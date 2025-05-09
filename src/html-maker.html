@@ -1,7 +1,3 @@
-#pragma once
-#include <Arduino.h>
-
-const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
   <head>
@@ -278,10 +274,3 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
     </script>
   </body>
 </html>
-
-)rawliteral";
-
-class WebHTML {
-public:
-    const char* getWebHTML();
-};

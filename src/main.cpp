@@ -43,7 +43,6 @@ void setup()
 
     // Test change of settings
     useDhcp.set(true);
-    wifiPassword.set("VivilWLANPasswort");
     updateInterval.set(15);
     configManager.saveAll();
 

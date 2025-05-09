@@ -330,41 +330,51 @@ public:
             server.send(200, "application/json", "{\"status\":\"reset\"}");
         });
 
-          // Apply single setting (KORRIGIERTE SYNTAX MIT :)
-            server.on("/config/apply/:category/:key", HTTP_POST, [this]() {
-                String category = server.pathArg(0);
-                String key = server.pathArg(1);
+
+            // Apply single setting (KORREKTE SYNTAX)
+            server.on("/config/apply", HTTP_POST, [this]() {
+                String category = server.arg("category");
+                String key = server.arg("key");
+
                 DynamicJsonDocument doc(128);
                 deserializeJson(doc, server.arg("plain"));
-                
+
+                sl.printf("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
+
                 for (auto *s : settings) {
                     if (String(s->getCategory()) == category && String(s->getName()) == key) {
                         if (s->fromJSON(doc["value"])) {
+                            sl.println("✅ Setting applied");
                             server.send(200, "application/json", "{\"status\":\"applied\"}");
                             return;
                         }
                     }
                 }
+
+                sl.println("❌ Setting not found");
                 server.send(404, "application/json", "{\"status\":\"not_found\"}");
             });
 
-            // Save single setting (KORRIGIERTE SYNTAX MIT :)
-            server.on("/config/save/:category/:key", HTTP_POST, [this]() {
-                String category = server.pathArg(0);
-                String key = server.pathArg(1);
-                
-                for (auto *s : settings) {
-                    if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                        prefs.begin("config", false);
-                        s->save(prefs);
-                        prefs.end();
-                        server.send(200, "application/json", "{\"status\":\"saved\"}");
-                        return;
-                    }
-                }
-                server.send(404, "application/json", "{\"status\":\"not_found\"}");
-            });
+    // Save single setting (KORREKTE SYNTAX)
+    server.on("/config/save", HTTP_POST, [this]() { // {parameter} statt :parameter
+        String category = server.arg("category");
+                String key = server.arg("key");
 
+        sl.printf("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
+
+        for (auto *s : settings) {
+            if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                prefs.begin("config", false);
+                s->save(prefs);
+                prefs.end();
+                sl.println("✅ Setting saved");
+                server.send(200, "application/json", "{\"status\":\"saved\"}");
+                return;
+            }
+        }
+        sl.println("❌ Setting not found");
+        server.send(404, "application/json", "{\"status\":\"not_found\"}");
+    });
 
         // Reboot
         server.on("/reboot", HTTP_POST, [this]() {
