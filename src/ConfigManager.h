@@ -6,51 +6,22 @@
 #include <functional>
 #include <WiFi.h>
 #include <ArduinoJson.h>
-// #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
 #include "html_content.h"
-// #include "cert.h"
 
 extern WebServer server;
 #define sl Serial
 
-enum class SettingType
-{
-    BOOL,
-    INT,
-    FLOAT,
-    STRING,
-    PASSWORD
-};
+enum class SettingType { BOOL, INT, FLOAT, STRING, PASSWORD };
 
-template <typename T>
-struct TypeTraits
-{
-};
-template <>
-struct TypeTraits<bool>
-{
-    static constexpr SettingType type = SettingType::BOOL;
-};
-template <>
-struct TypeTraits<int>
-{
-    static constexpr SettingType type = SettingType::INT;
-};
-template <>
-struct TypeTraits<float>
-{
-    static constexpr SettingType type = SettingType::FLOAT;
-};
-template <>
-struct TypeTraits<String>
-{
-    static constexpr SettingType type = SettingType::STRING;
-};
+template <typename T> struct TypeTraits {};
+template <> struct TypeTraits<bool> { static constexpr SettingType type = SettingType::BOOL; };
+template <> struct TypeTraits<int> { static constexpr SettingType type = SettingType::INT; };
+template <> struct TypeTraits<float> { static constexpr SettingType type = SettingType::FLOAT; };
+template <> struct TypeTraits<String> { static constexpr SettingType type = SettingType::STRING; };
 
-class BaseSetting
-{
+class BaseSetting {
 protected:
     const char *name;
     const char *category;
@@ -63,7 +34,6 @@ public:
         : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
 
     virtual ~BaseSetting() = default;
-
     virtual SettingType getType() const = 0;
     virtual void load(Preferences &prefs) = 0;
     virtual void save(Preferences &prefs) = 0;
@@ -71,8 +41,7 @@ public:
     virtual void toJSON(JsonObject &obj) const = 0;
     virtual bool fromJSON(const JsonVariant &value) = 0;
 
-    const char *getKey() const
-    {
+    const char *getKey() const {
         static char key[64];
         snprintf(key, sizeof(key), "%s_%s", category, name);
         return key;
@@ -85,84 +54,56 @@ public:
     bool needsSave() const { return modified; }
 };
 
-template <typename T>
-class Config : public BaseSetting
-{
+template <typename T> class Config : public BaseSetting {
 private:
     T value;
     T defaultValue;
     void (*callback)(T);
 
 public:
-    Config(const char *name, const char *category, T defaultValue,
-           bool showInWeb = true, bool isPassword = false,
-           void (*cb)(T) = nullptr)
-        : BaseSetting(name, category, showInWeb, isPassword),
-          value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+    Config(const char *name, const char *category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+        : BaseSetting(name, category, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
 
     T get() const { return value; }
 
-    void set(T newVal)
-    {
-        if (value != newVal)
-        {
+    void set(T newVal) {
+        if (value != newVal) {
             value = newVal;
             modified = true;
-            if (callback)
-                callback(value);
+            if (callback) callback(value);
         }
     }
 
-    SettingType getType() const override
-    {
-        return TypeTraits<T>::type;
-    }
+    SettingType getType() const override { return TypeTraits<T>::type; }
 
-    void load(Preferences &prefs) override
-    {
+    void load(Preferences &prefs) override {
         const char *key = getKey();
-        if constexpr (std::is_same_v<T, int>)
-        {
+        if constexpr (std::is_same_v<T, int>) {
             value = prefs.getInt(key, defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, bool>)
-        {
+        } else if constexpr (std::is_same_v<T, bool>) {
             value = prefs.getBool(key, defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, float>)
-        {
+        } else if constexpr (std::is_same_v<T, float>) {
             value = prefs.getFloat(key, defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, String>)
-        {
+        } else if constexpr (std::is_same_v<T, String>) {
             value = prefs.getString(key, defaultValue);
         }
     }
 
-    void save(Preferences &prefs) override
-    {
+    void save(Preferences &prefs) override {
         const char *key = getKey();
-        if constexpr (std::is_same_v<T, int>)
-        {
+        if constexpr (std::is_same_v<T, int>) {
             prefs.putInt(key, value);
-        }
-        else if constexpr (std::is_same_v<T, bool>)
-        {
+        } else if constexpr (std::is_same_v<T, bool>) {
             prefs.putBool(key, value);
-        }
-        else if constexpr (std::is_same_v<T, float>)
-        {
+        } else if constexpr (std::is_same_v<T, float>) {
             prefs.putFloat(key, value);
-        }
-        else if constexpr (std::is_same_v<T, String>)
-        {
+        } else if constexpr (std::is_same_v<T, String>) {
             prefs.putString(key, value);
         }
         modified = false;
     }
 
-    void setDefault() override
-    {
+    void setDefault() override {
         value = defaultValue;
         modified = true;
     }
@@ -179,42 +120,23 @@ public:
         }
     }
 
-    bool fromJSON(const JsonVariant &val) override
-    {
-        if (val.isNull())
-            return false;
-
-        if constexpr (std::is_same_v<T, int>)
-        {
-            set(val.as<int>());
-        }
-        else if constexpr (std::is_same_v<T, bool>)
-        {
-            set(val.as<bool>());
-        }
-        else if constexpr (std::is_same_v<T, float>)
-        {
-            set(val.as<float>());
-        }
-        else if constexpr (std::is_same_v<T, String>)
-        {
+    bool fromJSON(const JsonVariant &val) override {
+        if (val.isNull()) return false;
+        if constexpr (std::is_same_v<T, String>) {
             set(val.as<String>());
-        }
-        else
-        {
-            return false;
+        } else {
+            set(val.as<T>());
         }
         return true;
     }
 };
 
-class ConfigManagerClass
-{
+class ConfigManagerClass {
 private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
     WebHTML webhtml;
-    // WiFiServerSecure httpsServer;
+
 public:
     BaseSetting *findSetting(const String &category, const String &key)
     {
@@ -230,62 +152,73 @@ public:
 
     void addSetting(BaseSetting *s) { settings.push_back(s); }
 
-    void loadAll()
-    {
+    void loadAll() {
         prefs.begin("config", true);
-        for (auto *s : settings)
-            s->load(prefs);
+        for (auto *s : settings) s->load(prefs);
         prefs.end();
     }
 
-    void saveAll()
-    {
+    void saveAll() {
         prefs.begin("config", false);
-        for (auto *s : settings)
-            if (s->needsSave())
-                s->save(prefs);
+        for (auto *s : settings) if (s->needsSave()) s->save(prefs);
         prefs.end();
     }
 
-    String toJSON(bool includeSecrets = false)
+    bool getWiFiStatus()
     {
+        return WiFi.status() == WL_CONNECTED;
+    }
+
+    void reboot()
+    {
+        sl.println("🔄 Rebooting...");
+        delay(1000);
+        ESP.restart();
+    }
+
+    void handleClient()
+    {
+        server.handleClient();
+    }
+
+    void handleClientSecure()
+    {
+        server.handleClient();
+        // secureServer->handleClient();
+    }
+
+    void reconnectWifi()
+    {
+        sl.println("🔄 Reconnecting to WiFi...");
+        WiFi.disconnect();
+        delay(1000);
+        WiFi.reconnect();
+    }
+
+    String toJSON(bool includeSecrets = false) {
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
-
-        for (auto *s : settings)
-        {
+        for (auto *s : settings) {
             const char *category = s->getCategory();
             const char *name = s->getName();
-
-            if (!root[category].is<JsonObject>())
-                root.createNestedObject(category);
-
+            if (!root[category].is<JsonObject>()) root.createNestedObject(category);
             JsonObject cat = root[category];
-            if (s->isSecret() && !includeSecrets)
-            {
-                cat[name] = "***";
-            }
-            else
-            {
-                s->toJSON(cat);
-            }
+            s->toJSON(cat);
         }
-
         String output;
         serializeJsonPretty(doc, output);
         return output;
     }
 
-    bool fromJSON(JsonDocument &doc)
-    {
+    bool fromJSON(JsonDocument &doc) {
         bool changed = false;
-        for (auto *s : settings)
-        {
+        for (auto *s : settings) {
             JsonVariant val = doc[s->getCategory()][s->getName()];
             changed |= s->fromJSON(val);
         }
         return changed;
     }
+
 
     void startAccessPoint()
     {
@@ -386,111 +319,92 @@ public:
         }
     }
 
-    void defineRoutes()
-    {
-
-        // BearSSL::WiFiServerSecure *secureServer = new BearSSL::WiFiServerSecure(443);
-        // secureServer->setRSACert(
-        //     new BearSSL::X509List(CERT),
-        //     new BearSSL::PrivateKey(PRIVATE_KEY)
-        // );
-        // secureServer->begin();
+    void defineRoutes() {
         sl.println("🌐 Definiere Routen...");
 
         // Reset to Defaults
-        server.on("/config/reset", HTTP_POST, [this]()
-                  {
-                        for (auto* s : settings) {
-                            s->setDefault();
+        server.on("/config/reset", HTTP_POST, [this]() {
+            for (auto *s : settings) s->setDefault();
+            saveAll();
+            sl.println("🌐 Alle Einstellungen auf Standard zurückgesetzt");
+            server.send(200, "application/json", "{\"status\":\"reset\"}");
+        });
+
+          // Apply single setting (KORRIGIERTE SYNTAX MIT :)
+            server.on("/config/apply/:category/:key", HTTP_POST, [this]() {
+                String category = server.pathArg(0);
+                String key = server.pathArg(1);
+                DynamicJsonDocument doc(128);
+                deserializeJson(doc, server.arg("plain"));
+                
+                for (auto *s : settings) {
+                    if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                        if (s->fromJSON(doc["value"])) {
+                            server.send(200, "application/json", "{\"status\":\"applied\"}");
+                            return;
                         }
-                        this->saveAll();
-                        server.send(200, "application/json", "{\"status\":\"reset\"}"); });
+                    }
+                }
+                server.send(404, "application/json", "{\"status\":\"not_found\"}");
+            });
 
-        // Einzelne Einstellung anwenden
-        server.on("/config/apply/:category/:key", HTTP_POST, [this]()
-                  {
-            String category = server.pathArg(0);
-            String key = server.pathArg(1);
-            
-            for (auto* s : settings) {
-              if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                // ... Rest des Codes ...
-              }
-            } });
+            // Save single setting (KORRIGIERTE SYNTAX MIT :)
+            server.on("/config/save/:category/:key", HTTP_POST, [this]() {
+                String category = server.pathArg(0);
+                String key = server.pathArg(1);
+                
+                for (auto *s : settings) {
+                    if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                        prefs.begin("config", false);
+                        s->save(prefs);
+                        prefs.end();
+                        server.send(200, "application/json", "{\"status\":\"saved\"}");
+                        return;
+                    }
+                }
+                server.send(404, "application/json", "{\"status\":\"not_found\"}");
+            });
 
-        server.on("/config/save/:category/:key", HTTP_POST, [this]()
-                  {
-            String category = server.pathArg(0);
-            String key = server.pathArg(1);
-            
-            for (auto* s : settings) {
-              if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                // ... Rest des Codes ...
-              }
-            } });
 
         // Reboot
-        server.on("/reboot", HTTP_POST, [this]()
-                  {
-                    server.send(200, "application/json", "{\"status\":\"rebooting\"}");
-                    delay(100);
-                    this->reboot(); });
+        server.on("/reboot", HTTP_POST, [this]() {
+            server.send(200, "application/json", "{\"status\":\"rebooting\"}");
+            sl.println("🔄 Neustart des Geräts...");
+            delay(100);
+            reboot();
+        });
 
-        // Apply (falls benötigt, analog zu /save)
-        server.on("/config/apply", HTTP_POST, [this]()
-                  {
-                        DynamicJsonDocument doc(1024);
-                        deserializeJson(doc, server.arg("plain"));
-                        if (this->fromJSON(doc)) {
-                            server.send(200, "application/json", "{\"status\":\"applied\"}");
-                        } else {
-                            server.send(400, "application/json", "{\"status\":\"invalid\"}");
-                        } });
+        // Config JSON
+        server.on("/config.json", HTTP_GET, [this]() {
+            server.send(200, "application/json", toJSON());
+        });
 
-        // Send config.json
-        server.on("/config.json", HTTP_GET, [this]()
-                  { server.send(200, "application/json", this->toJSON()); });
-
-        // save all settings
-        server.on("/save", HTTP_POST, [this]()
-                  {
+        // Save all settings (MUSS NACH DEN EINZELROUTEN KOMMEN)
+        server.on("/save", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
+            sl.println("🌐 Speichern aller Einstellungen...");
             deserializeJson(doc, server.arg("plain"));
-            if (this->fromJSON(doc)) {
-                this->saveAll();
+            if (fromJSON(doc)) {
+                saveAll();
                 server.send(200, "application/json", "{\"status\":\"saved\"}");
             } else {
                 server.send(400, "application/json", "{\"status\":\"invalid\"}");
-            } });
+            }
+        });
 
-        sl.println("🌐 Lade HTML...");
-        // sl.println(webhtml.getWebHTML());
-        server.on("/", HTTP_GET, [this]()
-                  {
-                server.sendHeader("Access-Control-Allow-Origin", "*");
-                server.send_P(200, "text/html", webhtml.getWebHTML()); });
-        sl.println("🌐 fertig...");
+        // Root route (MUSS ALS LETZTES DEFINIEREN)
+        server.on("/", HTTP_GET, [this]() {
+            server.send_P(200, "text/html", webhtml.getWebHTML());
+        });
+
+        server.on("/", HTTP_POST, [this]() {
+            sl.println("🌐 POST-Anfrage an die Root-Route erhalten");
+            sl.println("🌐 Body: " + server.arg("plain"));
+        });
+
+        sl.println("🌐 Routen erfolgreich definiert");
     }
 
-    bool getWiFiStatus()
-    {
-        return WiFi.status() == WL_CONNECTED;
-    }
-    void reboot()
-    {
-        sl.println("🔄 Rebooting...");
-        delay(1000);
-        ESP.restart();
-    }
-    void handleClient()
-    {
-        server.handleClient();
-    }
-    void handleClientSecure()
-    {
-        server.handleClient();
-        // secureServer->handleClient();
-    }
 };
 
 extern ConfigManagerClass ConfigManager;

@@ -5,34 +5,46 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
   <head>
-    <title>ESP32 Config</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32 Configuration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       body {
         font-family: Arial, sans-serif;
         margin: 20px;
+        background-color: #f0f0f0;
       }
       .category {
         margin: 20px 0;
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      }
+      h1 {
+        color: #2c3e50;
+        text-align: center;
       }
       h2 {
-        color: #4caf50;
+        color: #3498db;
         margin-top: 0;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
       }
       .setting {
-        margin: 10px 0;
+        margin: 15px 0;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
         display: flex;
         align-items: center;
+        gap: 15px;
       }
       label {
         flex: 1;
-        margin-right: 15px;
+        font-weight: bold;
+        min-width: 120px;
       }
-      input,
-      select {
+      input, select {
         flex: 2;
         padding: 8px;
         border: 1px solid #ddd;
@@ -40,301 +52,205 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         font-size: 14px;
       }
       button {
-        padding: 12px 24px;
-        font-size: 1.1rem;
-        margin: 10px 5px;
-        background-color: #4caf50;
-        color: white;
+        padding: 8px 16px;
+        font-size: 14px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
+        transition: 0.3s;
       }
-      button.reset {
-        background-color: #f44336;
+      .apply-btn {
+        background-color: #3498db;
+        color: white;
+      }
+      .save-btn {
+        background-color: #27ae60;
+        color: white;
+      }
+      .reset-btn {
+        background-color: #e74c3c;
+        color: white;
       }
       #status {
-        margin: 15px 0;
-        padding: 10px;
-        display: none;
-      }
-      #settingsContainer {
+        position: fixed;
+        top: 20px;
+        right: 20px;
         padding: 15px;
-        background: #f5f5f5;
-        border-radius: 8px;
+        border-radius: 5px;
+        display: none;
+        max-width: 300px;
       }
-
-      .setting {
-        margin: 12px 0;
-        padding: 8px;
-        background: white;
-        border-radius: 4px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      .action-buttons {
+        text-align: center;
+        margin: 20px 0;
       }
     </style>
   </head>
   <body>
-    <h1>Configuration</h1>
+    <h1>Gerätekonfiguration</h1>
     <div id="status"></div>
     <div id="settingsContainer"></div>
 
-    <button onclick="apply()">apply</button>
-    <button onclick="saveSettings()">Save Settings</button>
-    <button onclick="resetToDefaults()" class="reset">Reset to Defaults</button>
-    <button onclick="handleReboot()">Reboot</button>
+    <div class="action-buttons">
+      <button onclick="applyAll()" class="apply-btn">Alle anwenden</button>
+      <button onclick="saveAll()" class="save-btn">Alle speichern</button>
+      <button onclick="resetDefaults()" class="reset-btn">Zurücksetzen</button>
+      <button onclick="rebootDevice()" class="reset-btn">Neustart</button>
+    </div>
 
     <script>
-      const container = document.getElementById("settingsContainer");
-      container.innerHTML = "";
-
       async function loadSettings() {
         try {
-          const response = await fetch("/config.json");
-          if (!response.ok)
-            throw new Error(`HTTP error! status: ${response.status}`);
-
+          const response = await fetch('/config.json');
+          if(!response.ok) throw new Error('HTTP Error');
           const config = await response.json();
           renderSettings(config);
-        } catch (error) {
-          showStatus("Error: " + error.message, "red");
-          console.error("Fetch error:", error);
+        } catch(error) {
+          showStatus('Fehler: ' + error.message, 'red');
         }
       }
 
-      // Debug
       function renderSettings(config) {
-        console.log("Rendering config:", config);
-        const container = document.getElementById("settingsContainer");
-        container.innerHTML = "";
+        const container = document.getElementById('settingsContainer');
+        container.innerHTML = '';
 
-        for (const [category, settings] of Object.entries(config)) {
-          const categoryDiv = document.createElement("div");
-          categoryDiv.className = "category";
-          categoryDiv.innerHTML = `<h2>${category.toUpperCase()}</h2>`;
+        for(const [category, settings] of Object.entries(config)) {
+          const categoryDiv = document.createElement('div');
+          categoryDiv.className = 'category';
+          categoryDiv.innerHTML = `<h2>${category}</h2>`;
 
-          for (const [key, value] of Object.entries(settings)) {
-            const settingDiv = document.createElement("div");
-            settingDiv.className = "setting";
-
-            const label = document.createElement("label");
-            label.textContent = key.replace(/_/g, " ") + ":";
-
-            const input = createInputField(category, key, value);
-
-            settingDiv.appendChild(label);
-            settingDiv.appendChild(input);
+          for(const [key, value] of Object.entries(settings)) {
+            const settingDiv = document.createElement('div');
+            settingDiv.className = 'setting';
+            
+            const label = document.createElement('label');
+            label.textContent = key + ':';
+            
+            const input = createInput(category, key, value);
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+            
+            settingDiv.append(label, input, actions);
             categoryDiv.appendChild(settingDiv);
           }
           container.appendChild(categoryDiv);
         }
       }
 
-      function createInputField(category, key, value) {
-        const inputName = `${category}.${key}`;
+      function createInput(category, key, value) {
+        const wrapper = document.createElement('div');
+        wrapper.style.flex = '2';
+        wrapper.style.display = 'flex';
+        wrapper.style.gap = '10px';
 
-        // Handle different input types based on key name or value type
-        if (key.toLowerCase().includes("pass")) {
-          return createPasswordInput(inputName, value);
-        } else if (typeof value === "boolean") {
-          return createCheckbox(inputName, value);
-        } else if (typeof value === "number") {
-          return createNumberInput(inputName, value);
+        let input;
+        if(key.toLowerCase().includes('pass')) {
+          input = document.createElement('input');
+          input.type = 'password';
+          input.value = value;
+        } else if(typeof value === 'boolean') {
+          input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = value;
+        } else if(typeof value === 'number') {
+          input = document.createElement('input');
+          input.type = 'number';
+          input.value = value;
+        } else {
+          input = document.createElement('input');
+          input.type = 'text';
+          input.value = value;
         }
 
-        const container = document.createElement("div");
-        container.style.display = "flex";
-        container.style.gap = "8px";
+        input.name = `${category}.${key}`;
+        input.style.flex = '1';
 
-        // Füge "Apply" und "Save"-Buttons hinzu
-        const applyBtn = document.createElement("button");
-        applyBtn.textContent = "Apply";
-        applyBtn.onclick = () => applySingleSetting(category, key, input.value);
+        const applyBtn = document.createElement('button');
+        applyBtn.textContent = 'Anwenden';
+        applyBtn.className = 'apply-btn';
+        applyBtn.onclick = () => applySingle(category, key, input);
 
-        const saveBtn = document.createElement("button");
-        saveBtn.textContent = "Save";
-        saveBtn.onclick = () => saveSingleSetting(category, key, input.value);
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Speichern';
+        saveBtn.className = 'save-btn';
+        saveBtn.onclick = () => saveSingle(category, key, input);
 
-        container.appendChild(input);
-        container.appendChild(applyBtn);
-        container.appendChild(saveBtn);
-
-        return container;
+        wrapper.append(input, applyBtn, saveBtn);
+        return wrapper;
       }
 
-      function createTextInput(name, value) {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.name = name;
-        input.value = value;
-        return input;
+     // In den JavaScript-Funktionen applySingle() und saveSingle():
+async function applySingle(category, key, input) {
+    const value = input.type === 'checkbox' ? input.checked : input.value;
+    await fetch(`/config/apply/${encodeURIComponent(category)}/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({value: value})
+    });
+}
+
+async function saveSingle(category, key, input) {
+    const value = input.type === 'checkbox' ? input.checked : input.value;
+    await fetch(`/config/save/${encodeURIComponent(category)}/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({value: value})
+    });
+}
+      async function saveAll() {
+        if(!confirm('Alle Einstellungen speichern?')) return;
+        
+        const config = {};
+        document.querySelectorAll('input').forEach(input => {
+          const [category, key] = input.name.split('.');
+          if(!config[category]) config[category] = {};
+          config[category][key] = input.type === 'checkbox' ? input.checked : input.value;
+        });
+
+        try {
+          const response = await fetch('/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+          });
+          showStatus(response.ok ? 'Alle Einstellungen gespeichert!' : 'Fehler!', response.ok ? 'green' : 'red');
+        } catch(error) {
+          showStatus('Fehler: ' + error.message, 'red');
+        }
       }
 
-      function createPasswordInput(name, value) {
-        const input = document.createElement("input");
-        input.type = "password";
-        input.name = name;
-        input.value = value;
-        return input;
-      }
-
-      function createNumberInput(name, value) {
-        const input = document.createElement("input");
-        input.type = "number";
-        input.name = name;
-        input.value = value;
-        return input;
-      }
-
-      function createCheckbox(name, checked) {
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.name = name;
-        input.checked = checked;
-        return input;
-      }
-        async function applySingleSetting(category, key, value) {
-          try {
-            const response = await fetch(`/config/apply/${category}/${key}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ value: value })
-            });
-            showStatus(response.ok ? "Applied!" : "Error!", response.ok ? "green" : "red");
-          } catch (error) {
-            showStatus("Error: " + error.message, "red");
+      async function resetDefaults() {
+        if(!confirm('Auf Standard zurücksetzen?')) return;
+        try {
+          const response = await fetch('/config/reset', {method: 'POST'});
+          if(response.ok) {
+            showStatus('Zurücksetzen erfolgreich!', 'green');
+            setTimeout(() => location.reload(), 1000);
           }
-        }
-
-        async function saveSingleSetting(category, key, value) {
-          try {
-            const response = await fetch(`/config/save/${category}/${key}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ value: value })
-            });
-            showStatus(response.ok ? "Saved!" : "Error!", response.ok ? "green" : "red");
-          } catch (error) {
-            showStatus("Error: " + error.message, "red");
-          }
-        }
-      async function saveSettings() {
-        if (confirm("Are you sure you want to save the settings?")) {
-          try {
-            const config = {};
-
-            document.querySelectorAll("input").forEach((input) => {
-              const [category, key] = input.name.split(".");
-              if (!config[category]) {
-                config[category] = {};
-              }
-              if (input.type === "checkbox") {
-                config[category][key] = input.checked;
-              } else if (input.type === "number") {
-                config[category][key] = Number(input.value);
-              } else {
-                config[category][key] = input.value;
-              }
-            });
-
-            const response = await fetch("/config/save", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(config),
-            });
-
-            if (response.ok) {
-              showStatus("Settings saved successfully!", "green");
-              setTimeout(() => location.reload(), 1000);
-            } else {
-              showStatus("Error saving settings!", "red");
-            }
-          } catch (error) {
-            showStatus("Error: " + error.message, "red");
-          }
+        } catch(error) {
+          showStatus('Fehler: ' + error.message, 'red');
         }
       }
 
-      async function resetToDefaults() {
-        if (confirm("Are you sure you want to reset to default values?")) {
-          try {
-            const response = await fetch("/config/reset", { method: "POST" });
-            if (response.ok) {
-              showStatus("Reset to defaults successful!", "green");
-              setTimeout(() => location.reload(), 1000);
-            }
-          } catch (error) {
-            showStatus("Reset failed: " + error.message, "red");
-          }
-        }
-      }
-
-      async function apply() {
-        if (confirm("Are you sure you want to apply the settings?")) {
-          try {
-            const config = {};
-
-            document.querySelectorAll("input").forEach((input) => {
-              const [category, key] = input.name.split(".");
-              if (!config[category]) {
-                config[category] = {};
-              }
-              if (input.type === "checkbox") {
-                config[category][key] = input.checked;
-              } else if (input.type === "number") {
-                config[category][key] = Number(input.value);
-              } else {
-                config[category][key] = input.value;
-              }
-            });
-
-            const response = await fetch("/config/apply", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(config),
-            });
-
-            if (response.ok) {
-              showStatus("Settings applied successfully!", "green");
-              setTimeout(() => location.reload(), 1000);
-            } else {
-              showStatus("Error apply settings!", "red");
-            }
-          } catch (error) {
-            showStatus("Error: " + error.message, "red");
-          }
-        }
+      function rebootDevice() {
+        if(!confirm('Gerät neu starten?')) return;
+        fetch('/reboot', {method: 'POST'})
+          .then(response => response.ok ? showStatus('Neustart...', 'blue') : null)
+          .catch(error => showStatus('Fehler: ' + error.message, 'red'));
       }
 
       function showStatus(message, color) {
-        const statusDiv = document.getElementById("status");
-        statusDiv.style.display = "block";
-        statusDiv.style.color = color;
+        const statusDiv = document.getElementById('status');
         statusDiv.textContent = message;
-        setTimeout(() => (statusDiv.style.display = "none"), 3000);
+        statusDiv.style.backgroundColor = color;
+        statusDiv.style.display = 'block';
+        setTimeout(() => statusDiv.style.display = 'none', 3000);
       }
 
-      function handleReboot() {
-        if (confirm("Are you sure you want to reboot ESP?")) {
-          fetch("/reboot", { method: "POST" })
-            .then((response) => {
-              if (!response.ok) throw new Error("Reboot failed");
-              alert("Rebooting!");
-            })
-            .catch((error) => {
-              showStatus(error.message, "red");
-            });
-        }
-      }
-
-      // Load settings when page loads
       window.onload = loadSettings;
     </script>
   </body>
 </html>
-
 )rawliteral";
 
 class WebHTML {

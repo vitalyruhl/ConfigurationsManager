@@ -43,6 +43,7 @@ void setup()
 
     // Test change of settings
     useDhcp.set(true);
+    wifiPassword.set("VivilWLANPasswort");
     updateInterval.set(15);
     configManager.saveAll();
 
@@ -68,6 +69,11 @@ void loop()
         lastPrint = millis();
         sl.printf("Loop --> DHCP: %s\n", useDhcp.get() ? "jop" : "nop");
         // sl.printf("Loop --> Wifistatus: %s\n", WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
+    }
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        sl.println("❌ WiFi not connected!");
+        configManager.reconnectWifi();
     }
 }
 
