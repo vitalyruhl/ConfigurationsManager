@@ -21,7 +21,7 @@ enum class SettingType
     PASSWORD
 };
 
-// Type-Traits für C++11
+// Type-Traits for C++11
 template <typename T>
 struct TypeTraits
 {
@@ -114,45 +114,43 @@ public:
         return TypeTraits<T>::type;
     }
 
-    void load(Preferences &prefs) override
-    {
+    void load(Preferences &prefs) override {
         const char *key = getKey();
-        if (std::is_same<T, int>::value)
-        {
-            value = prefs.getInt(key, defaultValue);
-        }
-        else if (std::is_same<T, bool>::value)
-        {
+        switch (getType()) {
+        case SettingType::INT:
+            value = prefs.getInt(key, static_cast<int32_t>(defaultValue));
+            break;
+        case SettingType::BOOL:
             value = prefs.getBool(key, defaultValue);
-        }
-        else if (std::is_same<T, float>::value)
-        {
+            break;
+        case SettingType::FLOAT:
             value = prefs.getFloat(key, defaultValue);
-        }
-        else if (std::is_same<T, String>::value)
-        {
+            break;
+        case SettingType::STRING:
             value = prefs.getString(key, defaultValue);
+            break;
+        default:
+            break;
         }
     }
 
-    void save(Preferences &prefs) override
-    {
+    void save(Preferences &prefs) override {
         const char *key = getKey();
-        if (std::is_same<T, int>::value)
-        {
+        switch (getType()) {
+        case SettingType::INT:
             prefs.putInt(key, value);
-        }
-        else if (std::is_same<T, bool>::value)
-        {
+            break;
+        case SettingType::BOOL:
             prefs.putBool(key, value);
-        }
-        else if (std::is_same<T, float>::value)
-        {
+            break;
+        case SettingType::FLOAT:
             prefs.putFloat(key, value);
-        }
-        else if (std::is_same<T, String>::value)
-        {
-            prefs.putString(key, value);
+            break;
+        case SettingType::STRING:
+            prefs.putString(key, value.c_str());
+            break;
+        default:
+            break;
         }
         modified = false;
     }
@@ -175,26 +173,24 @@ public:
         }
     }
 
-    bool fromJSON(const JsonVariant &val) override
-    {
-        if (val.isNull())
-            return false;
-
-        if (std::is_same<T, int>::value)
-        {
+    bool fromJSON(const JsonVariant &val) override {
+        if (val.isNull()) return false;
+    
+        switch (getType()) {
+        case SettingType::INT:
             set(val.as<int>());
-        }
-        else if (std::is_same<T, bool>::value)
-        {
+            break;
+        case SettingType::BOOL:
             set(val.as<bool>());
-        }
-        else if (std::is_same<T, float>::value)
-        {
+            break;
+        case SettingType::FLOAT:
             set(val.as<float>());
-        }
-        else if (std::is_same<T, String>::value)
-        {
+            break;
+        case SettingType::STRING:
             set(val.as<String>());
+            break;
+        default:
+            return false;
         }
         return true;
     }
