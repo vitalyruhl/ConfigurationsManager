@@ -122,6 +122,13 @@ public:
 
     bool fromJSON(const JsonVariant &val) override {
         if (val.isNull()) return false;
+    
+        // Verhindere, dass "***" als echtes Passwort gespeichert wird
+        if (isSecret() && val.is<const char*>() && strcmp(val.as<const char*>(), "***") == 0) {
+            // Maskiertes Passwort – nichts ändern
+            return false;
+        }
+    
         if constexpr (std::is_same_v<T, String>) {
             set(val.as<String>());
         } else {
@@ -331,50 +338,50 @@ public:
         });
 
 
-            // Apply single setting (KORREKTE SYNTAX)
-            server.on("/config/apply", HTTP_POST, [this]() {
-                String category = server.arg("category");
-                String key = server.arg("key");
+        // Apply single setting
+        server.on("/config/apply", HTTP_POST, [this]() {
+            String category = server.arg("category");
+            String key = server.arg("key");
 
-                DynamicJsonDocument doc(128);
-                deserializeJson(doc, server.arg("plain"));
+            DynamicJsonDocument doc(128);
+            deserializeJson(doc, server.arg("plain"));
 
-                sl.printf("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
+            sl.printf("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
 
-                for (auto *s : settings) {
-                    if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                        if (s->fromJSON(doc["value"])) {
-                            sl.println("✅ Setting applied");
-                            server.send(200, "application/json", "{\"status\":\"applied\"}");
-                            return;
-                        }
+            for (auto *s : settings) {
+                if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                    if (s->fromJSON(doc["value"])) {
+                        sl.println("✅ Setting applied");
+                        server.send(200, "application/json", "{\"status\":\"applied\"}");
+                        return;
                     }
                 }
-
-                sl.println("❌ Setting not found");
-                server.send(404, "application/json", "{\"status\":\"not_found\"}");
-            });
-
-    // Save single setting (KORREKTE SYNTAX)
-    server.on("/config/save", HTTP_POST, [this]() { // {parameter} statt :parameter
-        String category = server.arg("category");
-                String key = server.arg("key");
-
-        sl.printf("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
-
-        for (auto *s : settings) {
-            if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                prefs.begin("config", false);
-                s->save(prefs);
-                prefs.end();
-                sl.println("✅ Setting saved");
-                server.send(200, "application/json", "{\"status\":\"saved\"}");
-                return;
             }
-        }
-        sl.println("❌ Setting not found");
-        server.send(404, "application/json", "{\"status\":\"not_found\"}");
-    });
+
+            sl.println("❌ Setting not found");
+            server.send(404, "application/json", "{\"status\":\"not_found\"}");
+        });
+
+        // Save single setting
+        server.on("/config/save", HTTP_POST, [this]() {
+            String category = server.arg("category");
+                    String key = server.arg("key");
+
+            sl.printf("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
+
+            for (auto *s : settings) {
+                if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                    prefs.begin("config", false);
+                    s->save(prefs);
+                    prefs.end();
+                    sl.println("✅ Setting saved");
+                    server.send(200, "application/json", "{\"status\":\"saved\"}");
+                    return;
+                }
+            }
+            sl.println("❌ Setting not found");
+            server.send(404, "application/json", "{\"status\":\"not_found\"}");
+        });
 
         // Reboot
         server.on("/reboot", HTTP_POST, [this]() {

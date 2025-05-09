@@ -42,7 +42,7 @@ void setup()
     sl.println(configManager.toJSON(false));
 
     // Test change of settings
-    useDhcp.set(true);
+    // useDhcp.set(true);
     updateInterval.set(15);
     configManager.saveAll();
 
