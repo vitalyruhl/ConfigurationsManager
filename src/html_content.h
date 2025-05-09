@@ -1,7 +1,11 @@
+#pragma once
+#include <Arduino.h>
+
+const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Settings</title>
+    <title>ESP32 Config</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
@@ -84,7 +88,7 @@
 
       async function loadSettings() {
         try {
-          const response = await fetch("/config/json");
+          const response = await fetch("/config.json");
           if (!response.ok)
             throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -135,7 +139,25 @@
         } else if (typeof value === "number") {
           return createNumberInput(inputName, value);
         }
-        return createTextInput(inputName, value);
+
+        const container = document.createElement("div");
+        container.style.display = "flex";
+        container.style.gap = "8px";
+
+        // Füge "Apply" und "Save"-Buttons hinzu
+        const applyBtn = document.createElement("button");
+        applyBtn.textContent = "Apply";
+        applyBtn.onclick = () => applySingleSetting(category, key, input.value);
+
+        const saveBtn = document.createElement("button");
+        saveBtn.textContent = "Save";
+        saveBtn.onclick = () => saveSingleSetting(category, key, input.value);
+
+        container.appendChild(input);
+        container.appendChild(applyBtn);
+        container.appendChild(saveBtn);
+
+        return container;
       }
 
       function createTextInput(name, value) {
@@ -169,7 +191,31 @@
         input.checked = checked;
         return input;
       }
+        async function applySingleSetting(category, key, value) {
+          try {
+            const response = await fetch(`/config/apply/${category}/${key}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ value: value })
+            });
+            showStatus(response.ok ? "Applied!" : "Error!", response.ok ? "green" : "red");
+          } catch (error) {
+            showStatus("Error: " + error.message, "red");
+          }
+        }
 
+        async function saveSingleSetting(category, key, value) {
+          try {
+            const response = await fetch(`/config/save/${category}/${key}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ value: value })
+            });
+            showStatus(response.ok ? "Saved!" : "Error!", response.ok ? "green" : "red");
+          } catch (error) {
+            showStatus("Error: " + error.message, "red");
+          }
+        }
       async function saveSettings() {
         if (confirm("Are you sure you want to save the settings?")) {
           try {
@@ -251,7 +297,7 @@
             });
 
             if (response.ok) {
-              showStatus("Settings applyed successfully!", "green");
+              showStatus("Settings applied successfully!", "green");
               setTimeout(() => location.reload(), 1000);
             } else {
               showStatus("Error apply settings!", "red");
@@ -288,3 +334,10 @@
     </script>
   </body>
 </html>
+
+)rawliteral";
+
+class WebHTML {
+public:
+    const char* getWebHTML();
+};

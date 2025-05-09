@@ -1,0 +1,74 @@
+# ConfigurationsManager for ESP32
+
+## Overview
+
+The ConfigurationsManager is a project designed to manage and store configuration settings for ESP32-based applications. It provides an easy-to-use interface for saving, retrieving, and updating configuration parameters, ensuring persistent storage and efficient management.
+
+## Achtung das ist ein c++V17 Projekt
+
+```ini
+[env:nodemcu-32s]
+platform = espressif32@6.3.2
+board = nodemcu-32s
+board_build.variant = esp32
+framework = arduino
+monitor_speed = 115200
+upload_port = COM[4]
+build_unflags = -std=gnu++11
+build_flags = 
+	-Wno-deprecated-declarations
+	-std=gnu++17
+lib_deps = bblanchon/ArduinoJson@^7.4.1
+```
+
+
+## Features
+
+- **Persistent Storage**: Save configuration settings to non-volatile memory (e.g., SPIFFS or NVS).
+- **Easy Retrieval**: Retrieve stored configurations with minimal code.
+- **Dynamic Updates**: Update configurations at runtime without restarting the device.
+- **JSON Support**: Store configurations in a structured JSON format for flexibility.
+- **Error Handling**: Robust error handling for invalid or missing configurations.
+
+## Requirements
+
+- ESP32 development board
+- Arduino IDE or PlatformIO
+- ESP32 libraries for SPIFFS or NVS (depending on the storage method)
+
+## Installation
+
+1. Clone this repository:
+    ```
+    git clone https://github.com/yourusername/ConfigurationsManager.git
+    ```
+2. Open the project in your preferred IDE (e.g., Arduino IDE or PlatformIO).
+3. Install the required libraries if not already installed.
+4. Upload the code to your ESP32 board.
+
+## Usage
+
+1. Include the ConfigurationsManager library in your project.
+2. Initialize the manager in your setup function.
+3. Use the provided methods to save, retrieve, or update configurations.
+
+Example:
+
+### HTTPS Support (not Readdy yet):
+
+install openSSL and generate a self-signed certificate:
+
+```bash
+# Install OpenSSL if not already installed
+# type this command in the command line as administrator
+choco install openssl -y
+Import-Module $env:ChocolateyInstall\helpers\chocolateyProfile.psm1
+refreshenv
+
+# Generate a self-signed certificate
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+```
+
+
+paste the generated key and certificate into the `cert.pem` and `key.pem` files in the cert.h file.
+

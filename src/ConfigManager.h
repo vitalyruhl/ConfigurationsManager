@@ -5,12 +5,15 @@
 #include <vector>
 #include <functional>
 #include <WiFi.h>
-#include <WebServer.h>
 #include <ArduinoJson.h>
-#include "FS.h"
-#include "SPIFFS.h"
+// #include <WiFiClientSecure.h>
+#include <WebServer.h>
+
+#include "html_content.h"
+// #include "cert.h"
 
 extern WebServer server;
+#define sl Serial
 
 enum class SettingType
 {
@@ -21,7 +24,6 @@ enum class SettingType
     PASSWORD
 };
 
-// Type-Traits for C++11
 template <typename T>
 struct TypeTraits
 {
@@ -29,22 +31,22 @@ struct TypeTraits
 template <>
 struct TypeTraits<bool>
 {
-    static const SettingType type = SettingType::BOOL;
+    static constexpr SettingType type = SettingType::BOOL;
 };
 template <>
 struct TypeTraits<int>
 {
-    static const SettingType type = SettingType::INT;
+    static constexpr SettingType type = SettingType::INT;
 };
 template <>
 struct TypeTraits<float>
 {
-    static const SettingType type = SettingType::FLOAT;
+    static constexpr SettingType type = SettingType::FLOAT;
 };
 template <>
 struct TypeTraits<String>
 {
-    static const SettingType type = SettingType::STRING;
+    static constexpr SettingType type = SettingType::STRING;
 };
 
 class BaseSetting
@@ -59,6 +61,8 @@ protected:
 public:
     BaseSetting(const char *name, const char *category, bool showInWeb, bool isPassword)
         : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
+
+    virtual ~BaseSetting() = default;
 
     virtual SettingType getType() const = 0;
     virtual void load(Preferences &prefs) = 0;
@@ -114,43 +118,45 @@ public:
         return TypeTraits<T>::type;
     }
 
-    void load(Preferences &prefs) override {
+    void load(Preferences &prefs) override
+    {
         const char *key = getKey();
-        switch (getType()) {
-        case SettingType::INT:
-            value = prefs.getInt(key, static_cast<int32_t>(defaultValue));
-            break;
-        case SettingType::BOOL:
+        if constexpr (std::is_same_v<T, int>)
+        {
+            value = prefs.getInt(key, defaultValue);
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
             value = prefs.getBool(key, defaultValue);
-            break;
-        case SettingType::FLOAT:
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
             value = prefs.getFloat(key, defaultValue);
-            break;
-        case SettingType::STRING:
+        }
+        else if constexpr (std::is_same_v<T, String>)
+        {
             value = prefs.getString(key, defaultValue);
-            break;
-        default:
-            break;
         }
     }
 
-    void save(Preferences &prefs) override {
+    void save(Preferences &prefs) override
+    {
         const char *key = getKey();
-        switch (getType()) {
-        case SettingType::INT:
+        if constexpr (std::is_same_v<T, int>)
+        {
             prefs.putInt(key, value);
-            break;
-        case SettingType::BOOL:
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
             prefs.putBool(key, value);
-            break;
-        case SettingType::FLOAT:
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
             prefs.putFloat(key, value);
-            break;
-        case SettingType::STRING:
-            prefs.putString(key, value.c_str());
-            break;
-        default:
-            break;
+        }
+        else if constexpr (std::is_same_v<T, String>)
+        {
+            prefs.putString(key, value);
         }
         modified = false;
     }
@@ -173,23 +179,29 @@ public:
         }
     }
 
-    bool fromJSON(const JsonVariant &val) override {
-        if (val.isNull()) return false;
-    
-        switch (getType()) {
-        case SettingType::INT:
+    bool fromJSON(const JsonVariant &val) override
+    {
+        if (val.isNull())
+            return false;
+
+        if constexpr (std::is_same_v<T, int>)
+        {
             set(val.as<int>());
-            break;
-        case SettingType::BOOL:
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
             set(val.as<bool>());
-            break;
-        case SettingType::FLOAT:
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
             set(val.as<float>());
-            break;
-        case SettingType::STRING:
+        }
+        else if constexpr (std::is_same_v<T, String>)
+        {
             set(val.as<String>());
-            break;
-        default:
+        }
+        else
+        {
             return false;
         }
         return true;
@@ -201,8 +213,21 @@ class ConfigManagerClass
 private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
-
+    WebHTML webhtml;
+    // WiFiServerSecure httpsServer;
 public:
+    BaseSetting *findSetting(const String &category, const String &key)
+    {
+        for (auto *s : settings)
+        {
+            if (String(s->getCategory()) == category && String(s->getName()) == key)
+            {
+                return s;
+            }
+        }
+        return nullptr;
+    }
+
     void addSetting(BaseSetting *s) { settings.push_back(s); }
 
     void loadAll()
@@ -233,9 +258,7 @@ public:
             const char *name = s->getName();
 
             if (!root[category].is<JsonObject>())
-            {
                 root.createNestedObject(category);
-            }
 
             JsonObject cat = root[category];
             if (s->isSecret() && !includeSecrets)
@@ -266,17 +289,173 @@ public:
 
     void startAccessPoint()
     {
-        WiFi.mode(WIFI_AP);
-        WiFi.softAP("ESP32_Config", "config1234");
+        startAccessPoint("192.168.2.106", "255.255.255.0", "ESP32_Config", "config1234");
+    }
 
+    void startAccessPoint(const String &ipStr, const String &mask, const String &APName, const String &pwd)
+    {
+        sl.printf("🌐 Konfiguriere AP %s ...\n", APName.c_str());
+        sl.printf("🌐 Konfiguriere statische IP %s ...\n", ipStr.c_str());
+        sl.printf("🌐 Konfiguriere Subnetzmaske %s ...\n", mask.c_str());
+        sl.printf("🌐 Konfiguriere Passwort %s ...\n", pwd.c_str());
+        sl.printf("🌐 Konfiguriere Gateway %s ...\n", ipStr.c_str());
+
+        IPAddress localIP, gateway, subnet;
+        localIP.fromString(ipStr);
+        gateway = localIP;
+        subnet.fromString(mask);
+
+        WiFi.mode(WIFI_AP);
+        WiFi.softAPConfig(localIP, gateway, subnet);
+
+        WiFi.softAP(APName, pwd);
+
+        defineRoutes();
+    }
+
+    void startWebServer(const String &ipStr, const String &mask, const String &ssid, const String &password)
+    {
+        sl.printf("🌐 Konfiguriere statische IP %s ...\n", ipStr.c_str());
+
+        IPAddress ip, gateway, subnet;
+        ip.fromString(ipStr);
+        gateway = ip; // ggf. anpassen
+        subnet.fromString(mask);
+
+        WiFi.config(ip, gateway, subnet);
+
+        sl.printf("🔌 Verbinde mit WLAN SSID: %s\n", ssid.c_str());
+        WiFi.begin(ssid.c_str(), password.c_str());
+
+        unsigned long startAttemptTime = millis();
+        const unsigned long timeout = 10000;
+
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout)
+        {
+            delay(250);
+            sl.print(".");
+        }
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            sl.println("\n✅ WLAN verbunden!");
+            sl.print("🌐 IP-Adresse: ");
+            sl.println(WiFi.localIP());
+
+            sl.println("🌐 Routen definieren...");
+            defineRoutes();
+
+            sl.println("🌐 Starte Webserver...");
+            server.begin();
+
+            sl.println("🖥️  Webserver läuft unter:");
+            sl.println(WiFi.localIP());
+        }
+        else
+        {
+            sl.println("\n❌ Verbindung zum WLAN fehlgeschlagen!");
+        }
+    }
+
+    void startWebServer(const String &ssid, const String &password)
+    {
+        sl.println("🌐 DHCP-Modus aktiv – Verbinde mit WLAN...");
+        WiFi.begin(ssid.c_str(), password.c_str());
+
+        unsigned long startAttemptTime = millis();
+        const unsigned long timeout = 10000;
+
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout)
+        {
+            delay(250);
+            sl.print(".");
+        }
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            sl.println("\n✅ WLAN verbunden mit DHCP!");
+            sl.print("🌐 IP-Adresse: ");
+            sl.println(WiFi.localIP());
+
+            defineRoutes();
+            server.begin();
+        }
+        else
+        {
+            sl.println("\n❌ Verbindung mit DHCP fehlgeschlagen!");
+        }
+    }
+
+    void defineRoutes()
+    {
+
+        // BearSSL::WiFiServerSecure *secureServer = new BearSSL::WiFiServerSecure(443);
+        // secureServer->setRSACert(
+        //     new BearSSL::X509List(CERT),
+        //     new BearSSL::PrivateKey(PRIVATE_KEY)
+        // );
+        // secureServer->begin();
+        sl.println("🌐 Definiere Routen...");
+
+        // Reset to Defaults
+        server.on("/config/reset", HTTP_POST, [this]()
+                  {
+                        for (auto* s : settings) {
+                            s->setDefault();
+                        }
+                        this->saveAll();
+                        server.send(200, "application/json", "{\"status\":\"reset\"}"); });
+
+        // Einzelne Einstellung anwenden
+        server.on("/config/apply/:category/:key", HTTP_POST, [this]()
+                  {
+            String category = server.pathArg(0);
+            String key = server.pathArg(1);
+            
+            for (auto* s : settings) {
+              if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                // ... Rest des Codes ...
+              }
+            } });
+
+        server.on("/config/save/:category/:key", HTTP_POST, [this]()
+                  {
+            String category = server.pathArg(0);
+            String key = server.pathArg(1);
+            
+            for (auto* s : settings) {
+              if (String(s->getCategory()) == category && String(s->getName()) == key) {
+                // ... Rest des Codes ...
+              }
+            } });
+
+        // Reboot
+        server.on("/reboot", HTTP_POST, [this]()
+                  {
+                    server.send(200, "application/json", "{\"status\":\"rebooting\"}");
+                    delay(100);
+                    this->reboot(); });
+
+        // Apply (falls benötigt, analog zu /save)
+        server.on("/config/apply", HTTP_POST, [this]()
+                  {
+                        DynamicJsonDocument doc(1024);
+                        deserializeJson(doc, server.arg("plain"));
+                        if (this->fromJSON(doc)) {
+                            server.send(200, "application/json", "{\"status\":\"applied\"}");
+                        } else {
+                            server.send(400, "application/json", "{\"status\":\"invalid\"}");
+                        } });
+
+        // Send config.json
         server.on("/config.json", HTTP_GET, [this]()
                   { server.send(200, "application/json", this->toJSON()); });
 
+        // save all settings
         server.on("/save", HTTP_POST, [this]()
                   {
-            JsonDocument doc;
+            DynamicJsonDocument doc(1024);
             deserializeJson(doc, server.arg("plain"));
-
             if (this->fromJSON(doc)) {
                 this->saveAll();
                 server.send(200, "application/json", "{\"status\":\"saved\"}");
@@ -284,13 +463,33 @@ public:
                 server.send(400, "application/json", "{\"status\":\"invalid\"}");
             } });
 
-        server.on("/", HTTP_GET, []()
+        sl.println("🌐 Lade HTML...");
+        // sl.println(webhtml.getWebHTML());
+        server.on("/", HTTP_GET, [this]()
                   {
-            File file = SPIFFS.open("/index.html", "r");
-            server.streamFile(file, "text/html");
-            file.close(); });
+                server.sendHeader("Access-Control-Allow-Origin", "*");
+                server.send_P(200, "text/html", webhtml.getWebHTML()); });
+        sl.println("🌐 fertig...");
+    }
 
-        server.begin();
+    bool getWiFiStatus()
+    {
+        return WiFi.status() == WL_CONNECTED;
+    }
+    void reboot()
+    {
+        sl.println("🔄 Rebooting...");
+        delay(1000);
+        ESP.restart();
+    }
+    void handleClient()
+    {
+        server.handleClient();
+    }
+    void handleClientSecure()
+    {
+        server.handleClient();
+        // secureServer->handleClient();
     }
 };
 
