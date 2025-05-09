@@ -122,13 +122,13 @@ public:
 
     bool fromJSON(const JsonVariant &val) override {
         if (val.isNull()) return false;
-    
+
         // Verhindere, dass "***" als echtes Passwort gespeichert wird
         if (isSecret() && val.is<const char*>() && strcmp(val.as<const char*>(), "***") == 0) {
             // Maskiertes Passwort – nichts ändern
             return false;
         }
-    
+
         if constexpr (std::is_same_v<T, String>) {
             set(val.as<String>());
         } else {
@@ -343,10 +343,15 @@ public:
             String category = server.arg("category");
             String key = server.arg("key");
 
-            DynamicJsonDocument doc(128);
-            deserializeJson(doc, server.arg("plain"));
-
             sl.printf("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
+
+            DynamicJsonDocument doc(256);
+            deserializeJson(doc, server.arg((size_t)2));
+
+            // sl.println(server.arg((size_t)0));
+            // sl.println(server.arg((size_t)1));
+            // sl.println(server.arg((size_t)2));
+            // sl.println("");
 
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
@@ -365,20 +370,26 @@ public:
         // Save single setting
         server.on("/config/save", HTTP_POST, [this]() {
             String category = server.arg("category");
-                    String key = server.arg("key");
+            String key = server.arg("key");
 
-            sl.printf("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
+            sl.printf("🌐 save: %s/%s\n", category.c_str(), key.c_str());
+
+            DynamicJsonDocument doc(256);
+            deserializeJson(doc, server.arg((size_t)2));
 
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                    prefs.begin("config", false);
-                    s->save(prefs);
-                    prefs.end();
-                    sl.println("✅ Setting saved");
-                    server.send(200, "application/json", "{\"status\":\"saved\"}");
-                    return;
+                    if (s->fromJSON(doc["value"])) {
+                        prefs.begin("config", false);
+                        s->save(prefs);           
+                        prefs.end();          
+                        sl.println("✅ Setting saved");
+                        server.send(200, "application/json", "{\"status\":\"saved\"}");
+                        return;
+                    }
                 }
             }
+
             sl.println("❌ Setting not found");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
