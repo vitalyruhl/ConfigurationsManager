@@ -1,5 +1,9 @@
 #pragma once
 
+
+//⚠️ Atention ⚠️ settings will not be stored if its lenht >14!, because the max length for prefs is 15 chars...
+// The settings wil be stored in the format: <category>_<key>
+
 #include <Arduino.h>
 #include <Preferences.h>
 #include <vector>
@@ -9,6 +13,23 @@
 #include <WebServer.h>
 
 #include "html_content.h"
+
+// #define ENABLE_LOGGING
+
+#ifdef ENABLE_LOGGING
+#define log(fmt, ...)                                     \
+  do                                                      \
+  {                                                       \
+    char buffer[255];                                     \
+    snprintf(buffer, sizeof(buffer), fmt, ##__VA_ARGS__); \
+    Serial.println(buffer);                               \
+  } while (0)
+#else
+#define log(...) \
+  do             \
+  {              \
+  } while (0) // do nothing if logging is disabled
+#endif
 
 extern WebServer server;
 #define sl Serial
@@ -178,7 +199,7 @@ public:
 
     void reboot()
     {
-        sl.println("🔄 Rebooting...");
+        log("🔄 Rebooting...");
         delay(1000);
         ESP.restart();
     }
@@ -196,7 +217,7 @@ public:
 
     void reconnectWifi()
     {
-        sl.println("🔄 Reconnecting to WiFi...");
+        log("🔄 Reconnecting to WiFi...");
         WiFi.disconnect();
         delay(1000);
         WiFi.reconnect();
@@ -229,16 +250,26 @@ public:
 
     void startAccessPoint()
     {
-        startAccessPoint("192.168.2.106", "255.255.255.0", "ESP32_Config", "config1234");
+        startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", "config1234");
+    }
+
+    void startAccessPoint(const String &pwd)
+    {
+        startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", pwd);
+    }
+
+    void startAccessPoint(const String &APName,const String &pwd)
+    {
+        startAccessPoint("192.168.4.1", "255.255.255.0", APName, pwd);
     }
 
     void startAccessPoint(const String &ipStr, const String &mask, const String &APName, const String &pwd)
     {
-        sl.printf("🌐 Konfiguriere AP %s ...\n", APName.c_str());
-        sl.printf("🌐 Konfiguriere statische IP %s ...\n", ipStr.c_str());
-        sl.printf("🌐 Konfiguriere Subnetzmaske %s ...\n", mask.c_str());
-        sl.printf("🌐 Konfiguriere Passwort %s ...\n", pwd.c_str());
-        sl.printf("🌐 Konfiguriere Gateway %s ...\n", ipStr.c_str());
+        log("🌐 Konfiguriere AP %s ...\n", APName.c_str());
+        log("🌐 Konfiguriere statische IP %s ...\n", ipStr.c_str());
+        log("🌐 Konfiguriere Subnetzmaske %s ...\n", mask.c_str());
+        log("🌐 Konfiguriere Passwort %s ...\n", pwd.c_str());
+        log("🌐 Konfiguriere Gateway %s ...\n", ipStr.c_str());
 
         IPAddress localIP, gateway, subnet;
         localIP.fromString(ipStr);
@@ -248,14 +279,24 @@ public:
         WiFi.mode(WIFI_AP);
         WiFi.softAPConfig(localIP, gateway, subnet);
 
-        WiFi.softAP(APName, pwd);
-
+        if (strcmp(pwd.c_str(), "") == 0)
+        {
+            log("🌐 AP ohne Passwort");
+            WiFi.softAP(APName);
+        }
+        else
+        {
+            log("🌐 AP mit Passwort: %s", pwd.c_str());
+             WiFi.softAP(APName, pwd);
+        }
+        log("🌐 AP gestartet unter: %s", WiFi.softAPIP().toString().c_str());
         defineRoutes();
+        server.begin();
     }
 
     void startWebServer(const String &ipStr, const String &mask, const String &ssid, const String &password)
     {
-        sl.printf("🌐 Konfiguriere statische IP %s ...\n", ipStr.c_str());
+        log("🌐 Konfiguriere statische IP %s ...\n", ipStr.c_str());
 
         IPAddress ip, gateway, subnet;
         ip.fromString(ipStr);
@@ -264,7 +305,7 @@ public:
 
         WiFi.config(ip, gateway, subnet);
 
-        sl.printf("🔌 Verbinde mit WLAN SSID: %s\n", ssid.c_str());
+        log("🔌 Verbinde mit WLAN SSID: %s\n", ssid.c_str());
         WiFi.begin(ssid.c_str(), password.c_str());
 
         unsigned long startAttemptTime = millis();
@@ -273,33 +314,31 @@ public:
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout)
         {
             delay(250);
-            sl.print(".");
+            log(".");
         }
 
         if (WiFi.status() == WL_CONNECTED)
         {
-            sl.println("\n✅ WLAN verbunden!");
-            sl.print("🌐 IP-Adresse: ");
-            sl.println(WiFi.localIP());
+            log("\n✅ WLAN verbunden!");
+            log("🌐 IP-Adresse: %s", WiFi.localIP().toString().c_str());
 
-            sl.println("🌐 Routen definieren...");
+            log("🌐 Routen definieren...");
             defineRoutes();
 
-            sl.println("🌐 Starte Webserver...");
+            log("🌐 Starte Webserver...");
             server.begin();
 
-            sl.println("🖥️  Webserver läuft unter:");
-            sl.println(WiFi.localIP());
+            log("🖥️  Webserver läuft unter:%s",WiFi.localIP().toString().c_str());
         }
         else
         {
-            sl.println("\n❌ Verbindung zum WLAN fehlgeschlagen!");
+            log("\n❌ Verbindung zum WLAN fehlgeschlagen!");
         }
     }
 
     void startWebServer(const String &ssid, const String &password)
     {
-        sl.println("🌐 DHCP-Modus aktiv – Verbinde mit WLAN...");
+        log("🌐 DHCP-Modus aktiv – Verbinde mit WLAN...");
         WiFi.begin(ssid.c_str(), password.c_str());
 
         unsigned long startAttemptTime = millis();
@@ -308,32 +347,31 @@ public:
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout)
         {
             delay(250);
-            sl.print(".");
+            log(".");
         }
 
         if (WiFi.status() == WL_CONNECTED)
         {
-            sl.println("\n✅ WLAN verbunden mit DHCP!");
-            sl.print("🌐 IP-Adresse: ");
-            sl.println(WiFi.localIP());
+            log("\n✅ WLAN verbunden mit DHCP!");
+            log("🌐 IP-Adresse: %s", WiFi.localIP().toString().c_str());
 
             defineRoutes();
             server.begin();
         }
         else
         {
-            sl.println("\n❌ Verbindung mit DHCP fehlgeschlagen!");
+            log("\n❌ Verbindung mit DHCP fehlgeschlagen!");
         }
     }
 
     void defineRoutes() {
-        sl.println("🌐 Definiere Routen...");
+        log("🌐 Definiere Routen...");
 
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this]() {
             for (auto *s : settings) s->setDefault();
             saveAll();
-            sl.println("🌐 Alle Einstellungen auf Standard zurückgesetzt");
+            log("🌐 Alle Einstellungen auf Standard zurückgesetzt");
             server.send(200, "application/json", "{\"status\":\"reset\"}");
         });
 
@@ -343,27 +381,27 @@ public:
             String category = server.arg("category");
             String key = server.arg("key");
 
-            sl.printf("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
+            log("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
 
             DynamicJsonDocument doc(256);
             deserializeJson(doc, server.arg((size_t)2));
 
-            // sl.println(server.arg((size_t)0));
-            // sl.println(server.arg((size_t)1));
-            // sl.println(server.arg((size_t)2));
-            // sl.println("");
+            log("Arg(0):[%s]",server.arg((size_t)0));
+            log("Arg(1):[%s]",server.arg((size_t)1));
+            log("Arg(2):[%s]",server.arg((size_t)2));
+            log("");
 
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
                     if (s->fromJSON(doc["value"])) {
-                        sl.println("✅ Setting applied");
+                        log("✅ Setting applied");
                         server.send(200, "application/json", "{\"status\":\"applied\"}");
                         return;
                     }
                 }
             }
 
-            sl.println("❌ Setting not found");
+            log("❌ Setting not found");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
@@ -372,7 +410,7 @@ public:
             String category = server.arg("category");
             String key = server.arg("key");
 
-            sl.printf("🌐 save: %s/%s\n", category.c_str(), key.c_str());
+            log("🌐 save: %s/%s\n", category.c_str(), key.c_str());
 
             DynamicJsonDocument doc(256);
             deserializeJson(doc, server.arg((size_t)2));
@@ -381,23 +419,23 @@ public:
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
                     if (s->fromJSON(doc["value"])) {
                         prefs.begin("config", false);
-                        s->save(prefs);           
-                        prefs.end();          
-                        sl.println("✅ Setting saved");
+                        s->save(prefs);
+                        prefs.end();
+                        log("✅ Setting saved");
                         server.send(200, "application/json", "{\"status\":\"saved\"}");
                         return;
                     }
                 }
             }
 
-            sl.println("❌ Setting not found");
+            log("❌ Setting not found");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
         // Reboot
         server.on("/reboot", HTTP_POST, [this]() {
             server.send(200, "application/json", "{\"status\":\"rebooting\"}");
-            sl.println("🔄 Neustart des Geräts...");
+            log("🔄 Neustart des Geräts...");
             delay(100);
             reboot();
         });
@@ -407,10 +445,10 @@ public:
             server.send(200, "application/json", toJSON());
         });
 
-        // Save all settings (MUSS NACH DEN EINZELROUTEN KOMMEN)
+        // Save all settings
         server.on("/save", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
-            sl.println("🌐 Speichern aller Einstellungen...");
+            log("🌐 Speichern aller Einstellungen...");
             deserializeJson(doc, server.arg("plain"));
             if (fromJSON(doc)) {
                 saveAll();
@@ -420,17 +458,17 @@ public:
             }
         });
 
-        // Root route (MUSS ALS LETZTES DEFINIEREN)
+        // Root route
         server.on("/", HTTP_GET, [this]() {
             server.send_P(200, "text/html", webhtml.getWebHTML());
         });
 
         server.on("/", HTTP_POST, [this]() {
-            sl.println("🌐 POST-Anfrage an die Root-Route erhalten");
-            sl.println("🌐 Body: " + server.arg("plain"));
+            log("🌐 POST-Anfrage an die Root-Route erhalten");
+            log("🌐 Body: %s", server.arg("plain"));
         });
 
-        sl.println("🌐 Routen erfolgreich definiert");
+        log("🌐 Routen erfolgreich definiert");
     }
 
 };

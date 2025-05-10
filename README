@@ -7,18 +7,24 @@ The ConfigurationsManager is a project designed to manage and store configuratio
 ## Achtung das ist ein c++V17 Projekt
 
 ```ini
+
 [env:nodemcu-32s]
-platform = espressif32@6.3.2
+platform = espressif32
 board = nodemcu-32s
-board_build.variant = esp32
 framework = arduino
 monitor_speed = 115200
 upload_port = COM[4]
 build_unflags = -std=gnu++11
 build_flags = 
-	-Wno-deprecated-declarations
-	-std=gnu++17
+    -Wno-deprecated-declarations
+    -std=gnu++17
 lib_deps = bblanchon/ArduinoJson@^7.4.1
+
+
+[platformio]
+description = esp32 c++ V17 Project for manage settings
+
+
 ```
 
 
@@ -26,49 +32,30 @@ lib_deps = bblanchon/ArduinoJson@^7.4.1
 
 - **Persistent Storage**: Save configuration settings to non-volatile memory (e.g., SPIFFS or NVS).
 - **Easy Retrieval**: Retrieve stored configurations with minimal code.
-- **Dynamic Updates**: Update configurations at runtime without restarting the device.
-- **JSON Support**: Store configurations in a structured JSON format for flexibility.
-- **Error Handling**: Robust error handling for invalid or missing configurations.
+- **Web Interface**: Optional web interface for managing configurations via a web browser.
+
 
 ## Requirements
 
 - ESP32 development board
 - Arduino IDE or PlatformIO
-- ESP32 libraries for SPIFFS or NVS (depending on the storage method)
+- add *build_flags = -std=gnu++17* and *build_unflags = -std=gnu++11* to your platformio.ini file
 
-## Installation
 
-1. Clone this repository:
-    ```
-    git clone https://github.com/yourusername/ConfigurationsManager.git
-    ```
-2. Open the project in your preferred IDE (e.g., Arduino IDE or PlatformIO).
-3. Install the required libraries if not already installed.
-4. Upload the code to your ESP32 board.
+
 
 ## Usage
 
 1. Include the ConfigurationsManager library in your project.
-2. Initialize the manager in your setup function.
-3. Use the provided methods to save, retrieve, or update configurations.
 
-Example:
+```cpp
+//todo: add some example code
 
-### HTTPS Support (not Readdy yet):
+´´´
 
-install openSSL and generate a self-signed certificate:
+# todo
 
-```bash
-# Install OpenSSL if not already installed
-# type this command in the command line as administrator
-choco install openssl -y
-Import-Module $env:ChocolateyInstall\helpers\chocolateyProfile.psm1
-refreshenv
-
-# Generate a self-signed certificate
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
-```
-
-
-paste the generated key and certificate into the `cert.pem` and `key.pem` files in the cert.h file.
+- HTTPS Support
+- i18n Support
+- make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for it)
 
