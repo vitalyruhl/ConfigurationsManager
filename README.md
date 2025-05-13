@@ -27,9 +27,11 @@ description = ESP32 C++17 Project for managing settings
 
 ## Features
 
-- **Persistent Storage**: Save configuration settings to non-volatile memory (e.g., SPIFFS or NVS).
-- **Easy Retrieval**: Retrieve stored configurations with minimal code.
-- **Web Interface**: Optional web interface for managing configurations via a web browser.
+- 📦 Non-Volatile Storage (NVS) integration
+- 🌐 Responsive Web Configuration Interface
+- 🔒 Password masking & secret handling
+- 🔄 Automatic WiFi reconnect
+- 📡 AP Mode fallback
 
 ## Requirements
 
@@ -37,13 +39,28 @@ description = ESP32 C++17 Project for managing settings
 - Arduino IDE or PlatformIO
 - add _build_flags = -std=gnu++17_ and _build_unflags = -std=gnu++11_ to your platformio.ini file
 
-## Usage
+
+## Installation
+
+```bash
+# PlatformIO
+pio pkg install --library "idk/ESP32ConfigManager"
+```
 
 1. Include the ConfigurationsManager library in your project.
 
 ```cpp
-//todo: add some example code
+#include <ConfigManager.h>
 
+Config<String> wifiSSID("ssid", "network", "MyWiFi");
+Config<String> wifiPass("password", "network", "", true, true);
+
+void setup() {
+  ConfigManager.addSetting(&wifiSSID);
+  ConfigManager.addSetting(&wifiPass);
+  configManager.saveAll();
+  ConfigManager.startWebServer();
+}
 ´´´
 
 # todo
