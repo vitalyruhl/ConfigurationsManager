@@ -39,7 +39,6 @@ description = ESP32 C++17 Project for managing settings
 - Arduino IDE or PlatformIO
 - add _build_flags = -std=gnu++17_ and _build_unflags = -std=gnu++11_ to your platformio.ini file
 
-
 ## Installation
 
 ```bash
