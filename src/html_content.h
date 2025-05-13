@@ -88,15 +88,17 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
     </style>
   </head>
   <body>
-    <h1>Gerätekonfiguration</h1>
+    <h1>Device Configuration</h1>
     <div id="status"></div>
     <div id="settingsContainer"></div>
 
     <div class="action-buttons">
-      <button onclick="applyAll()" class="apply-btn">Alle anwenden</button>
-      <button onclick="saveAll()" class="save-btn">Alle speichern</button>
-      <button onclick="resetDefaults()" class="reset-btn">Zurücksetzen</button>
-      <button onclick="rebootDevice()" class="reset-btn">Neustart</button>
+      <button onclick="applyAll()" class="apply-btn">Apply All</button>
+      <button onclick="saveAll()" class="save-btn">Save All</button>
+      <button onclick="resetDefaults()" class="reset-btn">
+        Reset Defaults
+      </button>
+      <button onclick="rebootDevice()" class="reset-btn">Reboot</button>
     </div>
 
     <script>
@@ -107,7 +109,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
           const config = await response.json();
           renderSettings(config);
         } catch (error) {
-          showStatus("Fehler: " + error.message, "red");
+          showStatus("Error: " + error.message, "red");
         }
       }
 
@@ -167,12 +169,12 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         input.style.flex = "1";
 
         const applyBtn = document.createElement("button");
-        applyBtn.textContent = "Anwenden";
+        applyBtn.textContent = "Apply";
         applyBtn.className = "apply-btn";
         applyBtn.onclick = () => applySingle(category, key, input);
 
         const saveBtn = document.createElement("button");
-        saveBtn.textContent = "Speichern";
+        saveBtn.textContent = "Save";
         saveBtn.className = "save-btn";
         saveBtn.onclick = () => saveSingle(category, key, input);
 
@@ -219,7 +221,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
       }
 
       async function saveAll() {
-        if (!confirm("Alle Einstellungen speichern?")) return;
+        if (!confirm("Save all settings?")) return;
 
         const config = {};
         document.querySelectorAll("input").forEach((input) => {
@@ -236,34 +238,34 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
             body: JSON.stringify(config),
           });
           showStatus(
-            response.ok ? "Alle Einstellungen gespeichert!" : "Fehler!",
+            response.ok ? "All settings saved!" : "Error!",
             response.ok ? "green" : "red"
           );
         } catch (error) {
-          showStatus("Fehler: " + error.message, "red");
+          showStatus("Error: " + error.message, "red");
         }
       }
 
       async function resetDefaults() {
-        if (!confirm("Auf Standard zurücksetzen?")) return;
+        if (!confirm("Reset to defaults?")) return;
         try {
           const response = await fetch("/config/reset", { method: "POST" });
           if (response.ok) {
-            showStatus("Zurücksetzen erfolgreich!", "green");
+            showStatus("Reset successful!", "green");
             setTimeout(() => location.reload(), 1000);
           }
         } catch (error) {
-          showStatus("Fehler: " + error.message, "red");
+          showStatus("Error: " + error.message, "red");
         }
       }
 
       function rebootDevice() {
-        if (!confirm("Gerät neu starten?")) return;
+        if (!confirm("Reboot device?")) return;
         fetch("/reboot", { method: "POST" })
           .then((response) =>
-            response.ok ? showStatus("Neustart...", "blue") : null
+            response.ok ? showStatus("Rebooting...", "blue") : null
           )
-          .catch((error) => showStatus("Fehler: " + error.message, "red"));
+          .catch((error) => showStatus("Error: " + error.message, "red"));
       }
 
       function showStatus(message, color) {
@@ -283,5 +285,5 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 
 class WebHTML {
 public:
-    const char* getWebHTML();
+const char* getWebHTML();
 };
