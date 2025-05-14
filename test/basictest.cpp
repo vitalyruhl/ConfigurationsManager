@@ -6,6 +6,10 @@
 
 ConfigManagerClass testManager;
 
+//todo: Add test for Wifi-AP mode
+//todo: Add test for Wifi-STA mode
+//todo: Add test for Web-AP (Save, Load, Reboot, etc.)
+
 // Main Test
 Config<int> testInt("tInt", "cfg", 42);
 Config<bool> testBool("tBool", "cfg", true);
