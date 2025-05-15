@@ -72,7 +72,7 @@ void test_callback_function() {
 void setup() {
   delay(2000);
   Serial.begin(115200);
-  
+
   UNITY_BEGIN();
   testManager.addSetting(&testInt);
   testManager.addSetting(&testBool);
@@ -87,7 +87,7 @@ void setup() {
   RUN_TEST(test_float_config);
   RUN_TEST(test_password_masking);
   RUN_TEST(test_callback_function);
-  
+
   UNITY_END();
 }
 

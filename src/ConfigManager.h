@@ -13,7 +13,9 @@
 
 #include "html_content.h"
 
-// #define ENABLE_LOGGING
+
+
+#define ENABLE_LOGGING // todo: make Enable Logging from Usage, or send log to an external Logger, or make an callback logger?
 
 #ifdef ENABLE_LOGGING
 #define log(fmt, ...)                                     \
@@ -63,6 +65,19 @@ virtual bool fromJSON(const JsonVariant &value) = 0;
 
 const char *getKey() const {
     static char key[64];
+    //todo: Check if key length is > 14 chars, because max key length is 15 chars
+    //trow an error? or just truncate the key? if truncate- is there an library for that?
+
+    // Idea 1: convert the key to a hash value and use that as key
+
+    // Idea 2: Use an Optional Parameter to store an String with Full Key Name (it can be shown in WebUI)
+    // and use the shortened key for the Preferences
+
+    // now log if the key is too long
+    if (strlen(category) + strlen(name) > 14) {
+        log("⚠️ Key length exceeds 14 characters! Key: %s_%s", category, name);
+    }
+
     snprintf(key, sizeof(key), "%s_%s", category, name);
     return key;
 }
