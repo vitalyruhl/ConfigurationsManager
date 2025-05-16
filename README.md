@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.0.0
+> Version 1.0.1
 
 ## Overview
 
@@ -43,7 +43,7 @@ description = ESP32 C++17 Project for managing settings
 
 ```bash
 # PlatformIO
-pio pkg install --library "idk/ESP32ConfigManager"
+pio pkg install --library "vitalyruhl/ESP32ConfigManager"
 ```
 
 1. Include the ConfigurationsManager library in your project.
