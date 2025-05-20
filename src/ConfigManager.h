@@ -15,7 +15,7 @@
 
 
 
-#define ENABLE_LOGGING // todo: make Enable Logging from Usage, or send log to an external Logger, or make an callback logger?
+// #define ENABLE_LOGGING // todo: make Enable Logging from Usage, or send log to an external Logger, or make an callback logger?
 
 #ifdef ENABLE_LOGGING
 #define log(fmt, ...)                                     \
@@ -33,7 +33,6 @@
 #endif
 
 extern WebServer server;
-#define sl Serial
 
 enum class SettingType { BOOL, INT, FLOAT, STRING, PASSWORD };
 
@@ -455,6 +454,41 @@ void defineRoutes() {
     });
 
     log("🌐 Routes defined successfully");
+}
+
+void remove(String category, String key) {
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
+        if (String((*it)->getCategory()) == category && String((*it)->getName()) == key) {
+            settings.erase(it);
+            break;
+        }
+    }
+}
+void remove(BaseSetting *s) {
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
+        if (*it == s) {
+            settings.erase(it);
+            break;
+        }
+    }
+}
+void clearAll() {
+    for (auto *s : settings) {
+        delete s;
+    }
+    settings.clear();
+    log("🌐 All settings cleared");
+    prefs.begin("config", false);
+    prefs.clear();
+    prefs.end();
+    log("🌐 Preferences cleared");
+}
+
+void clearAllFromPrefs() {
+    prefs.begin("config", false);
+    prefs.clear();
+    prefs.end();
+    log("🌐 All preferences cleared");
 }
 
 };

@@ -1,6 +1,12 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.0.2
+> Version 1.1.0
+
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
+
+[![GitHub issues](https://img.shields.io/github/issues/vitaly.ruhl/ESP32ConfigManager.svg)]
+[![GitHub last commit](https://img.shields.io/github/last-commit/vitaly.ruhl/ESP32ConfigManager.svg)]
+
 
 ## Overview
 
@@ -27,7 +33,7 @@ description = ESP32 C++17 Project for managing settings
 
 ## Features
 
-- 📦 Non-Volatile Storage (NVS) integration
+- 📦 Non-Volatile Storage (NVS) integration (esp preferences)
 - 🌐 Responsive Web Configuration Interface
 - 🔒 Password masking & secret handling
 - 🔄 Automatic WiFi reconnect
@@ -60,13 +66,20 @@ void setup() {
   configManager.saveAll();
   ConfigManager.startWebServer();
 }
-´´´
+```
 
-# todo
+## Version History
 
+- **1.0.0**: Initial release with basic features.
+- **1.0.2**: make an library
+- **1.1.0**: add Structure example, bugfix, add delete settings functions
+
+
+## ToDo
+
+- add test for new functions
+- add more examples
 - HTTPS Support
 - i18n Support
-- make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for it)
-
-```
+- make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for make it typ-safe)
 
