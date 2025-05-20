@@ -4,8 +4,9 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define BUTTON_PIN_AP_MODE 13
+#define VERSION "1.1.0" // add Structure example, bugfix, add delete all settings
 
+#define BUTTON_PIN_AP_MODE 13
 #define sl Serial // logger
 
 // ⚠️ Warning ⚠️ settings will not be stored if length >14! Max length for prefs is 15 chars...
@@ -14,23 +15,30 @@
 // Usage:
 // Config<VarType> VarName (const char *name, const char category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (cb)(T) = nullptr)
 
-#define VERSION "1.1.0" // add Structure example, bugfix, add delete all settings
+ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
+WebServer server(80);
+int cbTestValue = 0;
 
-ConfigManagerClass configManager;
+// here used global variables without struct eg Config is an helper class for the settings stored in the ConfigManager.h
+// todo: test for settings used in a void scope etc...
 Config<String> wifiSsid("ssid", "wifi", "MyWiFi");
 Config<String> wifiPassword("password", "wifi", "secretpass", true, true);
 Config<bool> useDhcp("dhcp", "network", true);
+
 Config<int> updateInterval("interval", "main", 30);
 
-WebServer server(80);
-
+//--------------------------------------------------------------------
+// predeclaration of functions
 void SetupCheckForAPModeButton();
 void blinkBuidInLED(int BlinkCount, int blinkRate);
 
-int cbTestValue = 0;
-void testCallback(int val);
-Config<int> testCb("cbt", "main", 0, true, false, testCallback);
+#pragma region "Callback-Example"
+void testCallback(int val);                                      // Callback function for testCb here defined, later implemented...
+Config<int> testCb("cbt", "main", 0, true, false, testCallback); // define int variable with callback
+#pragma endregion
+//--------------------------------------------------------------------
 
+#pragma region "Structure-Example"
 // General configuration (Structure example)
 struct General_Settings
 {
@@ -47,13 +55,37 @@ struct General_Settings
                          Version("Version", "GS", VERSION)
     {
         // Register settings with ConfigManager
-        ConfigManager.addSetting(&enableController);
-        ConfigManager.addSetting(&maxOutput);
-        ConfigManager.addSetting(&minOutput);
-        ConfigManager.addSetting(&MQTTPublischPeriod);
-        ConfigManager.addSetting(&Version);
+        cfg.addSetting(&enableController);
+        cfg.addSetting(&maxOutput);
+        cfg.addSetting(&minOutput);
+        cfg.addSetting(&MQTTPublischPeriod);
+        cfg.addSetting(&Version);
     }
 };
+
+General_Settings generalSettings; // Create an instance of General_Settings-Struct
+
+// Example of a structure for WiFi with settings
+struct WiFi_Settings
+{
+    Config<String> Ssid;
+    Config<String> Password;
+    Config<bool> useDhcp;
+    WiFi_Settings() :
+
+                      Ssid("ssid", "struct", "MyWiFiStruct"),
+                      Password("password", "struct", "secretpassStruct", true, true),
+                      useDhcp("dhcp", "struct", false)
+
+    {
+        cfg.addSetting(&wifiSsid);
+        cfg.addSetting(&wifiPassword);
+        cfg.addSetting(&useDhcp);
+    }
+};
+
+WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
+#pragma endregion
 
 void setup()
 {
@@ -62,31 +94,31 @@ void setup()
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
 
     // Register settings
-    configManager.addSetting(&wifiSsid);
-    configManager.addSetting(&wifiPassword);
-    configManager.addSetting(&useDhcp);
-    configManager.addSetting(&updateInterval);
-    configManager.addSetting(&testCb);
+    cfg.addSetting(&wifiSsid);
+    cfg.addSetting(&wifiPassword);
+    cfg.addSetting(&useDhcp);
+    cfg.addSetting(&updateInterval);
+    cfg.addSetting(&testCb);
 
-    configManager.loadAll();
+    cfg.loadAll();
     sl.println("Loaded configuration:");
 
     SetupCheckForAPModeButton();
 
     delay(300);
     sl.println("Configuration printout:");
-    sl.println(configManager.toJSON(false));
+    sl.println(cfg.toJSON(false));
 
     // Test setting changes
     useDhcp.set(false);
     updateInterval.set(15);
-    configManager.saveAll();
+    cfg.saveAll();
     delay(300);
 
     if (wifiSsid.get().length() == 0)
     {
         sl.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSsid.get().c_str());
-        configManager.startAccessPoint();
+        cfg.startAccessPoint();
     }
 
     if (WiFi.getMode() == WIFI_AP)
@@ -98,12 +130,12 @@ void setup()
     if (useDhcp.get())
     {
         sl.println("DHCP enabled");
-        configManager.startWebServer(wifiSsid.get(), wifiPassword.get());
+        cfg.startWebServer(wifiSsid.get(), wifiPassword.get());
     }
     else
     {
         sl.println("DHCP disabled");
-        configManager.startWebServer("192.168.2.122", "255.255.255.0", wifiSsid.get(), wifiPassword.get());
+        cfg.startWebServer("192.168.2.122", "255.255.255.0", wifiSsid.get(), wifiPassword.get());
     }
     sl.printf("🖥️ Webserver running at: %s", WiFi.localIP().toString().c_str());
 }
@@ -120,14 +152,14 @@ void loop()
         if (WiFi.status() != WL_CONNECTED)
         {
             sl.println("❌ WiFi not connected!");
-            configManager.reconnectWifi();
+            cfg.reconnectWifi();
             delay(1000);
             return;
         }
         blinkBuidInLED(1, 100);
     }
 
-    configManager.handleClient();
+    cfg.handleClient();
 
     static unsigned long lastPrint = 0;
     int interval = max(updateInterval.get(), 1); // Prevent zero interval
@@ -164,11 +196,11 @@ void SetupCheckForAPModeButton()
         sl.printf("AP mode button pressed -> Starting AP with\n --> SSID: %s \n --> Password: %s\n", APName.c_str(), pwd.c_str());
 
         // Choose preferred AP mode:
-        // configManager.startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", "config1234");
-        // configManager.startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", pwd);
-        // configManager.startAccessPoint("192.168.4.1", "255.255.255.0", APName, pwd);
-        configManager.startAccessPoint("192.168.4.1", "255.255.255.0", APName, "");
-        // configManager.startAccessPoint();
+        // cfg.startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", "config1234");
+        // cfg.startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", pwd);
+        // cfg.startAccessPoint("192.168.4.1", "255.255.255.0", APName, pwd);
+        cfg.startAccessPoint("192.168.4.1", "255.255.255.0", APName, "");
+        // cfg.startAccessPoint();
     }
 }
 
