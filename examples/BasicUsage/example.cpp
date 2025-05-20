@@ -70,17 +70,17 @@ struct WiFi_Settings
 {
     Config<String> Ssid;
     Config<String> Password;
-    Config<bool> useDhcp;
+    Config<bool> Dhcp;
     WiFi_Settings() :
 
                       Ssid("ssid", "struct", "MyWiFiStruct"),
                       Password("password", "struct", "secretpassStruct", true, true),
-                      useDhcp("dhcp", "struct", false)
+                      Dhcp("dhcp", "struct", false)
 
     {
-        cfg.addSetting(&wifiSsid);
-        cfg.addSetting(&wifiPassword);
-        cfg.addSetting(&useDhcp);
+        cfg.addSetting(&Ssid);
+        cfg.addSetting(&Password);
+        cfg.addSetting(&Dhcp);
     }
 };
 
