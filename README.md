@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.1.0
+> Version 1.1.1
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 
@@ -73,6 +73,7 @@ void setup() {
 - **1.0.0**: Initial release with basic features.
 - **1.0.2**: make an library
 - **1.1.0**: add Structure example, bugfix, add delete settings functions
+- **1.1.1**: forgot to change library version in library.json
 
 
 ## ToDo
