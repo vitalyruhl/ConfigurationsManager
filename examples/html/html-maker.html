@@ -242,6 +242,32 @@
         }
       }
 
+      async function applyAll() {
+        if (!confirm("Apply all settings?")) return;
+
+        const config = {};
+        document.querySelectorAll("input").forEach((input) => {
+          const [category, key] = input.name.split(".");
+          if (!config[category]) config[category] = {};
+          config[category][key] =
+            input.type === "checkbox" ? input.checked : input.value;
+        });
+
+        try {
+          const response = await fetch("/apply", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config),
+          });
+          showStatus(
+            response.ok ? "All settings Applyed!" : "Error!",
+            response.ok ? "green" : "red"
+          );
+        } catch (error) {
+          showStatus("Error: " + error.message, "red");
+        }
+      }
+
       async function resetDefaults() {
         if (!confirm("Reset to defaults?")) return;
         try {

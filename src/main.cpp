@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "1.1.0" // add Structure example, bugfix, add delete all settings
+#define VERSION "1.2.0" // Add additional Logging
 
 #define BUTTON_PIN_AP_MODE 13
 #define sl Serial // logger
@@ -87,6 +87,15 @@ struct WiFi_Settings
 WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
 #pragma endregion
 
+#pragma region "Logger-Callback"
+
+void cbMyConfigLogger(const char* msg) {
+    sl.println(msg);
+}
+
+#pragma endregion
+//--------------------------------------------------------------------
+
 void setup()
 {
     sl.begin(115200);
@@ -99,6 +108,13 @@ void setup()
     cfg.addSetting(&useDhcp);
     cfg.addSetting(&updateInterval);
     cfg.addSetting(&testCb);
+
+    // ConfigManagerClass::setLogger(cbMyConfigLogger); // Set logger callback to log in your own way
+
+    ConfigManagerClass::setLogger([](const char* msg) {
+            Serial.print("[CFG] ");
+            Serial.println(msg);
+    });
 
     cfg.loadAll();
     sl.println("Loaded configuration:");

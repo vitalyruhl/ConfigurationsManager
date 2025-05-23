@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.1.1
+> Version 1.1.2
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 
@@ -74,7 +74,8 @@ void setup() {
 - **1.0.2**: make an library
 - **1.1.0**: add Structure example, bugfix, add delete settings functions
 - **1.1.1**: forgot to change library version in library.json
-
+- **1.1.2**: Bugfix: add forgotten function applyAll() in html
+- **1.2.0**: add logging function as callback for flexible logging
 
 ## ToDo
 

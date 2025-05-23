@@ -1,6 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
+// Version 1.1.2 - 23.05.2025 - viru - Bugfix add forgotten function applyAll() in html
+
 const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -239,6 +241,32 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
           });
           showStatus(
             response.ok ? "All settings saved!" : "Error!",
+            response.ok ? "green" : "red"
+          );
+        } catch (error) {
+          showStatus("Error: " + error.message, "red");
+        }
+      }
+
+      async function applyAll() {
+        if (!confirm("Apply all settings?")) return;
+
+        const config = {};
+        document.querySelectorAll("input").forEach((input) => {
+          const [category, key] = input.name.split(".");
+          if (!config[category]) config[category] = {};
+          config[category][key] =
+            input.type === "checkbox" ? input.checked : input.value;
+        });
+
+        try {
+          const response = await fetch("/apply", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config),
+          });
+          showStatus(
+            response.ok ? "All settings Applyed!" : "Error!",
             response.ok ? "green" : "red"
           );
         } catch (error) {
