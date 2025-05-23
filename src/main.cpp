@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "1.2.0" // Add additional Logging, and Truncated Key Warning
+#define VERSION "1.2.1" // Add additional Logging, and Truncated Key Warning
 
 #define BUTTON_PIN_AP_MODE 13
 

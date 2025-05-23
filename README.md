@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.2.0
+> Version 1.2.1
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 
@@ -76,6 +76,7 @@ void setup() {
 - **1.1.1**: forgot to change library version in library.json
 - **1.1.2**: Bugfix: add forgotten function applyAll() in html
 - **1.2.0**: add logging function as callback for flexible logging
+- **1.2.1**: bugfix in logger over more, then one headder using, add dnsserver option for static ip.
 
 ## ToDo
 
