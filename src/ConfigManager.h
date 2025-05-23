@@ -340,7 +340,46 @@ public:
         gateway = ip; // Adjust if needed
         subnet.fromString(mask);
 
-        WiFi.config(ip, gateway, subnet);
+        WiFi.config(ip, gateway, subnet, IPAddress(8, 8, 8, 8));
+
+        log_message("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
+        WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
+        WiFi.begin(ssid.c_str(), password.c_str());
+
+        unsigned long startAttemptTime = millis();
+        const unsigned long timeout = 10000;
+
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
+            delay(250);
+            log_message(".");
+        }
+
+        if (WiFi.status() == WL_CONNECTED) {
+            log_message("\n✅ WiFi connected!");
+            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
+
+            log_message("🌐 Defining routes...");
+            defineRoutes();
+
+            log_message("🌐 Starting web server...");
+            server.begin();
+
+            log_message("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
+        } else {
+            log_message("\n❌ Failed to connect to WiFi!");
+        }
+    }
+    void startWebServer(const String &ipStr, const String &mask, const String &dnsServer, const String &ssid, const String &password) {
+        log_message("🌐 Configuring static IP %s...\n", ipStr.c_str());
+
+        IPAddress ip, gateway, subnet, dns;
+
+        ip.fromString(ipStr);
+        gateway = ip; // Adjust if needed
+        subnet.fromString(mask);
+        dns.fromString(dnsServer);
+
+        WiFi.config(ip, gateway, subnet, dns);
 
         log_message("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
         WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
@@ -574,5 +613,5 @@ private:
 
 };
 
-ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
+// extern ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 extern ConfigManagerClass ConfigManager;

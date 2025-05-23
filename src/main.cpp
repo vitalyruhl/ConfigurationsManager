@@ -19,6 +19,8 @@
 // Config<VarType> VarName (const char *name, const char category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (cb)(T) = nullptr)
 
 ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
+ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
+
 WebServer server(80);
 int cbTestValue = 0;
 
@@ -189,7 +191,8 @@ void setup()
     else
     {
         Serial.println("DHCP disabled");
-        cfg.startWebServer("192.168.2.122", "255.255.255.0", wifiSsid.get(), wifiPassword.get());
+        // cfg.startWebServer("192.168.2.122", "255.255.255.0", wifiSsid.get(), wifiPassword.get());
+        cfg.startWebServer("192.168.2.122", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
     }
     Serial.printf("🖥️ Webserver running at: %s", WiFi.localIP().toString().c_str());
 }
