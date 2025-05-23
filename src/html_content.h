@@ -12,7 +12,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
     <style>
       body {
         font-family: Arial, sans-serif;
-        margin: 20px;
+        margin: 2rem;
         background-color: #f0f0f0;
       }
       .category {
@@ -234,7 +234,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         });
 
         try {
-          const response = await fetch("/save", {
+          const response = await fetch("/config/save_all", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(config),
@@ -260,13 +260,13 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         });
 
         try {
-          const response = await fetch("/apply", {
+          const response = await fetch("/config/apply_all", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(config),
           });
           showStatus(
-            response.ok ? "All settings Applyed!" : "Error!",
+            response.ok ? "All settings Applied!" : "Error!",
             response.ok ? "green" : "red"
           );
         } catch (error) {
@@ -289,7 +289,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 
       function rebootDevice() {
         if (!confirm("Reboot device?")) return;
-        fetch("/reboot", { method: "POST" })
+        fetch("/config/reboot", { method: "POST" })
           .then((response) =>
             response.ok ? showStatus("Rebooting...", "blue") : null
           )

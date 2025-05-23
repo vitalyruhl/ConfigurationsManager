@@ -43,7 +43,13 @@ protected:
 public:
     NonFatalException(const std::string& msg) : message(msg) {
         //todo: add a logger, or something like that
-        // log_message("[WARN] %s", msg ); 
+        String logMsg = "[WARN] " + String(msg.c_str());
+        // if (!Serial) {
+        //     Serial.begin(115200);
+        //     while (!Serial); // Warte auf Verbindung
+        // }
+        // Serial.println(logMsg);
+        // Serial.flush();
     }
     const char* what() const noexcept override {
         return message.c_str();
@@ -93,41 +99,25 @@ class BaseSetting {
     virtual bool fromJSON(const JsonVariant &value) = 0;
 
     const char* getKey() const {
-        static char key[16]; // 15 chars + Null-Terminator
-        const int MAX_CATEGORY_LENGTH = 13; // Max for Category (14 - 1 for '_' - 1 Min Name)
+        static char key[64]; // 15 chars + Null-Terminator
+        const int MAX_CATEGORY_LENGTH = 13;
         const int MAX_TOTAL_LENGTH = 15;
 
-        // Cut the Category (WebUI all same)
-        char categoryTrimmed[MAX_CATEGORY_LENGTH + 1];
-        strncpy(categoryTrimmed, category, MAX_CATEGORY_LENGTH);
-        categoryTrimmed[MAX_CATEGORY_LENGTH] = '\0';
-
-        // throw exception if category is too long
         if (strlen(category) > MAX_CATEGORY_LENGTH) {
             throw KeyTooLongException(category, name);
         }
 
-        // get length of the max name 
-        int maxNameLength = MAX_TOTAL_LENGTH - strlen(categoryTrimmed) - 1;
-        
-        // cut the name, but mot less than 1 char
+        int maxNameLength = MAX_TOTAL_LENGTH - strlen(category) - 1;
+
         char nameTrimmed[maxNameLength + 1];
         strncpy(nameTrimmed, name, maxNameLength);
         nameTrimmed[maxNameLength] = '\0';
 
-        snprintf(key, sizeof(key), "%s_%s", categoryTrimmed, nameTrimmed);
-
-        // if name is truncated
-        int max_name_len = MAX_TOTAL_LENGTH - strlen(category) - 1;
-        if(strlen(name) > max_name_len) {
-            char trimmed_name[max_name_len + 1];
-            strncpy(trimmed_name, name, max_name_len);
-            trimmed_name[max_name_len] = '\0';
-            
-            snprintf(key, sizeof(key), "%s_%s", category, trimmed_name);
-            throw KeyTruncatedWarning(key, trimmed_name);
+        if (strlen(name) > maxNameLength) {
+            throw KeyTruncatedWarning(name, nameTrimmed);
         }
 
+        snprintf(key, sizeof(key), "%s_%s", category, nameTrimmed);
         return key;
     }
 
@@ -353,6 +343,7 @@ public:
         WiFi.config(ip, gateway, subnet);
 
         log_message("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
+        WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
         WiFi.begin(ssid.c_str(), password.c_str());
 
         unsigned long startAttemptTime = millis();
@@ -381,6 +372,7 @@ public:
 
     void startWebServer(const String &ssid, const String &password) {
         log_message("🌐 DHCP mode active - Connecting to WiFi...");
+        WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
         WiFi.begin(ssid.c_str(), password.c_str());
 
         unsigned long startAttemptTime = millis();
@@ -426,7 +418,7 @@ public:
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
                     if (s->fromJSON(doc["value"])) {
-                        log_message("✅ Setting applied");
+                        log_message("✅ Setting applied Category: %s, Key: %s", category.c_str(), key.c_str());
                         server.send(200, "application/json", "{\"status\":\"applied\"}");
                         return;
                     }
@@ -435,6 +427,17 @@ public:
 
             log_message("❌ Setting not found");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
+        });
+
+        server.on("/config/apply_all", HTTP_POST, [this]() {
+            DynamicJsonDocument doc(1024);
+            log_message("🌐 Applying all settings...");
+            deserializeJson(doc, server.arg("plain"));
+            if (fromJSON(doc)) {
+                server.send(200, "application/json", "{\"status\":\"applied\"}");
+            } else {
+                server.send(400, "application/json", "{\"status\":\"invalid\"}");
+            }
         });
 
         // Save single setting
@@ -453,19 +456,19 @@ public:
                         prefs.begin("config", false);
                         s->save(prefs);
                         prefs.end();
-                        log_message("✅ Setting saved");
+                        log_message("✅ Setting saved Category: %s, Key: %s", category.c_str(), key.c_str());
                         server.send(200, "application/json", "{\"status\":\"saved\"}");
                         return;
                     }
                 }
             }
 
-            log_message("❌ Setting not found");
+            log_message("❌ Setting not found category: %s, key: %s", category.c_str(), key.c_str());
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
         // Reboot
-        server.on("/reboot", HTTP_POST, [this]() {
+        server.on("/config/reboot", HTTP_POST, [this]() {
             server.send(200, "application/json", "{\"status\":\"rebooting\"}");
             log_message("🔄 Device rebooting...");
             delay(100);
@@ -478,7 +481,7 @@ public:
         });
 
         // Save all settings
-        server.on("/save", HTTP_POST, [this]() {
+        server.on("/config/save_all", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
             log_message("🌐 Saving all settings...");
             deserializeJson(doc, server.arg("plain"));
@@ -557,6 +560,10 @@ public:
         va_end(args);
 
         logger(buffer);
+    }
+
+    void triggerLoggerTest() {
+       log_message("Test message abcdefghijklmnop");
     }
 
 private:

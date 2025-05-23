@@ -7,7 +7,6 @@
 #define VERSION "1.2.0" // Add additional Logging, and Truncated Key Warning
 
 #define BUTTON_PIN_AP_MODE 13
-#define sl Serial // logger
 
 // ⚠️ Warning ⚠️
 // ESP 32 has a limitation of 15 chars for the key name.
@@ -15,7 +14,6 @@
 // The category is limited to 13 chars, the key name to 1 char.
 // also the key will be truncated up to 1 char if length of category is to long.
 // if all longer than 15 chars, you become an exception!
-
 
 // Usage:
 // Config<VarType> VarName (const char *name, const char category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (cb)(T) = nullptr)
@@ -91,55 +89,79 @@ struct WiFi_Settings
 WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
 #pragma endregion
 
-#pragma region "Logger-Callback"
-
-void cbMyConfigLogger(const char* msg) {
-    sl.println(msg);
-}
-
-#pragma endregion
 //--------------------------------------------------------------------
 
 void setup()
 {
-    sl.begin(115200);
+    Serial.begin(115200);
 
-    
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
-    
+
     // Register settings
     cfg.addSetting(&wifiSsid);
     cfg.addSetting(&wifiPassword);
     cfg.addSetting(&useDhcp);
     cfg.addSetting(&updateInterval);
     cfg.addSetting(&testCb);
-    
 
+    //-----------------------------------------------------------------
     // this is only to show, that you get an exception if the key is to long
     // but you cant catch it in the constructor!
-    try { 
-        const char* key = wifiSsid.getKey();
-    } catch(const KeyTooLongException& e) {
-        Serial.printf("Config Error: %s\n", e.what());
+    try
+    {
+        const char *key = wifiSsid.getKey();
     }
-    
-    // ConfigManagerClass::setLogger(cbMyConfigLogger); // Set logger callback to log in your own way
-    // or as an lambda function...
-    ConfigManagerClass::setLogger([](const char* msg) {
-            Serial.print("[CFG] ");
-            Serial.println(msg);
-    });
+    catch (const KeyTooLongException &e)
+    {
+        Serial.printf("[ERROR] Config Error: %s\n", e.what());
+    }
+    catch (const KeyTruncatedWarning &e)
+    {
+        Serial.printf("[MAIN-Catch] Config Error: %s\n", e.what());
+    }
 
+    // test a to long, but truncatable key
+    try
+    {
+        Config<String> toLongKey("abcdefghijklmnop", "1234567890", "test to long, but truncatable key", true, false);
+        const char *key = toLongKey.getKey();
+        // Serial.printf("[WARNING] this Key was truncated: %s\n", key);
+    }
+    catch (const KeyTruncatedWarning &e)
+    {
+        Serial.printf("[MAIN-Catch-WARNING] Config Error: %s\n", e.what());
+    }
+    catch (const KeyTooLongException &e)
+    {
+        Serial.printf("[ERROR]  Config Error: %s\n", e.what());
+    }
+    //-----------------------------------------------------------------
+
+    //-----------------------------------------------------------------
+    // Set logger callback to log in your own way
+    // void cbMyConfigLogger(const char *msg)
+    // {
+    //     Serial.println(msg);
+    // }
+    // ConfigManagerClass::setLogger(cbMyConfigLogger);
+
+    // or as an lambda function...
+    ConfigManagerClass::setLogger([](const char *msg)
+                                  {
+            Serial.print("[CFG] ");
+            Serial.println(msg); });
+
+    //-----------------------------------------------------------------
 
     cfg.loadAll(); // Load all settings from the preferences
-    sl.println("Loaded configuration:");
+    Serial.println("Loaded configuration:");
 
     SetupCheckForAPModeButton();
 
     delay(300);
-    sl.println("Configuration printout:");
-    sl.println(cfg.toJSON(false));
+    Serial.println("Configuration printout:");
+    Serial.println(cfg.toJSON(false));
 
     // Test setting changes
     useDhcp.set(false);
@@ -149,27 +171,27 @@ void setup()
 
     if (wifiSsid.get().length() == 0)
     {
-        sl.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSsid.get().c_str());
+        Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSsid.get().c_str());
         cfg.startAccessPoint();
     }
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        sl.printf("🖥️  AP Mode! ");
+        Serial.printf("🖥️  AP Mode! ");
         return; // Skip webserver setup in AP mode
     }
 
     if (useDhcp.get())
     {
-        sl.println("DHCP enabled");
+        Serial.println("DHCP enabled");
         cfg.startWebServer(wifiSsid.get(), wifiPassword.get());
     }
     else
     {
-        sl.println("DHCP disabled");
+        Serial.println("DHCP disabled");
         cfg.startWebServer("192.168.2.122", "255.255.255.0", wifiSsid.get(), wifiPassword.get());
     }
-    sl.printf("🖥️ Webserver running at: %s", WiFi.localIP().toString().c_str());
+    Serial.printf("🖥️ Webserver running at: %s", WiFi.localIP().toString().c_str());
 }
 
 void loop()
@@ -183,7 +205,7 @@ void loop()
     {
         if (WiFi.status() != WL_CONNECTED)
         {
-            sl.println("❌ WiFi not connected!");
+            Serial.println("❌ WiFi not connected!");
             cfg.reconnectWifi();
             delay(1000);
             return;
@@ -198,8 +220,8 @@ void loop()
     if (millis() - lastPrint > interval * 1000)
     {
         lastPrint = millis();
-        // sl.printf("Loop --> DHCP status: %s\n", useDhcp.get() ? "yes" : "no");
-        // sl.printf("Loop --> WiFi status: %s\n", WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
+        // Serial.printf("Loop --> DHCP status: %s\n", useDhcp.get() ? "yes" : "no");
+        // Serial.printf("Loop --> WiFi status: %s\n", WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
         cbTestValue++;
         testCb.set(cbTestValue);
         if (cbTestValue > 10)
@@ -213,7 +235,7 @@ void loop()
 
 void testCallback(int val)
 {
-    sl.printf("Callback called with value: %d\n", val);
+    Serial.printf("Callback called with value: %d\n", val);
 }
 
 void SetupCheckForAPModeButton()
@@ -221,11 +243,11 @@ void SetupCheckForAPModeButton()
     String APName = "ESP32_Config";
     String pwd = "config1234"; // Default AP password
 
-    sl.println("Checking AP mode button...");
+    Serial.println("Checking AP mode button...");
 
     if (digitalRead(BUTTON_PIN_AP_MODE) == LOW)
     {
-        sl.printf("AP mode button pressed -> Starting AP with\n --> SSID: %s \n --> Password: %s\n", APName.c_str(), pwd.c_str());
+        Serial.printf("AP mode button pressed -> Starting AP with\n --> SSID: %s \n --> Password: %s\n", APName.c_str(), pwd.c_str());
 
         // Choose preferred AP mode:
         // cfg.startAccessPoint("192.168.4.1", "255.255.255.0", "ESP32_Config", "config1234");
