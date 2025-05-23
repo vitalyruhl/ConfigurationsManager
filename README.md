@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.1.2
+> Version 1.2.0
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 
