@@ -20,9 +20,8 @@ jobs:
           python-version: "3.10"
 
       - name: Install PlatformIO Core
-        run: |
-          pip install -U platformio
+        run: pip install -U platformio
 
-      - name: Run PlatformIO Tests
+      - name: Run PlatformIO Tests (ESP32)
         run: |
-          pio test -e test
+          pio test -e test --without-upload
