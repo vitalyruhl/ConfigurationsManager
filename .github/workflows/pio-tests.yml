@@ -24,4 +24,4 @@ jobs:
 
       - name: Run PlatformIO Tests (ESP32)
         run: |
-          pio test -e test --without-upload
+          pio test -e test --without-uploading
