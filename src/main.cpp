@@ -4,13 +4,18 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "1.2.0" // Add additional Logging
+#define VERSION "1.2.0" // Add additional Logging, and Truncated Key Warning
 
 #define BUTTON_PIN_AP_MODE 13
 #define sl Serial // logger
 
-// ⚠️ Warning ⚠️ settings will not be stored if length >14! Max length for prefs is 15 chars...
-// Settings are stored in format: <category>_<key>
+// ⚠️ Warning ⚠️
+// ESP 32 has a limitation of 15 chars for the key name.
+// The key name is build from the category and the key name. (<category>_<key>).
+// The category is limited to 13 chars, the key name to 1 char.
+// also the key will be truncated up to 1 char if length of category is to long.
+// if all longer than 15 chars, you become an exception!
+
 
 // Usage:
 // Config<VarType> VarName (const char *name, const char category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (cb)(T) = nullptr)
@@ -20,7 +25,6 @@ WebServer server(80);
 int cbTestValue = 0;
 
 // here used global variables without struct eg Config is an helper class for the settings stored in the ConfigManager.h
-// todo: test for settings used in a void scope etc...
 Config<String> wifiSsid("ssid", "wifi", "MyWiFi");
 Config<String> wifiPassword("password", "wifi", "secretpass", true, true);
 Config<bool> useDhcp("dhcp", "network", true);
@@ -99,24 +103,36 @@ void cbMyConfigLogger(const char* msg) {
 void setup()
 {
     sl.begin(115200);
+
+    
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
-
+    
     // Register settings
     cfg.addSetting(&wifiSsid);
     cfg.addSetting(&wifiPassword);
     cfg.addSetting(&useDhcp);
     cfg.addSetting(&updateInterval);
     cfg.addSetting(&testCb);
+    
 
+    // this is only to show, that you get an exception if the key is to long
+    // but you cant catch it in the constructor!
+    try { 
+        const char* key = wifiSsid.getKey();
+    } catch(const KeyTooLongException& e) {
+        Serial.printf("Config Error: %s\n", e.what());
+    }
+    
     // ConfigManagerClass::setLogger(cbMyConfigLogger); // Set logger callback to log in your own way
-
+    // or as an lambda function...
     ConfigManagerClass::setLogger([](const char* msg) {
             Serial.print("[CFG] ");
             Serial.println(msg);
     });
 
-    cfg.loadAll();
+
+    cfg.loadAll(); // Load all settings from the preferences
     sl.println("Loaded configuration:");
 
     SetupCheckForAPModeButton();

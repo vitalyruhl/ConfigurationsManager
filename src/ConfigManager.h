@@ -10,20 +10,15 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <WebServer.h>
+#include <exception>
 
 #include "html_content.h"
 
+//TODO Global
+//ToDo: add optional parameter to set the keyname and Kategoryname for the webUI
+
 extern WebServer server;
-class ConfigManagerClass;  // Forward declaration
-
-// set namespaces for the logger to prevent name clashes
-namespace ConfigManagerLog {
-    extern std::function<void(const char*)> logger;
-    void log_message(const char* format, ...); // Name geändert
-}
-
-
-#define LOG(fmt, ...) ConfigManagerLog::log_message(fmt, ##__VA_ARGS__)
+class ConfigManagerClass; // Forward declaration
 
 enum class SettingType { BOOL, INT, FLOAT, STRING, PASSWORD };
 
@@ -32,6 +27,50 @@ template <> struct TypeTraits<bool> { static constexpr SettingType type = Settin
 template <> struct TypeTraits<int> { static constexpr SettingType type = SettingType::INT; };
 template <> struct TypeTraits<float> { static constexpr SettingType type = SettingType::FLOAT; };
 template <> struct TypeTraits<String> { static constexpr SettingType type = SettingType::STRING; };
+
+
+class ConfigException : public std::exception {
+protected:
+    String msg;
+public:
+    explicit ConfigException(const String& message) : msg(message) {}
+    const char* what() const noexcept override { return msg.c_str(); }
+};
+
+class NonFatalException : public std::exception {
+protected:
+    std::string message;
+public:
+    NonFatalException(const std::string& msg) : message(msg) {
+        //todo: add a logger, or something like that
+        // log_message("[WARN] %s", msg ); 
+    }
+    const char* what() const noexcept override {
+        return message.c_str();
+    }
+};
+
+class KeyTooLongException : public std::exception {
+    String msg;
+public:
+    KeyTooLongException(const char* cat, const char* name) {
+        msg = "Category '" + String(cat) + "' exceeds 13 chars (Name: '" + name + "')\n";
+        msg += " ESP32 Preferences only allows 15 chars in total (Category + _ + Name)\n";
+        msg += " Category: 'network_config' (14 Chars) → Error (max 13 allowed)\n";
+        msg += " Category: 'wifi' + Name: 'very_long_password_setting' → Name cuts to 'very_lo' (15 - 4 - 1 = 10 chars) → its ok\n";
+
+
+    }
+    const char* what() const noexcept override {
+        return msg.c_str();
+    }
+};
+
+class KeyTruncatedWarning : public NonFatalException {
+public:
+    KeyTruncatedWarning(const std::string& original, const std::string& trimmed)
+        : NonFatalException("Key truncated: '" + original + "' → '" + trimmed + "'") {}
+};
 
 class BaseSetting {
     protected:
@@ -53,22 +92,42 @@ class BaseSetting {
     virtual void toJSON(JsonObject &obj) const = 0;
     virtual bool fromJSON(const JsonVariant &value) = 0;
 
-    const char *getKey() const {
-        static char key[64];
-        //todo: Check if key length is > 14 chars, because max key length is 15 chars
-        //trow an error? or just truncate the key? if truncate- is there an library for that?
+    const char* getKey() const {
+        static char key[16]; // 15 chars + Null-Terminator
+        const int MAX_CATEGORY_LENGTH = 13; // Max for Category (14 - 1 for '_' - 1 Min Name)
+        const int MAX_TOTAL_LENGTH = 15;
 
-        // Idea 1: convert the key to a hash value and use that as key
+        // Cut the Category (WebUI all same)
+        char categoryTrimmed[MAX_CATEGORY_LENGTH + 1];
+        strncpy(categoryTrimmed, category, MAX_CATEGORY_LENGTH);
+        categoryTrimmed[MAX_CATEGORY_LENGTH] = '\0';
 
-        // Idea 2: Use an Optional Parameter to store an String with Full Key Name (it can be shown in WebUI)
-        // and use the shortened key for the Preferences
-
-        // now log if the key is too long
-        if (strlen(category) + strlen(name) > 14) {
-            LOG("⚠️ Key length exceeds 14 characters! Key: %s_%s", category, name);
+        // throw exception if category is too long
+        if (strlen(category) > MAX_CATEGORY_LENGTH) {
+            throw KeyTooLongException(category, name);
         }
 
-        snprintf(key, sizeof(key), "%s_%s", category, name);
+        // get length of the max name 
+        int maxNameLength = MAX_TOTAL_LENGTH - strlen(categoryTrimmed) - 1;
+        
+        // cut the name, but mot less than 1 char
+        char nameTrimmed[maxNameLength + 1];
+        strncpy(nameTrimmed, name, maxNameLength);
+        nameTrimmed[maxNameLength] = '\0';
+
+        snprintf(key, sizeof(key), "%s_%s", categoryTrimmed, nameTrimmed);
+
+        // if name is truncated
+        int max_name_len = MAX_TOTAL_LENGTH - strlen(category) - 1;
+        if(strlen(name) > max_name_len) {
+            char trimmed_name[max_name_len + 1];
+            strncpy(trimmed_name, name, max_name_len);
+            trimmed_name[max_name_len] = '\0';
+            
+            snprintf(key, sizeof(key), "%s_%s", category, trimmed_name);
+            throw KeyTruncatedWarning(key, trimmed_name);
+        }
+
         return key;
     }
 
@@ -199,7 +258,7 @@ public:
     }
 
     void reboot() {
-        LOG("🔄 Rebooting...");
+        log_message("🔄 Rebooting...");
         delay(1000);
         ESP.restart();
     }
@@ -214,7 +273,7 @@ public:
     }
 
     void reconnectWifi() {
-        LOG("🔄 Reconnecting to WiFi...");
+        log_message("🔄 Reconnecting to WiFi...");
         WiFi.disconnect();
         delay(1000);
         WiFi.reconnect();
@@ -257,11 +316,11 @@ public:
     }
 
     void startAccessPoint(const String &ipStr, const String &mask, const String &APName, const String &pwd) {
-        LOG("🌐 Configuring AP %s...\n", APName.c_str());
-        LOG("🌐 Setting static IP %s...\n", ipStr.c_str());
-        LOG("🌐 Setting subnet mask %s...\n", mask.c_str());
-        LOG("🌐 Setting password %s...\n", pwd.c_str());
-        LOG("🌐 Setting gateway %s...\n", ipStr.c_str());
+        log_message("🌐 Configuring AP %s...\n", APName.c_str());
+        log_message("🌐 Setting static IP %s...\n", ipStr.c_str());
+        log_message("🌐 Setting subnet mask %s...\n", mask.c_str());
+        log_message("🌐 Setting password %s...\n", pwd.c_str());
+        log_message("🌐 Setting gateway %s...\n", ipStr.c_str());
 
         IPAddress localIP, gateway, subnet;
         localIP.fromString(ipStr);
@@ -272,19 +331,19 @@ public:
         WiFi.softAPConfig(localIP, gateway, subnet);
 
         if (strcmp(pwd.c_str(), "") == 0) {
-            LOG("🌐 AP without password");
+            log_message("🌐 AP without password");
             WiFi.softAP(APName);
         } else {
-            LOG("🌐 AP with password: %s", pwd.c_str());
+            log_message("🌐 AP with password: %s", pwd.c_str());
             WiFi.softAP(APName, pwd);
         }
-        LOG("🌐 AP started at: %s", WiFi.softAPIP().toString().c_str());
+        log_message("🌐 AP started at: %s", WiFi.softAPIP().toString().c_str());
         defineRoutes();
         server.begin();
     }
 
     void startWebServer(const String &ipStr, const String &mask, const String &ssid, const String &password) {
-        LOG("🌐 Configuring static IP %s...\n", ipStr.c_str());
+        log_message("🌐 Configuring static IP %s...\n", ipStr.c_str());
 
         IPAddress ip, gateway, subnet;
         ip.fromString(ipStr);
@@ -293,7 +352,7 @@ public:
 
         WiFi.config(ip, gateway, subnet);
 
-        LOG("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
+        log_message("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
         WiFi.begin(ssid.c_str(), password.c_str());
 
         unsigned long startAttemptTime = millis();
@@ -301,27 +360,27 @@ public:
 
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
             delay(250);
-            LOG(".");
+            log_message(".");
         }
 
         if (WiFi.status() == WL_CONNECTED) {
-            LOG("\n✅ WiFi connected!");
-            LOG("🌐 IP address: %s", WiFi.localIP().toString().c_str());
+            log_message("\n✅ WiFi connected!");
+            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
 
-            LOG("🌐 Defining routes...");
+            log_message("🌐 Defining routes...");
             defineRoutes();
 
-            LOG("🌐 Starting web server...");
+            log_message("🌐 Starting web server...");
             server.begin();
 
-            LOG("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
+            log_message("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
         } else {
-            LOG("\n❌ Failed to connect to WiFi!");
+            log_message("\n❌ Failed to connect to WiFi!");
         }
     }
 
     void startWebServer(const String &ssid, const String &password) {
-        LOG("🌐 DHCP mode active - Connecting to WiFi...");
+        log_message("🌐 DHCP mode active - Connecting to WiFi...");
         WiFi.begin(ssid.c_str(), password.c_str());
 
         unsigned long startAttemptTime = millis();
@@ -329,28 +388,28 @@ public:
 
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
             delay(250);
-            LOG(".");
+            log_message(".");
         }
 
         if (WiFi.status() == WL_CONNECTED) {
-            LOG("\n✅ WiFi connected via DHCP!");
-            LOG("🌐 IP address: %s", WiFi.localIP().toString().c_str());
+            log_message("\n✅ WiFi connected via DHCP!");
+            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
 
             defineRoutes();
             server.begin();
         } else {
-            LOG("\n❌ DHCP connection failed!");
+            log_message("\n❌ DHCP connection failed!");
         }
     }
 
     void defineRoutes() {
-        LOG("🌐 Defining routes...");
+        log_message("🌐 Defining routes...");
 
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this]() {
             for (auto *s : settings) s->setDefault();
             saveAll();
-            LOG("🌐 All settings reset to default");
+            log_message("🌐 All settings reset to default");
             server.send(200, "application/json", "{\"status\":\"reset\"}");
         });
 
@@ -359,7 +418,7 @@ public:
             String category = server.arg("category");
             String key = server.arg("key");
 
-            LOG("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
+            log_message("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
 
             DynamicJsonDocument doc(256);
             deserializeJson(doc, server.arg((size_t)2));
@@ -367,14 +426,14 @@ public:
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
                     if (s->fromJSON(doc["value"])) {
-                        LOG("✅ Setting applied");
+                        log_message("✅ Setting applied");
                         server.send(200, "application/json", "{\"status\":\"applied\"}");
                         return;
                     }
                 }
             }
 
-            LOG("❌ Setting not found");
+            log_message("❌ Setting not found");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
@@ -383,7 +442,7 @@ public:
             String category = server.arg("category");
             String key = server.arg("key");
 
-            LOG("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
+            log_message("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
 
             DynamicJsonDocument doc(256);
             deserializeJson(doc, server.arg((size_t)2));
@@ -394,21 +453,21 @@ public:
                         prefs.begin("config", false);
                         s->save(prefs);
                         prefs.end();
-                        LOG("✅ Setting saved");
+                        log_message("✅ Setting saved");
                         server.send(200, "application/json", "{\"status\":\"saved\"}");
                         return;
                     }
                 }
             }
 
-            LOG("❌ Setting not found");
+            log_message("❌ Setting not found");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
         // Reboot
         server.on("/reboot", HTTP_POST, [this]() {
             server.send(200, "application/json", "{\"status\":\"rebooting\"}");
-            LOG("🔄 Device rebooting...");
+            log_message("🔄 Device rebooting...");
             delay(100);
             reboot();
         });
@@ -421,7 +480,7 @@ public:
         // Save all settings
         server.on("/save", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
-            LOG("🌐 Saving all settings...");
+            log_message("🌐 Saving all settings...");
             deserializeJson(doc, server.arg("plain"));
             if (fromJSON(doc)) {
                 saveAll();
@@ -437,11 +496,11 @@ public:
         });
 
         server.on("/", HTTP_POST, [this]() {
-            LOG("🌐 Received POST request to root route");
-            LOG("🌐 Body: %s", server.arg("plain"));
+            log_message("🌐 Received POST request to root route");
+            log_message("🌐 Body: %s", server.arg("plain"));
         });
 
-        LOG("🌐 Routes defined successfully");
+        log_message("🌐 Routes defined successfully");
     }
 
     void remove(String category, String key) {
@@ -467,53 +526,46 @@ public:
             delete s;
         }
         settings.clear();
-        LOG("🌐 All settings cleared");
+        log_message("🌐 All settings cleared");
         prefs.begin("config", false);
         prefs.clear();
         prefs.end();
-        LOG("🌐 Preferences cleared");
+        log_message("🌐 Preferences cleared");
     }
 
     void clearAllFromPrefs() {
         prefs.begin("config", false);
         prefs.clear();
         prefs.end();
-        LOG("🌐 All preferences cleared");
+        log_message("🌐 All preferences cleared");
     }
 
     //new logging-callback functions
     typedef std::function<void(const char*)> LogCallback;
 
-    static void setLogger(std::function<void(const char*)> cb) {
-        ConfigManagerLog::logger = cb;
+    static void setLogger(LogCallback cb) {
+        logger = cb;
     }
 
-    static void doLog(const char* message) {
-      if(logCallback) logCallback(message);
+    static void log_message(const char* format, ...) {
+        if (!logger) return;
+
+        char buffer[255];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+
+        logger(buffer);
     }
 
 private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
     WebHTML webhtml;
-    static LogCallback logCallback;
+    static LogCallback logger;
 
 };
 
-namespace ConfigManagerLog {
-    std::function<void(const char*)> logger = nullptr;
-
-    void log_message(const char* format, ...) { // Name geändert
-        if(!logger) return;
-        
-        char buffer[255];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-        
-        logger(buffer);
-    }
-}
-#undef LOG
+ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 extern ConfigManagerClass ConfigManager;

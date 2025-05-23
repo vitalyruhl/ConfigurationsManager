@@ -3,12 +3,13 @@
 #include <Arduino.h>
 #include <unity.h>
 #include <ConfigManager.h>
+#include <exception>
 
 ConfigManagerClass testManager;
 
-//todo: Add test for Wifi-AP mode
-//todo: Add test for Wifi-STA mode
-//todo: Add test for Web-AP (Save, Load, Reboot, etc.)
+// todo: how can i test the web-UI?
+        // todo: Add test for Web-AP (Save, Load, Reboot, etc.)
+        
 
 // Main Test
 Config<int> testInt("tInt", "cfg", 42);
@@ -17,8 +18,60 @@ Config<String> testString("tStr", "cfg", "def");
 Config<float> testFloat("tFlt", "cfg", 3.14f);
 Config<String> testPassword("pwd", "auth", "secret", true, true);
 
+
+// Exception-Tests
+void test_key_too_long_exception() {
+    bool exceptionThrown = false;
+    try {
+        Config<String> invalidSetting(
+            "very_long_key_name_that_exceeds_limit", 
+            "also_too_long_category", 
+            "value"
+        );
+    } catch(const KeyTooLongException& e) {
+        exceptionThrown = true;
+    }
+    TEST_ASSERT_TRUE(exceptionThrown);
+}
+
+void test_key_truncation_warning() {
+    bool warningThrown = false;
+    try {
+        Config<String> truncatedSetting(
+            "category",
+            "key_name_that_is_too_long_but_gets_truncated",
+            "value"
+        );
+    } catch(const KeyTruncatedWarning& e) {
+        warningThrown = true;
+    }
+    TEST_ASSERT_TRUE(warningThrown);
+}
+
+// Logger-Callback Test
+bool loggerCalled = false;
+void testLogger(const char* msg) {
+    loggerCalled = true;
+}
+
+void test_logger_callback() {
+    testManager.setLogger(testLogger);
+    testManager.log_message("Test message");
+    TEST_ASSERT_TRUE(loggerCalled);
+}
+
+// WiFi-Mode Tests
+void test_ap_mode_initialization() {
+    testManager.startAccessPoint("TestAP", "password");
+    TEST_ASSERT_EQUAL(WIFI_AP, WiFi.getMode());
+}
+
+void test_sta_mode_initialization() {
+    testManager.startWebServer("TestSSID", "password");
+    TEST_ASSERT_EQUAL(WIFI_STA, WiFi.getMode());
+}
+
 // Test Callback function on change value
-// This is a small test callback function that sets a boolean flag when called
 bool callbackCalled = false;
 void testCallback(int val) { callbackCalled = true; }
 Config<int> testCb("cb", "cfg", 0, true, false, testCallback);
@@ -87,6 +140,14 @@ void setup() {
   RUN_TEST(test_float_config);
   RUN_TEST(test_password_masking);
   RUN_TEST(test_callback_function);
+
+   // new tests
+  RUN_TEST(test_key_too_long_exception);
+  RUN_TEST(test_key_truncation_warning);
+  RUN_TEST(test_logger_callback);
+  RUN_TEST(test_ap_mode_initialization);
+  RUN_TEST(test_sta_mode_initialization);
+
 
   UNITY_END();
 }

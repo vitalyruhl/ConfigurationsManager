@@ -20,7 +20,7 @@ platform = espressif32
 board = nodemcu-32s
 framework = arduino
 monitor_speed = 115200
-upload_port = COM[4]
+upload_port = COM[3]
 build_unflags = -std=gnu++11
 build_flags =
     -Wno-deprecated-declarations
