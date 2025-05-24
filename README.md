@@ -77,9 +77,11 @@ void setup() {
 - **1.1.2**: Bugfix: add forgotten function applyAll() in html
 - **1.2.0**: add logging function as callback for flexible logging
 - **1.2.1**: bugfix in logger over more, then one headder using, add dnsserver option for static ip.
+- **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
 
-## ToDo
+## ToDo / known Issues
 
+- **Save all** button works only, if you saved value ones over single save-button
 - add test for new functions
 - add more examples
 - HTTPS Support
