@@ -99,12 +99,12 @@ class BaseSetting {
     virtual bool fromJSON(const JsonVariant &value) = 0;
 
     const char* getKey() const {
-        static char key[64]; // 15 chars + Null-Terminator
-        const int MAX_CATEGORY_LENGTH = 13;
-        const int MAX_TOTAL_LENGTH = 15;
+        static char key[16]; // 15 chars + Null-Terminator
+        const int MAX_CATEGORY_LENGTH = 12;
+        const int MAX_TOTAL_LENGTH = 14;
 
         if (strlen(category) > MAX_CATEGORY_LENGTH) {
-            throw KeyTooLongException(category, name);
+            // throw KeyTooLongException(category, name);
         }
 
         int maxNameLength = MAX_TOTAL_LENGTH - strlen(category) - 1;
@@ -114,7 +114,7 @@ class BaseSetting {
         nameTrimmed[maxNameLength] = '\0';
 
         if (strlen(name) > maxNameLength) {
-            throw KeyTruncatedWarning(name, nameTrimmed);
+            // throw KeyTruncatedWarning(name, nameTrimmed);
         }
 
         snprintf(key, sizeof(key), "%s_%s", category, nameTrimmed);

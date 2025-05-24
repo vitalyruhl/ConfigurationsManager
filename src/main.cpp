@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "1.2.1" // Add additional Logging, and Truncated Key Warning
+#define VERSION "V1.2.2" // remove throwing errors, becaus it let esp restart without showing the error message
 
 #define BUTTON_PIN_AP_MODE 13
 
