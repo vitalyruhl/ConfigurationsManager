@@ -87,4 +87,4 @@ void setup() {
 - HTTPS Support
 - i18n Support
 - make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for make it typ-safe)
-
+- add OTA Support
