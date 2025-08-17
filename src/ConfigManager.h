@@ -12,6 +12,7 @@
 #include <WebServer.h>
 #include <exception>
 #include <ArduinoOTA.h>
+#include <Update.h>  // Required for U_FLASH
 
 #include "html_content.h"
 
@@ -605,44 +606,53 @@ public:
     void triggerLoggerTest() {
        log_message("Test message abcdefghijklmnop");
     }
-    void setupOTA(const String& hostname = "", const String& password = "");
-    void handleOTA();
+  
+    bool isOTAInitialized() const { return _otaInitialized; }
+    
+    String getOTAStatus() const {
+        if (!_otaEnabled) return "disabled";
+        if (!_otaInitialized) return "not initialized";
+        return "active on port 3232";
+    }
 
-    void ConfigManagerClass::setupOTA(const String& hostname, const String& password) {
+    void setupOTA(const String& hostname = "", const String& password = "") {
         _otaHostname = hostname.isEmpty() ? "esp32-device" : hostname;
         _otaPassword = password;
         _otaEnabled = true;
         log_message("🛜 OTA Enabled (Hostname: %s)", _otaHostname.c_str());
     }
 
-    void ConfigManagerClass::handleOTA() {
+    void handleOTA() {
         if (!_otaEnabled || _otaInitialized) return;
 
         // Initialize OTA only when WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
-            ArduinoOTA.setHostname(_otaHostname.c_str());
+            ArduinoOTA
+                .onStart([this]() {
+                    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+                    log_message("📡 OTA Update Start: %s", type.c_str());
+                })
+                .onEnd([this]() { 
+                    log_message("OTA Update Finished"); 
+                })
+                .onProgress([this](unsigned int progress, unsigned int total) {
+                    log_message("OTA Progress: %u%%", (progress * 100) / total);
+                })
+                .onError([this](ota_error_t error) {
+                    log_message("OTA Error[%u]: ", error);
+                    if (error == OTA_AUTH_ERROR) log_message("Auth Failed");
+                    else if (error == OTA_BEGIN_ERROR) log_message("Begin Failed");
+                    else if (error == OTA_CONNECT_ERROR) log_message("Connect Failed");
+                    else if (error == OTA_RECEIVE_ERROR) log_message("Receive Failed");
+                    else if (error == OTA_END_ERROR) log_message("End Failed");
+                });
 
+            if (!_otaHostname.isEmpty()) {
+                ArduinoOTA.setHostname(_otaHostname.c_str());
+            }
             if (!_otaPassword.isEmpty()) {
                 ArduinoOTA.setPassword(_otaPassword.c_str());
             }
-
-            ArduinoOTA
-                .onStart([]() {
-                    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-                    Serial.println("OTA Update Start: " + type);
-                })
-                .onEnd([]() { Serial.println("\nOTA Update Finished"); })
-                .onProgress([](unsigned int progress, unsigned int total) {
-                    Serial.printf("Progress: %u%%\r", (progress * 100) / total);
-                })
-                .onError([](ota_error_t error) {
-                    Serial.printf("OTA Error[%u]: ", error);
-                    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-                    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-                    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-                    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-                    else if (error == OTA_END_ERROR) Serial.println("End Failed");
-                });
 
             ArduinoOTA.begin();
             _otaInitialized = true;
@@ -662,6 +672,8 @@ private:
     String _otaHostname;
 
 };
+
+
 
 // extern ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 extern ConfigManagerClass ConfigManager;

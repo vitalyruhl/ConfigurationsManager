@@ -187,20 +187,17 @@ void setup()
     {
         Serial.println("DHCP enabled");
         cfg.startWebServer(wifiSsid.get(), wifiPassword.get());
-        delay(5000);
-        if (WiFi.status() == WL_CONNECTED) {
-            cfg.setupOTA("my-esp32-device", "1234");
-        }
+       
     }
     else
     {
         Serial.println("DHCP disabled");
-        // cfg.startWebServer("192.168.2.122", "255.255.255.0", wifiSsid.get(), wifiPassword.get());
         cfg.startWebServer("192.168.2.122", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
-        delay(5000);
-        if (WiFi.status() == WL_CONNECTED) {
-            cfg.setupOTA("my-esp32-device", "1234");
-        }
+        
+    }
+    delay(1500);
+    if (WiFi.status() == WL_CONNECTED) {
+        cfg.setupOTA("my-esp32-device", "1234");
     }
     Serial.printf("🖥️ Webserver running at: %s", WiFi.localIP().toString().c_str());
 }
@@ -241,16 +238,15 @@ void loop()
         }
     }
 
-    cfg.handleOTA();
     cfg.handleClient();
+    cfg.handleOTA();
 
     static unsigned long lastOTAmessage = 0;
     if (millis() - lastOTAmessage > 10000) {
         lastOTAmessage = millis();
-        if (cfg._otaInitialized) {
-            Serial.println("OTA active on port 3232");
-        }
+        Serial.printf("OTA Status: %s\n", cfg.getOTAStatus().c_str());
     }
+
     delay(500);
 }
 

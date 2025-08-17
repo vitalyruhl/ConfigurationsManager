@@ -78,6 +78,7 @@ void setup() {
 - **1.2.0**: add logging function as callback for flexible logging
 - **1.2.1**: bugfix in logger over more, then one headder using, add dnsserver option for static ip.
 - **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
+- **1.3.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA.
 
 ## ToDo / known Issues
 
@@ -87,4 +88,3 @@ void setup() {
 - HTTPS Support
 - i18n Support
 - make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for make it typ-safe)
-- add OTA Support
