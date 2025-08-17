@@ -88,9 +88,13 @@ class BaseSetting {
     bool isPassword;
     bool modified = false;
 
+    const char* displayName;// 2025.08.17 - Add new feature for display name in web interface
+    BaseSetting(const char *name, const char *category, const char* displayName, bool showInWeb, bool isPassword)    
+        : name(name), category(category), displayName(displayName), showInWeb(showInWeb), isPassword(isPassword) {}
+
     public:
     BaseSetting(const char *name, const char *category, bool showInWeb, bool isPassword)
-    : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
+        : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
 
     virtual ~BaseSetting() = default;
     virtual SettingType getType() const = 0;
@@ -99,6 +103,11 @@ class BaseSetting {
     virtual void setDefault() = 0;
     virtual void toJSON(JsonObject &obj) const = 0;
     virtual bool fromJSON(const JsonVariant &value) = 0;
+
+    // 2025.08.17 - Add accessor for display name
+    const char* getDisplayName() const { 
+        return displayName ? displayName : name; 
+    }
 
     const char* getKey() const {
         static char key[16]; // 15 chars + Null-Terminator
@@ -138,8 +147,13 @@ template <typename T> class Config : public BaseSetting {
     void (*callback)(T);
 
     public:
-    Config(const char *name, const char *category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-            : BaseSetting(name, category, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+    // Config(const char *name, const char *category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+    //         : BaseSetting(name, category, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+
+    // 2025.08.17 - Updated constructor with display name
+     Config(const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+        : BaseSetting(name, category, displayName, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+
 
     T get() const { return value; }
 
@@ -185,17 +199,29 @@ template <typename T> class Config : public BaseSetting {
         modified = true;
     }
 
-    void toJSON(JsonObject &obj) const override
-        {
-            if (isSecret())
-            {
-                obj[name] = "***";
+    // void toJSON(JsonObject &obj) const override
+    //     {
+    //         if (isSecret())
+    //         {
+    //             obj[name] = "***";
+    //         }
+    //         else
+    //         {
+    //             obj[name] = value;
+    //         }
+    //     }
+
+    // 2025.08.17 - Updated toJSON with display name
+    void toJSON(JsonObject &obj) const override {
+            JsonObject settingObj = obj.createNestedObject(name);
+            if (isSecret()) {
+                settingObj["value"] = "***";
+            } else {
+                // Use value directly without ternary operator
+                settingObj["value"] = value;
             }
-            else
-            {
-                obj[name] = value;
-            }
-        }
+            settingObj["displayName"] = getDisplayName();
+    }
 
 
     bool fromJSON(const JsonVariant &val) override {

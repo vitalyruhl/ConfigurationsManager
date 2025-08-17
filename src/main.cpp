@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "V1.2.2" // remove throwing errors, becaus it let esp restart without showing the error message
+#define VERSION "V2.0.0" // remove throwing errors, becaus it let esp restart without showing the error message
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -25,11 +25,18 @@ WebServer server(80);
 int cbTestValue = 0;
 
 // here used global variables without struct eg Config is an helper class for the settings stored in the ConfigManager.h
-Config<String> wifiSsid("ssid", "wifi", "MyWiFi");
-Config<String> wifiPassword("password", "wifi", "secretpass", true, true);
-Config<bool> useDhcp("dhcp", "network", true);
+// Config<String> wifiSsid("ssid", "wifi", "MyWiFi");
+// Config<String> wifiPassword("password", "wifi", "secretpass", true, true);
+// Config<bool> useDhcp("dhcp", "network", true);
+// Config<int> updateInterval("interval", "main", 30);
 
-Config<int> updateInterval("interval", "main", 30);
+
+// 2025.08.17 Breacking Changes in Interface --> add Prettyname 'displayName' for the web interface
+Config<String> wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi");
+Config<String> wifiPassword("password", "wifi", "WiFi Password", "secretpass", true, true);
+Config<bool> useDhcp("dhcp", "network", "Use DHCP", true);
+Config<int> updateInterval("interval", "main", "Update Interval (seconds)", 30);
+
 
 //--------------------------------------------------------------------
 // predeclaration of functions
@@ -38,27 +45,28 @@ void blinkBuidInLED(int BlinkCount, int blinkRate);
 
 #pragma region "Callback-Example"
 void testCallback(int val);                                      // Callback function for testCb here defined, later implemented...
-Config<int> testCb("cbt", "main", 0, true, false, testCallback); // define int variable with callback
+// Config<int> testCb("cbt", "main", 0, true, false, testCallback); // define int variable with callback
+Config<int> testCb("cbt", "main", "Test Callback", 0, true, false, testCallback); // since V2.0.0 use displayName for web interface
 #pragma endregion
 //--------------------------------------------------------------------
 
 #pragma region "Structure-Example"
 // General configuration (Structure example)
-struct General_Settings
-{
+struct General_Settings {
     Config<bool> enableController;
     Config<int> maxOutput;
     Config<int> minOutput;
     Config<float> MQTTPublischPeriod;
     Config<String> Version;
 
-    General_Settings() : enableController("enCtrl", "GS", true),
-                         maxOutput("MaxO", "GS", 1100),
-                         minOutput("MinO", "GS", 500),
-                         MQTTPublischPeriod("MQTTP", "GS", 5.0),
-                         Version("Version", "GS", VERSION)
+    General_Settings() : 
+        enableController("enCtrl", "GS", "Enable Controller", true),
+        maxOutput("MaxO", "GS", "Maximum Output", 1100),
+        minOutput("MinO", "GS", "Minimum Output", 500),
+        MQTTPublischPeriod("MQTTP", "GS", "MQTT Publish Period", 5.0),
+        Version("Version", "GS", "Firmware Version", VERSION)
     {
-        // Register settings with ConfigManager
+        // Register settings
         cfg.addSetting(&enableController);
         cfg.addSetting(&maxOutput);
         cfg.addSetting(&minOutput);
@@ -70,17 +78,15 @@ struct General_Settings
 General_Settings generalSettings; // Create an instance of General_Settings-Struct
 
 // Example of a structure for WiFi with settings
-struct WiFi_Settings
-{
+struct WiFi_Settings {
     Config<String> Ssid;
     Config<String> Password;
     Config<bool> Dhcp;
+    
     WiFi_Settings() :
-
-                      Ssid("ssid", "struct", "MyWiFiStruct"),
-                      Password("password", "struct", "secretpassStruct", true, true),
-                      Dhcp("dhcp", "struct", false)
-
+        Ssid("ssid", "struct", "WiFi SSID", "MyWiFiStruct"),
+        Password("password", "struct", "WiFi Password", "secretpassStruct", true, true),
+        Dhcp("dhcp", "struct", "Use DHCP", false)
     {
         cfg.addSetting(&Ssid);
         cfg.addSetting(&Password);
@@ -126,7 +132,8 @@ void setup()
     // test a to long, but truncatable key
     try
     {
-        Config<String> toLongKey("abcdefghijklmnop", "1234567890", "test to long, but truncatable key", true, false);
+        // Config<String> toLongKey("abcdefghijklmnop", "1234567890", "test to long, but truncatable key", true, false);
+        Config<String> toLongKey("abcdefghijklmnop", "1234567890", "Test Key", "test to long, but truncatable key", true, false);
         const char *key = toLongKey.getKey();
         // Serial.printf("[WARNING] this Key was truncated: %s\n", key);
     }
@@ -192,7 +199,7 @@ void setup()
     else
     {
         Serial.println("DHCP disabled");
-        cfg.startWebServer("192.168.2.122", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
+        cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
         
     }
     delay(1500);
