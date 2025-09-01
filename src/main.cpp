@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "V2.0.0" // remove throwing errors, becaus it let esp restart without showing the error message
+#define VERSION "V2.0.1" // remove throwing errors, becaus it let esp restart without showing the error message
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -12,11 +12,20 @@
 // ESP 32 has a limitation of 15 chars for the key name.
 // The key name is build from the category and the key name. (<category>_<key>).
 // The category is limited to 13 chars, the key name to 1 char.
-// also the key will be truncated up to 1 char if length of category is to long.
-// if all longer than 15 chars, you become an exception!
+// Since V2.0.0 the key will be truncated if it is to long, but you have now a userfriendly displayName to show in the web interface.
 
 // Usage:
-// Config<VarType> VarName (const char *name, const char category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (cb)(T) = nullptr)
+// Config<VarType> VarName (const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+
+//since V2.0.0 Thera is a way to upload the firmware over the air (OTA).
+    //You can set the hostname and the password for the OTA in the setupOTA function.
+    //If you leave the hostname empty, it will be set to "esp32-device".
+    //If you leave the password empty, it will be set to "ota".
+    //Usage: cfg.setupOTA("Ota-esp32-device", "ota1234"); //be sure you have a wifi connection before calling this function!
+    //you can uplaod the firmware with the following command:
+    //pio run --target upload --upload-port <IP_ADDRESS> optional:--upload-flags="
+    //pio run --target upload --upload-port 192.168.2.126
+    //or use web-interface http://<IP_ADDRESS>/ota_update
 
 ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
@@ -25,11 +34,6 @@ WebServer server(80);
 int cbTestValue = 0;
 
 // here used global variables without struct eg Config is an helper class for the settings stored in the ConfigManager.h
-// Config<String> wifiSsid("ssid", "wifi", "MyWiFi");
-// Config<String> wifiPassword("password", "wifi", "secretpass", true, true);
-// Config<bool> useDhcp("dhcp", "network", true);
-// Config<int> updateInterval("interval", "main", 30);
-
 
 // 2025.08.17 Breacking Changes in Interface --> add Prettyname 'displayName' for the web interface
 Config<String> wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi");
@@ -44,8 +48,7 @@ void SetupCheckForAPModeButton();
 void blinkBuidInLED(int BlinkCount, int blinkRate);
 
 #pragma region "Callback-Example"
-void testCallback(int val);                                      // Callback function for testCb here defined, later implemented...
-// Config<int> testCb("cbt", "main", 0, true, false, testCallback); // define int variable with callback
+void testCallback(int val); // Callback function for testCb here defined, later implemented...
 Config<int> testCb("cbt", "main", "Test Callback", 0, true, false, testCallback); // since V2.0.0 use displayName for web interface
 #pragma endregion
 //--------------------------------------------------------------------
@@ -166,6 +169,9 @@ void setup()
     cfg.loadAll(); // Load all settings from the preferences
     Serial.println("Loaded configuration:");
 
+    generalSettings.Version.set(VERSION);// update version on device
+    cfg.saveAll(); // Save all settings to the preferences
+
     SetupCheckForAPModeButton();
 
     delay(300);
@@ -186,7 +192,7 @@ void setup()
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        Serial.printf("🖥️  AP Mode! ");
+        Serial.printf("🖥️  AP Mode! \n");
         return; // Skip webserver setup in AP mode
     }
 
@@ -204,9 +210,9 @@ void setup()
     }
     delay(1500);
     if (WiFi.status() == WL_CONNECTED) {
-        cfg.setupOTA("my-esp32-device", "1234");
+        cfg.setupOTA("Ota-esp32-device", "ota1234");
     }
-    Serial.printf("🖥️ Webserver running at: %s", WiFi.localIP().toString().c_str());
+    Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
 }
 
 void loop()

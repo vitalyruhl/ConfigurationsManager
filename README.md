@@ -66,21 +66,26 @@ void setup() {
   configManager.saveAll();
   ConfigManager.startWebServer();
 }
+
+// see the main.cpp for more information
 ```
 
-### use ota upload
+### use platform.io enviroments to upload over usb or ota
 
 ```sh
-# Build and upload via OTA
-pio run --target upload
+#See platformio.ini for details
 
-# Or directly:
-pio run --target upload --upload-port <ESP32_IP_ADDRESS>
+platformio run -e usb -t upload # use this to upload via usb
 
-# Example:
-pio run --target upload --upload-port 192.168.2.126
+# Or via ota:
+pio run -e ota -t upload
+
+#or:
+#pio run --target upload --upload-port <ESP32_IP_ADDRESS>
+pio run -e ota -t upload --upload-port 192.168.2.126
 
 #or over the Webinterface use http://192.168.2.126/ota_update
+# before you need to compile like this: pio run -e usb
 
 
 ```

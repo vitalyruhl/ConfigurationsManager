@@ -3,85 +3,126 @@
   <head>
     <title>ESP32 Configuration V2.0.1</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
+<style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1rem; /* Reduzierter Rand für mobile Geräte */
+      background-color: #f0f0f0;
+    }
+    .category {
+      margin: 10px 0;
+      padding: 15px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #2c3e50;
+      text-align: center;
+      font-size: 1.5rem; /* Kleinere Überschrift für mobile */
+    }
+    h2 {
+      color: #3498db;
+      margin-top: 0;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 10px;
+      font-size: 1.2rem; /* Kleinere Überschrift für mobile */
+    }
+    .setting {
+      margin: 15px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      display: flex;
+      flex-direction: column; /* Standardmäßig column für mobile */
+      gap: 10px;
+    }
+    label {
+      font-weight: bold;
+      min-width: 120px;
+    }
+    input,
+    select {
+      width: 100%; /* Volle Breite auf mobilen Geräten */
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box; /* Damit Padding in der Breite enthalten ist */
+    }
+    button {
+      padding: 8px 16px;
+      font-size: 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: 0.3s;
+      width: 100%; /* Volle Breite auf mobilen Geräten */
+      margin-bottom: 5px; /* Abstand zwischen Buttons */
+    }
+    .apply-btn {
+      background-color: #3498db;
+      color: white;
+    }
+    .save-btn {
+      background-color: #27ae60;
+      color: white;
+    }
+    .reset-btn {
+      background-color: #e74c3c;
+      color: white;
+    }
+    #status {
+      position: fixed;
+      top: 10px; /* Angepasst für mobile */
+      right: 10px; /* Angepasst für mobile */
+      left: 10px; /* Angepasst für mobile */
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+      max-width: none; /* Volle Breite auf mobilen Geräten */
+      z-index: 1000; /* Über anderen Elementen */
+    }
+    .action-buttons {
+      text-align: center;
+      margin: 20px 0;
+      display: flex;
+      flex-direction: column; /* Buttons untereinander auf mobilen Geräten */
+      gap: 10px;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column; /* Apply/Save Buttons untereinander */
+      gap: 5px;
+      width: 100%;
+    }
+
+    /* Desktop-Ansicht */
+    @media (min-width: 768px) {
       body {
-        font-family: Arial, sans-serif;
         margin: 2rem;
-        background-color: #f0f0f0;
-      }
-      .category {
-        margin: 20px 0;
-        padding: 20px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-      }
-      h1 {
-        color: #2c3e50;
-        text-align: center;
-      }
-      h2 {
-        color: #3498db;
-        margin-top: 0;
-        border-bottom: 2px solid #3498db;
-        padding-bottom: 10px;
       }
       .setting {
-        margin: 15px 0;
-        padding: 15px;
-        background: #f8f9fa;
-        border-radius: 5px;
-        display: flex;
+        flex-direction: row; /* Zeilenlayout auf Desktop */
         align-items: center;
-        gap: 15px;
       }
-      label {
-        flex: 1;
-        font-weight: bold;
-        min-width: 120px;
+      .actions {
+        flex-direction: row; /* Apply/Save Buttons nebeneinander auf Desktop */
+        width: auto;
+      }
+      button {
+        width: auto; /* Automatische Breite auf Desktop */
+      }
+      .action-buttons {
+        flex-direction: row; /* Action-Buttons nebeneinander auf Desktop */
       }
       input,
       select {
+        width: auto; /* Automatische Breite auf Desktop */
         flex: 2;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
       }
-      button {
-        padding: 8px 16px;
-        font-size: 14px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: 0.3s;
-      }
-      .apply-btn {
-        background-color: #3498db;
-        color: white;
-      }
-      .save-btn {
-        background-color: #27ae60;
-        color: white;
-      }
-      .reset-btn {
-        background-color: #e74c3c;
-        color: white;
-      }
-      #status {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px;
-        border-radius: 5px;
-        display: none;
-        max-width: 300px;
-      }
-      .action-buttons {
-        text-align: center;
-        margin: 20px 0;
-      }
-    </style>
+    }
+  </style>
   </head>
   <body>
     <h1>Device Configuration</h1>
@@ -109,44 +150,55 @@
         }
       }
 
-      
       function renderSettings(config) {
-        const container = document.getElementById("settingsContainer");
-        container.innerHTML = "";
+          const container = document.getElementById("settingsContainer");
+          container.innerHTML = "";
 
-        for (const [category, settings] of Object.entries(config)) {
-          const categoryDiv = document.createElement("div");
-          categoryDiv.className = "category";
-          categoryDiv.innerHTML = `<h2>${category}</h2>`;
+          for (const [category, settings] of Object.entries(config)) {
+            const categoryDiv = document.createElement("div");
+            categoryDiv.className = "category";
+            categoryDiv.innerHTML = `<h2>${category}</h2>`;
 
-          for (const [key, settingData] of Object.entries(settings)) {
-            const settingDiv = document.createElement("div");
-            settingDiv.className = "setting";
+            for (const [key, settingData] of Object.entries(settings)) {
+              const settingDiv = document.createElement("div");
+              settingDiv.className = "setting";
 
-            // Use displayName if available, otherwise use key
-            const displayName = settingData.displayName || key;
+              // Use displayName if available, otherwise use key
+              const displayName = settingData.displayName || key;
 
-            const label = document.createElement("label");
-            label.textContent = displayName + ":";
-            label.title = key;  // Show technical name as tooltip
+              const label = document.createElement("label");
+              label.textContent = displayName + ":";
+              label.title = key;  // Show technical name as tooltip
 
-            const input = createInput(category, key, settingData);
-            const actions = document.createElement("div");
-            actions.className = "actions";
+              const inputWrapper = document.createElement("div");
+              inputWrapper.style.flex = "2";
+              inputWrapper.style.display = "flex";
 
-            settingDiv.append(label, input, actions);
-            categoryDiv.appendChild(settingDiv);
+              const input = createInput(category, key, settingData);
+              inputWrapper.appendChild(input);
+
+              const actions = document.createElement("div");
+              actions.className = "actions";
+
+              const applyBtn = document.createElement("button");
+              applyBtn.textContent = "Apply";
+              applyBtn.className = "apply-btn";
+              applyBtn.onclick = () => applySingle(category, key, input);
+
+              const saveBtn = document.createElement("button");
+              saveBtn.textContent = "Save";
+              saveBtn.className = "save-btn";
+              saveBtn.onclick = () => saveSingle(category, key, input);
+
+              actions.append(applyBtn, saveBtn);
+              settingDiv.append(label, inputWrapper, actions);
+              categoryDiv.appendChild(settingDiv);
+            }
+            container.appendChild(categoryDiv);
           }
-          container.appendChild(categoryDiv);
         }
-      }
 
-    function createInput(category, key, settingData) {
-        const wrapper = document.createElement("div");
-        wrapper.style.flex = "2";
-        wrapper.style.display = "flex";
-        wrapper.style.gap = "10px";
-
+      function createInput(category, key, settingData) {
         const value = settingData.value;
         const isPassword = key.toLowerCase().includes("pass") || 
                           (settingData.isPassword === true);
@@ -172,19 +224,7 @@
 
         input.name = `${category}.${key}`;
         input.style.flex = "1";
-
-        const applyBtn = document.createElement("button");
-        applyBtn.textContent = "Apply";
-        applyBtn.className = "apply-btn";
-        applyBtn.onclick = () => applySingle(category, key, input);
-
-        const saveBtn = document.createElement("button");
-        saveBtn.textContent = "Save";
-        saveBtn.className = "save-btn";
-        saveBtn.onclick = () => saveSingle(category, key, input);
-
-        wrapper.append(input, applyBtn, saveBtn);
-        return wrapper;
+        return input;
       }
 
       async function applySingle(category, key, input) {

@@ -714,13 +714,18 @@ public:
                     else if (error == OTA_END_ERROR) log_message("End Failed");
                 });
 
-            if (!_otaHostname.isEmpty()) {
-                ArduinoOTA.setHostname(_otaHostname.c_str());
-                log_message("OTA Hostname: %s", _otaHostname.c_str());
+            if (_otaHostname.isEmpty()) {
+                ArduinoOTA.setHostname("esp32-device");
             }
-            if (!_otaPassword.isEmpty()) {
+            else{
+                ArduinoOTA.setHostname(_otaHostname.c_str());
+            }
+
+            if (_otaPassword.isEmpty()) {
+                ArduinoOTA.setPassword("ota");
+            }
+            else {
                 ArduinoOTA.setPassword(_otaPassword.c_str());
-                // log_message("OTA Password: Set to: %s",_otaPassword.c_str());
             }
 
             ArduinoOTA.begin();
