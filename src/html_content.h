@@ -7,7 +7,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
   <head>
-    <title>ESP32 Configuration</title>
+    <title>ESP32 Configuration V2.0.1</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
@@ -115,6 +115,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         }
       }
 
+      
       function renderSettings(config) {
         const container = document.getElementById("settingsContainer");
         container.innerHTML = "";
@@ -124,33 +125,29 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
           categoryDiv.className = "category";
           categoryDiv.innerHTML = `<h2>${category}</h2>`;
 
-          for (const [key, value] of Object.entries(settings)) {
+          for (const [key, settingData] of Object.entries(settings)) {
             const settingDiv = document.createElement("div");
             settingDiv.className = "setting";
 
-             // Use displayName if available, otherwise use key
+            // Use displayName if available, otherwise use key
             const displayName = settingData.displayName || key;
 
             const label = document.createElement("label");
-            // label.textContent = key + ":";
             label.textContent = displayName + ":";
             label.title = key;  // Show technical name as tooltip
 
-            // const input = createInput(category, key, value);
             const input = createInput(category, key, settingData);
             const actions = document.createElement("div");
             actions.className = "actions";
 
             settingDiv.append(label, input, actions);
             categoryDiv.appendChild(settingDiv);
-
-
           }
           container.appendChild(categoryDiv);
         }
       }
 
-      function createInput(category, key, value) {
+    function createInput(category, key, settingData) {
         const wrapper = document.createElement("div");
         wrapper.style.flex = "2";
         wrapper.style.display = "flex";
@@ -158,27 +155,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 
         const value = settingData.value;
         const isPassword = key.toLowerCase().includes("pass") || 
-                           (settingData.isPassword === true);
-
-
-        // let input;
-        // if (key.toLowerCase().includes("pass")) {
-        //   input = document.createElement("input");
-        //   input.type = "password";
-        //   input.value = value;
-        // } else if (typeof value === "boolean") {
-        //   input = document.createElement("input");
-        //   input.type = "checkbox";
-        //   input.checked = value;
-        // } else if (typeof value === "number") {
-        //   input = document.createElement("input");
-        //   input.type = "number";
-        //   input.value = value;
-        // } else {
-        //   input = document.createElement("input");
-        //   input.type = "text";
-        //   input.value = value;
-        // }
+                          (settingData.isPassword === true);
 
         let input;
         if (isPassword) {

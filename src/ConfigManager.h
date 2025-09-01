@@ -199,28 +199,16 @@ template <typename T> class Config : public BaseSetting {
         modified = true;
     }
 
-    // void toJSON(JsonObject &obj) const override
-    //     {
-    //         if (isSecret())
-    //         {
-    //             obj[name] = "***";
-    //         }
-    //         else
-    //         {
-    //             obj[name] = value;
-    //         }
-    //     }
-
     // 2025.08.17 - Updated toJSON with display name
     void toJSON(JsonObject &obj) const override {
-            JsonObject settingObj = obj.createNestedObject(name);
-            if (isSecret()) {
-                settingObj["value"] = "***";
-            } else {
-                // Use value directly without ternary operator
-                settingObj["value"] = value;
-            }
-            settingObj["displayName"] = getDisplayName();
+        JsonObject settingObj = obj.createNestedObject(name);
+        if (isSecret()) {
+            settingObj["value"] = "***";
+        } else {
+            settingObj["value"] = value;
+        }
+        settingObj["displayName"] = getDisplayName();
+        settingObj["isPassword"] = isSecret(); // Add this line
     }
 
 
@@ -732,12 +720,12 @@ public:
             }
             if (!_otaPassword.isEmpty()) {
                 ArduinoOTA.setPassword(_otaPassword.c_str());
-                log_message("OTA Password: Set to: %s",_otaPassword.c_str());
+                // log_message("OTA Password: Set to: %s",_otaPassword.c_str());
             }
 
             ArduinoOTA.begin();
             _otaInitialized = true;
-            log_message("✅ OTA Service Ready on port %d", 3232);
+            // log_message("✅ OTA Service Ready on port %d", 3232);
             // Test if the port is actually open
             // Test if we can create a server on port 3232
             // Test if port 3232 is accessible
@@ -758,7 +746,7 @@ public:
 
         }else {
             log_message("OTA: Waiting for WiFi connection");
-            log_message("WiFi Status: %d\n", WiFi.status());
+            // log_message("WiFi Status: %d\n", WiFi.status());
         }
     }
 
