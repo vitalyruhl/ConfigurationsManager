@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.2.1
+> Version 2.0.1
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 
@@ -78,7 +78,11 @@ pio run --target upload
 pio run --target upload --upload-port <ESP32_IP_ADDRESS>
 
 # Example:
-pio run --target upload --upload-port 192.168.2.126  
+pio run --target upload --upload-port 192.168.2.126
+
+#or over the Webinterface use http://192.168.2.126/ota_update
+
+
 ```
 
 ## Version History
@@ -92,6 +96,7 @@ pio run --target upload --upload-port 192.168.2.126
 - **1.2.1**: bugfix in logger over more, then one headder using, add dnsserver option for static ip.
 - **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
 - **2.0.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA. Add PrettyName for web interface
+- **2.0.1**: bugfixing, and add an additional site to transfer firmware over webinterface
 
 ## ToDo / known Issues
 

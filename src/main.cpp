@@ -59,7 +59,7 @@ struct General_Settings {
     Config<float> MQTTPublischPeriod;
     Config<String> Version;
 
-    General_Settings() : 
+    General_Settings() :
         enableController("enCtrl", "GS", "Enable Controller", true),
         maxOutput("MaxO", "GS", "Maximum Output", 1100),
         minOutput("MinO", "GS", "Minimum Output", 500),
@@ -82,7 +82,7 @@ struct WiFi_Settings {
     Config<String> Ssid;
     Config<String> Password;
     Config<bool> Dhcp;
-    
+
     WiFi_Settings() :
         Ssid("ssid", "struct", "WiFi SSID", "MyWiFiStruct"),
         Password("password", "struct", "WiFi Password", "secretpassStruct", true, true),
@@ -194,13 +194,13 @@ void setup()
     {
         Serial.println("DHCP enabled");
         cfg.startWebServer(wifiSsid.get(), wifiPassword.get());
-       
+
     }
     else
     {
         Serial.println("DHCP disabled");
         cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
-        
+
     }
     delay(1500);
     if (WiFi.status() == WL_CONNECTED) {

@@ -89,7 +89,7 @@ class BaseSetting {
     bool modified = false;
 
     const char* displayName;// 2025.08.17 - Add new feature for display name in web interface
-    BaseSetting(const char *name, const char *category, const char* displayName, bool showInWeb, bool isPassword)    
+    BaseSetting(const char *name, const char *category, const char* displayName, bool showInWeb, bool isPassword)
         : name(name), category(category), displayName(displayName), showInWeb(showInWeb), isPassword(isPassword) {}
 
     public:
@@ -105,8 +105,8 @@ class BaseSetting {
     virtual bool fromJSON(const JsonVariant &value) = 0;
 
     // 2025.08.17 - Add accessor for display name
-    const char* getDisplayName() const { 
-        return displayName ? displayName : name; 
+    const char* getDisplayName() const {
+        return displayName ? displayName : name;
     }
 
     const char* getKey() const {
@@ -464,6 +464,46 @@ public:
     void defineRoutes() {
         log_message("🌐 Defining routes...");
 
+        server.on("/ota_update", HTTP_GET, [this]() {
+            String html = R"(
+                <!DOCTYPE html>
+                <html>
+                <body>
+                    <h2>OTA Update</h2>
+                    <form method='POST' action='/ota_update' enctype='multipart/form-data'>
+                        <input type='file' name='firmware'>
+                        <input type='submit' value='Update'>
+                    </form>
+                </body>
+                </html>
+            )";
+            server.send(200, "text/html", html);
+        });
+
+        server.on("/ota_update", HTTP_POST, [this]() {
+            server.sendHeader("Connection", "close");
+            server.send(200, "text/plain", Update.hasError() ? "UPDATE FAILED" : "UPDATE SUCCESS");
+            ESP.restart();
+        }, [this]() {
+            HTTPUpload& upload = server.upload();
+            if (upload.status == UPLOAD_FILE_START) {
+                Serial.printf("Update: %s\n", upload.filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                    Update.printError(Serial);
+                }
+            } else if (upload.status == UPLOAD_FILE_WRITE) {
+                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                    Update.printError(Serial);
+                }
+            } else if (upload.status == UPLOAD_FILE_END) {
+                if (Update.end(true)) {
+                    Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        });
+
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this]() {
             for (auto *s : settings) s->setDefault();
@@ -632,9 +672,9 @@ public:
     void triggerLoggerTest() {
        log_message("Test message abcdefghijklmnop");
     }
-  
+
     bool isOTAInitialized() const { return _otaInitialized; }
-    
+
     String getOTAStatus() const {
         if (!_otaEnabled) return "disabled";
         if (!_otaInitialized) return "not initialized";
@@ -649,21 +689,34 @@ public:
     }
 
     void handleOTA() {
-        if (!_otaEnabled || _otaInitialized) return;
+        // if (!_otaEnabled || _otaInitialized) return;
+
+        if (!_otaEnabled) {
+            log_message("OTA: Not enabled");
+            return;
+        }
 
         // Initialize OTA only when WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
+
+            // log_message("WiFi Status: %d\n", WiFi.status());
+            // log_message("Local IP: %s\n", WiFi.localIP().toString().c_str());
+            // log_message("Subnet Mask: %s\n", WiFi.subnetMask().toString().c_str());
+            // log_message("Gateway IP: %s\n", WiFi.gatewayIP().toString().c_str());
+
+
             ArduinoOTA
                 .onStart([this]() {
                     String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
                     log_message("📡 OTA Update Start: %s", type.c_str());
                 })
-                .onEnd([this]() { 
-                    log_message("OTA Update Finished"); 
+                .onEnd([this]() {
+                    log_message("OTA Update Finished");
                 })
                 .onProgress([this](unsigned int progress, unsigned int total) {
                     log_message("OTA Progress: %u%%", (progress * 100) / total);
                 })
+
                 .onError([this](ota_error_t error) {
                     log_message("OTA Error[%u]: ", error);
                     if (error == OTA_AUTH_ERROR) log_message("Auth Failed");
@@ -675,14 +728,37 @@ public:
 
             if (!_otaHostname.isEmpty()) {
                 ArduinoOTA.setHostname(_otaHostname.c_str());
+                log_message("OTA Hostname: %s", _otaHostname.c_str());
             }
             if (!_otaPassword.isEmpty()) {
                 ArduinoOTA.setPassword(_otaPassword.c_str());
+                log_message("OTA Password: Set to: %s",_otaPassword.c_str());
             }
 
             ArduinoOTA.begin();
             _otaInitialized = true;
-            log_message("✅ OTA Service Ready");
+            log_message("✅ OTA Service Ready on port %d", 3232);
+            // Test if the port is actually open
+            // Test if we can create a server on port 3232
+            // Test if port 3232 is accessible
+            // WiFiClient testClient;
+            // if (testClient.connect("127.0.0.1", 3232)) {
+            //     log_message("Port 3232: Successfully opened (loopback test)");
+            //     testClient.stop();
+            // } else {
+            //     log_message("❌ Port 3232: Loopback test failed");
+            // }
+            // log_message("OTA Service.IP: %s\n", WiFi.localIP().toString().c_str());
+
+        if (_otaInitialized) {
+            ArduinoOTA.handle();  // This is crucial for handling requests
+            return;
+        }
+
+
+        }else {
+            log_message("OTA: Waiting for WiFi connection");
+            log_message("WiFi Status: %d\n", WiFi.status());
         }
     }
 
