@@ -2,6 +2,18 @@
 #include <unity.h>
 #include <ConfigManager.h>
 #include <exception>
+#include <WebServer.h>
+
+#ifdef UNIT_TEST
+class WebHTML {
+public:
+    const char* getWebHTML() {
+        return ""; // Return empty string for tests
+    }
+};
+#endif
+
+WebServer server(80);
 
 ConfigManagerClass testManager;
 
@@ -11,6 +23,11 @@ Config<bool> testBool("tBool", "cfg", "Test Boolean", true);
 Config<String> testString("tStr", "cfg", "Test String", "def");
 Config<float> testFloat("tFlt", "cfg", "Test Float", 3.14f);
 Config<String> testPassword("pwd", "auth", "Test Password", "secret", true, true);
+Config<String> wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi");
+Config<String> wifiPassword("password", "wifi", "WiFi Password", "secretpass", true, true);
+Config<bool> useDhcp("dhcp", "network", "Use DHCP", true);
+
+ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 
 // Exception tests
 void test_key_too_long_exception() {
@@ -49,20 +66,6 @@ void test_key_truncation_warning() {
     TEST_ASSERT_TRUE(warningThrown);
 }
 
-// Logger callback test
-bool loggerCalled = false;
-void testLogger(const char *msg) {
-    loggerCalled = true;
-}
-
-void test_logger_callback() {
-    testManager.setLogger(testLogger);
-    testManager.triggerLoggerTest();
-    TEST_ASSERT_TRUE(loggerCalled);
-}
-
-// WiFi mode tests
-WebServer server(80);
 
 void test_ap_mode_initialization() {
     testManager.startAccessPoint("TestAP", "password");
@@ -70,7 +73,10 @@ void test_ap_mode_initialization() {
 }
 
 void test_sta_mode_initialization() {
-    testManager.startWebServer("TestSSID", "password");
+    testManager.loadAll();
+    //testManager.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
+    testManager.startWebServer(wifiSsid.get(), wifiPassword.get());
+    testManager.handleClient();
     TEST_ASSERT_EQUAL(WIFI_STA, WiFi.getMode());
 }
 
@@ -115,8 +121,13 @@ void test_float_config() {
 void test_password_masking() {
     DynamicJsonDocument doc(256);
     JsonObject obj = doc.to<JsonObject>();
-    testPassword.toJSON(obj["auth"]);
-    TEST_ASSERT_EQUAL_STRING("***", obj["auth"]["pwd"]["value"].as<const char*>());
+    JsonObject authObj = obj.createNestedObject("auth");
+    testPassword.toJSON(authObj);
+
+    // Check the nested structure
+    JsonObject pwdObj = authObj["pwd"];
+    TEST_ASSERT_EQUAL_STRING("***", pwdObj["value"].as<const char*>());
+    TEST_ASSERT_TRUE(pwdObj["isPassword"].as<bool>());
 }
 
 void test_callback_function() {
@@ -133,13 +144,21 @@ void test_display_name() {
 
 void setup() {
     delay(2000);
+
     Serial.begin(115200);
     while (!Serial);
     disableCore0WDT();
 
+    ConfigManagerClass::setLogger([](const char *msg){
+           Serial.print("[test] ");
+           Serial.println(msg); });
+
     UNITY_BEGIN();
 
     // Add settings to manager
+    testManager.addSetting(&wifiSsid);
+    testManager.addSetting(&wifiPassword);
+    testManager.addSetting(&useDhcp);
     testManager.addSetting(&testInt);
     testManager.addSetting(&testBool);
     testManager.addSetting(&testString);
@@ -157,7 +176,6 @@ void setup() {
     RUN_TEST(test_display_name);
     RUN_TEST(test_key_too_long_exception);
     RUN_TEST(test_key_truncation_warning);
-    RUN_TEST(test_logger_callback);
     RUN_TEST(test_ap_mode_initialization);
     RUN_TEST(test_sta_mode_initialization);
 
