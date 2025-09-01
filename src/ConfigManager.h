@@ -11,6 +11,8 @@
 #include <ArduinoJson.h>
 #include <WebServer.h>
 #include <exception>
+#include <ArduinoOTA.h>
+#include <Update.h>  // Required for U_FLASH
 
 #include "html_content.h"
 
@@ -86,9 +88,13 @@ class BaseSetting {
     bool isPassword;
     bool modified = false;
 
+    const char* displayName;// 2025.08.17 - Add new feature for display name in web interface
+    BaseSetting(const char *name, const char *category, const char* displayName, bool showInWeb, bool isPassword)
+        : name(name), category(category), displayName(displayName), showInWeb(showInWeb), isPassword(isPassword) {}
+
     public:
     BaseSetting(const char *name, const char *category, bool showInWeb, bool isPassword)
-    : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
+        : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
 
     virtual ~BaseSetting() = default;
     virtual SettingType getType() const = 0;
@@ -97,6 +103,11 @@ class BaseSetting {
     virtual void setDefault() = 0;
     virtual void toJSON(JsonObject &obj) const = 0;
     virtual bool fromJSON(const JsonVariant &value) = 0;
+
+    // 2025.08.17 - Add accessor for display name
+    const char* getDisplayName() const {
+        return displayName ? displayName : name;
+    }
 
     const char* getKey() const {
         static char key[16]; // 15 chars + Null-Terminator
@@ -136,8 +147,13 @@ template <typename T> class Config : public BaseSetting {
     void (*callback)(T);
 
     public:
-    Config(const char *name, const char *category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-            : BaseSetting(name, category, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+    // Config(const char *name, const char *category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+    //         : BaseSetting(name, category, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+
+    // 2025.08.17 - Updated constructor with display name
+     Config(const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+        : BaseSetting(name, category, displayName, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
+
 
     T get() const { return value; }
 
@@ -183,17 +199,17 @@ template <typename T> class Config : public BaseSetting {
         modified = true;
     }
 
-    void toJSON(JsonObject &obj) const override
-        {
-            if (isSecret())
-            {
-                obj[name] = "***";
-            }
-            else
-            {
-                obj[name] = value;
-            }
+    // 2025.08.17 - Updated toJSON with display name
+    void toJSON(JsonObject &obj) const override {
+        JsonObject settingObj = obj.createNestedObject(name);
+        if (isSecret()) {
+            settingObj["value"] = "***";
+        } else {
+            settingObj["value"] = value;
         }
+        settingObj["displayName"] = getDisplayName();
+        settingObj["isPassword"] = isSecret(); // Add this line
+    }
 
 
     bool fromJSON(const JsonVariant &val) override {
@@ -436,6 +452,46 @@ public:
     void defineRoutes() {
         log_message("🌐 Defining routes...");
 
+        server.on("/ota_update", HTTP_GET, [this]() {
+            String html = R"(
+                <!DOCTYPE html>
+                <html>
+                <body>
+                    <h2>OTA Update</h2>
+                    <form method='POST' action='/ota_update' enctype='multipart/form-data'>
+                        <input type='file' name='firmware'>
+                        <input type='submit' value='Update'>
+                    </form>
+                </body>
+                </html>
+            )";
+            server.send(200, "text/html", html);
+        });
+
+        server.on("/ota_update", HTTP_POST, [this]() {
+            server.sendHeader("Connection", "close");
+            server.send(200, "text/plain", Update.hasError() ? "UPDATE FAILED" : "UPDATE SUCCESS");
+            ESP.restart();
+        }, [this]() {
+            HTTPUpload& upload = server.upload();
+            if (upload.status == UPLOAD_FILE_START) {
+                Serial.printf("Update: %s\n", upload.filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                    Update.printError(Serial);
+                }
+            } else if (upload.status == UPLOAD_FILE_WRITE) {
+                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                    Update.printError(Serial);
+                }
+            } else if (upload.status == UPLOAD_FILE_END) {
+                if (Update.end(true)) {
+                    Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        });
+
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this]() {
             for (auto *s : settings) s->setDefault();
@@ -553,7 +609,7 @@ public:
             }
         }
     }
-    
+
     void remove(BaseSetting *s) {
         for (auto it = settings.begin(); it != settings.end(); ++it) {
             if (*it == s) {
@@ -562,7 +618,7 @@ public:
             }
         }
     }
-    
+
     void clearAll() {
         for (auto *s : settings) {
             delete s;
@@ -605,13 +661,114 @@ public:
        log_message("Test message abcdefghijklmnop");
     }
 
+    bool isOTAInitialized() const { return _otaInitialized; }
+
+    String getOTAStatus() const {
+        if (!_otaEnabled) return "disabled";
+        if (!_otaInitialized) return "not initialized";
+        return "active on port 3232";
+    }
+
+    void setupOTA(const String& hostname = "", const String& password = "") {
+        _otaHostname = hostname.isEmpty() ? "esp32-device" : hostname;
+        _otaPassword = password;
+        _otaEnabled = true;
+        log_message("🛜 OTA Enabled (Hostname: %s)", _otaHostname.c_str());
+    }
+
+    void handleOTA() {
+        // if (!_otaEnabled || _otaInitialized) return;
+
+        if (!_otaEnabled) {
+            log_message("OTA: Not enabled");
+            return;
+        }
+
+        // Initialize OTA only when WiFi is connected
+        if (WiFi.status() == WL_CONNECTED) {
+
+            // log_message("WiFi Status: %d\n", WiFi.status());
+            // log_message("Local IP: %s\n", WiFi.localIP().toString().c_str());
+            // log_message("Subnet Mask: %s\n", WiFi.subnetMask().toString().c_str());
+            // log_message("Gateway IP: %s\n", WiFi.gatewayIP().toString().c_str());
+
+
+            ArduinoOTA
+                .onStart([this]() {
+                    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+                    log_message("📡 OTA Update Start: %s", type.c_str());
+                })
+                .onEnd([this]() {
+                    log_message("OTA Update Finished");
+                })
+                .onProgress([this](unsigned int progress, unsigned int total) {
+                    log_message("OTA Progress: %u%%", (progress * 100) / total);
+                })
+
+                .onError([this](ota_error_t error) {
+                    log_message("OTA Error[%u]: ", error);
+                    if (error == OTA_AUTH_ERROR) log_message("Auth Failed");
+                    else if (error == OTA_BEGIN_ERROR) log_message("Begin Failed");
+                    else if (error == OTA_CONNECT_ERROR) log_message("Connect Failed");
+                    else if (error == OTA_RECEIVE_ERROR) log_message("Receive Failed");
+                    else if (error == OTA_END_ERROR) log_message("End Failed");
+                });
+
+            if (_otaHostname.isEmpty()) {
+                ArduinoOTA.setHostname("esp32-device");
+            }
+            else{
+                ArduinoOTA.setHostname(_otaHostname.c_str());
+            }
+
+            if (_otaPassword.isEmpty()) {
+                ArduinoOTA.setPassword("ota");
+            }
+            else {
+                ArduinoOTA.setPassword(_otaPassword.c_str());
+            }
+
+            ArduinoOTA.begin();
+            _otaInitialized = true;
+            // log_message("✅ OTA Service Ready on port %d", 3232);
+            // Test if the port is actually open
+            // Test if we can create a server on port 3232
+            // Test if port 3232 is accessible
+            // WiFiClient testClient;
+            // if (testClient.connect("127.0.0.1", 3232)) {
+            //     log_message("Port 3232: Successfully opened (loopback test)");
+            //     testClient.stop();
+            // } else {
+            //     log_message("❌ Port 3232: Loopback test failed");
+            // }
+            // log_message("OTA Service.IP: %s\n", WiFi.localIP().toString().c_str());
+
+        if (_otaInitialized) {
+            ArduinoOTA.handle();  // This is crucial for handling requests
+            return;
+        }
+
+
+        }else {
+            log_message("OTA: Waiting for WiFi connection");
+            // log_message("WiFi Status: %d\n", WiFi.status());
+        }
+    }
+
 private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
     WebHTML webhtml;
     static LogCallback logger;
 
+    bool _otaEnabled = false;
+    bool _otaInitialized = false;
+    String _otaPassword;
+    String _otaHostname;
+
 };
+
+
 
 // extern ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 extern ConfigManagerClass ConfigManager;

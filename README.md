@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 1.2.1
+> Version 2.0.1
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 
@@ -66,6 +66,28 @@ void setup() {
   configManager.saveAll();
   ConfigManager.startWebServer();
 }
+
+// see the main.cpp for more information
+```
+
+### use platform.io enviroments to upload over usb or ota
+
+```sh
+#See platformio.ini for details
+
+platformio run -e usb -t upload # use this to upload via usb
+
+# Or via ota:
+pio run -e ota -t upload
+
+#or:
+#pio run --target upload --upload-port <ESP32_IP_ADDRESS>
+pio run -e ota -t upload --upload-port 192.168.2.126
+
+#or over the Webinterface use http://192.168.2.126/ota_update
+# before you need to compile like this: pio run -e usb
+
+
 ```
 
 ## Version History
@@ -78,6 +100,8 @@ void setup() {
 - **1.2.0**: add logging function as callback for flexible logging
 - **1.2.1**: bugfix in logger over more, then one headder using, add dnsserver option for static ip.
 - **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
+- **2.0.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA. Add PrettyName for web interface
+- **2.0.1**: bugfixing, and add an additional site to transfer firmware over webinterface
 
 ## ToDo / known Issues
 
@@ -87,4 +111,3 @@ void setup() {
 - HTTPS Support
 - i18n Support
 - make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for make it typ-safe)
-- add OTA Support
