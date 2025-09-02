@@ -251,10 +251,16 @@ public:
         prefs.begin("config", true);
         for (auto *s : settings) {
             try {
+                log_message("Loading setting: %s, default value: %s", s->getKey(), s->isSecret() ? "***" : String(s->getType() == SettingType::BOOL ? String(static_cast<Config<bool>*>(s)->get()) :
+                                                                                                    s->getType() == SettingType::INT ? String(static_cast<Config<int>*>(s)->get()) :
+                                                                                                    s->getType() == SettingType::FLOAT ? String(static_cast<Config<float>*>(s)->get()) :
+                                                                                                    s->getType() == SettingType::STRING ? static_cast<Config<String>*>(s)->get() :
+                                                                                                    "unknown").c_str());
                 s->load(prefs);
             } catch (const std::exception& e) {
                 log_message("Error loading setting: %s", e.what());
                 s->setDefault(); // Load default value on error
+                log_message("Set it to default. [%s]", s->getKey());
             }
         }
         prefs.end();
