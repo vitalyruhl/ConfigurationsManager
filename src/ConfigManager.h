@@ -249,7 +249,14 @@ public:
 
     void loadAll() {
         prefs.begin("config", true);
-        for (auto *s : settings) s->load(prefs);
+        for (auto *s : settings) {
+            try {
+                s->load(prefs);
+            } catch (const std::exception& e) {
+                log_message("Error loading setting: %s", e.what());
+                s->setDefault(); // Load default value on error
+            }
+        }
         prefs.end();
     }
 
@@ -730,18 +737,6 @@ public:
 
             ArduinoOTA.begin();
             _otaInitialized = true;
-            // log_message("✅ OTA Service Ready on port %d", 3232);
-            // Test if the port is actually open
-            // Test if we can create a server on port 3232
-            // Test if port 3232 is accessible
-            // WiFiClient testClient;
-            // if (testClient.connect("127.0.0.1", 3232)) {
-            //     log_message("Port 3232: Successfully opened (loopback test)");
-            //     testClient.stop();
-            // } else {
-            //     log_message("❌ Port 3232: Loopback test failed");
-            // }
-            // log_message("OTA Service.IP: %s\n", WiFi.localIP().toString().c_str());
 
         if (_otaInitialized) {
             ArduinoOTA.handle();  // This is crucial for handling requests
@@ -753,6 +748,15 @@ public:
             log_message("OTA: Waiting for WiFi connection");
             // log_message("WiFi Status: %d\n", WiFi.status());
         }
+    }
+
+    void stopOTA() {
+        if (_otaInitialized) {
+            // No direct method to stop ArduinoOTA, but we can reset the flag
+            _otaInitialized = false;
+            log_message("🛜 OTA Stopped");
+        }
+        _otaEnabled = false;
     }
 
 private:

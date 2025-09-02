@@ -87,6 +87,10 @@ pio run -e ota -t upload --upload-port 192.168.2.126
 #or over the Webinterface use http://192.168.2.126/ota_update
 # before you need to compile like this: pio run -e usb
 
+#sometimes you get an guru-meditation error, if you upload,
+#try this:
+pio run -e usb -t erase #this will delete all flash data on your esp32!
+pio run -e usb -t clean
 
 ```
 
@@ -102,6 +106,7 @@ pio run -e ota -t upload --upload-port 192.168.2.126
 - **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
 - **2.0.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA. Add PrettyName for web interface
 - **2.0.1**: bugfixing, and add an additional site to transfer firmware over webinterface
+- **2.0.2**: bugfixing, prevent an buffer overflow on much settings
 
 ## ToDo / known Issues
 
