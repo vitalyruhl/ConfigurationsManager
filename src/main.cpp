@@ -36,10 +36,18 @@ int cbTestValue = 0;
 // here used global variables without struct eg Config is an helper class for the settings stored in the ConfigManager.h
 
 // 2025.08.17 Breacking Changes in Interface --> add Prettyname 'displayName' for the web interface
-Config<String> wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi");
-Config<String> wifiPassword("password", "wifi", "WiFi Password", "secretpass", true, true);
-Config<bool> useDhcp("dhcp", "network", "Use DHCP", true);
 Config<int> updateInterval("interval", "main", "Update Interval (seconds)", 30);
+Config<bool> testBool("tbool", "main", "test bool", true);
+
+//04.09.2025 test long category and key names
+
+// good:
+Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1);
+Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction", 0.1);
+
+//Wrong, but it will be truncated and logged as warning:
+Config<float>  VeryLongCategoryName("TCO", "VeryLongCategoryName","Temperature Correction long", 0.1);
+Config<float>  VeryLongKeyName("VeryLongKeyName", "Temp","Temperature Correction long", 0.1);
 
 
 //--------------------------------------------------------------------
@@ -55,45 +63,63 @@ Config<int> testCb("cbt", "main", "Test Callback", 0, true, false, testCallback)
 
 #pragma region "Structure-Example"
 // General configuration (Structure example)
-struct General_Settings {
-    Config<bool> enableController;
-    Config<int> maxOutput;
-    Config<int> minOutput;
-    Config<float> MQTTPublischPeriod;
-    Config<String> Version;
+struct General_Settings
+{
+    Config<bool> enableController;     // set to false to disable the controller and use Maximum power output
+    Config<bool> enableMQTT;           // set to false to disable the MQTT connection
 
-    General_Settings() :
-        enableController("enCtrl", "GS", "Enable Controller", true),
-        maxOutput("MaxO", "GS", "Maximum Output", 1100),
-        minOutput("MinO", "GS", "Minimum Output", 500),
-        MQTTPublischPeriod("MQTTP", "GS", "MQTT Publish Period", 5.0),
-        Version("Version", "GS", "Firmware Version", VERSION)
+    Config<bool> saveDisplay; // to turn off the display
+    Config<int> displayShowTime; // time in seconds to show the display after boot or button press (default is 60 seconds, 0 = 10s)
+
+    Config<bool> allowOTA; // allow OTA updates (default is true, set to false to disable OTA updates)
+    Config<String> otaPassword; // password for OTA updates (default is "ota1234", change it to a secure password)
+
+    Config<String> Version;            // save the current version of the software
+
+    General_Settings() :enableController("enCtrl", "Limiter","Enable Limitation", true),
+                        enableMQTT("enMQTT", "Limiter","Enable MQTT Propagation", true),
+
+                        saveDisplay("Save", "Display", "Turn Display Off", true),
+                        displayShowTime("Time", "Display", "Display On-Time in Sec", 60),
+
+                        allowOTA("OTAEn", "System", "Allow OTA Updates", true),
+                        otaPassword("OTAPass", "System", "OTA Password", "ota1234", true, true),
+
+                        Version("Version", "System","Programm-Version", VERSION)
     {
-        // Register settings
+        // Register settings with configManager
         cfg.addSetting(&enableController);
-        cfg.addSetting(&maxOutput);
-        cfg.addSetting(&minOutput);
-        cfg.addSetting(&MQTTPublischPeriod);
+        cfg.addSetting(&enableMQTT);
+
+        cfg.addSetting(&saveDisplay);
+        cfg.addSetting(&displayShowTime);
+
+        cfg.addSetting(&allowOTA);
+        cfg.addSetting(&otaPassword);
+
         cfg.addSetting(&Version);
+
     }
 };
 
 General_Settings generalSettings; // Create an instance of General_Settings-Struct
 
 // Example of a structure for WiFi with settings
-struct WiFi_Settings {
-    Config<String> Ssid;
-    Config<String> Password;
-    Config<bool> Dhcp;
-
+struct WiFi_Settings //wifiSettings
+{
+    Config<String> wifiSsid;
+    Config<String> wifiPassword;
+    Config<bool> useDhcp;
     WiFi_Settings() :
-        Ssid("ssid", "struct", "WiFi SSID", "MyWiFiStruct"),
-        Password("password", "struct", "WiFi Password", "secretpassStruct", true, true),
-        Dhcp("dhcp", "struct", "Use DHCP", false)
+
+                      wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi"),
+                      wifiPassword("password", "wifi", "WiFi Password", "secretpass", true, true),
+                      useDhcp("dhcp", "network", "Use DHCP", false)
+
     {
-        cfg.addSetting(&Ssid);
-        cfg.addSetting(&Password);
-        cfg.addSetting(&Dhcp);
+        cfg.addSetting(&wifiSsid);
+        cfg.addSetting(&wifiPassword);
+        cfg.addSetting(&useDhcp);
     }
 };
 
@@ -109,69 +135,47 @@ void setup()
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
 
-    // Register settings
-    cfg.addSetting(&wifiSsid);
-    cfg.addSetting(&wifiPassword);
-    cfg.addSetting(&useDhcp);
-    cfg.addSetting(&updateInterval);
-    cfg.addSetting(&testCb);
-
     //-----------------------------------------------------------------
-    // this is only to show, that you get an exception if the key is to long
-    // but you cant catch it in the constructor!
-    try
-    {
-        const char *key = wifiSsid.getKey();
-    }
-    catch (const KeyTooLongException &e)
-    {
-        Serial.printf("[ERROR] Config Error: %s\n", e.what());
-    }
-    catch (const KeyTruncatedWarning &e)
-    {
-        Serial.printf("[MAIN-Catch] Config Error: %s\n", e.what());
-    }
-
-    // test a to long, but truncatable key
-    try
-    {
-        // Config<String> toLongKey("abcdefghijklmnop", "1234567890", "test to long, but truncatable key", true, false);
-        Config<String> toLongKey("abcdefghijklmnop", "1234567890", "Test Key", "test to long, but truncatable key", true, false);
-        Config<float> WrongKey("TCO","Temperature Correction", "Temp", 0.1); // This will throw an exception, because category is to long, but in version 2.0.1 it make a buffer overflow + crash
-        Config<float> okKey("TCO", "Temp","Temperature Correction", 0.1);
-
-        const char *key = toLongKey.getKey();
-        const char *key2 = WrongKey.getKey();
-        const char *key3 = okKey.getKey();
-       
-    }
-    catch (const KeyTruncatedWarning &e)
-    {
-        Serial.printf("[MAIN-Catch-WARNING] Config Error: %s\n", e.what());
-    }
-    catch (const KeyTooLongException &e)
-    {
-        Serial.printf("[ERROR]  Config Error: %s\n", e.what());
-    }
-    //-----------------------------------------------------------------
-
-    //-----------------------------------------------------------------
-    // Set logger callback to log in your own way
-    // void cbMyConfigLogger(const char *msg)
-    // {
-    //     Serial.println(msg);
-    // }
+    // Set logger callback to log in your own way but before using the cfg object!
+    // Example 1: use Serial for logging
+    // void cbMyConfigLogger(const char *msg){ Serial.println(msg);}
     // ConfigManagerClass::setLogger(cbMyConfigLogger);
 
     // or as an lambda function...
-    ConfigManagerClass::setLogger([](const char *msg)
-                                  {
+    ConfigManagerClass::setLogger([](const char *msg){
             Serial.print("[CFG] ");
-            Serial.println(msg); });
+            Serial.println(msg);
+        });
 
     //-----------------------------------------------------------------
 
-    cfg.loadAll(); // Load all settings from the preferences
+
+
+    // Register settings
+    cfg.addSetting(&updateInterval);
+    cfg.addSetting(&testCb);
+    cfg.addSetting(&testBool);
+
+    cfg.addSetting(&TempCorrectionOffset);
+    cfg.addSetting(&HumidityCorrectionOffset);
+    cfg.addSetting(&VeryLongCategoryName);
+    cfg.addSetting(&VeryLongKeyName);
+
+
+
+    //04.09.2025 new function to check all settings with errors
+    cfg.checkSettingsForErrors();
+
+
+    try
+    {
+        cfg.loadAll(); // Load all settings from the preferences
+    }
+    catch(const std::exception& e)
+    {
+         Serial.println(e.what());
+    }
+
     Serial.println("Loaded configuration:");
 
     generalSettings.Version.set(VERSION);// update version on device
@@ -184,14 +188,14 @@ void setup()
     Serial.println(cfg.toJSON(false));
 
     // Test setting changes
-    useDhcp.set(false);
+    testBool.set(false);
     updateInterval.set(15);
     cfg.saveAll();
     delay(300);
 
-    if (wifiSsid.get().length() == 0)
+    if (wifiSettings.wifiSsid.get().length() == 0)
     {
-        Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSsid.get().c_str());
+        Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
         cfg.startAccessPoint();
     }
 
@@ -201,21 +205,21 @@ void setup()
         return; // Skip webserver setup in AP mode
     }
 
-    if (useDhcp.get())
+    if (wifiSettings.useDhcp.get())
     {
         Serial.println("DHCP enabled");
-        cfg.startWebServer(wifiSsid.get(), wifiPassword.get());
+        cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
 
     }
     else
     {
         Serial.println("DHCP disabled");
-        cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSsid.get(), wifiPassword.get());
+        cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
 
     }
     delay(1500);
-    if (WiFi.status() == WL_CONNECTED) {
-        cfg.setupOTA("Ota-esp32-device", "ota1234");
+    if (WiFi.status() == WL_CONNECTED && generalSettings.allowOTA.get()) {
+        cfg.setupOTA("Ota-esp32-device", generalSettings.otaPassword.get().c_str());
     }
     Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
 }

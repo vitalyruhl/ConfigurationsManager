@@ -42,55 +42,6 @@ constexpr size_t const_strlen(const char* s) {
     return len;
 }
 
-class ConfigException : public std::exception {
-protected:
-    String msg;
-public:
-    explicit ConfigException(const String& message) : msg(message) {}
-    const char* what() const noexcept override { return msg.c_str(); }
-};
-
-class NonFatalException : public std::exception {
-protected:
-    std::string message;
-public:
-    NonFatalException(const std::string& msg) : message(msg) {
-        //todo: add a logger, or something like that
-        String logMsg = "[WARN] " + String(msg.c_str());
-        // if (!Serial) {
-        //     Serial.begin(115200);
-        //     while (!Serial); // Warte auf Verbindung
-        // }
-        // Serial.println(logMsg);
-        // Serial.flush();
-    }
-    const char* what() const noexcept override {
-        return message.c_str();
-    }
-};
-
-class KeyTooLongException : public std::exception {
-    String msg;
-public:
-    KeyTooLongException(const char* cat, const char* keyName) {
-        msg = "Category '" + String(cat) + "' exceeds 13 chars (keyName: '" + keyName + "')\n";
-        msg += " ESP32 Preferences only allows 15 chars in total (Category + _ + keyName)\n";
-        msg += " Category: 'network_config' (14 Chars) → Error (max 13 allowed)\n";
-        msg += " Category: 'wifi' + keyName: 'very_long_password_setting' → keyName cuts to 'very_lo' (15 - 4 - 1 = 10 chars) → its ok\n";
-
-
-    }
-    const char* what() const noexcept override {
-        return msg.c_str();
-    }
-};
-
-class KeyTruncatedWarning : public NonFatalException {
-    public:
-    KeyTruncatedWarning(const std::string& original, const std::string& trimmed)
-        : NonFatalException("Key truncated: '" + original + "' → '" + trimmed + "'") {}
-};
-
 
 // ------------------------------------------------------------------------------------------------------------------
 class BaseSetting {
@@ -134,11 +85,21 @@ class BaseSetting {
             size_t catLen = strlen(category);
             size_t keyLen = strlen(keyName);
 
-            if (catLen + keyLen + 1 > 14) {
-                // Set an error flag instead of throwing
+            if (catLen + keyLen + 1 > 14) { // +1 for underscore
                 hasKeyLengthError = true;
-                keyLengthErrorMsg = String("ERROR: Key length limit exceeded! Category: ") +
-                                category + ", Key: " + keyName;
+                keyLengthErrorMsg = String("[ERROR] Setting will not be stored! Combined length exceeds limit.\n");
+                keyLengthErrorMsg += "Category: '";
+                keyLengthErrorMsg += category;
+                keyLengthErrorMsg += "' (";
+                keyLengthErrorMsg += String(catLen);
+                keyLengthErrorMsg += " chars)\nKey: '";
+                keyLengthErrorMsg += keyName;
+                keyLengthErrorMsg += "' (";
+                keyLengthErrorMsg += String(keyLen);
+                keyLengthErrorMsg += " chars)\nTotal: ";
+                keyLengthErrorMsg += String(catLen + keyLen + 1);
+                keyLengthErrorMsg += " chars (max 14 allowed)\n";
+                keyLengthErrorMsg += "ESP32 Preferences allows max 15 chars total (Category + _ + Key)";
             } else {
                 hasKeyLengthError = false;
             }
@@ -167,26 +128,47 @@ class BaseSetting {
 
     const char* getKey() const {
         static char key[16]; // 15 chars + Null-Terminator
-        const int MAX_CATEGORY_LENGTH = 12;
-        const int MAX_TOTAL_LENGTH = 14;
+        const int MAX_TOTAL_LENGTH = 14; // 15 chars total including null terminator
 
-        if (strlen(category) > MAX_CATEGORY_LENGTH) {
-            log("ERROR: Category length limit of 12 chars exceeded! Category: %s, Key: %s\n", category, keyName);
-            throw KeyTooLongException(category, keyName);//todo: check for - did wee need it?
+        // Handle category truncation if needed
+        char categoryTrimmed[13]; // Max 12 chars + null terminator
+        int maxCategoryLength = 12;
+
+        if (strlen(category) > maxCategoryLength) {
+            strncpy(categoryTrimmed, category, maxCategoryLength);
+            categoryTrimmed[maxCategoryLength] = '\0';
+            if (logger) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "[WARNING] Category '%s' (%d chars) truncated to '%s' (%d chars). Key: '%s'",
+                        category, strlen(category), categoryTrimmed, maxCategoryLength, keyName);
+                logger(msg);
+            }
+        } else {
+            strcpy(categoryTrimmed, category);
         }
 
-        int maxNameLength = MAX_TOTAL_LENGTH - strlen(category) - 1;
+        // Calculate available space for key name
+        int maxNameLength = MAX_TOTAL_LENGTH - strlen(categoryTrimmed) - 1; // -1 for underscore
 
+        // Handle key name truncation if needed
         char nameTrimmed[maxNameLength + 1];
-        strncpy(nameTrimmed, keyName, maxNameLength);
-        nameTrimmed[maxNameLength] = '\0';
 
         if (strlen(keyName) > maxNameLength) {
-           log("ERROR: Key length limit exceeded (15 chars + Null-Terminator)! Category: %s, Key: %s\nKey will be truncated! %s", category, keyName, nameTrimmed);
-            //throw KeyTruncatedWarning(keyName, nameTrimmed);
+            strncpy(nameTrimmed, keyName, maxNameLength);
+            nameTrimmed[maxNameLength] = '\0';
+            if (logger) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "[WARNING] Key '%s' (%d chars) truncated to '%s' (%d chars) to fit limit. Category: '%s'",
+                        keyName, strlen(keyName), nameTrimmed, maxNameLength, categoryTrimmed);
+                logger(msg);
+            }
+        } else {
+            strcpy(nameTrimmed, keyName);
         }
 
-        snprintf(key, sizeof(key), "%s_%s", category, nameTrimmed);
+        // Create the final key
+        snprintf(key, sizeof(key), "%s_%s", categoryTrimmed, nameTrimmed);
+
         return key;
     }
 
@@ -196,7 +178,7 @@ class BaseSetting {
     bool shouldShowInWeb() const { return showInWeb; }
     bool needsSave() const { return modified; }
 
-};
+    };
 
 template <typename T> class Config : public BaseSetting {
     private:
@@ -331,10 +313,12 @@ public:
     // 2025.09.04 - error handling for settings with key length issues
     void addSetting(BaseSetting *setting) {
         if (setting->hasError()) {
-            log_message("ERROR: Cannot add setting with invalid key: %s", setting->getError());
+            log_message("[ERROR] %s", setting->getError());
+            log_message("[ERROR] This setting will not be stored or available in the web interface.");
             return; // Don't add invalid settings
         }
         settings.push_back(setting);
+
         setting->setLogger([this](const char* msg) {
             this->log_message("%s", msg);
         });
@@ -832,6 +816,15 @@ public:
             log_message("🛜 OTA Stopped");
         }
         _otaEnabled = false;
+    }
+
+    void checkSettingsForErrors() {
+        for (auto *s : settings) {
+            if (s->hasError()) {
+                log_message("[ERROR] Setting %s/%s has errors: %s",
+                        s->getCategory(), s->getName(), s->getError());
+            }
+        }
     }
 
     private:
