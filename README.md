@@ -106,7 +106,8 @@ pio run -e usb -t clean
 - **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
 - **2.0.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA. Add PrettyName for web interface
 - **2.0.1**: bugfixing, and add an additional site to transfer firmware over webinterface
-- **2.0.2**: bugfixing, prevent an buffer overflow on much settings
+- **2.0.2**: bugfixing, prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
+              I has an mistake in TempCorrectionOffset("TCO","Temperature Correction", "Temp", 0.1) instead of TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1) --> buffer overflow and guru meditation error
 
 ## ToDo / known Issues
 

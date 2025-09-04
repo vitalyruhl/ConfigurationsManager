@@ -1,9 +1,9 @@
 #pragma once
 
-//⚠️ Warning ⚠️ Settings will not be stored if their key length >14! The max key length for preferences is 15 chars.
 // Settings are stored in the format: <category>_<key>
 
 #include <Arduino.h>
+#include <string_view>
 #include <Preferences.h>
 #include <vector>
 #include <functional>
@@ -13,11 +13,7 @@
 #include <exception>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
-
 #include "html_content.h"
-
-//TODO Global
-//ToDo: add optional parameter to set the keyname and Kategoryname for the webUI
 
 extern WebServer server;
 class ConfigManagerClass; // Forward declaration
@@ -30,6 +26,21 @@ template <> struct TypeTraits<int> { static constexpr SettingType type = Setting
 template <> struct TypeTraits<float> { static constexpr SettingType type = SettingType::FLOAT; };
 template <> struct TypeTraits<String> { static constexpr SettingType type = SettingType::STRING; };
 
+// A helper function to get the length of a const char array at compile time
+using LogCallback = std::function<void(const char*, ...)>;
+template <size_t N>
+constexpr size_t string_literal_length(const char (&)[N]) {
+    return N - 1; // N includes the null terminator, so subtract 1
+}
+
+constexpr size_t const_strlen(const char* s) {
+    size_t len = 0;
+    while (*s) {
+        s++;
+        len++;
+    }
+    return len;
+}
 
 class ConfigException : public std::exception {
 protected:
@@ -61,11 +72,11 @@ public:
 class KeyTooLongException : public std::exception {
     String msg;
 public:
-    KeyTooLongException(const char* cat, const char* name) {
-        msg = "Category '" + String(cat) + "' exceeds 13 chars (Name: '" + name + "')\n";
-        msg += " ESP32 Preferences only allows 15 chars in total (Category + _ + Name)\n";
+    KeyTooLongException(const char* cat, const char* keyName) {
+        msg = "Category '" + String(cat) + "' exceeds 13 chars (keyName: '" + keyName + "')\n";
+        msg += " ESP32 Preferences only allows 15 chars in total (Category + _ + keyName)\n";
         msg += " Category: 'network_config' (14 Chars) → Error (max 13 allowed)\n";
-        msg += " Category: 'wifi' + Name: 'very_long_password_setting' → Name cuts to 'very_lo' (15 - 4 - 1 = 10 chars) → its ok\n";
+        msg += " Category: 'wifi' + keyName: 'very_long_password_setting' → keyName cuts to 'very_lo' (15 - 4 - 1 = 10 chars) → its ok\n";
 
 
     }
@@ -75,27 +86,72 @@ public:
 };
 
 class KeyTruncatedWarning : public NonFatalException {
-public:
+    public:
     KeyTruncatedWarning(const std::string& original, const std::string& trimmed)
         : NonFatalException("Key truncated: '" + original + "' → '" + trimmed + "'") {}
 };
 
+
+// ------------------------------------------------------------------------------------------------------------------
 class BaseSetting {
     protected:
-    const char *name;
-    const char *category;
     bool showInWeb;
     bool isPassword;
     bool modified = false;
+    const char *keyName;
+    const char *category;
+    const char *displayName;// 2025.08.17 - Add new feature for display keyName in web interface
+    SettingType type;
+    bool hasKeyLengthError = false; //04.09.2025 bugfix: prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
+    String keyLengthErrorMsg;
 
-    const char* displayName;// 2025.08.17 - Add new feature for display name in web interface
-    BaseSetting(const char *name, const char *category, const char* displayName, bool showInWeb, bool isPassword)
-        : name(name), category(category), displayName(displayName), showInWeb(showInWeb), isPassword(isPassword) {}
+    mutable std::function<void(const char*)> logger;
+    void log(const char* format, ...) const {
+        if (logger) {
+            char buffer[256];
+            va_list args;
+            va_start(args, format);
+            vsnprintf(buffer, sizeof(buffer), format, args);
+            va_end(args);
+            logger(buffer);
+        }
+    }
 
     public:
-    BaseSetting(const char *name, const char *category, bool showInWeb, bool isPassword)
-        : name(name), category(category), showInWeb(showInWeb), isPassword(isPassword) {}
+    // std::function<void(const char*)> logger;
 
+    bool hasError() const { return hasKeyLengthError; }
+    const char* getError() const { return keyLengthErrorMsg.c_str(); }
+    void setLogger(std::function<void(const char*)> logFunc) {
+            this->logger = logFunc;
+        }
+
+    // This is constructor for backward compatibility
+    BaseSetting(const char *category, const char *keyName, const char *displayName, SettingType type, bool showInWeb = true, bool isPassword = false)
+        : keyName(keyName), category(category), displayName(displayName), type(type), showInWeb(showInWeb), isPassword(isPassword)
+        {
+            // Runtime check for non-constant strings - just set a flag instead of throwing
+            size_t catLen = strlen(category);
+            size_t keyLen = strlen(keyName);
+
+            if (catLen + keyLen + 1 > 14) {
+                // Set an error flag instead of throwing
+                hasKeyLengthError = true;
+                keyLengthErrorMsg = String("ERROR: Key length limit exceeded! Category: ") +
+                                category + ", Key: " + keyName;
+            } else {
+                hasKeyLengthError = false;
+            }
+        }
+
+    // New template constructor for compile-time checking
+    template <size_t CatLen, size_t KeyLen>
+    constexpr BaseSetting(const char (&category)[CatLen], const char (&keyName)[KeyLen], const char *displayName, SettingType type, bool showInWeb = true, bool isPassword = false)
+        : keyName(keyName), category(category), displayName(displayName), type(type), showInWeb(showInWeb), isPassword(isPassword) {
+        static_assert(string_literal_length(category) + string_literal_length(keyName) + 1 <= 14,"Setting key and category names combined must not exceed 13 characters (plus one for the underscore).");
+    }
+
+    //---------------------------------------
     virtual ~BaseSetting() = default;
     virtual SettingType getType() const = 0;
     virtual void load(Preferences &prefs) = 0;
@@ -104,9 +160,9 @@ class BaseSetting {
     virtual void toJSON(JsonObject &obj) const = 0;
     virtual bool fromJSON(const JsonVariant &value) = 0;
 
-    // 2025.08.17 - Add accessor for display name
+    // 2025.08.17 - Add accessor for display keyName
     const char* getDisplayName() const {
-        return displayName ? displayName : name;
+        return displayName ? displayName : keyName;
     }
 
     const char* getKey() const {
@@ -115,17 +171,19 @@ class BaseSetting {
         const int MAX_TOTAL_LENGTH = 14;
 
         if (strlen(category) > MAX_CATEGORY_LENGTH) {
-            // throw KeyTooLongException(category, name);
+            log("ERROR: Category length limit of 12 chars exceeded! Category: %s, Key: %s\n", category, keyName);
+            throw KeyTooLongException(category, keyName);//todo: check for - did wee need it?
         }
 
         int maxNameLength = MAX_TOTAL_LENGTH - strlen(category) - 1;
 
         char nameTrimmed[maxNameLength + 1];
-        strncpy(nameTrimmed, name, maxNameLength);
+        strncpy(nameTrimmed, keyName, maxNameLength);
         nameTrimmed[maxNameLength] = '\0';
 
-        if (strlen(name) > maxNameLength) {
-            // throw KeyTruncatedWarning(name, nameTrimmed);
+        if (strlen(keyName) > maxNameLength) {
+           log("ERROR: Key length limit exceeded (15 chars + Null-Terminator)! Category: %s, Key: %s\nKey will be truncated! %s", category, keyName, nameTrimmed);
+            //throw KeyTruncatedWarning(keyName, nameTrimmed);
         }
 
         snprintf(key, sizeof(key), "%s_%s", category, nameTrimmed);
@@ -134,7 +192,7 @@ class BaseSetting {
 
     bool isSecret() const { return isPassword; }
     const char *getCategory() const { return category; }
-    const char *getName() const { return name; }
+    const char *getName() const { return keyName; }
     bool shouldShowInWeb() const { return showInWeb; }
     bool needsSave() const { return modified; }
 
@@ -147,13 +205,17 @@ template <typename T> class Config : public BaseSetting {
     void (*callback)(T);
 
     public:
-    // Config(const char *name, const char *category, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-    //         : BaseSetting(name, category, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
 
-    // 2025.08.17 - Updated constructor with display name
-     Config(const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(name, category, displayName, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb) {}
-
+    // 2025.08.17 - Updated constructor with display keyName
+    // 2025.09.04 - New constructor with compile-time checking
+    Config(const char *keyName, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+        : BaseSetting(category, keyName, displayName, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb)
+        {
+            // 2025.09.04 - Check for errors and log them if possible
+            if (hasError() && logger) {
+                logger(getError());
+            }
+        }
 
     T get() const { return value; }
 
@@ -199,9 +261,9 @@ template <typename T> class Config : public BaseSetting {
         modified = true;
     }
 
-    // 2025.08.17 - Updated toJSON with display name
+    // 2025.08.17 - Updated toJSON with display keyName
     void toJSON(JsonObject &obj) const override {
-        JsonObject settingObj = obj.createNestedObject(name);
+        JsonObject settingObj = obj.createNestedObject(keyName);
         if (isSecret()) {
             settingObj["value"] = "***";
         } else {
@@ -210,7 +272,6 @@ template <typename T> class Config : public BaseSetting {
         settingObj["displayName"] = getDisplayName();
         settingObj["isPassword"] = isSecret(); // Add this line
     }
-
 
     bool fromJSON(const JsonVariant &val) override {
         if (val.isNull()) return false;
@@ -233,35 +294,64 @@ class ConfigManagerClass {
 
 public:
 
-    BaseSetting *findSetting(const String &category, const String &key)
+    BaseSetting *findSetting(const String &category, const String &key) {
+        for (auto *s : settings)
         {
-            for (auto *s : settings)
+            if (String(s->getCategory()) == category && String(s->getName()) == key)
             {
-                if (String(s->getCategory()) == category && String(s->getName()) == key)
-                {
-                    return s;
-                }
+                return s;
             }
-            return nullptr;
         }
+        return nullptr;
+    }
 
-    void addSetting(BaseSetting *s) { settings.push_back(s); }
+    //new logging-callback functions
+    typedef std::function<void(const char*)> LogCallback;
 
+    static void setLogger(LogCallback cb) {
+        logger = cb;
+    }
+
+    static void log_message(const char* format, ...) {
+        if (!logger) return;
+
+        char buffer[255];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+
+        logger(buffer);
+    }
+
+    void triggerLoggerTest() {
+       log_message("Test message abcdefghijklmnop");
+    }
+
+    // 2025.09.04 - error handling for settings with key length issues
+    void addSetting(BaseSetting *setting) {
+        if (setting->hasError()) {
+            log_message("ERROR: Cannot add setting with invalid key: %s", setting->getError());
+            return; // Don't add invalid settings
+        }
+        settings.push_back(setting);
+        setting->setLogger([this](const char* msg) {
+            this->log_message("%s", msg);
+        });
+    }
+
+    // 04.09.2025 bugfix: it will not catch the exception [   224][E][Preferences.cpp:483] getString(): nvs_get_str len fail: MQTT_Server NOT_FOUND, and overload the log until its crash
     void loadAll() {
-        prefs.begin("config", true);
+        prefs.begin("config", false); // Read-write mode
         for (auto *s : settings) {
-            try {
-                log_message("Loading setting: %s, default value: %s", s->getKey(), s->isSecret() ? "***" : String(s->getType() == SettingType::BOOL ? String(static_cast<Config<bool>*>(s)->get()) :
-                                                                                                    s->getType() == SettingType::INT ? String(static_cast<Config<int>*>(s)->get()) :
-                                                                                                    s->getType() == SettingType::FLOAT ? String(static_cast<Config<float>*>(s)->get()) :
-                                                                                                    s->getType() == SettingType::STRING ? static_cast<Config<String>*>(s)->get() :
-                                                                                                    "unknown").c_str());
-                s->load(prefs);
-            } catch (const std::exception& e) {
-                log_message("Error loading setting: %s", e.what());
-                s->setDefault(); // Load default value on error
-                log_message("Set it to default. [%s]", s->getKey());
+            log_message("loadAll(): Loading %s (type: %d)", s->getKey(), static_cast<int>(s->getType()));
+            s->load(prefs);
+
+            if (!prefs.isKey(s->getKey())) {
+                s->save(prefs); // Save default value if key not found
+                log_message("loadAll(): Saved default value for: %s", s->getKey());
             }
+
         }
         prefs.end();
     }
@@ -303,7 +393,7 @@ public:
         JsonObject root = doc.to<JsonObject>();
         for (auto *s : settings) {
             const char *category = s->getCategory();
-            const char *name = s->getName();
+            const char *keyName = s->getName();
             if (!root[category].is<JsonObject>()) root.createNestedObject(category);
             JsonObject cat = root[category];
             s->toJSON(cat);
@@ -398,6 +488,7 @@ public:
             log_message("\n❌ Failed to connect to WiFi!");
         }
     }
+
     void startWebServer(const String &ipStr, const String &mask, const String &dnsServer, const String &ssid, const String &password) {
         log_message("🌐 Configuring static IP %s...\n", ipStr.c_str());
 
@@ -472,7 +563,7 @@ public:
                 <body>
                     <h2>OTA Update</h2>
                     <form method='POST' action='/ota_update' enctype='multipart/form-data'>
-                        <input type='file' name='firmware'>
+                        <input type='file' keyName='firmware'>
                         <input type='submit' value='Update'>
                     </form>
                 </body>
@@ -651,29 +742,6 @@ public:
         log_message("🌐 All preferences cleared");
     }
 
-    //new logging-callback functions
-    typedef std::function<void(const char*)> LogCallback;
-
-    static void setLogger(LogCallback cb) {
-        logger = cb;
-    }
-
-    static void log_message(const char* format, ...) {
-        if (!logger) return;
-
-        char buffer[255];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-
-        logger(buffer);
-    }
-
-    void triggerLoggerTest() {
-       log_message("Test message abcdefghijklmnop");
-    }
-
     bool isOTAInitialized() const { return _otaInitialized; }
 
     String getOTAStatus() const {
@@ -758,23 +826,24 @@ public:
 
     void stopOTA() {
         if (_otaInitialized) {
-            // No direct method to stop ArduinoOTA, but we can reset the flag
+            //TODO: No direct method to stop ArduinoOTA how to handle this?
+             ArduinoOTA.end(); // Hypothetical function, does not exist in current library
             _otaInitialized = false;
             log_message("🛜 OTA Stopped");
         }
         _otaEnabled = false;
     }
 
-private:
-    Preferences prefs;
-    std::vector<BaseSetting *> settings;
-    WebHTML webhtml;
-    static LogCallback logger;
+    private:
+        Preferences prefs;
+        std::vector<BaseSetting *> settings;
+        WebHTML webhtml;
+        static LogCallback logger;
 
-    bool _otaEnabled = false;
-    bool _otaInitialized = false;
-    String _otaPassword;
-    String _otaHostname;
+        bool _otaEnabled = false;
+        bool _otaInitialized = false;
+        String _otaPassword;
+        String _otaHostname;
 
 };
 

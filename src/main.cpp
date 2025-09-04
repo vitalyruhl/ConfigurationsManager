@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 #include <WebServer.h>
 
-#define VERSION "V2.0.1" // remove throwing errors, becaus it let esp restart without showing the error message
+#define VERSION "V2.0.2" // remove throwing errors, becaus it let esp restart without showing the error message
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -137,8 +137,13 @@ void setup()
     {
         // Config<String> toLongKey("abcdefghijklmnop", "1234567890", "test to long, but truncatable key", true, false);
         Config<String> toLongKey("abcdefghijklmnop", "1234567890", "Test Key", "test to long, but truncatable key", true, false);
+        Config<float> WrongKey("TCO","Temperature Correction", "Temp", 0.1); // This will throw an exception, because category is to long, but in version 2.0.1 it make a buffer overflow + crash
+        Config<float> okKey("TCO", "Temp","Temperature Correction", 0.1);
+
         const char *key = toLongKey.getKey();
-        // Serial.printf("[WARNING] this Key was truncated: %s\n", key);
+        const char *key2 = WrongKey.getKey();
+        const char *key3 = okKey.getKey();
+       
     }
     catch (const KeyTruncatedWarning &e)
     {
