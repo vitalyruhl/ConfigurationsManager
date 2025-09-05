@@ -2,9 +2,9 @@
 #include "ConfigManager.h"
 #include <WebServer.h>
 // #include <WiFiClientSecure.h>
-#include <WebServer.h>
 
-#define VERSION "V2.0.2" // remove throwing errors, becaus it let esp restart without showing the error message
+
+#define VERSION "V2.1.0" // remove throwing errors, becaus it let esp restart without showing the error message
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -124,6 +124,59 @@ struct WiFi_Settings //wifiSettings
 };
 
 WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
+
+
+// declaration as an struct with callback function
+struct MQTT_Settings {
+    Config<int> mqtt_port;
+    Config<String> mqtt_server;
+    Config<String> mqtt_username;
+    Config<String> mqtt_password;
+    Config<String> mqtt_sensor_powerusage_topic;
+    Config<String> Publish_Topic;
+
+    // for dynamic topics based on Publish_Topic
+    String mqtt_publish_setvalue_topic;
+    String mqtt_publish_getvalue_topic;
+    String mqtt_publish_Temperature_topic;
+    String mqtt_publish_Humidity_topic;
+    String mqtt_publish_Dewpoint_topic;
+
+    MQTT_Settings() :
+        mqtt_port("Port", "MQTT", "MQTT-Port", 1883),
+        mqtt_server("Server", "MQTT", "MQTT-Server-IP", "192.168.2.3"),
+        mqtt_username("User", "MQTT", "MQTT-User", "housebattery"),
+        mqtt_password("Pass", "MQTT", "MQTT-Passwort", "mqttsecret", true, true),
+        mqtt_sensor_powerusage_topic("PUT", "MQTT", "Topic Powerusage", "emon/emonpi/power1"),
+        Publish_Topic("MQTTT", "MQTT", "Publish-Topic", "SolarLimiter")
+    {
+        cfg.addSetting(&mqtt_port);
+        cfg.addSetting(&mqtt_server);
+        cfg.addSetting(&mqtt_username);
+        cfg.addSetting(&mqtt_password);
+        cfg.addSetting(&mqtt_sensor_powerusage_topic);
+        cfg.addSetting(&Publish_Topic);
+
+        // callback to update topics when Publish_Topic changes
+        Publish_Topic.setCallback([this](String newValue) {
+            this->updateTopics();
+        });
+
+        updateTopics(); // make sure topics are initialized
+    }
+
+    void updateTopics() {
+        String hostname = Publish_Topic.get(); //you can trow an error here if its empty
+        mqtt_publish_setvalue_topic = hostname + "/SetValue";
+        mqtt_publish_getvalue_topic = hostname + "/GetValue";
+        mqtt_publish_Temperature_topic = hostname + "/Temperature";
+        mqtt_publish_Humidity_topic = hostname + "/Humidity";
+        mqtt_publish_Dewpoint_topic = hostname + "/Dewpoint";
+    }
+};
+
+MQTT_Settings mqttSettings; //mqttSettings
+
 #pragma endregion
 
 //--------------------------------------------------------------------
