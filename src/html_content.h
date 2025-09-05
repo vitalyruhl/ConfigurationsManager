@@ -7,7 +7,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
   <head>
-    <title>ESP32 Configuration V2.0.1</title>
+  <title id="pageTitle">ESP32 Configuration Vx.x.x</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
     body {
@@ -131,7 +131,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
   </style>
   </head>
   <body>
-    <h1>Device Configuration</h1>
+  <h1 id="mainHeader">Device Configuration Vx.x.x</h1>
     <div id="status"></div>
     <div id="settingsContainer"></div>
 
@@ -161,9 +161,18 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
           container.innerHTML = "";
 
           for (const [category, settings] of Object.entries(config)) {
+            // Try to get a pretty name from the first setting in the category
+            let pretty = null;
+            for (const [key, settingData] of Object.entries(settings)) {
+              if (key === "categoryPretty") continue;
+              if (settingData.categoryPretty) {
+                pretty = settingData.categoryPretty;
+                break;
+              }
+            }
             const categoryDiv = document.createElement("div");
             categoryDiv.className = "category";
-            categoryDiv.innerHTML = `<h2>${category}</h2>`;
+            categoryDiv.innerHTML = `<h2>${pretty ? pretty : category}</h2>`;
 
             for (const [key, settingData] of Object.entries(settings)) {
               const settingDiv = document.createElement("div");
@@ -174,7 +183,8 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 
               const label = document.createElement("label");
               label.textContent = displayName + ":";
-              label.title = key;  // Show technical name as tooltip
+              label.title = key;
+              if (key === "categoryPretty") continue; // Do not render as a field
 
               const inputWrapper = document.createElement("div");
               inputWrapper.style.flex = "2";
@@ -213,7 +223,8 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         if (isPassword) {
           input = document.createElement("input");
           input.type = "password";
-          input.value = value === "***" ? "" : value;
+          input.value = value && value !== "***" ? value : "";
+          input.placeholder = "***";
         } else if (typeof value === "boolean") {
           input = document.createElement("input");
           input.type = "checkbox";
@@ -230,6 +241,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 
         input.name = `${category}.${key}`;
         input.style.flex = "1";
+        if (isPassword) input.dataset.isPassword = "1";
         return input;
       }
 
@@ -278,6 +290,12 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         document.querySelectorAll("input").forEach((input) => {
           const [category, key] = input.name.split(".");
           if (!config[category]) config[category] = {};
+          // If password field and empty or '***', skip saving
+          if (input.dataset.isPassword === "1") {
+            if (!input.value || input.value === "***") {
+              return; // skip this password field
+            }
+          }
           config[category][key] =
             input.type === "checkbox" ? input.checked : input.value;
         });
@@ -353,7 +371,30 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
         setTimeout(() => (statusDiv.style.display = "none"), 3000);
       }
 
-      window.onload = loadSettings;
+      async function injectVersion() {
+        try {
+          const response = await fetch('/version');
+          if (!response.ok) throw new Error('Version fetch failed');
+          const version = await response.text();
+          // Update <title>
+          const pageTitle = document.getElementById('pageTitle');
+          if (pageTitle) {
+            pageTitle.textContent = `ESP32 Configuration V${version}`;
+          }
+          // Update <h1>
+          const mainHeader = document.getElementById('mainHeader');
+          if (mainHeader) {
+            mainHeader.textContent = `Device Configuration V${version}`;
+          }
+        } catch (e) {
+          // fallback: do nothing
+        }
+      }
+
+      window.onload = function() {
+        injectVersion();
+        loadSettings();
+      };
     </script>
   </body>
 </html>

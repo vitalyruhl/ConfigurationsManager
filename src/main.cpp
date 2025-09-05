@@ -10,7 +10,7 @@
 
 // ⚠️ Warning ⚠️
 // ESP 32 has a limitation of 15 chars for the key name.
-// The key name is build from the category and the key name. (<category>_<key>).
+// The key name is build from the category and the key name. (<category>_<key>)
 // The category is limited to 13 chars, the key name to 1 char.
 // Since V2.0.0 the key will be truncated if it is to long, but you have now a userfriendly displayName to show in the web interface.
 
@@ -41,13 +41,17 @@ Config<bool> testBool("tbool", "main", "test bool", true);
 
 //04.09.2025 test long category and key names
 
-// good:
-Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1);
-Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction", 0.1);
+// good old version with short categoryname:
+// Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1);
+// Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction", 0.1);
 
-//Wrong, but it will be truncated and logged as warning:
-Config<float>  VeryLongCategoryName("TCO", "VeryLongCategoryName","Temperature Correction long", 0.1);
-Config<float>  VeryLongKeyName("VeryLongKeyName", "Temp","Temperature Correction long", 0.1);
+// good new version since V2.2.0 with Pretty categoryname: eg ("keyname", "category","web displayName", "web Pretty category", defaultValue)
+Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction","Temperature Correction Settings", 0.1);
+Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction","Temperature Correction Settings", 0.1);
+
+// Now, these will be truncated and added if their truncated keys are unique:
+Config<float>  VeryLongCategoryName("VlongC", "VeryLongCategoryName","category Correction long","key Correction", 0.1);
+Config<float>  VeryLongKeyName("VeryLongKeyName", "Temp","key Correction long","key Correction", 0.1);
 
 
 //--------------------------------------------------------------------
@@ -142,13 +146,14 @@ struct MQTT_Settings {
     String mqtt_publish_Humidity_topic;
     String mqtt_publish_Dewpoint_topic;
 
+    //now schow extra pretty category name since V2.2.0: eg ("keyname", "category","web displayName", "web Pretty category", defaultValue)
     MQTT_Settings() :
-        mqtt_port("Port", "MQTT", "MQTT-Port", 1883),
-        mqtt_server("Server", "MQTT", "MQTT-Server-IP", "192.168.2.3"),
-        mqtt_username("User", "MQTT", "MQTT-User", "housebattery"),
-        mqtt_password("Pass", "MQTT", "MQTT-Passwort", "mqttsecret", true, true),
-        mqtt_sensor_powerusage_topic("PUT", "MQTT", "Topic Powerusage", "emon/emonpi/power1"),
-        Publish_Topic("MQTTT", "MQTT", "Publish-Topic", "SolarLimiter")
+    mqtt_port("Port", "MQTT", "Port", "MQTT-Section", 1883),
+    mqtt_server("Server", "MQTT", "Server-IP", "MQTT-Section", String("192.168.2.3")),
+    mqtt_username("User", "MQTT", "User", "MQTT-Section", String("housebattery")),
+    mqtt_password("Pass", "MQTT", "Password", "MQTT-Section", String("mqttsecret"), true, true),
+    mqtt_sensor_powerusage_topic("PUT", "MQTT", "Powerusage Topic", "MQTT-Section", String("emon/emonpi/power1")),
+    Publish_Topic("MQTTT", "MQTT", "Publish-Topic", "MQTT-Section", String("SolarLimiter"))
     {
         cfg.addSetting(&mqtt_port);
         cfg.addSetting(&mqtt_server);
@@ -295,8 +300,6 @@ void loop()
         }
         blinkBuidInLED(1, 100);
     }
-
-    cfg.handleClient();
 
     static unsigned long lastPrint = 0;
     int interval = max(updateInterval.get(), 1); // Prevent zero interval

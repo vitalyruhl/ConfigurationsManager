@@ -15,6 +15,8 @@
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h"
 
+#define CONFIGMANAGER_VERSION "2.2.0"
+
 extern WebServer server;
 class ConfigManagerClass; // Forward declaration
 
@@ -46,18 +48,19 @@ constexpr size_t const_strlen(const char* s) {
 // ------------------------------------------------------------------------------------------------------------------
 class BaseSetting {
     protected:
-    bool showInWeb;
-    bool isPassword;
-    bool modified = false;
-    const char *keyName;
-    const char *category;
-    const char *displayName;// 2025.08.17 - Add new feature for display keyName in web interface
-    SettingType type;
-    bool hasKeyLengthError = false; //04.09.2025 bugfix: prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
-    String keyLengthErrorMsg;
+        bool showInWeb;
+        bool isPassword;
+        bool modified = false;
+        const char *keyName;
+        const char *category;
+        const char *displayName; // 2025.08.17 - Add new feature for display keyName in web interface
+        const char *categoryPretty = nullptr; // 2025.09.05 - Add pretty name for category
+        SettingType type;
+        bool hasKeyLengthError = false; //04.09.2025 bugfix: prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
+        String keyLengthErrorMsg;
 
-    mutable std::function<void(const char*)> logger;
-    void log(const char* format, ...) const {
+        mutable std::function<void(const char*)> logger;
+        void log(const char* format, ...) const {
         if (logger) {
             char buffer[256];
             va_list args;
@@ -77,40 +80,73 @@ class BaseSetting {
             this->logger = logFunc;
         }
 
+
     // This is constructor for backward compatibility
     BaseSetting(const char *category, const char *keyName, const char *displayName, SettingType type, bool showInWeb = true, bool isPassword = false)
         : keyName(keyName), category(category), displayName(displayName), type(type), showInWeb(showInWeb), isPassword(isPassword)
-        {
-            // Runtime check for non-constant strings - just set a flag instead of throwing
-            size_t catLen = strlen(category);
-            size_t keyLen = strlen(keyName);
-
-            if (catLen + keyLen + 1 > 14) { // +1 for underscore
-                hasKeyLengthError = true;
-                keyLengthErrorMsg = String("[ERROR] Setting will not be stored! Combined length exceeds limit.\n");
-                keyLengthErrorMsg += "Category: '";
-                keyLengthErrorMsg += category;
-                keyLengthErrorMsg += "' (";
-                keyLengthErrorMsg += String(catLen);
-                keyLengthErrorMsg += " chars)\nKey: '";
-                keyLengthErrorMsg += keyName;
-                keyLengthErrorMsg += "' (";
-                keyLengthErrorMsg += String(keyLen);
-                keyLengthErrorMsg += " chars)\nTotal: ";
-                keyLengthErrorMsg += String(catLen + keyLen + 1);
-                keyLengthErrorMsg += " chars (max 14 allowed)\n";
-                keyLengthErrorMsg += "ESP32 Preferences allows max 15 chars total (Category + _ + Key)";
-            } else {
-                hasKeyLengthError = false;
-            }
+    {
+        size_t catLen = strlen(category);
+        size_t keyLen = strlen(keyName);
+        if (catLen + keyLen + 1 > 14) {
+            hasKeyLengthError = true;
+            keyLengthErrorMsg = String("[ERROR] Setting will not be stored! Combined length exceeds limit.\n");
+            keyLengthErrorMsg += "Category: '";
+            keyLengthErrorMsg += category;
+            keyLengthErrorMsg += "' (";
+            keyLengthErrorMsg += String(catLen);
+            keyLengthErrorMsg += " chars)\nKey: '";
+            keyLengthErrorMsg += keyName;
+            keyLengthErrorMsg += "' (";
+            keyLengthErrorMsg += String(keyLen);
+            keyLengthErrorMsg += " chars)\nTotal: ";
+            keyLengthErrorMsg += String(catLen + keyLen + 1);
+            keyLengthErrorMsg += " chars (max 14 allowed)\n";
+            keyLengthErrorMsg += "ESP32 Preferences allows max 15 chars total (Category + _ + Key)";
+        } else {
+            hasKeyLengthError = false;
         }
+    }
+
+    // Overload: with categoryPretty
+    BaseSetting(const char *category, const char *keyName, const char *displayName, const char *categoryPretty, SettingType type, bool showInWeb = true, bool isPassword = false)
+        : keyName(keyName), category(category), displayName(displayName), categoryPretty(categoryPretty), type(type), showInWeb(showInWeb), isPassword(isPassword)
+    {
+        size_t catLen = strlen(category);
+        size_t keyLen = strlen(keyName);
+        if (catLen + keyLen + 1 > 14) {
+            hasKeyLengthError = true;
+            keyLengthErrorMsg = String("[ERROR] Setting will not be stored! Combined length exceeds limit.\n");
+            keyLengthErrorMsg += "Category: '";
+            keyLengthErrorMsg += category;
+            keyLengthErrorMsg += "' (";
+            keyLengthErrorMsg += String(catLen);
+            keyLengthErrorMsg += " chars)\nKey: '";
+            keyLengthErrorMsg += keyName;
+            keyLengthErrorMsg += "' (";
+            keyLengthErrorMsg += String(keyLen);
+            keyLengthErrorMsg += " chars)\nTotal: ";
+            keyLengthErrorMsg += String(catLen + keyLen + 1);
+            keyLengthErrorMsg += " chars (max 14 allowed)\n";
+            keyLengthErrorMsg += "ESP32 Preferences allows max 15 chars total (Category + _ + Key)";
+        } else {
+            hasKeyLengthError = false;
+        }
+    }
 
     // New template constructor for compile-time checking
     template <size_t CatLen, size_t KeyLen>
     constexpr BaseSetting(const char (&category)[CatLen], const char (&keyName)[KeyLen], const char *displayName, SettingType type, bool showInWeb = true, bool isPassword = false)
         : keyName(keyName), category(category), displayName(displayName), type(type), showInWeb(showInWeb), isPassword(isPassword) {
-        static_assert(string_literal_length(category) + string_literal_length(keyName) + 1 <= 14,"Setting key and category names combined must not exceed 13 characters (plus one for the underscore).");
+        static_assert(string_literal_length(category) + string_literal_length(keyName) + 1 <= 14, "Setting key and category names combined must not exceed 13 characters (plus one for the underscore).");
     }
+    // Overload: with categoryPretty
+    template <size_t CatLen, size_t KeyLen>
+    constexpr BaseSetting(const char (&category)[CatLen], const char (&keyName)[KeyLen], const char *displayName, const char *categoryPretty, SettingType type, bool showInWeb = true, bool isPassword = false)
+        : keyName(keyName), category(category), displayName(displayName), categoryPretty(categoryPretty), type(type), showInWeb(showInWeb), isPassword(isPassword) {
+        static_assert(string_literal_length(category) + string_literal_length(keyName) + 1 <= 14, "Setting key and category names combined must not exceed 13 characters (plus one for the underscore).");
+    }
+    // Getter for categoryPretty
+    const char* getCategoryPretty() const { return categoryPretty ? categoryPretty : category; }
 
     //---------------------------------------
     virtual ~BaseSetting() = default;
@@ -126,50 +162,45 @@ class BaseSetting {
         return displayName ? displayName : keyName;
     }
 
+    mutable char keyBuffer[16]; // 15 chars + Null-Terminator, per-instance
     const char* getKey() const {
-        static char key[16]; // 15 chars + Null-Terminator
-        const int MAX_TOTAL_LENGTH = 14; // 15 chars total including null terminator
+        // ESP32 Preferences: max 15 chars (category + '_' + key + null)
+        const int MAX_TOTAL_LENGTH = 14; // 15 chars total (excluding null)
 
-        // Handle category truncation if needed
-        char categoryTrimmed[13]; // Max 12 chars + null terminator
-        int maxCategoryLength = 12;
+        int catLen = strlen(category);
+        int keyLen = strlen(keyName);
+        int maxCatLen = catLen;
+        int maxKeyLen = keyLen;
 
-        if (strlen(category) > maxCategoryLength) {
-            strncpy(categoryTrimmed, category, maxCategoryLength);
-            categoryTrimmed[maxCategoryLength] = '\0';
-            if (logger) {
-                char msg[256];
-                snprintf(msg, sizeof(msg), "[WARNING] Category '%s' (%d chars) truncated to '%s' (%d chars). Key: '%s'",
-                        category, strlen(category), categoryTrimmed, maxCategoryLength, keyName);
-                logger(msg);
-            }
-        } else {
-            strcpy(categoryTrimmed, category);
+        // Always truncate category to at least 1 char, then key
+        if (catLen + 1 + keyLen > MAX_TOTAL_LENGTH) {
+            maxCatLen = MAX_TOTAL_LENGTH - 1;
+            if (maxCatLen < 1) maxCatLen = 1; // Ensure at least 1 char for category
+            maxKeyLen = MAX_TOTAL_LENGTH - maxCatLen;
+            if (maxKeyLen < 1) maxKeyLen = 1; // Ensure at least 1 char for key
         }
 
-        // Calculate available space for key name
-        int maxNameLength = MAX_TOTAL_LENGTH - strlen(categoryTrimmed) - 1; // -1 for underscore
+        char categoryTrimmed[13];
+        char keyTrimmed[13];
+        strncpy(categoryTrimmed, category, maxCatLen);
+        categoryTrimmed[maxCatLen] = '\0';
+        strncpy(keyTrimmed, keyName, maxKeyLen);
+        keyTrimmed[maxKeyLen] = '\0';
 
-        // Handle key name truncation if needed
-        char nameTrimmed[maxNameLength + 1];
+        // Compose final key
+        snprintf(keyBuffer, sizeof(keyBuffer), "%s_%s", categoryTrimmed, keyTrimmed);
 
-        if (strlen(keyName) > maxNameLength) {
-            strncpy(nameTrimmed, keyName, maxNameLength);
-            nameTrimmed[maxNameLength] = '\0';
-            if (logger) {
+        // Optionally log truncation
+        if (logger) {
+            if (catLen != maxCatLen || keyLen != maxKeyLen) {
                 char msg[256];
-                snprintf(msg, sizeof(msg), "[WARNING] Key '%s' (%d chars) truncated to '%s' (%d chars) to fit limit. Category: '%s'",
-                        keyName, strlen(keyName), nameTrimmed, maxNameLength, categoryTrimmed);
+                snprintf(msg, sizeof(msg), "[WARNING] getKey(): category/key truncated: '%s' (%d) + '_' + '%s' (%d) => '%s' (max 14 chars)",
+                    category, catLen, keyName, keyLen, keyBuffer);
                 logger(msg);
             }
-        } else {
-            strcpy(nameTrimmed, keyName);
         }
 
-        // Create the final key
-        snprintf(key, sizeof(key), "%s_%s", categoryTrimmed, nameTrimmed);
-
-        return key;
+        return keyBuffer;
     }
 
     bool isSecret() const { return isPassword; }
@@ -195,7 +226,14 @@ template <typename T> class Config : public BaseSetting {
     Config(const char *keyName, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
         : BaseSetting(category, keyName, displayName, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
     {
-        // 2025.09.04 - Check for errors and log them if possible
+        if (hasError() && logger) {
+            logger(getError());
+        }
+    }
+    // Overload: with categoryPretty
+    Config(const char *keyName, const char *category, const char* displayName, const char* categoryPretty, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
+        : BaseSetting(category, keyName, displayName, categoryPretty, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
+    {
         if (hasError() && logger) {
             logger(getError());
         }
@@ -259,7 +297,7 @@ template <typename T> class Config : public BaseSetting {
             settingObj["value"] = value;
         }
         settingObj["displayName"] = getDisplayName();
-        settingObj["isPassword"] = isSecret(); // Add this line
+        settingObj["isPassword"] = isSecret();
     }
 
     bool fromJSON(const JsonVariant &val) override {
@@ -319,20 +357,25 @@ public:
 
     // 2025.09.04 - error handling for settings with key length issues
     void addSetting(BaseSetting *setting) {
-        if (setting->hasError()) {
-            log_message("[ERROR] %s", setting->getError());
-            log_message("[ERROR] This setting will not be stored or available in the web interface.");
-            return; // Don't add invalid settings
+        // Always truncate category/key in getKey(), so we check for uniqueness after truncation
+        const char* truncatedKey = setting->getKey();
+        // Check for uniqueness among already added settings
+        for (auto* s : settings) {
+            if (strcmp(s->getKey(), truncatedKey) == 0) {
+                log_message("[ERROR] Setting with key '%s' already exists after truncation. Not adding duplicate.", truncatedKey);
+                log_message("[ERROR] This setting will not be stored or available in the web interface.");
+                return;
+            }
         }
+        // If unique, add
         settings.push_back(setting);
-
         setting->setLogger([this](const char* msg) {
             this->log_message("%s", msg);
         });
     }
 
-    // 04.09.2025 bugfix: it will not catch the exception [   224][E][Preferences.cpp:483] getString(): nvs_get_str len fail: MQTT_Server NOT_FOUND, and overload the log until its crash
     void loadAll() {
+        // 04.09.2025 bugfix: it will not catch the exception [   224][E][Preferences.cpp:483] getString(): nvs_get_str len fail: MQTT_Server NOT_FOUND, and overload the log until its crash
         prefs.begin("config", false); // Read-write mode
         for (auto *s : settings) {
             log_message("loadAll(): Loading %s (type: %d)", s->getKey(), static_cast<int>(s->getType()));
@@ -349,7 +392,17 @@ public:
 
     void saveAll() {
         prefs.begin("config", false);
-        for (auto *s : settings) if (s->needsSave()) s->save(prefs);
+        for (auto *s : settings) {
+            if (!s->needsSave()) continue;
+            if (s->isSecret() && s->getType() == SettingType::STRING) {
+                Config<String>* strSetting = static_cast<Config<String>*>(s);
+                String val = strSetting->get();
+                if (val.isEmpty() || val == "***") {// 05.09.2025 skip saving this password if its empty or masked
+                    continue;
+                }
+            }
+            s->save(prefs);
+        }
         prefs.end();
     }
 
@@ -382,11 +435,29 @@ public:
     String toJSON(bool includeSecrets = false) {
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
+        // Track which categories we've already set pretty names for (Arduino compatible)
+        String catNames[20]; // up to 20 categories
+        int catCount = 0;
         for (auto *s : settings) {
             const char *category = s->getCategory();
             const char *keyName = s->getName();
             if (!root[category].is<JsonObject>()) root.createNestedObject(category);
             JsonObject cat = root[category];
+            // Set categoryPretty only once per category
+            bool found = false;
+            for (int i = 0; i < catCount; ++i) {
+                if (catNames[i] == category) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                const char* pretty = s->getCategoryPretty();
+                if (pretty && strcmp(pretty, category) != 0) {
+                    cat["categoryPretty"] = pretty;
+                }
+                if (catCount < 20) catNames[catCount++] = category;
+            }
             s->toJSON(cat);
         }
         String output;
@@ -546,6 +617,11 @@ public:
 
     void defineRoutes() {
         log_message("🌐 Defining routes...");
+
+        // Serve version at /version
+        server.on("/version", HTTP_GET, []() {
+            server.send(200, "text/plain", CONFIGMANAGER_VERSION);
+        });
 
         server.on("/ota_update", HTTP_GET, [this]() {
             String html = R"(
