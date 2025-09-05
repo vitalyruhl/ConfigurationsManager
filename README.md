@@ -1,12 +1,9 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.0.1
+> Version 2.2.0
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
-
-[![GitHub issues](https://img.shields.io/github/issues/vitaly.ruhl/ESP32ConfigManager.svg)]
-[![GitHub last commit](https://img.shields.io/github/last-commit/vitaly.ruhl/ESP32ConfigManager.svg)]
-
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
 
 ## Overview
 
@@ -47,9 +44,15 @@ description = ESP32 C++17 Project for managing settings
 
 ## Screenshots
 
+>Example on Monitor HD
+
 ![Example on monitor](examples/example-hd.jpg)
 
+>Example on mobile
+
 ![Example on mobile](examples/example-mobile.jpg)
+
+>OTA Update over web-interface
 
 ![OTA Update over web-interface](examples/ota-update-over-web.jpg)
 
