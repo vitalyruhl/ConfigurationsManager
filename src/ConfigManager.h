@@ -184,28 +184,35 @@ template <typename T> class Config : public BaseSetting {
     private:
     T value;
     T defaultValue;
-    void (*callback)(T);
+    void (*originalCallback)(T);
+    std::function<void(T)> callback = nullptr; // 2025.08.17 - Support for std::function callbacks
 
     public:
 
     // 2025.08.17 - Updated constructor with display keyName
     // 2025.09.04 - New constructor with compile-time checking
+    // 05.09.2025 - add new callback function with std::function
     Config(const char *keyName, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(category, keyName, displayName, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), callback(cb)
-        {
-            // 2025.09.04 - Check for errors and log them if possible
-            if (hasError() && logger) {
-                logger(getError());
-            }
+        : BaseSetting(category, keyName, displayName, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
+    {
+        // 2025.09.04 - Check for errors and log them if possible
+        if (hasError() && logger) {
+            logger(getError());
         }
+    }
 
     T get() const { return value; }
+
+    void setCallback(std::function<void(T)> cb) {
+        callback = cb;
+    }
 
     void set(T newVal) {
         if (value != newVal) {
             value = newVal;
             modified = true;
             if (callback) callback(value);
+            if (originalCallback) originalCallback(value);
         }
     }
 
