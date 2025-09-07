@@ -13,7 +13,7 @@
 #include <exception>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
-#include "html_content.h"
+#include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
 
 #define CONFIGMANAGER_VERSION "2.2.0"
 

@@ -1,0 +1,141 @@
+{
+  "config": {
+    "Limiter": {
+      "enCtrl": {
+        "value": true,
+        "displayName": "Enable Limitation",
+        "isPassword": false
+      },
+      "enMQTT": {
+        "value": true,
+        "displayName": "Enable MQTT Propagation",
+        "isPassword": false
+      }
+    },
+    "Display": {
+      "Save": {
+        "value": true,
+        "displayName": "Turn Display Off",
+        "isPassword": false
+      },
+      "Time": {
+        "value": 60,
+        "displayName": "Display On-Time in Sec",
+        "isPassword": false
+      }
+    },
+    "System": {
+      "OTAEn": {
+        "value": true,
+        "displayName": "Allow OTA Updates",
+        "isPassword": false
+      },
+      "OTAPass": {
+        "value": "***",
+        "displayName": "OTA Password",
+        "isPassword": true
+      },
+      "Version": {
+        "value": "V2.1.0",
+        "displayName": "Programm-Version",
+        "isPassword": false
+      }
+    },
+    "wifi": {
+      "ssid": {
+        "value": "VivilIE",
+        "displayName": "WiFi SSID",
+        "isPassword": false
+      },
+      "password": {
+        "value": "***",
+        "displayName": "WiFi Password",
+        "isPassword": true
+      }
+    },
+    "network": {
+      "dhcp": {
+        "value": false,
+        "displayName": "Use DHCP",
+        "isPassword": false
+      }
+    },
+    "MQTT": {
+      "categoryPretty": "MQTT-Section",
+      "Port": {
+        "value": 1883,
+        "displayName": "Port",
+        "isPassword": false
+      },
+      "Server": {
+        "value": "192.168.2.3",
+        "displayName": "Server-IP",
+        "isPassword": false
+      },
+      "User": {
+        "value": "housebattery",
+        "displayName": "User",
+        "isPassword": false
+      },
+      "Pass": {
+        "value": "***",
+        "displayName": "Password",
+        "isPassword": true
+      },
+      "PUT": {
+        "value": "emon/emonpi/power1",
+        "displayName": "Powerusage Topic",
+        "isPassword": false
+      },
+      "MQTTT": {
+        "value": "SolarLimiter2",
+        "displayName": "Publish-Topic",
+        "isPassword": false
+      }
+    },
+    "main": {
+      "interval": {
+        "value": 15,
+        "displayName": "Update Interval (seconds)",
+        "isPassword": false
+      },
+      "cbt": {
+        "value": 3,
+        "displayName": "Test Callback",
+        "isPassword": false
+      },
+      "tbool": {
+        "value": false,
+        "displayName": "test bool",
+        "isPassword": false
+      }
+    },
+    "Temp": {
+      "categoryPretty": "Temperature Correction Settings",
+      "TCO": {
+        "value": 0.1,
+        "displayName": "Temperature Correction",
+        "isPassword": false
+      },
+      "HYO": {
+        "value": 0.1,
+        "displayName": "Humidity Correction",
+        "isPassword": false
+      },
+      "VeryLongKeyName": {
+        "value": 0.1,
+        "displayName": "key Correction long",
+        "isPassword": false
+      }
+    },
+    "VeryLongCategoryName": {
+      "categoryPretty": "key Correction",
+      "VlongC": {
+        "value": 0.1,
+        "displayName": "category Correction long",
+        "isPassword": false
+      }
+    }
+  },
+  "version": { "value": "2.2.0" }
+}
