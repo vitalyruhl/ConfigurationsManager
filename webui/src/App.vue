@@ -35,6 +35,7 @@ async function loadSettings() {
     const response = await fetch('/config.json');
     if (!response.ok) throw new Error('HTTP Error');
     const data = await response.json();
+    console.log('Fetched config:', data); // <--- Hier einfügen
     config.value = data.config || data; // for json-server, config is nested
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
@@ -159,13 +160,6 @@ body {
   margin: 1rem;
   background-color: #f0f0f0;
 }
-.category {
-  margin: 10px 0;
-  padding: 15px;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
 h1 {
   color: #2c3e50;
   text-align: center;
@@ -177,15 +171,6 @@ h2 {
   border-bottom: 2px solid #3498db;
   padding-bottom: 10px;
   font-size: 1.2rem;
-}
-.setting {
-  margin: 15px 0;
-  padding: 15px;
-  background: #f8f9fa;
-  border-radius: 5px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 label {
   font-weight: bold;
@@ -250,24 +235,8 @@ button {
   body {
     margin: 2rem;
   }
-  .setting {
-    flex-direction: row;
-    align-items: center;
-  }
-  .actions {
-    flex-direction: row;
-    width: auto;
-  }
-  button {
-    width: auto;
-  }
   .action-buttons {
     flex-direction: row;
-  }
-  input,
-  select {
-    width: auto;
-    flex: 2;
   }
 }
 </style>

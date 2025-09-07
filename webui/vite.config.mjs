@@ -5,8 +5,14 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
-      '/config.json': 'http://localhost:3000/config',
-      '/version': 'http://localhost:3000/version'
+      '/config.json': {
+        target: 'http://localhost:3000',
+        rewrite: path => path.replace(/^\/config\.json$/, '/config')
+      },
+      '/version': {
+        target: 'http://localhost:3000',
+        rewrite: path => path.replace(/^\/version$/, '/version')
+      }
     }
   }
 });
