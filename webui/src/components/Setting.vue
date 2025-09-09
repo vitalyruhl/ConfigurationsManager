@@ -19,7 +19,7 @@
           @change="onInput($event.target.checked)"
           :name="`${category}.${keyName}`"
         />
-        <span class="slider"></span>
+  <span class="slider round"></span>
       </label>
       <input
         v-else-if="type === 'number'"
@@ -58,81 +58,61 @@
     gap: 10px;
     align-items: flex-start;
   }
+
   /* Android-Style Toggle Switch */
   .switch {
-    position: relative;
     display: inline-block;
-    width: 32px;
-    height: 20px;
-    margin: 0 8px 0 0;
-    vertical-align: middle;
+    height: 34px;
+    position: relative;
+    width: 30px;
   }
-  .slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    transition: .4s;
-    border-radius: 20px;
-  }
-  .slider:before {
-    position: absolute;
-    content: "";
-    height: 14px;
-    width: 14px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: .4s;
-    border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  }
-  .switch input:checked + .slider {
-    background-color: #4caf50;
-  }
-  .switch input:checked + .slider:before {
-    transform: translateX(12px);
-  }
+
   .switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
+    display:none;
   }
+
   .slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
     background-color: #ccc;
-    transition: .4s;
-    border-radius: 24px;
-  }
-  .slider:before {
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
     position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
+    right: 0;
+    top: 0;
     transition: .4s;
+  }
+
+  .slider:before {
+    background-color: #fff;
+    bottom: 4px;
+    content: "";
+    height: 26px;
+    left: 4px;
+    position: absolute;
+    transition: .4s;
+    width: 26px;
+  }
+
+  input:checked + .slider {
+    background-color: #66bb6a;
+  }
+
+  input:checked + .slider:before {
+    transform: translateX(26px);
+  }
+
+  .slider.round {
+    border-radius: 34px;
+  }
+
+  .slider.round:before {
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   }
-  .switch input:checked + .slider {
-    background-color: #4caf50;
-  }
-  .switch input:checked + .slider:before {
-    transform: translateX(16px);
-  }
+/* end of toggle switch */
+
 label {
   font-weight: bold;
-  min-width: 120px;
+  min-width: 70px;
 }
 input,
 select {

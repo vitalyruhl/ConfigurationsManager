@@ -6,11 +6,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/config.json': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:32000',
         rewrite: path => path.replace(/^\/config\.json$/, '/config')
       },
       '/version': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:32000',
         rewrite: path => path.replace(/^\/version$/, '/version')
       }
     }
