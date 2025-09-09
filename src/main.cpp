@@ -4,28 +4,28 @@
 // #include <WiFiClientSecure.h>
 
 
-#define VERSION "V2.1.0" // remove throwing errors, becaus it let esp restart without showing the error message
+#define VERSION "V2.1.0" // remove throwing errors, because it causes ESP to restart without showing the error message
 
 #define BUTTON_PIN_AP_MODE 13
 
 // ⚠️ Warning ⚠️
-// ESP 32 has a limitation of 15 chars for the key name.
-// The key name is build from the category and the key name. (<category>_<key>)
-// The category is limited to 13 chars, the key name to 1 char.
-// Since V2.0.0 the key will be truncated if it is to long, but you have now a userfriendly displayName to show in the web interface.
+// ESP32 has a limitation of 15 characters for the key name.
+// The key name is built from the category and the key name (<category>_<key>).
+// The category is limited to 13 characters, the key name to 1 character.
+// Since V2.0.0, the key will be truncated if it is too long, but you now have a user-friendly displayName to show in the web interface.
 
 // Usage:
 // Config<VarType> VarName (const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
 
-//since V2.0.0 Thera is a way to upload the firmware over the air (OTA).
-    //You can set the hostname and the password for the OTA in the setupOTA function.
-    //If you leave the hostname empty, it will be set to "esp32-device".
-    //If you leave the password empty, it will be set to "ota".
-    //Usage: cfg.setupOTA("Ota-esp32-device", "ota1234"); //be sure you have a wifi connection before calling this function!
-    //you can uplaod the firmware with the following command:
-    //pio run --target upload --upload-port <IP_ADDRESS> optional:--upload-flags="
-    //pio run --target upload --upload-port 192.168.2.126
-    //or use web-interface http://<IP_ADDRESS>/ota_update
+// Since V2.0.0 there is a way to upload the firmware over the air (OTA).
+// You can set the hostname and the password for OTA in the setupOTA function.
+// If you leave the hostname empty, it will be set to "esp32-device".
+// If you leave the password empty, it will be set to "ota".
+// Usage: cfg.setupOTA("Ota-esp32-device", "ota1234"); // Make sure you have a WiFi connection before calling this function!
+// You can upload the firmware with the following command:
+// pio run --target upload --upload-port <IP_ADDRESS> optional:--upload-flags="
+// pio run --target upload --upload-port 192.168.2.126
+// or use the web interface http://<IP_ADDRESS>/ota_update
 
 ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
@@ -33,19 +33,19 @@ ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initial
 WebServer server(80);
 int cbTestValue = 0;
 
-// here used global variables without struct eg Config is an helper class for the settings stored in the ConfigManager.h
+// Here, global variables are used without a struct, e.g., Config is a helper class for the settings stored in ConfigManager.h
 
-// 2025.08.17 Breacking Changes in Interface --> add Prettyname 'displayName' for the web interface
+// 2025.08.17 Breaking Changes in Interface --> add Prettyname 'displayName' for the web interface
 Config<int> updateInterval("interval", "main", "Update Interval (seconds)", 30);
 Config<bool> testBool("tbool", "main", "test bool", true);
 
-//04.09.2025 test long category and key names
+// 2025.09.04 Test long category and key names
 
-// good old version with short categoryname:
+// Good old version with short category name:
 // Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1);
 // Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction", 0.1);
 
-// good new version since V2.2.0 with Pretty categoryname: eg ("keyname", "category","web displayName", "web Pretty category", defaultValue)
+// Improved version since V2.2.0 with pretty category name: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
 Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction","Temperature Correction Settings", 0.1);
 Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction","Temperature Correction Settings", 0.1);
 
@@ -55,30 +55,30 @@ Config<float>  VeryLongKeyName("VeryLongKeyName", "Temp","key Correction long","
 
 
 //--------------------------------------------------------------------
-// predeclaration of functions
+// Forward declarations of functions
 void SetupCheckForAPModeButton();
 void blinkBuidInLED(int BlinkCount, int blinkRate);
 
-#pragma region "Callback-Example"
+// Example: Callback usage
 void testCallback(int val); // Callback function for testCb here defined, later implemented...
 Config<int> testCb("cbt", "main", "Test Callback", 0, true, false, testCallback); // since V2.0.0 use displayName for web interface
 #pragma endregion
 //--------------------------------------------------------------------
 
-#pragma region "Structure-Example"
-// General configuration (Structure example)
+// Example: Using structures for grouped settings
+// General configuration (structure example)
 struct General_Settings
 {
-    Config<bool> enableController;     // set to false to disable the controller and use Maximum power output
-    Config<bool> enableMQTT;           // set to false to disable the MQTT connection
+    Config<bool> enableController;     // Set to false to disable the controller and use maximum power output
+    Config<bool> enableMQTT;           // Set to false to disable the MQTT connection
 
-    Config<bool> saveDisplay; // to turn off the display
-    Config<int> displayShowTime; // time in seconds to show the display after boot or button press (default is 60 seconds, 0 = 10s)
+    Config<bool> saveDisplay; // To turn off the display
+    Config<int> displayShowTime; // Time in seconds to show the display after boot or button press (default is 60 seconds, 0 = 10s)
 
-    Config<bool> allowOTA; // allow OTA updates (default is true, set to false to disable OTA updates)
-    Config<String> otaPassword; // password for OTA updates (default is "ota1234", change it to a secure password)
+    Config<bool> allowOTA; // Allow OTA updates (default is true, set to false to disable OTA updates)
+    Config<String> otaPassword; // Password for OTA updates (default is "ota1234", change it to a secure password)
 
-    Config<String> Version;            // save the current version of the software
+    Config<String> Version;            // Save the current version of the software
 
     General_Settings() :enableController("enCtrl", "Limiter","Enable Limitation", true),
                         enableMQTT("enMQTT", "Limiter","Enable MQTT Propagation", true),
@@ -89,9 +89,9 @@ struct General_Settings
                         allowOTA("OTAEn", "System", "Allow OTA Updates", true),
                         otaPassword("OTAPass", "System", "OTA Password", "ota1234", true, true),
 
-                        Version("Version", "System","Programm-Version", VERSION)
+                        Version("Version", "System","Program Version", VERSION)
     {
-        // Register settings with configManager
+    // Register settings with ConfigManager
         cfg.addSetting(&enableController);
         cfg.addSetting(&enableMQTT);
 
@@ -108,8 +108,8 @@ struct General_Settings
 
 General_Settings generalSettings; // Create an instance of General_Settings-Struct
 
-// Example of a structure for WiFi with settings
-struct WiFi_Settings //wifiSettings
+// Example of a structure for WiFi settings
+struct WiFi_Settings // wifiSettings
 {
     Config<String> wifiSsid;
     Config<String> wifiPassword;
@@ -130,7 +130,7 @@ struct WiFi_Settings //wifiSettings
 WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
 
 
-// declaration as an struct with callback function
+// Declaration as a struct with callback function
 struct MQTT_Settings {
     Config<int> mqtt_port;
     Config<String> mqtt_server;
@@ -139,14 +139,14 @@ struct MQTT_Settings {
     Config<String> mqtt_sensor_powerusage_topic;
     Config<String> Publish_Topic;
 
-    // for dynamic topics based on Publish_Topic
+    // For dynamic topics based on Publish_Topic
     String mqtt_publish_setvalue_topic;
     String mqtt_publish_getvalue_topic;
     String mqtt_publish_Temperature_topic;
     String mqtt_publish_Humidity_topic;
     String mqtt_publish_Dewpoint_topic;
 
-    //now schow extra pretty category name since V2.2.0: eg ("keyname", "category","web displayName", "web Pretty category", defaultValue)
+    // Now show extra pretty category name since V2.2.0: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
     MQTT_Settings() :
     mqtt_port("Port", "MQTT", "Port", "MQTT-Section", 1883),
     mqtt_server("Server", "MQTT", "Server-IP", "MQTT-Section", String("192.168.2.3")),
@@ -162,16 +162,16 @@ struct MQTT_Settings {
         cfg.addSetting(&mqtt_sensor_powerusage_topic);
         cfg.addSetting(&Publish_Topic);
 
-        // callback to update topics when Publish_Topic changes
+    // Callback to update topics when Publish_Topic changes
         Publish_Topic.setCallback([this](String newValue) {
             this->updateTopics();
         });
 
-        updateTopics(); // make sure topics are initialized
+    updateTopics(); // Make sure topics are initialized
     }
 
     void updateTopics() {
-        String hostname = Publish_Topic.get(); //you can trow an error here if its empty
+    String hostname = Publish_Topic.get(); // You can throw an error here if it's empty
         mqtt_publish_setvalue_topic = hostname + "/SetValue";
         mqtt_publish_getvalue_topic = hostname + "/GetValue";
         mqtt_publish_Temperature_topic = hostname + "/Temperature";
@@ -194,12 +194,12 @@ void setup()
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
 
     //-----------------------------------------------------------------
-    // Set logger callback to log in your own way but before using the cfg object!
+    // Set logger callback to log in your own way, but do this before using the cfg object!
     // Example 1: use Serial for logging
     // void cbMyConfigLogger(const char *msg){ Serial.println(msg);}
     // ConfigManagerClass::setLogger(cbMyConfigLogger);
 
-    // or as an lambda function...
+    // Or as a lambda function...
     ConfigManagerClass::setLogger([](const char *msg){
             Serial.print("[CFG] ");
             Serial.println(msg);
@@ -221,13 +221,13 @@ void setup()
 
 
 
-    //04.09.2025 new function to check all settings with errors
+    // 2025.09.04 New function to check all settings for errors
     cfg.checkSettingsForErrors();
 
 
     try
     {
-        cfg.loadAll(); // Load all settings from the preferences
+    cfg.loadAll(); // Load all settings from preferences
     }
     catch(const std::exception& e)
     {
@@ -236,8 +236,8 @@ void setup()
 
     Serial.println("Loaded configuration:");
 
-    generalSettings.Version.set(VERSION);// update version on device
-    cfg.saveAll(); // Save all settings to the preferences
+    generalSettings.Version.set(VERSION); // Update version on device
+    cfg.saveAll(); // Save all settings to preferences
 
     SetupCheckForAPModeButton();
 
@@ -288,7 +288,6 @@ void loop()
     {
         blinkBuidInLED(3, 100);
     }
-
     else
     {
         if (WiFi.status() != WL_CONNECTED)
@@ -306,8 +305,8 @@ void loop()
     if (millis() - lastPrint > interval * 1000)
     {
         lastPrint = millis();
-        // Serial.printf("Loop --> DHCP status: %s\n", useDhcp.get() ? "yes" : "no");
-        // Serial.printf("Loop --> WiFi status: %s\n", WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
+    // Serial.printf("Loop --> DHCP status: %s\n", useDhcp.get() ? "yes" : "no");
+    // Serial.printf("Loop --> WiFi status: %s\n", WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
         cbTestValue++;
         testCb.set(cbTestValue);
         if (cbTestValue > 10)

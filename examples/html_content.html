@@ -1,7 +1,4 @@
-#pragma once
-#include <pgmspace.h>
 
-const char WEB_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -32,13 +29,7 @@ const char WEB_HTML[] PROGMEM = R"rawliteral(
 </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"></div>
+
   </body>
 </html>
-
-)rawliteral";
-
-class WebHTML {
-public:
-    const char* getWebHTML();
-};
