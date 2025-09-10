@@ -261,7 +261,7 @@ pio run -e usb -t clean
 - **2.0.2**: bugfixing, prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
               I has an mistake in TempCorrectionOffset("TCO","Temperature Correction", "Temp", 0.1) instead of TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1) --> buffer overflow and guru meditation error
 - **2.1.0**: add callback for value changes
-- **2.2.0**: add optional pretty category names
+- **2.2.0**: add optional pretty category names, convert static HTML to Vue3 project for better maintainability
 
 
 ## ToDo

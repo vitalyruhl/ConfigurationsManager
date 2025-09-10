@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 id="mainHeader">Device Configuration V{{ version }}</h1>
+    <h1 id="mainHeader">Device Configuration {{ version }}</h1>
     <div id="status" v-if="statusMessage" :style="{backgroundColor: statusColor}">{{ statusMessage }}</div>
     <div id="settingsContainer">
       <Category
@@ -26,7 +26,7 @@ import { ref, onMounted } from 'vue';
 import Category from './components/Category.vue';
 
 const config = ref({});
-const version = ref('x.x.x');
+const version = ref('');
 const statusMessage = ref('');
 const statusColor = ref('');
 
@@ -35,8 +35,8 @@ async function loadSettings() {
     const response = await fetch('/config.json');
     if (!response.ok) throw new Error('HTTP Error');
     const data = await response.json();
-    console.log('Fetched config:', data); // <--- Hier einfügen
-    config.value = data.config || data; // for json-server, config is nested
+    console.log('Fetched config:', data);
+    config.value = data.config || data;
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
   }
@@ -44,12 +44,14 @@ async function loadSettings() {
 
 async function injectVersion() {
   try {
+    // console.log('Try to fetch version...');
     const response = await fetch('/version');
     if (!response.ok) throw new Error('Version fetch failed');
-    const data = await response.json();
-    version.value = data.value || data;
+    const data = await response.text();
+    console.log('Fetched Version:', data);
+    version.value = 'V' + data;
   } catch (e) {
-    version.value = 'x.x.x';
+    version.value = '';
   }
 }
 
@@ -149,8 +151,8 @@ function rebootDevice() {
 }
 
 onMounted(() => {
-  injectVersion();
   loadSettings();
+  injectVersion();
 });
 </script>
 
@@ -159,6 +161,21 @@ body {
   font-family: Arial, sans-serif;
   margin: 1rem;
   background-color: #f0f0f0;
+}
+.logo-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  height: 80px;
+  margin-bottom: 0.5rem;
+}
+.app-logo {
+  max-width: 80px;
+  max-height: 80px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
 }
 h1 {
   color: #2c3e50;
@@ -240,3 +257,4 @@ button {
   }
 }
 </style>
+
