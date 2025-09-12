@@ -1,7 +1,3 @@
-#pragma once
-
-// Settings are stored in the format: <category>_<key>
-
 #include <Arduino.h>
 #include <string_view>
 #include <Preferences.h>
@@ -9,13 +5,31 @@
 #include <functional>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <type_traits>
 #include <WebServer.h>
 #include <exception>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
 
-#define CONFIGMANAGER_VERSION "2.2.0"
+#define CONFIGMANAGER_VERSION "2.3.0"
+
+
+// ConfigOptions must be defined before any usage in Config<T>
+template<typename T>
+struct ConfigOptions {
+    const char* keyName;
+    const char* category;
+    T defaultValue;
+    const char* prettyName = nullptr;
+    const char* prettyCat = nullptr;
+    bool showInWeb = true;
+    bool isPassword = false;
+    void (*cb)(T) = nullptr;
+    std::function<bool()> showIf = nullptr;
+};
+#pragma once
+
 
 extern WebServer server;
 class ConfigManagerClass; // Forward declaration
@@ -211,7 +225,7 @@ class BaseSetting {
 
     };
 
-template <typename T> class Config : public BaseSetting {
+    template <typename T> class Config : public BaseSetting {
     private:
     T value;
     T defaultValue;
@@ -220,23 +234,44 @@ template <typename T> class Config : public BaseSetting {
 
     public:
 
-    // 2025.08.17 - Updated constructor with display keyName
-    // 2025.09.04 - New constructor with compile-time checking
-    // 05.09.2025 - add new callback function with std::function
-    Config(const char *keyName, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(category, keyName, displayName, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
-    {
-        if (hasError() && logger) {
-            logger(getError());
-        }
-    }
-    // Overload: with categoryPretty
-    Config(const char *keyName, const char *category, const char* displayName, const char* categoryPretty, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(category, keyName, displayName, categoryPretty, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
-    {
-        if (hasError() && logger) {
-            logger(getError());
-        }
+    // // 1. Short form: key, cat, defaultValue
+    // Config(const char *keyName, const char *category, T defaultValue,
+    //        bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr, std::function<bool()> showIf = nullptr)
+    //     : BaseSetting(category, keyName, keyName, TypeTraits<T>::type, showInWeb, isPassword),
+    //       value(defaultValue), defaultValue(defaultValue), originalCallback(cb), showIfFunc(showIf)
+    // {
+    //     if (hasError() && logger) {
+    //         logger(getError());
+    //     }
+    // }
+
+    // // 2. Short with pretty name: key, cat, prettyName, defaultValue
+    // Config(const char *keyName, const char *category, const char* prettyName, T defaultValue,
+    //        bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr, std::function<bool()> showIf = nullptr)
+    //     : BaseSetting(category, keyName, prettyName, TypeTraits<T>::type, showInWeb, isPassword),
+    //       value(defaultValue), defaultValue(defaultValue), originalCallback(cb), showIfFunc(showIf)
+    // {
+    //     if (hasError() && logger) {
+    //         logger(getError());
+    //     }
+    // }
+
+    // // 3. Long: key, cat, prettyName, prettyCat, defaultValue
+    // Config(const char *keyName, const char *category, const char* prettyName, const char* prettyCat, T defaultValue,
+    //        bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr, std::function<bool()> showIf = nullptr)
+    //     : BaseSetting(category, keyName, prettyName, prettyCat, TypeTraits<T>::type, showInWeb, isPassword),
+    //       value(defaultValue), defaultValue(defaultValue), originalCallback(cb), showIfFunc(showIf)
+    // {
+    //     if (hasError() && logger) {
+    //         logger(getError());
+    //     }
+    // }
+
+    // Optional: showIf function for web visibility dependency
+    std::function<bool()> showIfFunc = nullptr;
+    bool shouldShowInWebDynamic() const {
+        if (showIfFunc) return showIfFunc();
+        return showInWeb;
     }
 
     T get() const { return value; }
@@ -249,36 +284,80 @@ template <typename T> class Config : public BaseSetting {
         if (value != newVal) {
             value = newVal;
             modified = true;
-            if (callback) callback(value);
-            if (originalCallback) originalCallback(value);
+            if (callback) callback(newVal);
+            if (originalCallback) originalCallback(newVal);
+        }
+    }
+
+    // NOTE: ConfigOptions field order matters for designated initialization in C++17 (GNU extension).
+    // Keep declaration order consistent: keyName, category, defaultValue, prettyName, prettyCat, showInWeb, isPassword, cb, showIf.
+    // When adding new fields, update all initializers accordingly.
+
+    Config(const ConfigOptions<T>& opts)
+        : BaseSetting(
+            opts.category,
+            opts.keyName,
+            opts.prettyName ? opts.prettyName : opts.keyName,
+            opts.prettyCat ? opts.prettyCat : opts.category,
+            TypeTraits<T>::type,
+            opts.showInWeb,
+            opts.isPassword),
+          value(opts.defaultValue),
+          defaultValue(opts.defaultValue),
+          originalCallback(opts.cb),
+          showIfFunc(opts.showIf)
+    {
+        if (hasError() && logger) {
+            logger(getError());
         }
     }
 
     SettingType getType() const override { return TypeTraits<T>::type; }
 
     void load(Preferences &prefs) override {
-        const char *key = getKey();
-        if constexpr (std::is_same_v<T, int>) {
-            value = prefs.getInt(key, defaultValue);
-        } else if constexpr (std::is_same_v<T, bool>) {
-            value = prefs.getBool(key, defaultValue);
-        } else if constexpr (std::is_same_v<T, float>) {
-            value = prefs.getFloat(key, defaultValue);
-        } else if constexpr (std::is_same_v<T, String>) {
-            value = prefs.getString(key, defaultValue);
+        String key = getKey();
+        switch (TypeTraits<T>::type) {
+            case SettingType::BOOL:
+                if constexpr (std::is_same_v<T, bool>) value = prefs.getBool(key.c_str(), defaultValue);
+                break;
+            case SettingType::INT:
+                if constexpr (std::is_same_v<T, int>) value = prefs.getInt(key.c_str(), defaultValue);
+                break;
+            case SettingType::FLOAT:
+                if constexpr (std::is_same_v<T, float>) {
+                    // Preferences has no float, store as string
+                    String stored = prefs.getString(key.c_str(), String(defaultValue, 6));
+                    value = stored.toFloat();
+                }
+                break;
+            case SettingType::STRING:
+            case SettingType::PASSWORD:
+                if constexpr (std::is_same_v<T, String>) value = prefs.getString(key.c_str(), defaultValue);
+                break;
         }
+        modified = false;
     }
 
     void save(Preferences &prefs) override {
-        const char *key = getKey();
-        if constexpr (std::is_same_v<T, int>) {
-            prefs.putInt(key, value);
-        } else if constexpr (std::is_same_v<T, bool>) {
-            prefs.putBool(key, value);
-        } else if constexpr (std::is_same_v<T, float>) {
-            prefs.putFloat(key, value);
-        } else if constexpr (std::is_same_v<T, String>) {
-            prefs.putString(key, value);
+        String key = getKey();
+        switch (TypeTraits<T>::type) {
+            case SettingType::BOOL:
+                if constexpr (std::is_same_v<T, bool>) prefs.putBool(key.c_str(), value);
+                break;
+            case SettingType::INT:
+                if constexpr (std::is_same_v<T, int>) prefs.putInt(key.c_str(), value);
+                break;
+            case SettingType::FLOAT:
+                if constexpr (std::is_same_v<T, float>) {
+                    char buf[32];
+                    dtostrf(value, 0, 6, buf);
+                    prefs.putString(key.c_str(), buf);
+                }
+                break;
+            case SettingType::STRING:
+            case SettingType::PASSWORD:
+                if constexpr (std::is_same_v<T, String>) prefs.putString(key.c_str(), value);
+                break;
         }
         modified = false;
     }
