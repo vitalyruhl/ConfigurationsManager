@@ -1,13 +1,22 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.2.0
+> Version 2.3.1
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
 
 ## Overview
 
-The ConfigurationsManager is a project designed to manage and store configuration settings for ESP32-based applications. It provides an easy-to-use interface for saving, retrieving, and updating configuration parameters, ensuring persistent storage and efficient management.
+The ConfigurationsManager is a C++17 helper library & example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI and OTA update endpoint. It focuses on:
+
+- Type‑safe templated `Config<T>` wrappers
+- Central registration + bulk load/save functions
+- Optional pretty display names and pretty category names (decouple storage key from UI)
+- Automatic key truncation safety (category + key <= 15 chars total in NVS) with friendly UI name preserved
+- Dynamic conditional visibility (`showIf` lambdas)
+- Callbacks on value change
+- OTA update integration
+- Static or DHCP WiFi startup helpers (multiple overloads)
 
 ## Note: This is a C++17 Project
 
@@ -30,11 +39,16 @@ description = ESP32 C++17 Project for managing settings
 
 ## Features
 
-- 📦 Non-Volatile Storage (NVS) integration (esp preferences)
-- 🌐 Responsive Web Configuration Interface
-- 🔒 Password masking & secret handling
-- 🔄 Automatic WiFi reconnect
-- 📡 AP Mode fallback
+- 📦 Non-Volatile Storage (NVS) integration (ESP Preferences)
+- 🌐 Vue 3 responsive web configuration interface (embedded in flash)
+- 🎯 Declarative config registration with a `ConfigOptions<T>` aggregate
+- 🪄 Dynamic visibility of settings via `showIf` lambda (e.g. hide static IP fields while DHCP enabled)
+- 🔒 Password masking & selective exposure
+- 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
+- 🔄 Automatic WiFi reconnect helper
+- 📡 AP Mode fallback / captive portal style entry
+- 🚀 OTA firmware upload endpoint
+- 🧪 Simple unit test scaffold (`test/basictest.cpp`)
 
 ## Requirements
 
@@ -56,146 +70,130 @@ description = ESP32 C++17 Project for managing settings
 
 ![OTA Update over web-interface](examples/ota-update-over-web.jpg)
 
-## examples
+## Examples (Updated API Style Since 2.3.x)
 
 ```cpp
 #include <Arduino.h>
 #include "ConfigManager.h"
 #include <WebServer.h>
 
-//##########################################################################
-// main declarations
-ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
-ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
-
+ConfigManagerClass cfg;
+ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 WebServer server(80);
 
-//##########################################################################
-//declaration Examples:
-// basic example
-Config<int> updateInterval("interval", "main", "Update Interval (seconds)", 30);
-Config<bool> useTempOffset("UTC", "Temp", "Use Temp-Correction offset", true);
-Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1);
+// Basic setting using new aggregate initialization (ConfigOptions<T>)
+Config<int> updateInterval(ConfigOptions<int>{
+    .keyName = "interval",
+    .category = "main",
+    .defaultValue = 30,
+    .prettyName = "Update Interval (seconds)"
+});
 
-//##########################################################################
+// Dynamic visibility example: show static IP fields only if DHCP disabled
+struct WiFi_Settings {
+  Config<String> wifiSsid;
+  Config<String> wifiPassword;
+  Config<bool>   useDhcp;
+  Config<String> staticIp;
+  Config<String> gateway;
+  Config<String> subnet;
 
-// declaration as an struct
-struct WiFi_Settings
-{
-    Config<String> wifiSsid;
-    Config<String> wifiPassword;
-    Config<bool> useDhcp;
-    Config<String> staticIp;
-    Config<String> gateway;
-    Config<String> subnet;
-
-    //todo: add static-IP settings
-    WiFi_Settings() :
-
-                    wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi"),
-                    wifiPassword("password", "wifi", "WiFi Password", "secretpass", true, true),
-                    useDhcp("dhcp", "network", "Use DHCP", false),
-                    staticIp("sIP", "network", "Static IP", "192.168.2.126"),
-                    subnet("subnet", "network", "Subnet-Mask", "255.255.255.0"),
-                    gateway("GW", "network", "Gateway", "192.168.2.250")
-
-    {
-        cfg.addSetting(&wifiSsid);
-        cfg.addSetting(&wifiPassword);
-        cfg.addSetting(&useDhcp);
-        cfg.addSetting(&staticIp);
-        cfg.addSetting(&gateway);
-        cfg.addSetting(&subnet);
-    }
+  WiFi_Settings() :
+    wifiSsid(ConfigOptions<String>{ .keyName="ssid", .category="wifi", .defaultValue="MyWiFi", .prettyName="WiFi SSID", .prettyCat="Network Settings" }),
+    wifiPassword(ConfigOptions<String>{ .keyName="password", .category="wifi", .defaultValue="secretpass", .prettyName="WiFi Password", .prettyCat="Network Settings", .showInWeb=true, .isPassword=true }),
+    useDhcp(ConfigOptions<bool>{ .keyName="dhcp", .category="network", .defaultValue=false, .prettyName="Use DHCP", .prettyCat="Network Settings" }),
+    staticIp(ConfigOptions<String>{ .keyName="sIP", .category="network", .defaultValue="192.168.2.126", .prettyName="Static IP", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } }),
+    gateway(ConfigOptions<String>{ .keyName="GW", .category="network", .defaultValue="192.168.2.250", .prettyName="Gateway", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } }),
+    subnet(ConfigOptions<String>{ .keyName="subnet", .category="network", .defaultValue="255.255.255.0", .prettyName="Subnet-Mask", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } })
+  {
+    cfg.addSetting(&wifiSsid);
+    cfg.addSetting(&wifiPassword);
+    cfg.addSetting(&useDhcp);
+    cfg.addSetting(&staticIp);
+    cfg.addSetting(&gateway);
+    cfg.addSetting(&subnet);
+  }
 };
 
-WiFi_Settings wifiSettings; //instance of wifiSettings
+WiFi_Settings wifiSettings;
 
-//##########################################################################
+void setup() {
+  Serial.begin(115200);
+  ConfigManagerClass::setLogger([](const char* msg){ Serial.print("[CFG] "); Serial.println(msg); });
 
-
-
-//##########################################################################
-
-//Usage in setup():
-
-void setup()
-{
-
- Serial.begin(115200);
- // ConfigManagerClass::setLogger(cbMyConfigLogger); //as extern callback function
- ConfigManagerClass::setLogger([](const char *msg){
-            Serial.print("[my-Section]: ");
-            Serial.println(msg);
-        }); // or as lambda function
-
-  // Register settings basic usage
   cfg.addSetting(&updateInterval);
-  cfg.addSetting(&useTempOffset);
-  cfg.addSetting(&TempCorrectionOffset);
+  cfg.loadAll();
+  cfg.checkSettingsForErrors();
 
-  cfg.loadAll(); // Load all settings from NVS (should be done after adding all settings)
-  cfg.checkSettingsForErrors(); // Optional: Check for errors in settings (prints to logger if there are issues)
+  // Optional update
+  updateInterval.set(15);
+  cfg.saveAll();
 
-  mqttSettings.updateTopics(); // Ensure topics are initialized based on current Publish_Topic value
-
-  updateInterval.set(15); // Change a setting value
-  cfg.saveAll(); // Save all settings to NVS
-
-  Serial.println(cfg.toJSON(false)); // Print all settings as JSON (pretty print)
-
-
-  // Start WiFi and Web Server
-  if (wifiSettings.wifiSsid.get().length() == 0) {
-          Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
-          cfg.startAccessPoint();
+  if (wifiSettings.wifiSsid.get().isEmpty()) {
+    cfg.startAccessPoint();
   }
 
-  if (WiFi.getMode() == WIFI_AP) {
-      Serial.printf("🖥️  AP Mode! \n");
-      return; // Skip webserver setup in AP mode
-  }
-
-  if (wifiSettings.useDhcp.get()) {
-      Serial.println("DHCP enabled");
+  if (WiFi.getMode() != WIFI_AP) {
+    if (wifiSettings.useDhcp.get()) {
       cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-  } else {
-      Serial.println("DHCP disabled");
-      // cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSettings.wifiSsid.get(), 
-      cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());wifiSettings.wifiPassword.get());
+    } else {
+      // Explicit static (IP, Gateway, Mask)
+      cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+      // Or full explicit including DNS:
+      // cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), String("8.8.8.8"), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+    }
   }
-
-  delay(1500);
 
   if (WiFi.status() == WL_CONNECTED) {
-      cfg.setupOTA("Ota-esp32-device", generalSettings.otaPassword.get().c_str());
+    // OTA password is another Config<String> you can define similarly
+    cfg.setupOTA("Ota-esp32-device", "ota1234");
   }
-  Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
 }
-
-
-
 
 void loop() {
-
-  if (WiFi.getMode() == WIFI_AP) {
-    Serial.printf("🖥️ Run in AP Mode!\n");
-    cfg.handleClient();
-    return false; // Skip other in AP mode
-  }
-
-  if (WiFi.status() != WL_CONNECTED){ 
-    cfg.reconnectWifi();
-    delay(1000);
-  }
-
-  cfg.handleClient(); // Handle web server clients
-  cfg.handleOTA(); //ota is not available in AP mode
-  delay(1000);
+  cfg.handleClient();
+  cfg.handleOTA();
+  delay(250);
 }
-
 ```
 
+
+### Dynamic Visibility (showIf) Pattern
+
+The `showIf` member of `ConfigOptions<T>` is a `std::function<bool()>`. It is evaluated on every JSON generation for the web UI (after each apply/save). Keep it lightweight (simple flag checks) to avoid blocking the loop. Example:
+
+```cpp
+Config<bool> enableAdvanced(ConfigOptions<bool>{
+  .keyName = "adv",
+  .category = "sys",
+  .defaultValue = false,
+  .prettyName = "Enable Advanced"
+});
+Config<int> hiddenUnlessEnabled(ConfigOptions<int>{
+  .keyName = "hnum",
+  .category = "sys",
+  .defaultValue = 42,
+  .prettyName = "Hidden Number",
+  .showIf = [](){ return enableAdvanced.get(); }
+});
+```
+
+### Static IP Helper Overloads
+
+Overloads now available:
+
+1. `startWebServer(ssid, password)` → DHCP
+2. `startWebServer(ip, mask, ssid, password)` → Derives gateway (.1) + DNS 8.8.8.8
+3. `startWebServer(ip, gateway, mask, ssid, password)` → Explicit gateway (DNS 8.8.8.8)
+4. `startWebServer(ip, gateway, mask, dns, ssid, password)` → Fully explicit
+
+### Key Length & Truncation Safety
+
+Internal storage key format: `<category>_<keyName>` truncated to 15 chars to satisfy ESP32 NVS limits. Provide human friendly `.prettyName` / `.prettyCat` for UI text. Avoid relying on raw key for user output.
+
+### Password / Secret Fields
+
+Set `.isPassword = true` to mask in UI. The backend stores the real value; UI obscures it and only sends new value when field changed.
 
 ## Installation
 
@@ -262,27 +260,23 @@ pio run -e usb -t clean
               I has an mistake in TempCorrectionOffset("TCO","Temperature Correction", "Temp", 0.1) instead of TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1) --> buffer overflow and guru meditation error
 - **2.1.0**: add callback for value changes
 - **2.2.0**: add optional pretty category names, convert static HTML to Vue3 project for better maintainability
+- **2.3.0**: introduce `ConfigOptions<T>` aggregate initialization (breaking style update) + dynamic `showIf` visibility + improved front-end auto-refresh
+- **2.3.1**: added multiple `startWebServer` static IP overloads, refactored connection logic, suppressed noisy NOT_FOUND NVS messages when keys absent, updated README
 
 
 ## ToDo
 
 - HTTPS Support
-- add optional pretty category names (or Automatic on more then 12 chars)
-- add optional selective show on webinterface (eg. if dhcp is disabled -> show ip, gw, sn, dns settings
 - add optional order number for settings to show on webinterface
 - add optional order number for categories to show on webinterface
-- add optional description for settings to show on webinterface as tooltip)
-- add optional shor password in cleartext to show on webinterface, and or console
+- add optional description for settings to show on webinterface as tooltip
+- add optional show-password flag to show password on webinterface, and or console
 - add reset to default for single settings
-- show boolean checkbox as switch and not in the middle if big size of screen
 - add configurable OTA route
 - add configurable OTA password for webinterface
 - i18n Support
-- make c++ V11 support (i hope for contribution, because i have not enough c++ knowledge for make it typ-safe)
-- add test for new functions
-- add more examples
+- make c++ V11 support
 
 ## known Issues
 
 - **Save all** button works only, if you saved value ones over single save-button
-- **Save all** repair pssword change to "" if pres save all with empty password field

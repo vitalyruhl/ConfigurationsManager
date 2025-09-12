@@ -1,5 +1,5 @@
 <template>
-  <div class="setting">
+  <div class="setting" v-if="visible">
     <label :title="keyName">{{ displayName }}:</label>
   <div style="flex:2;display:flex;justify-content:flex-start;">
       <input
@@ -16,7 +16,7 @@
         <input
           type="checkbox"
           :checked="inputValue"
-          @change="onInput($event.target.checked)"
+          @change="onToggle($event.target.checked)"
           :name="`${category}.${keyName}`"
         />
   <span class="slider round"></span>
@@ -39,7 +39,11 @@
       />
     </div>
     <div class="actions">
-      <button class="apply-btn" @click="emit('apply', keyName, inputValue)">Apply</button>
+      <button
+        v-if="type !== 'boolean'"
+        class="apply-btn"
+        @click="emit('apply', keyName, inputValue)"
+      >Apply</button>
       <button class="save-btn" @click="emit('save', keyName, inputValue)">Save</button>
     </div>
   </div>
@@ -184,8 +188,21 @@ const displayName = props.settingData.displayName || props.keyName;
 const isPassword = props.keyName.toLowerCase().includes('pass') || props.settingData.isPassword === true;
 const type = typeof props.settingData.value === 'boolean' ? 'boolean' : typeof props.settingData.value === 'number' ? 'number' : 'string';
 const inputValue = ref(isPassword && (!props.settingData.value || props.settingData.value === '***') ? '' : props.settingData.value);
+// Visibility: the server can deliver a resolved showIf as boolean
+const visible = ref(true);
+if (Object.prototype.hasOwnProperty.call(props.settingData, 'showIf') && typeof props.settingData.showIf === 'boolean') {
+  visible.value = props.settingData.showIf;
+} else if (Object.prototype.hasOwnProperty.call(props.settingData, 'showIfResolved') && typeof props.settingData.showIfResolved === 'boolean') {
+  visible.value = props.settingData.showIfResolved;
+}
 watch(() => props.settingData.value, v => { inputValue.value = v; });
 function onInput(val) {
   inputValue.value = val;
+}
+function onToggle(val){
+  // Ensure boolean stored
+  inputValue.value = !!val;
+  // Auto-apply so dependent showIf fields refresh quickly
+  emit('apply', props.keyName, inputValue.value);
 }
 </script>

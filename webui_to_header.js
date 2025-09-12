@@ -15,9 +15,10 @@ async function buildHeader() {
     throw new Error('cannot find CSS file in assets directory!');
   }
   const cssContent = fs.readFileSync(path.join(assetsDir, cssFile), 'utf8');
+  // Inline CSS (only first stylesheet link). Use a replacer function to avoid accidental $-group substitutions.
   indexHtml = indexHtml.replace(
-    /<link rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/,
-    `<style>${cssContent}</style>`
+    /<link rel="stylesheet"[^>]*href="[^"]+"[^>]*>/,
+    () => `<style>${cssContent}</style>`
   );
 
   // add js
@@ -26,9 +27,10 @@ async function buildHeader() {
     throw new Error('cannot find JS file in assets directory!');
   }
   const jsContent = fs.readFileSync(path.join(assetsDir, jsFile), 'utf8');
+  // Inline JS (only first module script tag). Using function form prevents special replacement patterns.
   indexHtml = indexHtml.replace(
-    /<script[^>]*src="([^"]+)"[^>]*><\/script>/,
-    `<script type="module">${jsContent}</script>`
+    /<script[^>]*src="[^"]+"[^>]*><\/script>/,
+    () => `<script type="module">${jsContent}</script>`
   );
 
   // load favicon svg from webui/logo.svg
@@ -39,8 +41,8 @@ async function buildHeader() {
   const svgContent = fs.readFileSync(logoPath, 'utf8');
   const svgDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgContent);
   indexHtml = indexHtml.replace(
-    /<link rel="icon"[^>]*href="([^"]+\.svg)"[^>]*>/,
-    `<link rel="icon" type="image/svg+xml" href="${svgDataUrl}" />`
+    /<link rel="icon"[^>]*href="[^"]+\.svg"[^>]*>/,
+    () => `<link rel="icon" type="image/svg+xml" href="${svgDataUrl}" />`
   );
 
   // make the Header

@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 
 
-#define VERSION "V2.3.0"
+#define VERSION "V2.3.1"
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -14,14 +14,11 @@
 // The category is limited to 13 characters, the key name to 1 character.
 // Since V2.0.0, the key will be truncated if it is too long, but you now have a user-friendly displayName to show in the web interface.
 
-// Usage:
-// Config<VarType> VarName (const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-
 // Since V2.0.0 there is a way to upload the firmware over the air (OTA).
 // You can set the hostname and the password for OTA in the setupOTA function.
 
 
-/*
+/* Please note: 
         struct ConfigOptions {
             const char* keyName;
             const char* category;
@@ -92,6 +89,33 @@ Config<float> VeryLongKeyName(ConfigOptions<float>{
     .prettyName = "key Correction long",
     .prettyCat = "key Correction"
 });
+
+// ---- Temporary dynamic visibility test settings ----
+// Category kept short ("DynTest") to avoid key truncation when combined with key names.
+Config<bool> tempBoolToggle(ConfigOptions<bool>{
+    .keyName = "toggle",
+    .category = "DynTest",
+    .defaultValue = true,
+    .prettyName = "Temp Toggle",
+    .prettyCat = "Dynamic Test"
+});
+Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
+    .keyName = "trueS",
+    .category = "DynTest",
+    .defaultValue = String("Shown if toggle = true"),
+    .prettyName = "Visible When True",
+    .prettyCat = "Dynamic Test",
+    .showIf = [](){ return tempBoolToggle.get(); }
+});
+Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
+    .keyName = "falseS",
+    .category = "DynTest",
+    .defaultValue = String("Shown if toggle = false"),
+    .prettyName = "Visible When False",
+    .prettyCat = "Dynamic Test",
+    .showIf = [](){ return !tempBoolToggle.get(); }
+});
+// ---- End temporary dynamic visibility test settings ----
 
 
 //--------------------------------------------------------------------
@@ -170,9 +194,9 @@ struct WiFi_Settings //wifiSettings
     wifiSsid(ConfigOptions<String>{ .keyName = "ssid", .category = "wifi", .defaultValue = "MyWiFi", .prettyName = "WiFi SSID", .prettyCat = "Network Settings" }),
     wifiPassword(ConfigOptions<String>{ .keyName = "password", .category = "wifi", .defaultValue = "secretpass", .prettyName = "WiFi Password", .prettyCat = "Network Settings", .showInWeb = true, .isPassword = true }),
     useDhcp(ConfigOptions<bool>{ .keyName = "dhcp", .category = "network", .defaultValue = false, .prettyName = "Use DHCP", .prettyCat = "Network Settings" }),
-    staticIp(ConfigOptions<String>{ .keyName = "sIP", .category = "network", .defaultValue = "192.168.2.126", .prettyName = "Static IP", .prettyCat = "Network Settings" }),
-    subnet(ConfigOptions<String>{ .keyName = "subnet", .category = "network", .defaultValue = "255.255.255.0", .prettyName = "Subnet-Mask", .prettyCat = "Network Settings" }),
-    gateway(ConfigOptions<String>{ .keyName = "GW", .category = "network", .defaultValue = "192.168.2.250", .prettyName = "Gateway", .prettyCat = "Network Settings" })
+    staticIp(ConfigOptions<String>{ .keyName = "sIP", .category = "network", .defaultValue = "192.168.2.126", .prettyName = "Static IP", .prettyCat = "Network Settings", .showIf = [this]() { return !this->useDhcp.get(); } }),
+    subnet(ConfigOptions<String>{ .keyName = "subnet", .category = "network", .defaultValue = "255.255.255.0", .prettyName = "Subnet-Mask", .prettyCat = "Network Settings", .showIf = [this]() { return !this->useDhcp.get(); } }),
+    gateway(ConfigOptions<String>{ .keyName = "GW", .category = "network", .defaultValue = "192.168.2.250", .prettyName = "Gateway", .prettyCat = "Network Settings", .showIf = [this]() { return !this->useDhcp.get(); } })
 
     {
         cfg.addSetting(&wifiSsid);
@@ -277,6 +301,11 @@ void setup()
     cfg.addSetting(&VeryLongCategoryName);
     cfg.addSetting(&VeryLongKeyName);
 
+    // Register temporary dynamic test settings
+    cfg.addSetting(&tempBoolToggle);
+    cfg.addSetting(&tempSettingAktiveOnTrue);
+    cfg.addSetting(&tempSettingAktiveOnFalse);
+
 
 
     // 2025.09.04 New function to check all settings for errors
@@ -330,7 +359,8 @@ void setup()
     else
     {
         Serial.println("DHCP disabled");
-        cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        // cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.2.250" , wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
 
     }
     delay(1500);
