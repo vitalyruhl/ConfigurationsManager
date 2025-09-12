@@ -12,6 +12,11 @@
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
 
+#ifdef UNIT_TEST
+// Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
+inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
+#endif
+
 #define CONFIGMANAGER_VERSION "2.3.0"
 
 
