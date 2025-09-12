@@ -2,10 +2,10 @@
   <div>
     <h1 id="mainHeader">Device Configuration {{ version }}</h1>
     <div id="status" v-if="statusMessage" :style="{backgroundColor: statusColor}">{{ statusMessage }}</div>
-    <div id="settingsContainer">
+    <div id="settingsContainer" :key="refreshKey">
       <Category
         v-for="(settings, category) in config"
-        :key="category"
+        :key="category + '_' + refreshKey"
         :category="category"
         :settings="settings"
         @apply-single="applySingle"
@@ -13,10 +13,10 @@
       />
     </div>
     <div class="action-buttons">
-      <button @click="applyAll" class="apply-btn">Apply All</button>
-      <button @click="saveAll" class="save-btn">Save All</button>
-      <button @click="resetDefaults" class="reset-btn">Reset Defaults</button>
-      <button @click="rebootDevice" class="reset-btn">Reboot</button>
+      <button @click="applyAll" class="apply-btn" :disabled="refreshing">{{ refreshing ? '...' : 'Apply All' }}</button>
+      <button @click="saveAll" class="save-btn" :disabled="refreshing">{{ refreshing ? '...' : 'Save All' }}</button>
+      <button @click="resetDefaults" class="reset-btn" :disabled="refreshing">Reset Defaults</button>
+      <button @click="rebootDevice" class="reset-btn" :disabled="refreshing">Reboot</button>
     </div>
   </div>
 </template>
@@ -26,9 +26,11 @@ import { ref, onMounted } from 'vue';
 import Category from './components/Category.vue';
 
 const config = ref({});
+const refreshKey = ref(0); // forces re-render of settings tree
 const version = ref('');
 const statusMessage = ref('');
 const statusColor = ref('');
+const refreshing = ref(false); // new state
 
 async function loadSettings() {
   try {
@@ -37,6 +39,8 @@ async function loadSettings() {
     const data = await response.json();
     console.log('Fetched config:', data);
     config.value = data.config || data;
+    // bump key to force child component re-mount (ensures stale visibility cache cleared)
+    refreshKey.value++;
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
   }
@@ -44,7 +48,6 @@ async function loadSettings() {
 
 async function injectVersion() {
   try {
-    // console.log('Try to fetch version...');
     const response = await fetch('/version');
     if (!response.ok) throw new Error('Version fetch failed');
     const data = await response.text();
@@ -63,6 +66,7 @@ function showStatus(message, color) {
 
 async function applySingle(category, key, value) {
   try {
+    refreshing.value = true;
     const response = await fetch(`/config/apply?category=${encodeURIComponent(category)}&key=${encodeURIComponent(key)}`,
       {
         method: 'POST',
@@ -70,13 +74,18 @@ async function applySingle(category, key, value) {
         body: JSON.stringify({ value })
       });
     if (!response.ok) throw new Error('Apply failed');
+    await loadSettings();
+    showStatus('Applied', 'green');
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
+  } finally {
+    refreshing.value = false;
   }
 }
 
 async function saveSingle(category, key, value) {
   try {
+    refreshing.value = true;
     const response = await fetch(`/config/save?category=${encodeURIComponent(category)}&key=${encodeURIComponent(key)}`,
       {
         method: 'POST',
@@ -84,8 +93,12 @@ async function saveSingle(category, key, value) {
         body: JSON.stringify({ value })
       });
     if (!response.ok) throw new Error('Save failed');
+    await loadSettings();
+    showStatus('Saved', 'green');
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
+  } finally {
+    refreshing.value = false;
   }
 }
 
@@ -105,6 +118,7 @@ async function saveAll() {
       body: JSON.stringify(all)
     });
     showStatus(response.ok ? 'All settings saved!' : 'Error!', response.ok ? 'green' : 'red');
+    if (response.ok) await loadSettings();
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
   }
@@ -125,6 +139,7 @@ async function applyAll() {
       body: JSON.stringify(all)
     });
     showStatus(response.ok ? 'All settings Applied!' : 'Error!', response.ok ? 'green' : 'red');
+    if (response.ok) await loadSettings();
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
   }

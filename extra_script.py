@@ -1,10 +1,16 @@
+import os
 import subprocess
 
-# Absoluter Pfad zu npm und node
+# Absolute path to npm and node
 npm_cmd = r'C:\Program Files\nodejs\npm.cmd'
 node_exe = r'C:\Program Files\nodejs\node.exe'
 
-# 1. Vue-App bauen
+# Note: If "vite" is not found, run "npm install" in the webui folder first!
+# Automatic installation if node_modules is missing:
+webui_path = 'webui'
+subprocess.run([npm_cmd, 'install'], cwd=webui_path, check=True)
+
+# 1. Build Vue app
 subprocess.run([npm_cmd, 'run', 'build'], cwd='webui', check=True)
-# 2. Node.js-Skript ausführen
+# 2. Run Node.js script
 subprocess.run([node_exe, 'webui_to_header.js'], cwd='.', check=True)

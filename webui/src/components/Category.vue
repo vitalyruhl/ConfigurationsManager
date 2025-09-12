@@ -7,6 +7,7 @@
       :category="category"
       :keyName="key"
       :settingData="settingData"
+      v-if="shouldShow(settingData)"
       @apply="onApply"
       @save="onSave"
     />
@@ -37,11 +38,23 @@ const props = defineProps({
 });
 const emit = defineEmits(['apply-single', 'save-single']);
 const filteredSettings = computed(() => {
-  // Filtere categoryPretty raus
+  // Filter out categoryPretty meta key
   return Object.fromEntries(
     Object.entries(props.settings).filter(([key, val]) => key !== 'categoryPretty')
   );
 });
+function shouldShow(settingData){
+  // Firmware can provide dynamic visibility via showIfResolved or showIf; fallback to always true
+  if (settingData === null || typeof settingData !== 'object') return true;
+  if (Object.prototype.hasOwnProperty.call(settingData, 'showIf') && typeof settingData.showIf === 'boolean') {
+    return settingData.showIf; // already resolved to boolean in JSON (preferred)
+  }
+  // If backend later sends e.g. showIfResolved
+  if (Object.prototype.hasOwnProperty.call(settingData, 'showIfResolved') && typeof settingData.showIfResolved === 'boolean') {
+    return settingData.showIfResolved;
+  }
+  return true;
+}
 const prettyName = computed(() => {
   for (const key in props.settings) {
     if (key === 'categoryPretty') continue;

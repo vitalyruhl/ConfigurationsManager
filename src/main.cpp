@@ -4,7 +4,7 @@
 // #include <WiFiClientSecure.h>
 
 
-#define VERSION "V2.1.0" // remove throwing errors, because it causes ESP to restart without showing the error message
+#define VERSION "V2.3.1"
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -14,18 +14,23 @@
 // The category is limited to 13 characters, the key name to 1 character.
 // Since V2.0.0, the key will be truncated if it is too long, but you now have a user-friendly displayName to show in the web interface.
 
-// Usage:
-// Config<VarType> VarName (const char *name, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-
 // Since V2.0.0 there is a way to upload the firmware over the air (OTA).
 // You can set the hostname and the password for OTA in the setupOTA function.
-// If you leave the hostname empty, it will be set to "esp32-device".
-// If you leave the password empty, it will be set to "ota".
-// Usage: cfg.setupOTA("Ota-esp32-device", "ota1234"); // Make sure you have a WiFi connection before calling this function!
-// You can upload the firmware with the following command:
-// pio run --target upload --upload-port <IP_ADDRESS> optional:--upload-flags="
-// pio run --target upload --upload-port 192.168.2.126
-// or use the web interface http://<IP_ADDRESS>/ota_update
+
+
+/* Please note: 
+        struct ConfigOptions {
+            const char* keyName;
+            const char* category;
+            T defaultValue;
+            const char* prettyName = nullptr;
+            const char* prettyCat = nullptr;
+            bool showInWeb = true;
+            bool isPassword = false;
+            void (*cb)(T) = nullptr;
+            std::function<bool()> showIf = nullptr;
+        };
+*/
 
 ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
@@ -34,24 +39,83 @@ WebServer server(80);
 int cbTestValue = 0;
 
 // Here, global variables are used without a struct, e.g., Config is a helper class for the settings stored in ConfigManager.h
+// 2025.08.17 Breaking Changes in Interface --> now with struct initialization
 
-// 2025.08.17 Breaking Changes in Interface --> add Prettyname 'displayName' for the web interface
-Config<int> updateInterval("interval", "main", "Update Interval (seconds)", 30);
-Config<bool> testBool("tbool", "main", "test bool", true);
 
-// 2025.09.04 Test long category and key names
+// minimal Init
+Config<bool> testBool(ConfigOptions<bool>{
+    .keyName = "tbool",
+    .category = "main",
+    .defaultValue = true
+});
 
-// Good old version with short category name:
-// Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1);
-// Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction", 0.1);
 
-// Improved version since V2.2.0 with pretty category name: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
-Config<float>  TempCorrectionOffset("TCO", "Temp","Temperature Correction","Temperature Correction Settings", 0.1);
-Config<float>  HumidityCorrectionOffset("HYO", "Temp","Humidity Correction","Temperature Correction Settings", 0.1);
+// extended version with UI-friendly prettyName and prettyCategory
+// Improved version since V2.0.0
+Config<float> TempCorrectionOffset(ConfigOptions<float>{
+    .keyName = "TCO",
+    .category = "Temp",
+    .defaultValue = 0.1f,
+    .prettyName = "Temperature Correction",
+    .prettyCat = "Temperature Correction Settings"
+});
+Config<float> HumidityCorrectionOffset(ConfigOptions<float>{
+    .keyName = "HYO",
+    .category = "Temp",
+    .defaultValue = 0.1f,
+    .prettyName = "Humidity Correction",
+    .prettyCat = "Temperature Correction Settings"
+});
+
+Config<int> updateInterval(ConfigOptions<int>{
+    .keyName = "interval",
+    .category = "main",
+    .defaultValue = 30,
+    .prettyName = "Update Interval (seconds)"
+});
 
 // Now, these will be truncated and added if their truncated keys are unique:
-Config<float>  VeryLongCategoryName("VlongC", "VeryLongCategoryName","category Correction long","key Correction", 0.1);
-Config<float>  VeryLongKeyName("VeryLongKeyName", "Temp","key Correction long","key Correction", 0.1);
+Config<float> VeryLongCategoryName(ConfigOptions<float>{
+    .keyName = "VlongC",
+    .category = "VeryLongCategoryName",
+    .defaultValue = 0.1f,
+    .prettyName = "category Correction long",
+    .prettyCat = "key Correction"
+});
+Config<float> VeryLongKeyName(ConfigOptions<float>{
+    .keyName = "VeryLongKeyName",
+    .category = "Temp",
+    .defaultValue = 0.1f,
+    .prettyName = "key Correction long",
+    .prettyCat = "key Correction"
+});
+
+// ---- Temporary dynamic visibility test settings ----
+// Category kept short ("DynTest") to avoid key truncation when combined with key names.
+Config<bool> tempBoolToggle(ConfigOptions<bool>{
+    .keyName = "toggle",
+    .category = "DynTest",
+    .defaultValue = true,
+    .prettyName = "Temp Toggle",
+    .prettyCat = "Dynamic Test"
+});
+Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
+    .keyName = "trueS",
+    .category = "DynTest",
+    .defaultValue = String("Shown if toggle = true"),
+    .prettyName = "Visible When True",
+    .prettyCat = "Dynamic Test",
+    .showIf = [](){ return tempBoolToggle.get(); }
+});
+Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
+    .keyName = "falseS",
+    .category = "DynTest",
+    .defaultValue = String("Shown if toggle = false"),
+    .prettyName = "Visible When False",
+    .prettyCat = "Dynamic Test",
+    .showIf = [](){ return !tempBoolToggle.get(); }
+});
+// ---- End temporary dynamic visibility test settings ----
 
 
 //--------------------------------------------------------------------
@@ -61,7 +125,15 @@ void blinkBuidInLED(int BlinkCount, int blinkRate);
 
 // Example: Callback usage
 void testCallback(int val); // Callback function for testCb here defined, later implemented...
-Config<int> testCb("cbt", "main", "Test Callback", 0, true, false, testCallback); // since V2.0.0 use displayName for web interface
+Config<int> testCb(ConfigOptions<int>{
+    .keyName = "cbt",
+    .category = "main",
+    .defaultValue = 0,
+    .prettyName = "Test Callback",
+    .showInWeb = true,
+    .isPassword = false,
+    .cb = testCallback
+});
 #pragma endregion
 //--------------------------------------------------------------------
 
@@ -69,27 +141,25 @@ Config<int> testCb("cbt", "main", "Test Callback", 0, true, false, testCallback)
 // General configuration (structure example)
 struct General_Settings
 {
-    Config<bool> enableController;     // Set to false to disable the controller and use maximum power output
-    Config<bool> enableMQTT;           // Set to false to disable the MQTT connection
+    Config<bool> enableController;
+    Config<bool> enableMQTT;
+    Config<bool> saveDisplay;
+    Config<int> displayShowTime;
+    Config<bool> allowOTA;
+    Config<String> otaPassword;
+    Config<String> Version;
 
-    Config<bool> saveDisplay; // To turn off the display
-    Config<int> displayShowTime; // Time in seconds to show the display after boot or button press (default is 60 seconds, 0 = 10s)
+    General_Settings() :
+    enableController(ConfigOptions<bool>{ .keyName = "enCtrl", .category = "Limiter", .defaultValue = true, .prettyName = "Enable Limitation" }),
+    enableMQTT(ConfigOptions<bool>{ .keyName = "enMQTT", .category = "Limiter", .defaultValue = true, .prettyName = "Enable MQTT Propagation" }),
 
-    Config<bool> allowOTA; // Allow OTA updates (default is true, set to false to disable OTA updates)
-    Config<String> otaPassword; // Password for OTA updates (default is "ota1234", change it to a secure password)
+    saveDisplay(ConfigOptions<bool>{ .keyName = "Save", .category = "Display", .defaultValue = true, .prettyName = "Turn Display Off" }),
+    displayShowTime(ConfigOptions<int>{ .keyName = "Time", .category = "Display", .defaultValue = 60, .prettyName = "Display On-Time in Sec" }),
 
-    Config<String> Version;            // Save the current version of the software
+    allowOTA(ConfigOptions<bool>{ .keyName = "OTAEn", .category = "System", .defaultValue = true, .prettyName = "Allow OTA Updates" }),
+    otaPassword(ConfigOptions<String>{ .keyName = "OTAPass", .category = "System", .defaultValue = "ota1234", .prettyName = "OTA Password", .showInWeb = true, .isPassword = true }),
+    Version(ConfigOptions<String>{ .keyName = "Version", .category = "System", .defaultValue = String(VERSION), .prettyName = "Program Version" })
 
-    General_Settings() :enableController("enCtrl", "Limiter","Enable Limitation", true),
-                        enableMQTT("enMQTT", "Limiter","Enable MQTT Propagation", true),
-
-                        saveDisplay("Save", "Display", "Turn Display Off", true),
-                        displayShowTime("Time", "Display", "Display On-Time in Sec", 60),
-
-                        allowOTA("OTAEn", "System", "Allow OTA Updates", true),
-                        otaPassword("OTAPass", "System", "OTA Password", "ota1234", true, true),
-
-                        Version("Version", "System","Program Version", VERSION)
     {
     // Register settings with ConfigManager
         cfg.addSetting(&enableController);
@@ -108,22 +178,33 @@ struct General_Settings
 
 General_Settings generalSettings; // Create an instance of General_Settings-Struct
 
+
+
 // Example of a structure for WiFi settings
-struct WiFi_Settings // wifiSettings
+struct WiFi_Settings //wifiSettings
 {
     Config<String> wifiSsid;
     Config<String> wifiPassword;
     Config<bool> useDhcp;
-    WiFi_Settings() :
+    Config<String> staticIp;
+    Config<String> gateway;
+    Config<String> subnet;
 
-                      wifiSsid("ssid", "wifi", "WiFi SSID", "MyWiFi"),
-                      wifiPassword("password", "wifi", "WiFi Password", "secretpass", true, true),
-                      useDhcp("dhcp", "network", "Use DHCP", false)
+    WiFi_Settings() :
+    wifiSsid(ConfigOptions<String>{ .keyName = "ssid", .category = "wifi", .defaultValue = "MyWiFi", .prettyName = "WiFi SSID", .prettyCat = "Network Settings" }),
+    wifiPassword(ConfigOptions<String>{ .keyName = "password", .category = "wifi", .defaultValue = "secretpass", .prettyName = "WiFi Password", .prettyCat = "Network Settings", .showInWeb = true, .isPassword = true }),
+    useDhcp(ConfigOptions<bool>{ .keyName = "dhcp", .category = "network", .defaultValue = false, .prettyName = "Use DHCP", .prettyCat = "Network Settings" }),
+    staticIp(ConfigOptions<String>{ .keyName = "sIP", .category = "network", .defaultValue = "192.168.2.126", .prettyName = "Static IP", .prettyCat = "Network Settings", .showIf = [this]() { return !this->useDhcp.get(); } }),
+    subnet(ConfigOptions<String>{ .keyName = "subnet", .category = "network", .defaultValue = "255.255.255.0", .prettyName = "Subnet-Mask", .prettyCat = "Network Settings", .showIf = [this]() { return !this->useDhcp.get(); } }),
+    gateway(ConfigOptions<String>{ .keyName = "GW", .category = "network", .defaultValue = "192.168.2.250", .prettyName = "Gateway", .prettyCat = "Network Settings", .showIf = [this]() { return !this->useDhcp.get(); } })
 
     {
         cfg.addSetting(&wifiSsid);
         cfg.addSetting(&wifiPassword);
         cfg.addSetting(&useDhcp);
+        cfg.addSetting(&staticIp);
+        cfg.addSetting(&gateway);
+        cfg.addSetting(&subnet);
     }
 };
 
@@ -148,12 +229,13 @@ struct MQTT_Settings {
 
     // Now show extra pretty category name since V2.2.0: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
     MQTT_Settings() :
-    mqtt_port("Port", "MQTT", "Port", "MQTT-Section", 1883),
-    mqtt_server("Server", "MQTT", "Server-IP", "MQTT-Section", String("192.168.2.3")),
-    mqtt_username("User", "MQTT", "User", "MQTT-Section", String("housebattery")),
-    mqtt_password("Pass", "MQTT", "Password", "MQTT-Section", String("mqttsecret"), true, true),
-    mqtt_sensor_powerusage_topic("PUT", "MQTT", "Powerusage Topic", "MQTT-Section", String("emon/emonpi/power1")),
-    Publish_Topic("MQTTT", "MQTT", "Publish-Topic", "MQTT-Section", String("SolarLimiter"))
+    mqtt_port(ConfigOptions<int>{ .keyName = "Port", .category = "MQTT", .defaultValue = 1883, .prettyName = "Port", .prettyCat = "MQTT-Section" }),
+    mqtt_server(ConfigOptions<String>{ .keyName = "Server", .category = "MQTT", .defaultValue = String("192.168.2.3"), .prettyName = "Server-IP", .prettyCat = "MQTT-Section" }),
+    mqtt_username(ConfigOptions<String>{ .keyName = "User", .category = "MQTT", .defaultValue = String("housebattery"), .prettyName = "User", .prettyCat = "MQTT-Section" }),
+    mqtt_password(ConfigOptions<String>{ .keyName = "Pass", .category = "MQTT", .defaultValue = String("mqttsecret"), .prettyName = "Password", .prettyCat = "MQTT-Section", .showInWeb = true, .isPassword = true }),
+    mqtt_sensor_powerusage_topic(ConfigOptions<String>{ .keyName = "PUT", .category = "MQTT", .defaultValue = String("emon/emonpi/power1"), .prettyName = "Powerusage Topic", .prettyCat = "MQTT-Section" }),
+    Publish_Topic(ConfigOptions<String>{ .keyName = "MQTTT", .category = "MQTT", .defaultValue = String("SolarLimiter"), .prettyName = "Publish-Topic", .prettyCat = "MQTT-Section" })
+    
     {
         cfg.addSetting(&mqtt_port);
         cfg.addSetting(&mqtt_server);
@@ -219,6 +301,11 @@ void setup()
     cfg.addSetting(&VeryLongCategoryName);
     cfg.addSetting(&VeryLongKeyName);
 
+    // Register temporary dynamic test settings
+    cfg.addSetting(&tempBoolToggle);
+    cfg.addSetting(&tempSettingAktiveOnTrue);
+    cfg.addSetting(&tempSettingAktiveOnFalse);
+
 
 
     // 2025.09.04 New function to check all settings for errors
@@ -272,7 +359,8 @@ void setup()
     else
     {
         Serial.println("DHCP disabled");
-        cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.0.250" , wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        // cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.2.250" , wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
 
     }
     delay(1500);

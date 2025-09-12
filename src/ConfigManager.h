@@ -1,7 +1,3 @@
-#pragma once
-
-// Settings are stored in the format: <category>_<key>
-
 #include <Arduino.h>
 #include <string_view>
 #include <Preferences.h>
@@ -9,13 +5,36 @@
 #include <functional>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <type_traits>
 #include <WebServer.h>
 #include <exception>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
 
-#define CONFIGMANAGER_VERSION "2.2.0"
+#ifdef UNIT_TEST
+// Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
+inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
+#endif
+
+#define CONFIGMANAGER_VERSION "2.3.1"
+
+
+// ConfigOptions must be defined before any usage in Config<T>
+template<typename T>
+struct ConfigOptions {
+    const char* keyName;
+    const char* category;
+    T defaultValue;
+    const char* prettyName = nullptr;
+    const char* prettyCat = nullptr;
+    bool showInWeb = true;
+    bool isPassword = false;
+    void (*cb)(T) = nullptr;
+    std::function<bool()> showIf = nullptr;
+};
+#pragma once
+
 
 extern WebServer server;
 class ConfigManagerClass; // Forward declaration
@@ -53,10 +72,10 @@ class BaseSetting {
         bool modified = false;
         const char *keyName;
         const char *category;
-        const char *displayName; // 2025.08.17 - Add new feature for display keyName in web interface
-        const char *categoryPretty = nullptr; // 2025.09.05 - Add pretty name for category
+    const char *displayName; // 2025.08.17 - Human friendly name shown in the web interface
+    const char *categoryPretty = nullptr; // 2025.09.05 - Optional pretty (display) name for the category
         SettingType type;
-        bool hasKeyLengthError = false; //04.09.2025 bugfix: prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
+    bool hasKeyLengthError = false; // 2025-09-04 Bugfix: prevent buffer overflow when category + key are too long or contain unexpected whitespace
         String keyLengthErrorMsg;
 
         mutable std::function<void(const char*)> logger;
@@ -156,8 +175,10 @@ class BaseSetting {
     virtual void setDefault() = 0;
     virtual void toJSON(JsonObject &obj) const = 0;
     virtual bool fromJSON(const JsonVariant &value) = 0;
+    // Dynamic visibility evaluation (showIf). Default: static showInWeb flag
+    virtual bool isVisible() const { return showInWeb; }
 
-    // 2025.08.17 - Add accessor for display keyName
+    // 2025.08.17 - Accessor for display (pretty) name
     const char* getDisplayName() const {
         return displayName ? displayName : keyName;
     }
@@ -211,7 +232,7 @@ class BaseSetting {
 
     };
 
-template <typename T> class Config : public BaseSetting {
+    template <typename T> class Config : public BaseSetting {
     private:
     T value;
     T defaultValue;
@@ -219,24 +240,11 @@ template <typename T> class Config : public BaseSetting {
     std::function<void(T)> callback = nullptr; // 2025.08.17 - Support for std::function callbacks
 
     public:
-
-    // 2025.08.17 - Updated constructor with display keyName
-    // 2025.09.04 - New constructor with compile-time checking
-    // 05.09.2025 - add new callback function with std::function
-    Config(const char *keyName, const char *category, const char* displayName, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(category, keyName, displayName, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
-    {
-        if (hasError() && logger) {
-            logger(getError());
-        }
-    }
-    // Overload: with categoryPretty
-    Config(const char *keyName, const char *category, const char* displayName, const char* categoryPretty, T defaultValue, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(category, keyName, displayName, categoryPretty, TypeTraits<T>::type, showInWeb, isPassword), value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
-    {
-        if (hasError() && logger) {
-            logger(getError());
-        }
+    // Optional: showIf function for web visibility dependency
+    std::function<bool()> showIfFunc = nullptr;
+    bool shouldShowInWebDynamic() const {
+        if (showIfFunc) return showIfFunc();
+        return showInWeb;
     }
 
     T get() const { return value; }
@@ -249,36 +257,87 @@ template <typename T> class Config : public BaseSetting {
         if (value != newVal) {
             value = newVal;
             modified = true;
-            if (callback) callback(value);
-            if (originalCallback) originalCallback(value);
+            if (callback) callback(newVal);
+            if (originalCallback) originalCallback(newVal);
+        }
+    }
+
+    // NOTE: ConfigOptions field order matters for designated initialization in C++17 (GNU extension).
+    // Keep declaration order consistent: keyName, category, defaultValue, prettyName, prettyCat, showInWeb, isPassword, cb, showIf.
+    // When adding new fields, update all initializers accordingly.
+
+    Config(const ConfigOptions<T>& opts)
+        : BaseSetting(
+            opts.category,
+            opts.keyName,
+            opts.prettyName ? opts.prettyName : opts.keyName,
+            opts.prettyCat ? opts.prettyCat : opts.category,
+            TypeTraits<T>::type,
+            opts.showInWeb,
+            opts.isPassword),
+          value(opts.defaultValue),
+          defaultValue(opts.defaultValue),
+          originalCallback(opts.cb),
+          showIfFunc(opts.showIf)
+    {
+        if (hasError() && logger) {
+            logger(getError());
         }
     }
 
     SettingType getType() const override { return TypeTraits<T>::type; }
 
     void load(Preferences &prefs) override {
-        const char *key = getKey();
-        if constexpr (std::is_same_v<T, int>) {
-            value = prefs.getInt(key, defaultValue);
-        } else if constexpr (std::is_same_v<T, bool>) {
-            value = prefs.getBool(key, defaultValue);
-        } else if constexpr (std::is_same_v<T, float>) {
-            value = prefs.getFloat(key, defaultValue);
-        } else if constexpr (std::is_same_v<T, String>) {
-            value = prefs.getString(key, defaultValue);
+        String key = getKey();
+        bool exists = prefs.isKey(key.c_str());
+        if (!exists) {
+            // Key not yet stored – keep defaultValue (already set in ctor)
+            value = defaultValue;
+            modified = false;
+            return;
         }
+        switch (TypeTraits<T>::type) {
+            case SettingType::BOOL:
+                if constexpr (std::is_same_v<T, bool>) value = prefs.getBool(key.c_str(), defaultValue);
+                break;
+            case SettingType::INT:
+                if constexpr (std::is_same_v<T, int>) value = prefs.getInt(key.c_str(), defaultValue);
+                break;
+            case SettingType::FLOAT:
+                if constexpr (std::is_same_v<T, float>) {
+                    // Preferences has no float, store as string
+                    String stored = prefs.getString(key.c_str(), String(defaultValue, 6));
+                    value = stored.toFloat();
+                }
+                break;
+            case SettingType::STRING:
+            case SettingType::PASSWORD:
+                if constexpr (std::is_same_v<T, String>) value = prefs.getString(key.c_str(), defaultValue);
+                break;
+        }
+        modified = false;
     }
 
     void save(Preferences &prefs) override {
-        const char *key = getKey();
-        if constexpr (std::is_same_v<T, int>) {
-            prefs.putInt(key, value);
-        } else if constexpr (std::is_same_v<T, bool>) {
-            prefs.putBool(key, value);
-        } else if constexpr (std::is_same_v<T, float>) {
-            prefs.putFloat(key, value);
-        } else if constexpr (std::is_same_v<T, String>) {
-            prefs.putString(key, value);
+        String key = getKey();
+        switch (TypeTraits<T>::type) {
+            case SettingType::BOOL:
+                if constexpr (std::is_same_v<T, bool>) prefs.putBool(key.c_str(), value);
+                break;
+            case SettingType::INT:
+                if constexpr (std::is_same_v<T, int>) prefs.putInt(key.c_str(), value);
+                break;
+            case SettingType::FLOAT:
+                if constexpr (std::is_same_v<T, float>) {
+                    char buf[32];
+                    dtostrf(value, 0, 6, buf);
+                    prefs.putString(key.c_str(), buf);
+                }
+                break;
+            case SettingType::STRING:
+            case SettingType::PASSWORD:
+                if constexpr (std::is_same_v<T, String>) prefs.putString(key.c_str(), value);
+                break;
         }
         modified = false;
     }
@@ -314,6 +373,10 @@ template <typename T> class Config : public BaseSetting {
             set(val.as<T>());
         }
         return true;
+    }
+    bool isVisible() const override {
+        if (showIfFunc) return showIfFunc();
+        return showInWeb;
     }
 };
 
@@ -375,7 +438,8 @@ public:
     }
 
     void loadAll() {
-        // 04.09.2025 bugfix: it will not catch the exception [   224][E][Preferences.cpp:483] getString(): nvs_get_str len fail: MQTT_Server NOT_FOUND, and overload the log until its crash
+    // 2025-09-04 Bugfix note: Previously repeated NOT_FOUND messages (Preferences getString len fail) flooded the log.
+    // We now check for key existence first to avoid noisy output.
         prefs.begin("config", false); // Read-write mode
         for (auto *s : settings) {
             log_message("loadAll(): Loading %s (type: %d)", s->getKey(), static_cast<int>(s->getType()));
@@ -439,6 +503,7 @@ public:
         String catNames[20]; // up to 20 categories
         int catCount = 0;
         for (auto *s : settings) {
+            bool visible = s->isVisible();
             const char *category = s->getCategory();
             const char *keyName = s->getName();
             if (!root[category].is<JsonObject>()) root.createNestedObject(category);
@@ -459,6 +524,9 @@ public:
                 if (catCount < 20) catNames[catCount++] = category;
             }
             s->toJSON(cat);
+            if (cat[keyName].is<JsonObject>()) {
+                cat[keyName]["showIf"] = visible;
+            }
         }
         String output;
         serializeJsonPretty(doc, output);
@@ -513,82 +581,39 @@ public:
         server.begin();
     }
 
+    // Legacy simplified static config (IP + mask only). Gateway assumed as first host in subnet and DNS forced to 8.8.8.8.
     void startWebServer(const String &ipStr, const String &mask, const String &ssid, const String &password) {
-        log_message("🌐 Configuring static IP %s...\n", ipStr.c_str());
-
-        IPAddress ip, gateway, subnet;
+        IPAddress ip, gateway, subnet, dns(8,8,8,8);
         ip.fromString(ipStr);
-        gateway = ip; // Adjust if needed
         subnet.fromString(mask);
-
-        WiFi.config(ip, gateway, subnet, IPAddress(8, 8, 8, 8));
-
-        log_message("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
-        WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
-        WiFi.begin(ssid.c_str(), password.c_str());
-
-        unsigned long startAttemptTime = millis();
-        const unsigned long timeout = 10000;
-
-        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
-            delay(250);
-            log_message(".");
-        }
-
-        if (WiFi.status() == WL_CONNECTED) {
-            log_message("\n✅ WiFi connected!");
-            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
-
-            log_message("🌐 Defining routes...");
-            defineRoutes();
-
-            log_message("🌐 Starting web server...");
-            server.begin();
-
-            log_message("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
-        } else {
-            log_message("\n❌ Failed to connect to WiFi!");
-        }
+        // Derive gateway: keep network part of ip and .1 as common default
+        gateway = IPAddress((uint32_t)ip & (uint32_t)subnet | 0x01000000); // Build x.y.z.1
+        log_message("🌐 Static (simplified) IP: %s Gateway(auto): %s Mask: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str());
+        WiFi.config(ip, gateway, subnet, dns);
+        connectAndStart(ssid, password);
     }
 
-    void startWebServer(const String &ipStr, const String &mask, const String &dnsServer, const String &ssid, const String &password) {
-        log_message("🌐 Configuring static IP %s...\n", ipStr.c_str());
-
-        IPAddress ip, gateway, subnet, dns;
-
+    // Explicit static config without custom DNS (defaults to 8.8.8.8)
+    void startWebServer(const String &ipStr, const String &gatewayStr, const String &mask, const String &ssid, const String &password) {
+        IPAddress ip, gateway, subnet, dns(8,8,8,8);
         ip.fromString(ipStr);
-        gateway = ip; // Adjust if needed
+        gateway.fromString(gatewayStr);
+        subnet.fromString(mask);
+        log_message("🌐 Static IP: %s Gateway: %s Mask: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str());
+        WiFi.config(ip, gateway, subnet, dns);
+        connectAndStart(ssid, password);
+    }
+
+    // Explicit full static configuration including DNS server
+    void startWebServer(const String &ipStr, const String &gatewayStr, const String &mask, const String &dnsServer, const String &ssid, const String &password) {
+        IPAddress ip, gateway, subnet, dns;
+        ip.fromString(ipStr);
+        gateway.fromString(gatewayStr);
         subnet.fromString(mask);
         dns.fromString(dnsServer);
-
+        log_message("🌐 Static IP: %s Gateway: %s Mask: %s DNS: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str(), dns.toString().c_str());
         WiFi.config(ip, gateway, subnet, dns);
-
-        log_message("🔌 Connecting to WiFi SSID: %s\n", ssid.c_str());
-        WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
-        WiFi.begin(ssid.c_str(), password.c_str());
-
-        unsigned long startAttemptTime = millis();
-        const unsigned long timeout = 10000;
-
-        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
-            delay(250);
-            log_message(".");
-        }
-
-        if (WiFi.status() == WL_CONNECTED) {
-            log_message("\n✅ WiFi connected!");
-            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
-
-            log_message("🌐 Defining routes...");
-            defineRoutes();
-
-            log_message("🌐 Starting web server...");
-            server.begin();
-
-            log_message("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
-        } else {
-            log_message("\n❌ Failed to connect to WiFi!");
-        }
+        connectAndStart(ssid, password);
     }
 
     void startWebServer(const String &ssid, const String &password) {
@@ -614,6 +639,31 @@ public:
             log_message("\n❌ DHCP connection failed!");
         }
     }
+
+private:
+    void connectAndStart(const String &ssid, const String &password) {
+        log_message("🔌 Connecting to WiFi SSID: %s", ssid.c_str());
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(ssid.c_str(), password.c_str());
+        unsigned long startAttemptTime = millis();
+        const unsigned long timeout = 10000;
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
+            delay(250);
+            log_message(".");
+        }
+        if (WiFi.status() == WL_CONNECTED) {
+            log_message("\n✅ WiFi connected!");
+            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
+            log_message("🌐 Defining routes...");
+            defineRoutes();
+            log_message("🌐 Starting web server...");
+            server.begin();
+            log_message("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
+        } else {
+            log_message("\n❌ Failed to connect to WiFi!");
+        }
+    }
+public:
 
     void defineRoutes() {
         log_message("🌐 Defining routes...");
@@ -677,21 +727,58 @@ public:
             String key = server.arg("key");
 
             log_message("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
+            String body = server.arg("plain");
+            if (body.isEmpty()) {
+                // Fallback: attempt last unnamed arg (legacy behavior)
+                if (server.args() > 0) body = server.arg(server.args() - 1);
+            }
+            log_message("🌐 Apply body: %s", body.c_str());
 
             DynamicJsonDocument doc(256);
-            deserializeJson(doc, server.arg((size_t)2));
+            DeserializationError err = deserializeJson(doc, body);
+
+            auto isIntegerString = [](const String &s)->bool {
+                if (!s.length()) return false;
+                int start = 0;
+                if (s[0] == '-' && s.length() > 1) start = 1;
+                for (int i = start; i < (int)s.length(); ++i) {
+                    if (s[i] < '0' || s[i] > '9') return false;
+                }
+                return true;
+            };
+
+            JsonVariant val;
+            if (!err) {
+                // Accept either {"value":X} or direct literal
+                if (doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>();
+            } else {
+                // Rebuild minimal doc manually
+                doc.clear();
+                if (body.equalsIgnoreCase("true") || body.equalsIgnoreCase("false")) {
+                    doc["value"] = body.equalsIgnoreCase("true");
+                } else if (isIntegerString(body)) {
+                    doc["value"] = body.toInt();
+                } else {
+                    doc["value"] = body;
+                }
+                val = doc["value"];
+            }
 
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                    if (s->fromJSON(doc["value"])) {
+                    if (s->fromJSON(val)) {
                         log_message("✅ Setting applied Category: %s, Key: %s", category.c_str(), key.c_str());
                         server.send(200, "application/json", "{\"status\":\"applied\"}");
+                        return;
+                    } else {
+                        log_message("❌ Apply rejected (invalid value) Category: %s, Key: %s", category.c_str(), key.c_str());
+                        server.send(400, "application/json", "{\"status\":\"invalid_value\"}");
                         return;
                     }
                 }
             }
 
-            log_message("❌ Setting not found");
+            log_message("❌ Setting not found for apply");
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
@@ -712,24 +799,56 @@ public:
             String key = server.arg("key");
 
             log_message("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
+            String body = server.arg("plain");
+            if (body.isEmpty()) {
+                if (server.args() > 0) body = server.arg(server.args() - 1);
+            }
+            log_message("🌐 Save body: %s", body.c_str());
 
             DynamicJsonDocument doc(256);
-            deserializeJson(doc, server.arg((size_t)2));
+            DeserializationError err = deserializeJson(doc, body);
+            auto isIntegerString = [](const String &s)->bool {
+                if (!s.length()) return false;
+                int start = 0;
+                if (s[0] == '-' && s.length() > 1) start = 1;
+                for (int i = start; i < (int)s.length(); ++i) {
+                    if (s[i] < '0' || s[i] > '9') return false;
+                }
+                return true;
+            };
+            JsonVariant val;
+            if (!err) {
+                if (doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>();
+            } else {
+                doc.clear();
+                if (body.equalsIgnoreCase("true") || body.equalsIgnoreCase("false")) {
+                    doc["value"] = body.equalsIgnoreCase("true");
+                } else if (isIntegerString(body)) {
+                    doc["value"] = body.toInt();
+                } else {
+                    doc["value"] = body;
+                }
+                val = doc["value"];
+            }
 
             for (auto *s : settings) {
                 if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                    if (s->fromJSON(doc["value"])) {
+                    if (s->fromJSON(val)) {
                         prefs.begin("config", false);
                         s->save(prefs);
                         prefs.end();
                         log_message("✅ Setting saved Category: %s, Key: %s", category.c_str(), key.c_str());
                         server.send(200, "application/json", "{\"status\":\"saved\"}");
                         return;
+                    } else {
+                        log_message("❌ Save rejected (invalid value) Category: %s, Key: %s", category.c_str(), key.c_str());
+                        server.send(400, "application/json", "{\"status\":\"invalid_value\"}");
+                        return;
                     }
                 }
             }
 
-            log_message("❌ Setting not found category: %s, key: %s", category.c_str(), key.c_str());
+            log_message("❌ Setting not found for save: %s/%s", category.c_str(), key.c_str());
             server.send(404, "application/json", "{\"status\":\"not_found\"}");
         });
 
@@ -759,7 +878,7 @@ public:
             }
         });
 
-        // Root route
+    // Root (serves embedded SPA)
         server.on("/", HTTP_GET, [this]() {
             server.send_P(200, "text/html", webhtml.getWebHTML());
         });
@@ -835,10 +954,11 @@ public:
         // Initialize OTA only when WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
 
-            // log_message("WiFi Status: %d\n", WiFi.status());
-            // log_message("Local IP: %s\n", WiFi.localIP().toString().c_str());
-            // log_message("Subnet Mask: %s\n", WiFi.subnetMask().toString().c_str());
-            // log_message("Gateway IP: %s\n", WiFi.gatewayIP().toString().c_str());
+            // (Optional debug) Uncomment if you need detailed WiFi info:
+            // log_message("WiFi Status: %d", WiFi.status());
+            // log_message("Local IP: %s", WiFi.localIP().toString().c_str());
+            // log_message("Subnet Mask: %s", WiFi.subnetMask().toString().c_str());
+            // log_message("Gateway IP: %s", WiFi.gatewayIP().toString().c_str());
 
 
             ArduinoOTA
@@ -847,19 +967,19 @@ public:
                     log_message("📡 OTA Update Start: %s", type.c_str());
                 })
                 .onEnd([this]() {
-                    log_message("OTA Update Finished");
+                    log_message("OTA Update finished");
                 })
                 .onProgress([this](unsigned int progress, unsigned int total) {
                     log_message("OTA Progress: %u%%", (progress * 100) / total);
                 })
 
                 .onError([this](ota_error_t error) {
-                    log_message("OTA Error[%u]: ", error);
-                    if (error == OTA_AUTH_ERROR) log_message("Auth Failed");
-                    else if (error == OTA_BEGIN_ERROR) log_message("Begin Failed");
-                    else if (error == OTA_CONNECT_ERROR) log_message("Connect Failed");
-                    else if (error == OTA_RECEIVE_ERROR) log_message("Receive Failed");
-                    else if (error == OTA_END_ERROR) log_message("End Failed");
+                    log_message("OTA Error[%u]:", error);
+                    if (error == OTA_AUTH_ERROR) log_message("Authentication failed");
+                    else if (error == OTA_BEGIN_ERROR) log_message("Begin failed");
+                    else if (error == OTA_CONNECT_ERROR) log_message("Connection failed");
+                    else if (error == OTA_RECEIVE_ERROR) log_message("Receive failed");
+                    else if (error == OTA_END_ERROR) log_message("End failed");
                 });
 
             if (_otaHostname.isEmpty()) {
@@ -886,15 +1006,15 @@ public:
 
 
         }else {
-            log_message("OTA: Waiting for WiFi connection");
+            log_message("OTA: Waiting for WiFi connection...");
             // log_message("WiFi Status: %d\n", WiFi.status());
         }
     }
 
     void stopOTA() {
         if (_otaInitialized) {
-            //TODO: No direct method to stop ArduinoOTA how to handle this?
-             ArduinoOTA.end(); // Hypothetical function, does not exist in current library
+            // TODO: There is no official ArduinoOTA stop API. If future versions expose one, replace this placeholder.
+            ArduinoOTA.end(); // Placeholder (currently not part of core ArduinoOTA)
             _otaInitialized = false;
             log_message("🛜 OTA Stopped");
         }
