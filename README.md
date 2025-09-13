@@ -280,3 +280,4 @@ pio run -e usb -t clean
 ## known Issues
 
 - **Save all** button works only, if you saved value ones over single save-button
+- prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown.
