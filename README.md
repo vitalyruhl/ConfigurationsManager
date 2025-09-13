@@ -281,3 +281,5 @@ pio run -e usb -t clean
 
 - **Save all** button works only, if you saved value ones over single save-button
 - prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown.
+- if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty.
+- after all changes - the ota update over webinterface is not working, will be fixed in next release
