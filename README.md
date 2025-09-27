@@ -49,6 +49,9 @@ description = ESP32 C++17 Project for managing settings
 - 📡 AP Mode fallback / captive portal style entry
 - 🚀 OTA firmware upload endpoint
 - 🧪 Simple unit test scaffold (`test/basictest.cpp`)
+- 🔴 Optional live runtime values (`/runtime.json`) when built with feature flags
+- 🔁 Optional WebSocket push channel (`/ws`) in async build (`env:async`)
+  - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 
 ## Requirements
 
@@ -201,6 +204,59 @@ Set `.isPassword = true` to mask in UI. The backend stores the real value; UI ob
 # PlatformIO
 pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 ```
+
+### Async Build & Live Values
+
+To build with AsyncWebServer + runtime live values + WebSocket push:
+
+```bash
+pio run -e async -t upload
+```
+
+If WebSocket isn't available (older firmware or flags disabled), the frontend automatically falls back to polling `/runtime.json` every 2 seconds.
+
+### Runtime Providers & WebSocket API
+
+Register a provider (only compiled when `-DENABLE_LIVE_VALUES`):
+
+```cpp
+cfg.addRuntimeProvider({
+  .name = "sensors",
+  .fill = [](JsonObject& o){
+      o["temp"] = readTemp();
+      o["hum"]  = readHum();
+  }
+});
+```
+
+Enable WebSocket push (only when `USE_ASYNC_WEBSERVER` + `ENABLE_WEBSOCKET_PUSH`):
+
+```cpp
+cfg.enableWebSocketPush(1500); // push every 1.5s
+```
+
+In your loop (async build):
+
+```cpp
+cfg.handleWebsocketPush(); // handles interval + broadcast
+```
+
+Provide custom payload instead of auto runtime JSON:
+
+```cpp
+cfg.setCustomLivePayloadBuilder([](){
+    DynamicJsonDocument d(256);
+    d["uptime"] = millis();
+    d["heap"] = ESP.getFreeHeap();
+    String out; serializeJson(d, out); return out;
+});
+```
+
+Immediate manual push:
+```cpp
+cfg.pushRuntimeNow();
+```
+
 
 1. Include the ConfigurationsManager library in your project.
 

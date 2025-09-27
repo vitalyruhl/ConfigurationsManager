@@ -1,10 +1,20 @@
 #include <Arduino.h>
 #include "ConfigManager.h"
+#include <Ticker.h> // for read temperture periodically
+#include <BME280_I2C.h> // Include BME280 library Teperature and Humidity sensor
+// Web server selection (sync vs async)
+#ifdef USE_ASYNC_WEBSERVER
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+AsyncWebServer server(80);
+#else
 #include <WebServer.h>
+WebServer server(80);
+#endif
 // #include <WiFiClientSecure.h>
 
 
-#define VERSION "V2.3.1"
+#define VERSION "V2.4.0"
 
 #define BUTTON_PIN_AP_MODE 13
 
@@ -35,7 +45,7 @@
 ConfigManagerClass cfg; // Create an instance of ConfigManager before using it in structures etc.
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
 
-WebServer server(80);
+// (Server instance moved into conditional above)
 int cbTestValue = 0;
 
 // Here, global variables are used without a struct, e.g., Config is a helper class for the settings stored in ConfigManager.h
@@ -52,20 +62,6 @@ Config<bool> testBool(ConfigOptions<bool>{
 
 // extended version with UI-friendly prettyName and prettyCategory
 // Improved version since V2.0.0
-Config<float> TempCorrectionOffset(ConfigOptions<float>{
-    .keyName = "TCO",
-    .category = "Temp",
-    .defaultValue = 0.1f,
-    .prettyName = "Temperature Correction",
-    .prettyCat = "Temperature Correction Settings"
-});
-Config<float> HumidityCorrectionOffset(ConfigOptions<float>{
-    .keyName = "HYO",
-    .category = "Temp",
-    .defaultValue = 0.1f,
-    .prettyName = "Humidity Correction",
-    .prettyCat = "Temperature Correction Settings"
-});
 
 Config<int> updateInterval(ConfigOptions<int>{
     .keyName = "interval",
@@ -147,9 +143,15 @@ struct General_Settings
     Config<int> displayShowTime;
     Config<bool> allowOTA;
     Config<String> otaPassword;
+    Config<float> TempCorrectionOffset;
+    Config<float> HumidityCorrectionOffset;
     Config<String> Version;
 
     General_Settings() :
+
+    TempCorrectionOffset(ConfigOptions<float>{.keyName = "TCO", .category = "Temp", .defaultValue = 0.1f, .prettyName = "Temperature Correction", .prettyCat = "Temperature Settings"}),
+    HumidityCorrectionOffset(ConfigOptions<float>{.keyName = "HYO", .category = "Temp", .defaultValue = 0.1f, .prettyName = "Humidity Correction", .prettyCat = "Temperature Settings"}),
+
     enableController(ConfigOptions<bool>{ .keyName = "enCtrl", .category = "Limiter", .defaultValue = true, .prettyName = "Enable Limitation" }),
     enableMQTT(ConfigOptions<bool>{ .keyName = "enMQTT", .category = "Limiter", .defaultValue = true, .prettyName = "Enable MQTT Propagation" }),
 
@@ -267,6 +269,52 @@ MQTT_Settings mqttSettings; //mqttSettings
 #pragma endregion
 
 //--------------------------------------------------------------------
+// implement read temperature function and variables to show how to unse live values
+//--------------------------------------------------------------------------------------------------------------
+// set the I2C address for the BME280 sensor for temperature and humidity
+#define I2C_SDA 21
+#define I2C_SCL 22
+#define I2C_FREQUENCY 400000
+#define BME280_FREQUENCY 400000
+// #define BME280_ADDRESS 0x76 // I2C address for the BME280 sensor (default is 0x76) redefine, if needed
+
+#define ReadTemperatureTicker 10.0 // time in seconds to read the temperature and humidity
+
+BME280_I2C bme280;
+Ticker temperatureTicker;
+
+void readBme280(); //read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
+void SetupStartTemperatureMeasuring(); //setup the BME280 temperature and humidity sensor
+static float computeDewPoint(float temperatureC, float relHumidityPct); //compute the dewpoint from temperature and humidity
+
+float temperature = 0.0; // current temperature in Celsius
+float Dewpoint = 0.0; // current dewpoint in Celsius
+float Humidity = 0.0; // current humidity in percent
+
+Config<float> TempCorrectionOffset(ConfigOptions<float>{
+    .keyName = "TCO",
+    .category = "Temp",
+    .defaultValue = 0.1f,
+    .prettyName = "Temperature Correction",
+    .prettyCat = "Temperature Settings"
+});
+Config<float> HumidityCorrectionOffset(ConfigOptions<float>{
+    .keyName = "HYO",
+    .category = "Temp",
+    .defaultValue = 0.1f,
+    .prettyName = "Humidity Correction",
+    .prettyCat = "Temperature Settings"
+});
+
+Config<int> sensorInterval(ConfigOptions<int>{
+    .keyName = "interval",
+    .category = "Temp",
+    .defaultValue = 30,
+    .prettyName = "Read temperature Interval (seconds)",
+    .prettyCat = "Temperature Settings"
+});
+//--------------------------------------------------------------------------------------------------------------
+
 
 void setup()
 {
@@ -306,6 +354,7 @@ void setup()
     cfg.addSetting(&tempSettingAktiveOnTrue);
     cfg.addSetting(&tempSettingAktiveOnFalse);
 
+    cfg.addSetting(&sensorInterval);
 
 
     // 2025.09.04 New function to check all settings for errors
@@ -350,19 +399,44 @@ void setup()
         return; // Skip webserver setup in AP mode
     }
 
-    if (wifiSettings.useDhcp.get())
-    {
+    if (wifiSettings.useDhcp.get()) {
         Serial.println("DHCP enabled");
         cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-
-    }
-    else
-    {
+    } else {
         Serial.println("DHCP disabled");
         cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-        // cfg.startWebServer("192.168.2.126", "255.255.255.0", "192.168.2.250" , wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-
     }
+
+    SetupStartTemperatureMeasuring();
+
+#ifdef ENABLE_LIVE_VALUES
+    // Register example runtime providers (replace with real sensor code later)
+    cfg.addRuntimeProvider({
+        .name = "sensors",
+        .fill = [](JsonObject &o){
+            // Primary short keys expected by frontend
+            o["temp"] = temperature;
+            o["hum"] = Humidity;
+            o["dewpoint"] = Dewpoint;
+            // Legacy / verbose keys for backward compatibility (can be removed later)
+            o["Temperature"] = temperature;
+            o["Humidity"] = Humidity;
+            o["Dewpoint"] = Dewpoint;
+        }
+    });
+    cfg.addRuntimeProvider({
+        .name = "system",
+        .fill = [](JsonObject &o){
+            o["freeHeap"] = ESP.getFreeHeap();
+            o["rssi"] = WiFi.RSSI();
+        }
+    });
+#endif
+
+    // Enable WebSocket push if compiled with flags
+#if defined(USE_ASYNC_WEBSERVER) && defined(ENABLE_WEBSOCKET_PUSH)
+    cfg.enableWebSocketPush(2000); // 2s Interval
+#endif
     delay(1500);
     if (WiFi.status() == WL_CONNECTED && generalSettings.allowOTA.get()) {
         cfg.setupOTA("Ota-esp32-device", generalSettings.otaPassword.get().c_str());
@@ -404,6 +478,9 @@ void loop()
     }
 
     cfg.handleClient();
+#if defined(ENABLE_WEBSOCKET_PUSH)
+    cfg.handleWebsocketPush();
+#endif
     cfg.handleOTA();
 
     static unsigned long lastOTAmessage = 0;
@@ -438,6 +515,65 @@ void SetupCheckForAPModeButton()
         cfg.startAccessPoint("192.168.4.1", "255.255.255.0", APName, "");
         // cfg.startAccessPoint();
     }
+}
+
+void SetupStartTemperatureMeasuring()
+{
+  // init BME280 for temperature and humidity sensor
+  bme280.setAddress(BME280_ADDRESS, I2C_SDA, I2C_SCL);
+  bool isStatus = bme280.begin(
+      bme280.BME280_STANDBY_0_5,
+      bme280.BME280_FILTER_16,
+      bme280.BME280_SPI3_DISABLE,
+      bme280.BME280_OVERSAMPLING_2,
+      bme280.BME280_OVERSAMPLING_16,
+      bme280.BME280_OVERSAMPLING_1,
+      bme280.BME280_MODE_NORMAL);
+  if (!isStatus)
+  {
+    Serial.println("can NOT initialize for using BME280.");
+  }
+  else
+  {
+    Serial.println("ready to using BME280. Sart Ticker...");
+    int iv = sensorInterval.get();
+    if(iv < 2) iv = 2;
+    temperatureTicker.attach((float)iv, readBme280); // Attach ticker with configured interval
+    readBme280();                                                // Read once at startup
+  }
+}
+
+static float computeDewPoint(float temperatureC, float relHumidityPct) {
+    if (isnan(temperatureC) || isnan(relHumidityPct)) return NAN;
+    if (relHumidityPct <= 0.0f) relHumidityPct = 0.1f;       // Unterlauf abfangen
+    if (relHumidityPct > 100.0f) relHumidityPct = 100.0f;    // Clamp
+    const float a = 17.62f;
+    const float b = 243.12f;
+    float rh = relHumidityPct / 100.0f;
+    float gamma = (a * temperatureC) / (b + temperatureC) + log(rh);
+    float dew = (b * gamma) / (a - gamma);
+    return dew;
+}
+
+void readBme280()
+{
+  //   set sea-level pressure
+  bme280.setSeaLevelPressure(1010);
+
+  bme280.read();
+
+  temperature = bme280.data.temperature + generalSettings.TempCorrectionOffset.get(); // store the temperature value in the global variable
+  Humidity = bme280.data.humidity + generalSettings.HumidityCorrectionOffset.get();   // store the temperature value in the global variable
+  Dewpoint = computeDewPoint(temperature, Humidity);
+
+  // output formatted values to serial console
+  Serial.println("-----------------------");
+  Serial.printf("\r\nTemperature: %2.1lf °C", temperature);
+  Serial.printf("\r\nHumidity   : %2.1lf %rH", Humidity);
+  Serial.printf("\r\nDewpoint   : %2.1lf °C", Dewpoint);
+  Serial.printf("\r\nPressure   : %4.0lf hPa", bme280.data.pressure);
+  Serial.printf("\r\nAltitude   : %4.2lf m", bme280.data.altitude);
+  Serial.println("-----------------------");
 }
 
 void blinkBuidInLED(int BlinkCount, int blinkRate)

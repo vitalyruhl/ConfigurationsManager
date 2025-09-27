@@ -1,28 +1,53 @@
 <template>
   <div>
-    <h1 id="mainHeader">Device Configuration {{ version }}</h1>
+    <h1 id="mainHeader">Device {{ version }}</h1>
+    <div class="tabs">
+      <button :class="{active: activeTab==='live'}" @click="activeTab='live'">Live</button>
+      <button :class="{active: activeTab==='settings'}" @click="switchToSettings()">Settings</button>
+    </div>
     <div id="status" v-if="statusMessage" :style="{backgroundColor: statusColor}">{{ statusMessage }}</div>
-    <div id="settingsContainer" :key="refreshKey">
-      <Category
-        v-for="(settings, category) in config"
-        :key="category + '_' + refreshKey"
-        :category="category"
-        :settings="settings"
-        @apply-single="applySingle"
-        @save-single="saveSingle"
-      />
-    </div>
-    <div class="action-buttons">
-      <button @click="applyAll" class="apply-btn" :disabled="refreshing">{{ refreshing ? '...' : 'Apply All' }}</button>
-      <button @click="saveAll" class="save-btn" :disabled="refreshing">{{ refreshing ? '...' : 'Save All' }}</button>
-      <button @click="resetDefaults" class="reset-btn" :disabled="refreshing">Reset Defaults</button>
-      <button @click="rebootDevice" class="reset-btn" :disabled="refreshing">Reboot</button>
-    </div>
+
+    <section v-if="activeTab==='live'" class="live-view">
+      <div class="live-cards">
+        <div class="card" v-if="runtime.sensors">
+          <h3>Sensors</h3>
+          <p>Temp: {{ (runtime.sensors.temp ?? runtime.sensors.Temperature) ?? '' }} °C</p>
+          <p>Hum: {{ (runtime.sensors.hum ?? runtime.sensors.Humidity) ?? '' }} %</p>
+          <p v-if="runtime.sensors.dewpoint || runtime.sensors.Dewpoint">Dew: {{ (runtime.sensors.dewpoint ?? runtime.sensors.Dewpoint).toFixed(1) }} °C</p>
+        </div>
+        <div class="card" v-if="runtime.system">
+          <h3>System</h3>
+          <p>Heap: {{ runtime.system.freeHeap }}</p>
+          <p>RSSI: {{ runtime.system.rssi }}</p>
+          <p>Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
+        </div>
+      </div>
+      <div class="live-status">Mode: {{ wsConnected? 'WebSocket' : 'Polling' }}</div>
+    </section>
+
+    <section v-else class="settings-view">
+      <div id="settingsContainer" :key="refreshKey">
+        <Category
+          v-for="(settings, category) in config"
+          :key="category + '_' + refreshKey"
+          :category="category"
+          :settings="settings"
+          @apply-single="applySingle"
+          @save-single="saveSingle"
+        />
+      </div>
+      <div class="action-buttons">
+        <button @click="applyAll" class="apply-btn" :disabled="refreshing">{{ refreshing ? '...' : 'Apply All' }}</button>
+        <button @click="saveAll" class="save-btn" :disabled="refreshing">{{ refreshing ? '...' : 'Save All' }}</button>
+        <button @click="resetDefaults" class="reset-btn" :disabled="refreshing">Reset Defaults</button>
+        <button @click="rebootDevice" class="reset-btn" :disabled="refreshing">Reboot</button>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import Category from './components/Category.vue';
 
 const config = ref({});
@@ -31,6 +56,13 @@ const version = ref('');
 const statusMessage = ref('');
 const statusColor = ref('');
 const refreshing = ref(false); // new state
+const activeTab = ref('live');
+
+// Runtime values state
+const runtime = ref({});
+let pollTimer = null;
+let ws = null;
+const wsConnected = ref(false);
 
 async function loadSettings() {
   try {
@@ -44,6 +76,11 @@ async function loadSettings() {
   } catch (error) {
     showStatus('Error: ' + error.message, 'red');
   }
+}
+
+function switchToSettings(){
+  activeTab.value = 'settings';
+  loadSettings();
 }
 
 async function injectVersion() {
@@ -168,7 +205,52 @@ function rebootDevice() {
 onMounted(() => {
   loadSettings();
   injectVersion();
+  initLive();
+  // Immediate initial fetch so user sees data even before WS connects or first poll tick
+  fetchRuntime();
 });
+
+onBeforeUnmount(()=>{
+  if (pollTimer) clearInterval(pollTimer);
+  if (ws) ws.close();
+});
+
+function initLive(){
+  // Try WebSocket first
+  const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const url = proto + location.host + '/ws';
+  try {
+    ws = new WebSocket(url);
+    ws.onopen = ()=>{ 
+      wsConnected.value = true; 
+      // Safety fetch if first push hasn't arrived quickly
+      setTimeout(()=>{ if(!runtime.value.uptime) fetchRuntime(); }, 300);
+    };
+    ws.onclose = ()=>{ wsConnected.value = false; fallbackPolling(); };
+    ws.onerror = ()=>{ wsConnected.value = false; fallbackPolling(); };
+    ws.onmessage = ev => {
+      try { runtime.value = JSON.parse(ev.data); } catch(e){}
+    };
+    // If not connected within 1.5s -> fallback
+    setTimeout(()=>{ if(!wsConnected.value) { try{ ws.close(); }catch(e){} fallbackPolling(); } }, 1500);
+  } catch(e){
+    fallbackPolling();
+  }
+}
+
+async function fetchRuntime(){
+  try {
+    const r = await fetch('/runtime.json?ts=' + Date.now());
+    if(!r.ok) return;
+    runtime.value = await r.json();
+  } catch(e) { /* ignore */ }
+}
+
+function fallbackPolling(){
+  if (pollTimer) clearInterval(pollTimer);
+  fetchRuntime();
+  pollTimer = setInterval(fetchRuntime, 2000);
+}
 </script>
 
 <style scoped>
@@ -197,6 +279,15 @@ h1 {
   text-align: center;
   font-size: 1.5rem;
 }
+.tabs { display:flex; gap:.5rem; justify-content:center; margin-bottom:1rem; }
+.tabs button { background:#ddd; color:#222; width:auto; padding:.5rem 1rem; }
+.tabs button.active { background:#3498db; color:#fff; }
+.live-cards { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; }
+.card { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.15); padding:0.75rem 1rem; border-radius:8px; min-width:140px; }
+ .live-cards .card p { margin:0.25rem 0; }
+ .live-cards { gap:1.25rem; }
+ body { padding:0.5rem; }
+.live-status { text-align:center; margin-top:1rem; font-size:.85rem; color:#555; }
 h2 {
   color: #3498db;
   margin-top: 0;
