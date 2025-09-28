@@ -807,8 +807,13 @@ public:
                 String *body = static_cast<String*>(request->_tempObject);
                 body->concat(String((const char*)data).substring(0,len));
                 if(index + len == total){
-                    String category = request->getParam("category", true)->value();
-                    String key = request->getParam("key", true)->value();
+                    AsyncWebParameter* pCat = request->getParam("category");
+                    if(!pCat) pCat = request->getParam("category", true);
+                    AsyncWebParameter* pKey = request->getParam("key");
+                    if(!pKey) pKey = request->getParam("key", true);
+                    if(!pCat || !pKey){ request->send(400, "application/json", "{\"status\":\"missing_params\"}"); delete body; request->_tempObject=nullptr; return; }
+                    String category = pCat->value();
+                    String key = pKey->value();
                     log_message("🌐 Apply: %s/%s", category.c_str(), key.c_str());
                     DynamicJsonDocument doc(256);
                     DeserializationError err = deserializeJson(doc, *body);
@@ -872,8 +877,13 @@ public:
                 String *body = static_cast<String*>(request->_tempObject);
                 body->concat(String((const char*)data).substring(0,len));
                 if(index+len==total){
-                    String category = request->getParam("category", true)->value();
-                    String key = request->getParam("key", true)->value();
+                    AsyncWebParameter* pCat = request->getParam("category");
+                    if(!pCat) pCat = request->getParam("category", true);
+                    AsyncWebParameter* pKey = request->getParam("key");
+                    if(!pKey) pKey = request->getParam("key", true);
+                    if(!pCat || !pKey){ request->send(400, "application/json", "{\"status\":\"missing_params\"}"); delete body; request->_tempObject=nullptr; return; }
+                    String category = pCat->value();
+                    String key = pKey->value();
                     DynamicJsonDocument doc(256);
                     DeserializationError err = deserializeJson(doc, *body);
                     auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
@@ -933,9 +943,15 @@ public:
     server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){
         request->send(200, "application/json", runtimeValuesToJSON());
     });
+    server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){
+        request->send(200, "application/json", runtimeMetaToJSON());
+    });
 #else
     server.on("/runtime.json", HTTP_GET, [this]() {
         server.send(200, "application/json", runtimeValuesToJSON());
+    });
+    server.on("/runtime_meta.json", HTTP_GET, [this]() {
+        server.send(200, "application/json", runtimeMetaToJSON());
     });
 #endif
 #endif // ENABLE_LIVE_VALUES
@@ -1153,6 +1169,18 @@ public:
             std::function<void(JsonObject&)> fill; // called to populate nested object
         };
 
+        struct RuntimeFieldMeta {
+            String group;      // provider name (e.g. sensors/system)
+            String key;        // field key inside provider object
+            String label;      // human readable label
+            String unit;       // optional unit (e.g. °C, %, dBm)
+            int precision = 1; // decimals for floats
+        };
+
+        void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1){
+            _runtimeMeta.push_back({group,key,label,unit,precision});
+        }
+
         void addRuntimeProvider(const RuntimeValueProvider &p){ runtimeProviders.push_back(p); }
 
         String runtimeValuesToJSON(){
@@ -1165,8 +1193,22 @@ public:
             }
             String out; serializeJson(d, out); return out;
         }
+        String runtimeMetaToJSON(){
+            DynamicJsonDocument d(768);
+            JsonArray arr = d.to<JsonArray>();
+            for(auto &m : _runtimeMeta){
+                JsonObject o = arr.createNestedObject();
+                o["group"] = m.group;
+                o["key"] = m.key;
+                o["label"] = m.label;
+                if(m.unit.length()) o["unit"] = m.unit;
+                o["precision"] = m.precision;
+            }
+            String out; serializeJson(d, out); return out;
+        }
     private:
         std::vector<RuntimeValueProvider> runtimeProviders;
+        std::vector<RuntimeFieldMeta> _runtimeMeta;
     public:
 #endif
 #ifdef ENABLE_WEBSOCKET_PUSH

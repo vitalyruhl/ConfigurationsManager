@@ -417,11 +417,7 @@ void setup()
             // Primary short keys expected by frontend
             o["temp"] = temperature;
             o["hum"] = Humidity;
-            o["dewpoint"] = Dewpoint;
-            // Legacy / verbose keys for backward compatibility (can be removed later)
-            o["Temperature"] = temperature;
-            o["Humidity"] = Humidity;
-            o["Dewpoint"] = Dewpoint;
+            o["dew"] = Dewpoint;
         }
     });
     cfg.addRuntimeProvider({
@@ -431,6 +427,12 @@ void setup()
             o["rssi"] = WiFi.RSSI();
         }
     });
+    // Runtime field metadata for dynamic UI
+    cfg.defineRuntimeField("sensors", "temp", "Temperature", "°C", 1);
+    cfg.defineRuntimeField("sensors", "hum", "Humidity", "%", 1);
+    cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1);
+    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "B", 0);
+    cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0);
 #endif
 
     // Enable WebSocket push if compiled with flags

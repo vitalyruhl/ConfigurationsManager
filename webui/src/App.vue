@@ -9,17 +9,14 @@
 
     <section v-if="activeTab==='live'" class="live-view">
       <div class="live-cards">
-        <div class="card" v-if="runtime.sensors">
-          <h3>Sensors</h3>
-          <p>Temp: {{ (runtime.sensors.temp ?? runtime.sensors.Temperature) ?? '' }} °C</p>
-          <p>Hum: {{ (runtime.sensors.hum ?? runtime.sensors.Humidity) ?? '' }} %</p>
-          <p v-if="runtime.sensors.dewpoint || runtime.sensors.Dewpoint">Dew: {{ (runtime.sensors.dewpoint ?? runtime.sensors.Dewpoint).toFixed(1) }} °C</p>
-        </div>
-        <div class="card" v-if="runtime.system">
-          <h3>System</h3>
-          <p>Heap: {{ runtime.system.freeHeap }}</p>
-          <p>RSSI: {{ runtime.system.rssi }}</p>
-          <p>Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
+        <div class="card" v-for="group in runtimeGroups" :key="group.name">
+          <h3>{{ group.title }}</h3>
+          <template v-for="f in group.fields" :key="f.key">
+            <p v-if="runtime[group.name] && runtime[group.name][f.key] !== undefined">
+              {{ f.label }}: {{ formatValue(runtime[group.name][f.key], f) }}<span v-if="f.unit"> {{ f.unit }}</span>
+            </p>
+          </template>
+          <p v-if="group.name==='system' && runtime.uptime !== undefined">Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
         </div>
       </div>
       <div class="live-status">Mode: {{ wsConnected? 'WebSocket' : 'Polling' }}</div>
@@ -63,6 +60,9 @@ const runtime = ref({});
 let pollTimer = null;
 let ws = null;
 const wsConnected = ref(false);
+// Runtime metadata state for dynamic grouping
+const runtimeMeta = ref([]); // raw metadata array from /runtime_meta.json
+const runtimeGroups = ref([]); // transformed groups -> [{ name, title, fields:[{key,label,unit,precision}]}]
 
 async function loadSettings() {
   try {
@@ -208,6 +208,7 @@ onMounted(() => {
   initLive();
   // Immediate initial fetch so user sees data even before WS connects or first poll tick
   fetchRuntime();
+  fetchRuntimeMeta();
 });
 
 onBeforeUnmount(()=>{
@@ -243,7 +244,51 @@ async function fetchRuntime(){
     const r = await fetch('/runtime.json?ts=' + Date.now());
     if(!r.ok) return;
     runtime.value = await r.json();
+    if(runtimeMeta.value.length === 0) buildRuntimeGroups();
   } catch(e) { /* ignore */ }
+}
+
+async function fetchRuntimeMeta(){
+  try {
+    const r = await fetch('/runtime_meta.json?ts=' + Date.now());
+    if(!r.ok) return;
+    runtimeMeta.value = await r.json();
+    buildRuntimeGroups();
+  } catch(e){ /* ignore */ }
+}
+
+function buildRuntimeGroups(){
+  if(runtimeMeta.value.length){
+    const grouped = {};
+    for(const m of runtimeMeta.value){
+      if(!grouped[m.group]) grouped[m.group] = { name: m.group, title: capitalize(m.group), fields: [] };
+      grouped[m.group].fields.push({ key: m.key, label: m.label, unit: m.unit, precision: m.precision });
+    }
+    runtimeGroups.value = Object.values(grouped);
+    return;
+  }
+  // Fallback (legacy firmware without metadata endpoint)
+  const fallback = [];
+  if(runtime.value.sensors){
+    fallback.push({ name:'sensors', title:'Sensors', fields: Object.keys(runtime.value.sensors).map(k=>({key:k,label:capitalize(k),unit:'',precision:(k.toLowerCase().includes('temp')||k.toLowerCase().includes('dew'))?1:0})) });
+  }
+  if(runtime.value.system){
+    fallback.push({ name:'system', title:'System', fields: Object.keys(runtime.value.system).map(k=>({key:k,label:capitalize(k),unit:'',precision:0})) });
+  }
+  runtimeGroups.value = fallback;
+}
+
+function capitalize(s){ if(!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function formatValue(val, meta){
+  if(val == null) return '';
+  if(typeof val === 'number'){
+    if(meta && typeof meta.precision === 'number' && !Number.isInteger(val)){
+      try { return val.toFixed(meta.precision); } catch(e){ return val; }
+    }
+    return val;
+  }
+  return val;
 }
 
 function fallbackPolling(){
