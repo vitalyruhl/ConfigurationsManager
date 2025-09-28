@@ -1176,7 +1176,8 @@ public:
             String unit;         // optional unit (e.g. °C, %, dBm)
             int precision = 1;   // decimals for floats
             bool isBool = false; // render as boolean indicator
-            bool alarmWhenTrue = false; // for isBool: treat true as alarm (else false as alarm)
+            bool hasAlarm = false; // whether this boolean participates in alarm coloring/blink
+            bool alarmWhenTrue = false; // if hasAlarm && isBool: true=>alarm else false=>alarm (default true alarm)
             // Optional threshold ranges (for numeric coloring)
             bool hasWarnMin = false; float warnMin = 0;
             bool hasWarnMax = false; float warnMax = 0;
@@ -1204,8 +1205,13 @@ public:
             if(enableAlarmMax){ m.hasAlarmMax = true; m.alarmMax = alarmMax; }
             _runtimeMeta.push_back(m);
         }
+        // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics.
+        // alarmWhenTrue=true  -> true state is alarm
+        // alarmWhenTrue=false -> no alarm unless explicitly toggled via hasAlarm parameter (future extension)
         void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; m.alarmWhenTrue=alarmWhenTrue; _runtimeMeta.push_back(m);
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; 
+            if(alarmWhenTrue){ m.hasAlarm = true; m.alarmWhenTrue = true; }
+            _runtimeMeta.push_back(m);
         }
 
         void addRuntimeProvider(const RuntimeValueProvider &p){ runtimeProviders.push_back(p); }
@@ -1236,7 +1242,10 @@ public:
                 if(m.unit.length()) o["unit"] = m.unit;
                 o["precision"] = m.precision;
                 if(m.isBool) o["isBool"] = true;
-                if(m.isBool && m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false
+                if(m.isBool && m.hasAlarm){
+                    o["hasAlarm"] = true;
+                    if(m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false if omitted
+                }
                 // include thresholds only if defined to keep payload compact
                 if(m.hasWarnMin) o["warnMin"] = m.warnMin;
                 if(m.hasWarnMax) o["warnMax"] = m.warnMax;

@@ -273,7 +273,7 @@ function buildRuntimeGroups(){
       grouped[m.group].fields.push({ 
         key: m.key, label: m.label, unit: m.unit, precision: m.precision,
         warnMin: m.warnMin, warnMax: m.warnMax, alarmMin: m.alarmMin, alarmMax: m.alarmMax,
-        isBool: m.isBool, alarmWhenTrue: m.alarmWhenTrue
+        isBool: m.isBool, hasAlarm: m.hasAlarm || false, alarmWhenTrue: m.alarmWhenTrue || false
       });
     }
     runtimeGroups.value = Object.values(grouped);
@@ -292,9 +292,28 @@ function buildRuntimeGroups(){
 function capitalize(s){ if(!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
 function formatValue(val, meta){ if(val == null) return ''; if(typeof val === 'number'){ if(meta && typeof meta.precision === 'number' && !Number.isInteger(val)){ try { return val.toFixed(meta.precision); } catch(e){ return val; } } return val; } return val; }
 function severityClass(val, meta){ if(typeof val !== 'number' || !meta) return ''; if(meta.alarmMin!==undefined && meta.alarmMin!==null && meta.alarmMin!=='' && meta.alarmMin!==false && !Number.isNaN(meta.alarmMin) && val < meta.alarmMin) return 'sev-alarm'; if(meta.alarmMax!==undefined && meta.alarmMax!==null && meta.alarmMax!=='' && meta.alarmMax!==false && !Number.isNaN(meta.alarmMax) && val > meta.alarmMax) return 'sev-alarm'; if(meta.warnMin!==undefined && meta.warnMin!==null && !Number.isNaN(meta.warnMin) && val < meta.warnMin) return 'sev-warn'; if(meta.warnMax!==undefined && meta.warnMax!==null && !Number.isNaN(meta.warnMax) && val > meta.warnMax) return 'sev-warn'; return ''; }
-function valueClasses(val, meta){ if(meta && meta.isBool){ const alarm = isBoolAlarm(val, meta); return alarm ? 'sev-alarm bool-row' : 'bool-row'; } return severityClass(val, meta); }
-function isBoolAlarm(val, meta){ if(!meta || !meta.isBool) return false; if(meta.alarmWhenTrue) return !!val; return !val; }
-function boolDotClass(val, meta){ const alarm = isBoolAlarm(val, meta); if(alarm) return 'alarm'; return val ? 'on' : 'off'; }
+function valueClasses(val, meta){ 
+  if(meta && meta.isBool){ 
+    if(meta.hasAlarm){
+      const alarm = isBoolAlarm(val, meta); 
+      return alarm ? 'sev-alarm bool-row' : 'bool-row';
+    }
+    return 'bool-row';
+  } 
+  return severityClass(val, meta); 
+}
+function isBoolAlarm(val, meta){ if(!meta || !meta.isBool || !meta.hasAlarm) return false; if(meta.alarmWhenTrue) return !!val; return !val; }
+function boolDotClass(val, meta){ 
+  if(!meta || !meta.isBool){ return ''; }
+  if(meta.hasAlarm){
+    const alarm = isBoolAlarm(val, meta); 
+    if(alarm) return 'alarm';
+    // safe state colorization for alarm booleans: show green when non-alarm
+    return 'safe';
+  }
+  // plain boolean without alarm semantics
+  return val ? 'on' : 'off'; 
+}
 function fallbackPolling(){ if (pollTimer) clearInterval(pollTimer); fetchRuntime(); pollTimer = setInterval(fetchRuntime, 2000); }
 </script>
 
@@ -307,13 +326,15 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .card { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.15); padding:0.75rem 1rem; border-radius:8px; min-width:140px; }
 .live-cards .card p { margin:0.25rem 0; }
 .sev-warn { color:#b58900; font-weight:600; }
-.sev-alarm { color:#d00000; font-weight:700; animation: blink 1s linear infinite; }
-@keyframes blink { 50% { opacity:0.25; } }
+.sev-alarm { color:#d00000; font-weight:700; animation: blink 1.6s linear infinite; }
+@keyframes blink { 50% { opacity:0.30; } }
 .bool-row { display:flex; align-items:center; gap:.4rem; }
 .bool-dot { width:.85rem; height:.85rem; border-radius:50%; display:inline-block; box-shadow:0 0 2px rgba(0,0,0,.4); }
 .bool-dot.on { background:#2ecc71; }
 .bool-dot.off { background:#fff; border:1px solid #888; }
-.bool-dot.alarm { background:#d00000; animation: blink 0.8s linear infinite; }
+.bool-dot.alarm { background:#d00000; animation: blink 1.6s linear infinite; }
+.bool-dot.safe { background:#2ecc71; }
+/* Slow down blink for readability */
 .live-status { text-align:center; margin-top:1rem; font-size:.85rem; color:#555; }
 h2 { color:#3498db; margin-top:0; border-bottom:2px solid #3498db; padding-bottom:10px; font-size:1.2rem; }
 label { font-weight: bold; min-width: 120px; }
