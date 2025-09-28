@@ -410,7 +410,15 @@ void setup()
     SetupStartTemperatureMeasuring();
 
 #ifdef ENABLE_LIVE_VALUES
-    // Register example runtime providers (replace with real sensor code later)
+    // Register example runtime providers
+    cfg.addRuntimeProvider({
+        .name = "system",
+        .fill = [](JsonObject &o){
+            o["freeHeap"] = ESP.getFreeHeap();
+            o["rssi"] = WiFi.RSSI();
+        }
+    });
+
     cfg.addRuntimeProvider({
         .name = "sensors",
         .fill = [](JsonObject &o){
@@ -421,18 +429,46 @@ void setup()
         }
     });
     cfg.addRuntimeProvider({
-        .name = "system",
+        .name = "flags",
         .fill = [](JsonObject &o){
-            o["freeHeap"] = ESP.getFreeHeap();
-            o["rssi"] = WiFi.RSSI();
+            o["tempToggle"] = tempBoolToggle.get();
+            // dewpoint_risk alarm state will appear in root.alarms as well, but we also mirror here (optional)
         }
     });
     // Runtime field metadata for dynamic UI
-    cfg.defineRuntimeField("sensors", "temp", "Temperature", "°C", 1);
-    cfg.defineRuntimeField("sensors", "hum", "Humidity", "%", 1);
+    // With thresholds: warn (yellow) and alarm (red). Example ranges; adjust as needed.
+    cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
+        1.0f, 30.0f,   // warnMin / warnMax
+        0.0f, 32.0f,   // alarmMin / alarmMax
+         true,true,true,true
+    );
+    cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", "%", 1,
+        30.0f, 70.0f,
+        15.0f, 90.0f,
+        true,false,true,true
+    );
     cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1);
+
+    
     cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "B", 0);
     cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0);
+    cfg.defineRuntimeBool("flags", "tempToggle", "Temp Toggle", false); // no alarm styling
+    cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true); // show as bool alarm when true
+
+    // Cross-field alarm: temperature within 1.0°C above dewpoint (risk of condensation)
+    cfg.defineRuntimeAlarm(
+        "dewpoint_risk",
+        [](const JsonObject &root){
+            if(!root.containsKey("sensors")) return false;
+            const JsonObject sensors = root["sensors"].as<JsonObject>();
+            if(!sensors.containsKey("temp") || !sensors.containsKey("dew")) return false;
+            float t = sensors["temp"].as<float>();
+            float d = sensors["dew"].as<float>();
+            return (t - d) <= 1.0f; // risk window
+        },
+        [](){ Serial.println("[ALARM] Dewpoint proximity risk ENTER"); },
+        [](){ Serial.println("[ALARM] Dewpoint proximity risk EXIT"); }
+    );
 #endif
 
     // Enable WebSocket push if compiled with flags
@@ -483,6 +519,8 @@ void loop()
 #if defined(ENABLE_WEBSOCKET_PUSH)
     cfg.handleWebsocketPush();
 #endif
+    // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
+    static unsigned long lastAlarmEval = 0; if(millis() - lastAlarmEval > 1500){ lastAlarmEval = millis(); cfg.handleRuntimeAlarms(); }
     cfg.handleOTA();
 
     static unsigned long lastOTAmessage = 0;
@@ -564,8 +602,8 @@ void readBme280()
 
   bme280.read();
 
-  temperature = bme280.data.temperature + generalSettings.TempCorrectionOffset.get(); // store the temperature value in the global variable
-  Humidity = bme280.data.humidity + generalSettings.HumidityCorrectionOffset.get();   // store the temperature value in the global variable
+  temperature = bme280.data.temperature + generalSettings.TempCorrectionOffset.get();
+  Humidity = bme280.data.humidity + generalSettings.HumidityCorrectionOffset.get();
   Dewpoint = computeDewPoint(temperature, Humidity);
 
   // output formatted values to serial console

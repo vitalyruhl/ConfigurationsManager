@@ -821,8 +821,8 @@ public:
                     JsonVariant val;
                     if(!err){ if(doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>(); }
                     else { doc.clear(); if(body->equalsIgnoreCase("true")||body->equalsIgnoreCase("false")) doc["value"] = body->equalsIgnoreCase("true"); else if(isIntegerString(*body)) doc["value"] = body->toInt(); else doc["value"] = *body; val = doc["value"]; }
-                    for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ request->send(200, "application/json", "{\"status\":\"applied\"}"); delete body; request->_tempObject=nullptr; return;} else { request->send(400, "application/json", "{\"status\":\"invalid_value\"}"); delete body; request->_tempObject=nullptr; return;} } }
-                    request->send(404, "application/json", "{\"status\":\"not_found\"}"); delete body; request->_tempObject=nullptr;
+                    for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ String resp = String("{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; request->send(200, "application/json", resp); delete body; request->_tempObject=nullptr; return;} else { request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"invalid_value\"}"); delete body; request->_tempObject=nullptr; return;} } }
+                    request->send(404, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"not_found\"}"); delete body; request->_tempObject=nullptr;
                 }
             }
         );
@@ -839,8 +839,8 @@ public:
             JsonVariant val;
             if(!err){ if(doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>(); }
             else { doc.clear(); if(body.equalsIgnoreCase("true")||body.equalsIgnoreCase("false")) doc["value"] = body.equalsIgnoreCase("true"); else if(isIntegerString(body)) doc["value"] = body.toInt(); else doc["value"] = body; val = doc["value"]; }
-            for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ server.send(200, "application/json", "{\"status\":\"applied\"}"); return;} else { server.send(400, "application/json", "{\"status\":\"invalid_value\"}"); return;} } }
-            server.send(404, "application/json", "{\"status\":\"not_found\"}");
+            for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ String resp = String("{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; server.send(200, "application/json", resp); return;} else { server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"invalid_value\"}"); return;} } }
+            server.send(404, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"not_found\"}");
         });
 #endif
 
@@ -855,7 +855,7 @@ public:
                 if(index+len==total){
                     DynamicJsonDocument doc(1024);
                     deserializeJson(doc, *body);
-                    if(fromJSON(doc)) request->send(200, "application/json", "{\"status\":\"applied\"}"); else request->send(400, "application/json", "{\"status\":\"invalid\"}");
+                    if(fromJSON(doc)) request->send(200, "application/json", "{\"status\":\"ok\",\"action\":\"apply_all\"}"); else request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply_all\",\"reason\":\"invalid\"}");
                     delete body; request->_tempObject=nullptr;
                 }
             }
@@ -864,7 +864,7 @@ public:
         server.on("/config/apply_all", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
             deserializeJson(doc, server.arg("plain"));
-            if (fromJSON(doc)) server.send(200, "application/json", "{\"status\":\"applied\"}"); else server.send(400, "application/json", "{\"status\":\"invalid\"}");
+            if (fromJSON(doc)) server.send(200, "application/json", "{\"status\":\"ok\",\"action\":\"apply_all\"}"); else server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply_all\",\"reason\":\"invalid\"}");
         });
 #endif
 
@@ -888,8 +888,8 @@ public:
                     DeserializationError err = deserializeJson(doc, *body);
                     auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
                     JsonVariant val; if(!err){ if(doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>(); } else { doc.clear(); if(body->equalsIgnoreCase("true")||body->equalsIgnoreCase("false")) doc["value"] = body->equalsIgnoreCase("true"); else if(isIntegerString(*body)) doc["value"] = body->toInt(); else doc["value"] = *body; val = doc["value"]; }
-                    for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ prefs.begin("config", false); s->save(prefs); prefs.end(); request->send(200, "application/json", "{\"status\":\"saved\"}"); delete body; request->_tempObject=nullptr; return;} else { request->send(400, "application/json", "{\"status\":\"invalid_value\"}"); delete body; request->_tempObject=nullptr; return;} } }
-                    request->send(404, "application/json", "{\"status\":\"not_found\"}"); delete body; request->_tempObject=nullptr;
+                    for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ prefs.begin("config", false); s->save(prefs); prefs.end(); String resp = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; request->send(200, "application/json", resp); delete body; request->_tempObject=nullptr; return;} else { request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"invalid_value\"}"); delete body; request->_tempObject=nullptr; return;} } }
+                    request->send(404, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"not_found\"}"); delete body; request->_tempObject=nullptr;
                 }
             }
         );
@@ -902,8 +902,8 @@ public:
             DynamicJsonDocument doc(256); DeserializationError err = deserializeJson(doc, body);
             auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
             JsonVariant val; if(!err){ if(doc.containsKey("value")) val=doc["value"]; else val=doc.as<JsonVariant>(); } else { doc.clear(); if(body.equalsIgnoreCase("true")||body.equalsIgnoreCase("false")) doc["value"] = body.equalsIgnoreCase("true"); else if(isIntegerString(body)) doc["value"] = body.toInt(); else doc["value"] = body; val = doc["value"]; }
-            for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ prefs.begin("config", false); s->save(prefs); prefs.end(); server.send(200, "application/json", "{\"status\":\"saved\"}"); return; } else { server.send(400, "application/json", "{\"status\":\"invalid_value\"}"); return; } } }
-            server.send(404, "application/json", "{\"status\":\"not_found\"}");
+            for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ prefs.begin("config", false); s->save(prefs); prefs.end(); String resp = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; server.send(200, "application/json", resp); return; } else { server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"invalid_value\"}"); return; } } }
+            server.send(404, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"not_found\"}");
         });
 #endif
 
@@ -967,7 +967,7 @@ public:
                 if(index+len==total){
                     DynamicJsonDocument doc(1024);
                     deserializeJson(doc, *body);
-                    if(fromJSON(doc)){ saveAll(); request->send(200, "application/json", "{\"status\":\"saved\"}"); } else { request->send(400, "application/json", "{\"status\":\"invalid\"}"); }
+                    if(fromJSON(doc)){ saveAll(); request->send(200, "application/json", "{\"status\":\"ok\",\"action\":\"save_all\"}"); } else { request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"save_all\",\"reason\":\"invalid\"}"); }
                     delete body; request->_tempObject=nullptr;
                 }
             }
@@ -976,8 +976,8 @@ public:
         server.on("/config/save_all", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
             deserializeJson(doc, server.arg("plain"));
-            if (fromJSON(doc)) { saveAll(); server.send(200, "application/json", "{\"status\":\"saved\"}"); }
-            else server.send(400, "application/json", "{\"status\":\"invalid\"}");
+            if (fromJSON(doc)) { saveAll(); server.send(200, "application/json", "{\"status\":\"ok\",\"action\":\"save_all\"}"); }
+            else server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"save_all\",\"reason\":\"invalid\"}");
         });
 #endif
 
@@ -1170,31 +1170,63 @@ public:
         };
 
         struct RuntimeFieldMeta {
-            String group;      // provider name (e.g. sensors/system)
-            String key;        // field key inside provider object
-            String label;      // human readable label
-            String unit;       // optional unit (e.g. °C, %, dBm)
-            int precision = 1; // decimals for floats
+            String group;        // provider name (e.g. sensors/system)
+            String key;          // field key inside provider object
+            String label;        // human readable label
+            String unit;         // optional unit (e.g. °C, %, dBm)
+            int precision = 1;   // decimals for floats
+            bool isBool = false; // render as boolean indicator
+            bool alarmWhenTrue = false; // for isBool: treat true as alarm (else false as alarm)
+            // Optional threshold ranges (for numeric coloring)
+            bool hasWarnMin = false; float warnMin = 0;
+            bool hasWarnMax = false; float warnMax = 0;
+            bool hasAlarmMin = false; float alarmMin = 0;
+            bool hasAlarmMax = false; float alarmMax = 0;
         };
 
+        // Backward-compatible minimal definition
         void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1){
-            _runtimeMeta.push_back({group,key,label,unit,precision});
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; _runtimeMeta.push_back(m);
+        }
+        // Extended with thresholds (pass NAN or omit to skip)
+        void defineRuntimeFieldThresholds(
+            const String &group, const String &key, const String &label, const String &unit,
+            int precision,
+            float warnMin, float warnMax,
+            float alarmMin, float alarmMax,
+            bool enableWarnMin = true, bool enableWarnMax = true,
+            bool enableAlarmMin = true, bool enableAlarmMax = true
+        ){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision;
+            if(enableWarnMin){ m.hasWarnMin = true; m.warnMin = warnMin; }
+            if(enableWarnMax){ m.hasWarnMax = true; m.warnMax = warnMax; }
+            if(enableAlarmMin){ m.hasAlarmMin = true; m.alarmMin = alarmMin; }
+            if(enableAlarmMax){ m.hasAlarmMax = true; m.alarmMax = alarmMax; }
+            _runtimeMeta.push_back(m);
+        }
+        void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; m.alarmWhenTrue=alarmWhenTrue; _runtimeMeta.push_back(m);
         }
 
         void addRuntimeProvider(const RuntimeValueProvider &p){ runtimeProviders.push_back(p); }
 
         String runtimeValuesToJSON(){
-            DynamicJsonDocument d(768);
+            DynamicJsonDocument d(1024);
             JsonObject root = d.to<JsonObject>();
             root["uptime"] = millis();
             for(auto &prov : runtimeProviders){
                 JsonObject slot = root.createNestedObject(prov.name);
                 if (prov.fill) prov.fill(slot);
             }
+            // expose active alarms by name (boolean map)
+            if(!_runtimeAlarms.empty()){
+                JsonObject alarms = root.createNestedObject("alarms");
+                for(auto &a : _runtimeAlarms){ alarms[a.name] = a.active; }
+            }
             String out; serializeJson(d, out); return out;
         }
         String runtimeMetaToJSON(){
-            DynamicJsonDocument d(768);
+            DynamicJsonDocument d(2048);
             JsonArray arr = d.to<JsonArray>();
             for(auto &m : _runtimeMeta){
                 JsonObject o = arr.createNestedObject();
@@ -1203,13 +1235,57 @@ public:
                 o["label"] = m.label;
                 if(m.unit.length()) o["unit"] = m.unit;
                 o["precision"] = m.precision;
+                if(m.isBool) o["isBool"] = true;
+                if(m.isBool && m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false
+                // include thresholds only if defined to keep payload compact
+                if(m.hasWarnMin) o["warnMin"] = m.warnMin;
+                if(m.hasWarnMax) o["warnMax"] = m.warnMax;
+                if(m.hasAlarmMin) o["alarmMin"] = m.alarmMin;
+                if(m.hasAlarmMax) o["alarmMax"] = m.alarmMax;
             }
             String out; serializeJson(d, out); return out;
         }
     private:
         std::vector<RuntimeValueProvider> runtimeProviders;
         std::vector<RuntimeFieldMeta> _runtimeMeta;
+        // Cross-field runtime alarms
+        struct RuntimeAlarm {
+            String name; // identifier
+            std::function<bool(const JsonObject&)> condition; // receives merged runtime JSON root
+            std::function<void()> onEnter; // called when condition becomes true
+            std::function<void()> onExit;  // called when condition leaves true
+            bool active = false; // current state
+        };
+        std::vector<RuntimeAlarm> _runtimeAlarms;
     public:
+        void defineRuntimeAlarm(const String &name,
+                                std::function<bool(const JsonObject&)> condition,
+                                std::function<void()> onEnter = nullptr,
+                                std::function<void()> onExit = nullptr){
+            _runtimeAlarms.push_back({name,condition,onEnter,onExit,false});
+        }
+        void handleRuntimeAlarms(){
+            if(_runtimeAlarms.empty()) return;
+            // Build a transient runtime JSON document (reuse existing builder without string serialize)
+            DynamicJsonDocument d(768);
+            JsonObject root = d.to<JsonObject>();
+            root["uptime"] = millis();
+            for(auto &prov : runtimeProviders){
+                JsonObject slot = root.createNestedObject(prov.name);
+                if (prov.fill) prov.fill(slot);
+            }
+            for(auto &al : _runtimeAlarms){
+                bool cond = false;
+                if(al.condition){
+                    try { cond = al.condition(root); } catch(...){ cond = false; }
+                }
+                if(cond && !al.active){
+                    al.active = true; if(al.onEnter) al.onEnter();
+                } else if(!cond && al.active){
+                    al.active = false; if(al.onExit) al.onExit();
+                }
+            }
+        }
 #endif
 #ifdef ENABLE_WEBSOCKET_PUSH
     private:

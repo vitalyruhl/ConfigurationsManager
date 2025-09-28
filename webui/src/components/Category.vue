@@ -7,6 +7,7 @@
       :category="category"
       :keyName="key"
       :settingData="settingData"
+      :busy="!!busyMap[category + '.' + key]"
       v-if="shouldShow(settingData)"
       @apply="onApply"
       @save="onSave"
@@ -34,7 +35,8 @@ import { computed } from 'vue';
 import Setting from './Setting.vue';
 const props = defineProps({
   category: String,
-  settings: Object
+  settings: Object,
+  busyMap: { type: Object, default: () => ({}) }
 });
 const emit = defineEmits(['apply-single', 'save-single']);
 const filteredSettings = computed(() => {

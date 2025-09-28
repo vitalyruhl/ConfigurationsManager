@@ -5,15 +5,29 @@
       <button :class="{active: activeTab==='live'}" @click="activeTab='live'">Live</button>
       <button :class="{active: activeTab==='settings'}" @click="switchToSettings()">Settings</button>
     </div>
-    <div id="status" v-if="statusMessage" :style="{backgroundColor: statusColor}">{{ statusMessage }}</div>
+
+    <!-- Toast notifications -->
+    <div class="toast-wrapper">
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
+        <span class="toast-msg">{{ t.message }}</span>
+        <button class="toast-close" @click="dismissToast(t.id)" aria-label="Close">✕</button>
+      </div>
+    </div>
 
     <section v-if="activeTab==='live'" class="live-view">
       <div class="live-cards">
         <div class="card" v-for="group in runtimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
           <template v-for="f in group.fields" :key="f.key">
-            <p v-if="runtime[group.name] && runtime[group.name][f.key] !== undefined">
-              {{ f.label }}: {{ formatValue(runtime[group.name][f.key], f) }}<span v-if="f.unit"> {{ f.unit }}</span>
+            <p v-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
+               :class="valueClasses(runtime[group.name][f.key], f)">
+              <template v-if="f.isBool">
+                <span class="bool-dot" :class="boolDotClass(runtime[group.name][f.key], f)"></span>
+                {{ f.label }}
+              </template>
+              <template v-else>
+                {{ f.label }}: {{ formatValue(runtime[group.name][f.key], f) }}<span v-if="f.unit"> {{ f.unit }}</span>
+              </template>
             </p>
           </template>
           <p v-if="group.name==='system' && runtime.uptime !== undefined">Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
@@ -29,6 +43,7 @@
           :key="category + '_' + refreshKey"
           :category="category"
           :settings="settings"
+          :busy-map="opBusy"
           @apply-single="applySingle"
           @save-single="saveSingle"
         />
@@ -50,10 +65,13 @@ import Category from './components/Category.vue';
 const config = ref({});
 const refreshKey = ref(0); // forces re-render of settings tree
 const version = ref('');
-const statusMessage = ref('');
-const statusColor = ref('');
-const refreshing = ref(false); // new state
+const refreshing = ref(false);
 const activeTab = ref('live');
+
+// Toast notifications
+const toasts = ref([]); // {id, message, type, sticky, ts}
+let toastCounter = 0;
+const opBusy = ref({}); // per-setting busy map
 
 // Runtime values state
 const runtime = ref({});
@@ -64,17 +82,30 @@ const wsConnected = ref(false);
 const runtimeMeta = ref([]); // raw metadata array from /runtime_meta.json
 const runtimeGroups = ref([]); // transformed groups -> [{ name, title, fields:[{key,label,unit,precision}]}]
 
+function notify(message, type='info', duration=3000, sticky=false, id=null){
+  if(id==null) id = ++toastCounter;
+  const existing = toasts.value.find(t=>t.id===id);
+  if(existing){ existing.message = message; existing.type = type; existing.sticky = sticky; existing.ts = Date.now(); }
+  else toasts.value.push({ id, message, type, sticky, ts: Date.now() });
+  if(!sticky){ setTimeout(()=>dismissToast(id), duration); }
+  return id;
+}
+function dismissToast(id){ toasts.value = toasts.value.filter(t=>t.id!==id); }
+function updateToast(id, message, type='info', duration=2500){
+  const t = toasts.value.find(t=>t.id===id);
+  if(!t) return notify(message, type, duration);
+  t.message = message; t.type = type; t.sticky = false; setTimeout(()=>dismissToast(id), duration);
+}
+
 async function loadSettings() {
   try {
     const response = await fetch('/config.json');
     if (!response.ok) throw new Error('HTTP Error');
     const data = await response.json();
-    console.log('Fetched config:', data);
     config.value = data.config || data;
-    // bump key to force child component re-mount (ensures stale visibility cache cleared)
-    refreshKey.value++;
+    refreshKey.value++; // force re-mount
   } catch (error) {
-    showStatus('Error: ' + error.message, 'red');
+    notify('Fehler: ' + error.message, 'error');
   }
 }
 
@@ -88,55 +119,40 @@ async function injectVersion() {
     const response = await fetch('/version');
     if (!response.ok) throw new Error('Version fetch failed');
     const data = await response.text();
-    console.log('Fetched Version:', data);
     version.value = 'V' + data;
   } catch (e) {
     version.value = '';
   }
 }
 
-function showStatus(message, color) {
-  statusMessage.value = message;
-  statusColor.value = color;
-  setTimeout(() => (statusMessage.value = ''), 3000);
-}
-
 async function applySingle(category, key, value) {
+  const opKey = `${category}.${key}`;
+  opBusy.value[opKey] = true;
+  const toastId = notify(`Applying: ${opKey} ...`, 'info', 7000, true);
   try {
-    refreshing.value = true;
-    const response = await fetch(`/config/apply?category=${encodeURIComponent(category)}&key=${encodeURIComponent(key)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
-      });
-    if (!response.ok) throw new Error('Apply failed');
+    const response = await fetch(`/config/apply?category=${encodeURIComponent(category)}&key=${encodeURIComponent(key)}`,{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) });
+    const json = await response.json().catch(()=>({}));
+    if(!response.ok || json.status!=='ok') throw new Error(json.reason || 'Failed');
     await loadSettings();
-    showStatus('Applied', 'green');
-  } catch (error) {
-    showStatus('Error: ' + error.message, 'red');
-  } finally {
-    refreshing.value = false;
-  }
+    updateToast(toastId, `Applied: ${opKey}`, 'success');
+  } catch(e){
+    updateToast(toastId, `Apply failed ${opKey}: ${e.message}`, 'error');
+  } finally { delete opBusy.value[opKey]; }
 }
 
 async function saveSingle(category, key, value) {
+  const opKey = `${category}.${key}`;
+  opBusy.value[opKey] = true;
+  const toastId = notify(`Saving: ${opKey} ...`, 'info', 7000, true);
   try {
-    refreshing.value = true;
-    const response = await fetch(`/config/save?category=${encodeURIComponent(category)}&key=${encodeURIComponent(key)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
-      });
-    if (!response.ok) throw new Error('Save failed');
+    const response = await fetch(`/config/save?category=${encodeURIComponent(category)}&key=${encodeURIComponent(key)}`,{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) });
+    const json = await response.json().catch(()=>({}));
+    if(!response.ok || json.status!=='ok') throw new Error(json.reason || 'Failed');
     await loadSettings();
-    showStatus('Saved', 'green');
-  } catch (error) {
-    showStatus('Error: ' + error.message, 'red');
-  } finally {
-    refreshing.value = false;
-  }
+    updateToast(toastId, `Saved: ${opKey}`, 'success');
+  } catch(e){
+    updateToast(toastId, `Save failed ${opKey}: ${e.message}`, 'error');
+  } finally { delete opBusy.value[opKey]; }
 }
 
 async function saveAll() {
@@ -150,15 +166,16 @@ async function saveAll() {
   });
   try {
     const response = await fetch('/config/save_all', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(all)
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all)
     });
-    showStatus(response.ok ? 'All settings saved!' : 'Error!', response.ok ? 'green' : 'red');
-    if (response.ok) await loadSettings();
-  } catch (error) {
-    showStatus('Error: ' + error.message, 'red');
-  }
+    const json = await response.json().catch(()=>({}));
+    if(response.ok && json.status==='ok'){
+      notify('All settings saved', 'success');
+      await loadSettings();
+    } else {
+      notify('Failed to save all settings', 'error');
+    }
+  } catch (error) { notify('Error: ' + error.message, 'error'); }
 }
 
 async function applyAll() {
@@ -171,15 +188,16 @@ async function applyAll() {
   });
   try {
     const response = await fetch('/config/apply_all', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(all)
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all)
     });
-    showStatus(response.ok ? 'All settings Applied!' : 'Error!', response.ok ? 'green' : 'red');
-    if (response.ok) await loadSettings();
-  } catch (error) {
-    showStatus('Error: ' + error.message, 'red');
-  }
+    const json = await response.json().catch(()=>({}));
+    if(response.ok && json.status==='ok'){
+      notify('All settings applied', 'success');
+      await loadSettings();
+    } else {
+      notify('Failed to apply all settings', 'error');
+    }
+  } catch (error) { notify('Error: ' + error.message, 'error'); }
 }
 
 async function resetDefaults() {
@@ -187,26 +205,23 @@ async function resetDefaults() {
   try {
     const response = await fetch('/config/reset', { method: 'POST' });
     if (response.ok) {
-      showStatus('Reset successful!', 'green');
+      notify('Reset to defaults', 'success');
       setTimeout(() => location.reload(), 1000);
     }
-  } catch (error) {
-    showStatus('Error: ' + error.message, 'red');
-  }
+  } catch (error) { notify('Error: ' + error.message, 'error'); }
 }
 
 function rebootDevice() {
   if (!confirm('Reboot device?')) return;
   fetch('/config/reboot', { method: 'POST' })
-    .then(response => response.ok ? showStatus('Rebooting...', 'blue') : null)
-    .catch(error => showStatus('Error: ' + error.message, 'red'));
+    .then(response => response.ok ? notify('Rebooting...', 'info') : null)
+    .catch(error => notify('Error: ' + error.message, 'error'));
 }
 
 onMounted(() => {
   loadSettings();
   injectVersion();
   initLive();
-  // Immediate initial fetch so user sees data even before WS connects or first poll tick
   fetchRuntime();
   fetchRuntimeMeta();
 });
@@ -217,26 +232,19 @@ onBeforeUnmount(()=>{
 });
 
 function initLive(){
-  // Try WebSocket first
   const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
   const url = proto + location.host + '/ws';
   try {
     ws = new WebSocket(url);
     ws.onopen = ()=>{ 
       wsConnected.value = true; 
-      // Safety fetch if first push hasn't arrived quickly
       setTimeout(()=>{ if(!runtime.value.uptime) fetchRuntime(); }, 300);
     };
     ws.onclose = ()=>{ wsConnected.value = false; fallbackPolling(); };
     ws.onerror = ()=>{ wsConnected.value = false; fallbackPolling(); };
-    ws.onmessage = ev => {
-      try { runtime.value = JSON.parse(ev.data); } catch(e){}
-    };
-    // If not connected within 1.5s -> fallback
+    ws.onmessage = ev => { try { runtime.value = JSON.parse(ev.data); } catch(e){} };
     setTimeout(()=>{ if(!wsConnected.value) { try{ ws.close(); }catch(e){} fallbackPolling(); } }, 1500);
-  } catch(e){
-    fallbackPolling();
-  }
+  } catch(e){ fallbackPolling(); }
 }
 
 async function fetchRuntime(){
@@ -262,12 +270,15 @@ function buildRuntimeGroups(){
     const grouped = {};
     for(const m of runtimeMeta.value){
       if(!grouped[m.group]) grouped[m.group] = { name: m.group, title: capitalize(m.group), fields: [] };
-      grouped[m.group].fields.push({ key: m.key, label: m.label, unit: m.unit, precision: m.precision });
+      grouped[m.group].fields.push({ 
+        key: m.key, label: m.label, unit: m.unit, precision: m.precision,
+        warnMin: m.warnMin, warnMax: m.warnMax, alarmMin: m.alarmMin, alarmMax: m.alarmMax,
+        isBool: m.isBool, alarmWhenTrue: m.alarmWhenTrue
+      });
     }
     runtimeGroups.value = Object.values(grouped);
     return;
   }
-  // Fallback (legacy firmware without metadata endpoint)
   const fallback = [];
   if(runtime.value.sensors){
     fallback.push({ name:'sensors', title:'Sensors', fields: Object.keys(runtime.value.sensors).map(k=>({key:k,label:capitalize(k),unit:'',precision:(k.toLowerCase().includes('temp')||k.toLowerCase().includes('dew'))?1:0})) });
@@ -279,133 +290,47 @@ function buildRuntimeGroups(){
 }
 
 function capitalize(s){ if(!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
-
-function formatValue(val, meta){
-  if(val == null) return '';
-  if(typeof val === 'number'){
-    if(meta && typeof meta.precision === 'number' && !Number.isInteger(val)){
-      try { return val.toFixed(meta.precision); } catch(e){ return val; }
-    }
-    return val;
-  }
-  return val;
-}
-
-function fallbackPolling(){
-  if (pollTimer) clearInterval(pollTimer);
-  fetchRuntime();
-  pollTimer = setInterval(fetchRuntime, 2000);
-}
+function formatValue(val, meta){ if(val == null) return ''; if(typeof val === 'number'){ if(meta && typeof meta.precision === 'number' && !Number.isInteger(val)){ try { return val.toFixed(meta.precision); } catch(e){ return val; } } return val; } return val; }
+function severityClass(val, meta){ if(typeof val !== 'number' || !meta) return ''; if(meta.alarmMin!==undefined && meta.alarmMin!==null && meta.alarmMin!=='' && meta.alarmMin!==false && !Number.isNaN(meta.alarmMin) && val < meta.alarmMin) return 'sev-alarm'; if(meta.alarmMax!==undefined && meta.alarmMax!==null && meta.alarmMax!=='' && meta.alarmMax!==false && !Number.isNaN(meta.alarmMax) && val > meta.alarmMax) return 'sev-alarm'; if(meta.warnMin!==undefined && meta.warnMin!==null && !Number.isNaN(meta.warnMin) && val < meta.warnMin) return 'sev-warn'; if(meta.warnMax!==undefined && meta.warnMax!==null && !Number.isNaN(meta.warnMax) && val > meta.warnMax) return 'sev-warn'; return ''; }
+function valueClasses(val, meta){ if(meta && meta.isBool){ const alarm = isBoolAlarm(val, meta); return alarm ? 'sev-alarm bool-row' : 'bool-row'; } return severityClass(val, meta); }
+function isBoolAlarm(val, meta){ if(!meta || !meta.isBool) return false; if(meta.alarmWhenTrue) return !!val; return !val; }
+function boolDotClass(val, meta){ const alarm = isBoolAlarm(val, meta); if(alarm) return 'alarm'; return val ? 'on' : 'off'; }
+function fallbackPolling(){ if (pollTimer) clearInterval(pollTimer); fetchRuntime(); pollTimer = setInterval(fetchRuntime, 2000); }
 </script>
 
 <style scoped>
-body {
-  font-family: Arial, sans-serif;
-  margin: 1rem;
-  background-color: #f0f0f0;
-}
-.logo-bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  height: 80px;
-  margin-bottom: 0.5rem;
-}
-.app-logo {
-  max-width: 80px;
-  max-height: 80px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  display: block;
-}
-h1 {
-  color: #2c3e50;
-  text-align: center;
-  font-size: 1.5rem;
-}
+body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; }
 .tabs { display:flex; gap:.5rem; justify-content:center; margin-bottom:1rem; }
 .tabs button { background:#ddd; color:#222; width:auto; padding:.5rem 1rem; }
 .tabs button.active { background:#3498db; color:#fff; }
 .live-cards { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; }
 .card { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.15); padding:0.75rem 1rem; border-radius:8px; min-width:140px; }
- .live-cards .card p { margin:0.25rem 0; }
- .live-cards { gap:1.25rem; }
- body { padding:0.5rem; }
+.live-cards .card p { margin:0.25rem 0; }
+.sev-warn { color:#b58900; font-weight:600; }
+.sev-alarm { color:#d00000; font-weight:700; animation: blink 1s linear infinite; }
+@keyframes blink { 50% { opacity:0.25; } }
+.bool-row { display:flex; align-items:center; gap:.4rem; }
+.bool-dot { width:.85rem; height:.85rem; border-radius:50%; display:inline-block; box-shadow:0 0 2px rgba(0,0,0,.4); }
+.bool-dot.on { background:#2ecc71; }
+.bool-dot.off { background:#fff; border:1px solid #888; }
+.bool-dot.alarm { background:#d00000; animation: blink 0.8s linear infinite; }
 .live-status { text-align:center; margin-top:1rem; font-size:.85rem; color:#555; }
-h2 {
-  color: #3498db;
-  margin-top: 0;
-  border-bottom: 2px solid #3498db;
-  padding-bottom: 10px;
-  font-size: 1.2rem;
-}
-label {
-  font-weight: bold;
-  min-width: 120px;
-}
-input,
-select {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  box-sizing: border-box;
-}
-button {
-  padding: 8px 16px;
-  font-size: 14px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: 0.3s;
-  width: 100%;
-  margin-bottom: 5px;
-}
-.apply-btn {
-  background-color: #3498db;
-  color: white;
-}
-.save-btn {
-  background-color: #27ae60;
-  color: white;
-}
-.reset-btn {
-  background-color: #e74c3c;
-  color: white;
-}
-#status {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  left: 10px;
-  padding: 10px;
-  border-radius: 5px;
-  display: none;
-  max-width: none;
-  z-index: 1000;
-}
-.action-buttons {
-  text-align: center;
-  margin: 20px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  width: 100%;
-}
-@media (min-width: 768px) {
-  body {
-    margin: 2rem;
-  }
-  .action-buttons {
-    flex-direction: row;
-  }
-}
+h2 { color:#3498db; margin-top:0; border-bottom:2px solid #3498db; padding-bottom:10px; font-size:1.2rem; }
+label { font-weight: bold; min-width: 120px; }
+input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+button { padding: 8px 16px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; transition: 0.3s; width: 100%; margin-bottom: 5px; }
+.apply-btn { background-color: #3498db; color: white; }
+.save-btn { background-color: #27ae60; color: white; }
+.reset-btn { background-color: #e74c3c; color: white; }
+.action-buttons { text-align: center; margin: 20px 0; display: flex; flex-direction: column; gap: 10px; }
+.actions { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+@media (min-width: 768px) { .action-buttons { flex-direction: row; } button { width:auto; } }
+/* Toast notifications */
+.toast-wrapper { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; z-index:2000; align-items:center; }
+.toast { position:relative; background:#303030; color:#fff; padding:10px 14px; border-radius:6px; min-width:200px; max-width:360px; box-shadow:0 4px 10px rgba(0,0,0,.4); font-size:.85rem; line-height:1.3; display:flex; align-items:center; gap:10px; }
+.toast.info { background:#455a64; }
+.toast.success { background:#2e7d32; }
+.toast.error { background:#c62828; }
+.toast-close { background:transparent; border:none; color:#fff; cursor:pointer; font-size:.9rem; padding:0 4px; }
 </style>
 

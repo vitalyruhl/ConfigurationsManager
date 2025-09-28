@@ -42,9 +42,14 @@
       <button
         v-if="type !== 'boolean'"
         class="apply-btn"
+        :disabled="busy"
         @click="emit('apply', keyName, inputValue)"
-      >Apply</button>
-      <button class="save-btn" @click="emit('save', keyName, inputValue)">Save</button>
+      >
+        <span v-if="busy">…</span><span v-else>Apply</span>
+      </button>
+      <button class="save-btn" :disabled="busy" @click="emit('save', keyName, inputValue)">
+        <span v-if="busy">…</span><span v-else>Save</span>
+      </button>
     </div>
   </div>
 </template>
@@ -181,7 +186,8 @@ import { ref, watch } from 'vue';
 const props = defineProps({
   category: String,
   keyName: String,
-  settingData: Object
+  settingData: Object,
+  busy: { type: Boolean, default: false }
 });
 const emit = defineEmits(['apply', 'save']);
 const displayName = props.settingData.displayName || props.keyName;
