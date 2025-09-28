@@ -6,7 +6,15 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <type_traits>
+#ifdef USE_ASYNC_WEBSERVER
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#ifdef ENABLE_WEBSOCKET_PUSH
+#include <ArduinoJson.h>
+#endif
+#else
 #include <WebServer.h>
+#endif
 #include <exception>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
@@ -17,7 +25,7 @@
 inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
 #endif
 
-#define CONFIGMANAGER_VERSION "2.3.1"
+#define CONFIGMANAGER_VERSION "2.4.0"
 
 
 // ConfigOptions must be defined before any usage in Config<T>
@@ -36,7 +44,12 @@ struct ConfigOptions {
 #pragma once
 
 
+// Server abstraction
+#ifdef USE_ASYNC_WEBSERVER
+extern AsyncWebServer server; // defined in main when async mode
+#else
 extern WebServer server;
+#endif
 class ConfigManagerClass; // Forward declaration
 
 enum class SettingType { BOOL, INT, FLOAT, STRING, PASSWORD };
@@ -481,12 +494,69 @@ public:
     }
 
     void handleClient() {
+#ifndef USE_ASYNC_WEBSERVER
         server.handleClient();
+#endif
     }
 
+#ifdef ENABLE_WEBSOCKET_PUSH
+    // Call frequently from loop() in async builds
+    void handleWebsocketPush(){
+        if(!_wsEnabled) return;
+        unsigned long now = millis();
+        if (now - _wsLastPush < _wsInterval) return;
+        _wsLastPush = now;
+        pushRuntimeNow();
+    }
+    void enableWebSocketPush(uint32_t intervalMs = 2000){
+#ifdef USE_ASYNC_WEBSERVER
+        if(!_wsInitialized){
+            _ws = new AsyncWebSocket("/ws");
+            _ws->onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len){
+                if(type == WS_EVT_CONNECT){ log_message("[WS] Client connect %u", client->id()); if(_pushOnConnect) pushRuntimeNow(); }
+                else if(type == WS_EVT_DISCONNECT){ log_message("[WS] Client disconnect %u", client->id()); }
+                else if(type == WS_EVT_DATA){ /* ignore */ }
+            });
+            server.addHandler(_ws);
+            _wsInitialized = true;
+            log_message("[WS] Handler registered at /ws");
+        }
+        _wsInterval = intervalMs;
+        _wsEnabled = true;
+        log_message("[WS] Push enabled interval=%lu ms", (unsigned long)_wsInterval);
+        // Immediate first push so UI does not wait for first interval
+        pushRuntimeNow();
+#endif
+    }
+    void disableWebSocketPush(){ _wsEnabled = false; }
+    void setWebSocketInterval(uint32_t intervalMs){ _wsInterval = intervalMs; }
+    void setPushOnConnect(bool v){ _pushOnConnect = v; }
+    // Optional external payload hook
+    void setCustomLivePayloadBuilder(std::function<String()> fn){ _customPayloadBuilder = fn; }
+    void pushRuntimeNow(){
+#ifdef USE_ASYNC_WEBSERVER
+        if(!_wsInitialized || !_wsEnabled) return;
+        String payload;
+        if(_customPayloadBuilder){ payload = _customPayloadBuilder(); }
+        else {
+#ifdef ENABLE_LIVE_VALUES
+            payload = runtimeValuesToJSON();
+#else
+            // minimal fallback
+            DynamicJsonDocument d(128); d["uptime"]=millis(); serializeJson(d, payload);
+#endif
+        }
+        _ws->textAll(payload);
+#endif
+    }
+#endif // ENABLE_WEBSOCKET_PUSH
+
     void handleClientSecure() {
-        server.handleClient();
-        // secureServer->handleClient();
+    // Only meaningful for sync (blocking) WebServer variant
+#ifndef USE_ASYNC_WEBSERVER
+    server.handleClient();
+#endif
+    // secureServer->handleClient(); (future TLS hook)
     }
 
     void reconnectWifi() {
@@ -668,27 +738,27 @@ public:
     void defineRoutes() {
         log_message("🌐 Defining routes...");
 
-        // Serve version at /version
-        server.on("/version", HTTP_GET, []() {
-            server.send(200, "text/plain", CONFIGMANAGER_VERSION);
-        });
+    // Serve version at /version
+#ifdef USE_ASYNC_WEBSERVER
+    server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", CONFIGMANAGER_VERSION);
+    });
+#else
+    server.on("/version", HTTP_GET, []() {
+        server.send(200, "text/plain", CONFIGMANAGER_VERSION);
+    });
+#endif
 
+        // Legacy HTTP OTA upload only supported in sync server variant
+#ifndef USE_ASYNC_WEBSERVER
         server.on("/ota_update", HTTP_GET, [this]() {
             String html = R"(
-                <!DOCTYPE html>
-                <html>
-                <body>
-                    <h2>OTA Update</h2>
-                    <form method='POST' action='/ota_update' enctype='multipart/form-data'>
-                        <input type='file' keyName='firmware'>
-                        <input type='submit' value='Update'>
-                    </form>
-                </body>
-                </html>
-            )";
+<!DOCTYPE html><html><body><h2>OTA Update (Sync)</h2>
+<form method='POST' action='/ota_update' enctype='multipart/form-data'>
+<input type='file' keyName='firmware'><input type='submit' value='Update'>
+</form></body></html>)";
             server.send(200, "text/html", html);
         });
-
         server.on("/ota_update", HTTP_POST, [this]() {
             server.sendHeader("Connection", "close");
             server.send(200, "text/plain", Update.hasError() ? "UPDATE FAILED" : "UPDATE SUCCESS");
@@ -696,197 +766,254 @@ public:
         }, [this]() {
             HTTPUpload& upload = server.upload();
             if (upload.status == UPLOAD_FILE_START) {
-                Serial.printf("Update: %s\n", upload.filename.c_str());
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-                    Update.printError(Serial);
-                }
+                log_message("Update: %s", upload.filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { Update.printError(Serial); }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
-                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-                    Update.printError(Serial);
-                }
+                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) { Update.printError(Serial); }
             } else if (upload.status == UPLOAD_FILE_END) {
-                if (Update.end(true)) {
-                    Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
-                } else {
-                    Update.printError(Serial);
-                }
+                if (Update.end(true)) { log_message("Update Success: rebooting"); } else { Update.printError(Serial); }
             }
         });
-
-        // Reset to Defaults
-        server.on("/config/reset", HTTP_POST, [this]() {
-            for (auto *s : settings) s->setDefault();
-            saveAll();
-            log_message("🌐 All settings reset to default");
-            server.send(200, "application/json", "{\"status\":\"reset\"}");
+#else
+        server.on("/ota_update", HTTP_GET, [](AsyncWebServerRequest *request){
+            request->send(200, "text/plain", "HTTP OTA form only available in sync build. Use ArduinoOTA / network upload.");
         });
+#endif
+
+    // Reset to Defaults
+#ifdef USE_ASYNC_WEBSERVER
+    server.on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest *request){
+        for (auto *s : settings) s->setDefault();
+        saveAll();
+        log_message("🌐 All settings reset to default");
+        request->send(200, "application/json", "{\"status\":\"reset\"}");
+    });
+#else
+    server.on("/config/reset", HTTP_POST, [this]() {
+        for (auto *s : settings) s->setDefault();
+        saveAll();
+        log_message("🌐 All settings reset to default");
+        server.send(200, "application/json", "{\"status\":\"reset\"}");
+    });
+#endif
 
         // Apply single setting
+#ifdef USE_ASYNC_WEBSERVER
+        server.on("/config/apply", HTTP_POST,
+            [this](AsyncWebServerRequest *request){ /* response sent in body handler */ },
+            NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index == 0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index + len == total){
+                    AsyncWebParameter* pCat = request->getParam("category");
+                    if(!pCat) pCat = request->getParam("category", true);
+                    AsyncWebParameter* pKey = request->getParam("key");
+                    if(!pKey) pKey = request->getParam("key", true);
+                    if(!pCat || !pKey){ request->send(400, "application/json", "{\"status\":\"missing_params\"}"); delete body; request->_tempObject=nullptr; return; }
+                    String category = pCat->value();
+                    String key = pKey->value();
+                    log_message("🌐 Apply: %s/%s", category.c_str(), key.c_str());
+                    DynamicJsonDocument doc(256);
+                    DeserializationError err = deserializeJson(doc, *body);
+                    auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
+                    JsonVariant val;
+                    if(!err){ if(doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>(); }
+                    else { doc.clear(); if(body->equalsIgnoreCase("true")||body->equalsIgnoreCase("false")) doc["value"] = body->equalsIgnoreCase("true"); else if(isIntegerString(*body)) doc["value"] = body->toInt(); else doc["value"] = *body; val = doc["value"]; }
+                    for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ String resp = String("{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; request->send(200, "application/json", resp); delete body; request->_tempObject=nullptr; return;} else { request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"invalid_value\"}"); delete body; request->_tempObject=nullptr; return;} } }
+                    request->send(404, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"not_found\"}"); delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+#else
         server.on("/config/apply", HTTP_POST, [this]() {
             String category = server.arg("category");
             String key = server.arg("key");
-
             log_message("🌐 Apply: %s/%s\n", category.c_str(), key.c_str());
             String body = server.arg("plain");
-            if (body.isEmpty()) {
-                // Fallback: attempt last unnamed arg (legacy behavior)
-                if (server.args() > 0) body = server.arg(server.args() - 1);
-            }
-            log_message("🌐 Apply body: %s", body.c_str());
-
+            if (body.isEmpty() && server.args() > 0) body = server.arg(server.args()-1);
             DynamicJsonDocument doc(256);
             DeserializationError err = deserializeJson(doc, body);
-
-            auto isIntegerString = [](const String &s)->bool {
-                if (!s.length()) return false;
-                int start = 0;
-                if (s[0] == '-' && s.length() > 1) start = 1;
-                for (int i = start; i < (int)s.length(); ++i) {
-                    if (s[i] < '0' || s[i] > '9') return false;
-                }
-                return true;
-            };
-
+            auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
             JsonVariant val;
-            if (!err) {
-                // Accept either {"value":X} or direct literal
-                if (doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>();
-            } else {
-                // Rebuild minimal doc manually
-                doc.clear();
-                if (body.equalsIgnoreCase("true") || body.equalsIgnoreCase("false")) {
-                    doc["value"] = body.equalsIgnoreCase("true");
-                } else if (isIntegerString(body)) {
-                    doc["value"] = body.toInt();
-                } else {
-                    doc["value"] = body;
-                }
-                val = doc["value"];
-            }
-
-            for (auto *s : settings) {
-                if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                    if (s->fromJSON(val)) {
-                        log_message("✅ Setting applied Category: %s, Key: %s", category.c_str(), key.c_str());
-                        server.send(200, "application/json", "{\"status\":\"applied\"}");
-                        return;
-                    } else {
-                        log_message("❌ Apply rejected (invalid value) Category: %s, Key: %s", category.c_str(), key.c_str());
-                        server.send(400, "application/json", "{\"status\":\"invalid_value\"}");
-                        return;
-                    }
-                }
-            }
-
-            log_message("❌ Setting not found for apply");
-            server.send(404, "application/json", "{\"status\":\"not_found\"}");
+            if(!err){ if(doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>(); }
+            else { doc.clear(); if(body.equalsIgnoreCase("true")||body.equalsIgnoreCase("false")) doc["value"] = body.equalsIgnoreCase("true"); else if(isIntegerString(body)) doc["value"] = body.toInt(); else doc["value"] = body; val = doc["value"]; }
+            for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ String resp = String("{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; server.send(200, "application/json", resp); return;} else { server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"invalid_value\"}"); return;} } }
+            server.send(404, "application/json", "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"not_found\"}");
         });
+#endif
 
+        // Apply all
+#ifdef USE_ASYNC_WEBSERVER
+        server.on("/config/apply_all", HTTP_POST,
+            [this](AsyncWebServerRequest *request){}, NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    DynamicJsonDocument doc(1024);
+                    deserializeJson(doc, *body);
+                    if(fromJSON(doc)) request->send(200, "application/json", "{\"status\":\"ok\",\"action\":\"apply_all\"}"); else request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply_all\",\"reason\":\"invalid\"}");
+                    delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+#else
         server.on("/config/apply_all", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
-            log_message("🌐 Applying all settings...");
             deserializeJson(doc, server.arg("plain"));
-            if (fromJSON(doc)) {
-                server.send(200, "application/json", "{\"status\":\"applied\"}");
-            } else {
-                server.send(400, "application/json", "{\"status\":\"invalid\"}");
-            }
+            if (fromJSON(doc)) server.send(200, "application/json", "{\"status\":\"ok\",\"action\":\"apply_all\"}"); else server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"apply_all\",\"reason\":\"invalid\"}");
         });
+#endif
 
         // Save single setting
+#ifdef USE_ASYNC_WEBSERVER
+        server.on("/config/save", HTTP_POST,
+            [this](AsyncWebServerRequest *request){}, NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total);} 
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    AsyncWebParameter* pCat = request->getParam("category");
+                    if(!pCat) pCat = request->getParam("category", true);
+                    AsyncWebParameter* pKey = request->getParam("key");
+                    if(!pKey) pKey = request->getParam("key", true);
+                    if(!pCat || !pKey){ request->send(400, "application/json", "{\"status\":\"missing_params\"}"); delete body; request->_tempObject=nullptr; return; }
+                    String category = pCat->value();
+                    String key = pKey->value();
+                    DynamicJsonDocument doc(256);
+                    DeserializationError err = deserializeJson(doc, *body);
+                    auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
+                    JsonVariant val; if(!err){ if(doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>(); } else { doc.clear(); if(body->equalsIgnoreCase("true")||body->equalsIgnoreCase("false")) doc["value"] = body->equalsIgnoreCase("true"); else if(isIntegerString(*body)) doc["value"] = body->toInt(); else doc["value"] = *body; val = doc["value"]; }
+                    for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ prefs.begin("config", false); s->save(prefs); prefs.end(); String resp = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; request->send(200, "application/json", resp); delete body; request->_tempObject=nullptr; return;} else { request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"invalid_value\"}"); delete body; request->_tempObject=nullptr; return;} } }
+                    request->send(404, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"not_found\"}"); delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+#else
         server.on("/config/save", HTTP_POST, [this]() {
             String category = server.arg("category");
             String key = server.arg("key");
-
-            log_message("🌐 Save: %s/%s\n", category.c_str(), key.c_str());
             String body = server.arg("plain");
-            if (body.isEmpty()) {
-                if (server.args() > 0) body = server.arg(server.args() - 1);
-            }
-            log_message("🌐 Save body: %s", body.c_str());
-
-            DynamicJsonDocument doc(256);
-            DeserializationError err = deserializeJson(doc, body);
-            auto isIntegerString = [](const String &s)->bool {
-                if (!s.length()) return false;
-                int start = 0;
-                if (s[0] == '-' && s.length() > 1) start = 1;
-                for (int i = start; i < (int)s.length(); ++i) {
-                    if (s[i] < '0' || s[i] > '9') return false;
-                }
-                return true;
-            };
-            JsonVariant val;
-            if (!err) {
-                if (doc.containsKey("value")) val = doc["value"]; else val = doc.as<JsonVariant>();
-            } else {
-                doc.clear();
-                if (body.equalsIgnoreCase("true") || body.equalsIgnoreCase("false")) {
-                    doc["value"] = body.equalsIgnoreCase("true");
-                } else if (isIntegerString(body)) {
-                    doc["value"] = body.toInt();
-                } else {
-                    doc["value"] = body;
-                }
-                val = doc["value"];
-            }
-
-            for (auto *s : settings) {
-                if (String(s->getCategory()) == category && String(s->getName()) == key) {
-                    if (s->fromJSON(val)) {
-                        prefs.begin("config", false);
-                        s->save(prefs);
-                        prefs.end();
-                        log_message("✅ Setting saved Category: %s, Key: %s", category.c_str(), key.c_str());
-                        server.send(200, "application/json", "{\"status\":\"saved\"}");
-                        return;
-                    } else {
-                        log_message("❌ Save rejected (invalid value) Category: %s, Key: %s", category.c_str(), key.c_str());
-                        server.send(400, "application/json", "{\"status\":\"invalid_value\"}");
-                        return;
-                    }
-                }
-            }
-
-            log_message("❌ Setting not found for save: %s/%s", category.c_str(), key.c_str());
-            server.send(404, "application/json", "{\"status\":\"not_found\"}");
+            if (body.isEmpty() && server.args()>0) body = server.arg(server.args()-1);
+            DynamicJsonDocument doc(256); DeserializationError err = deserializeJson(doc, body);
+            auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
+            JsonVariant val; if(!err){ if(doc.containsKey("value")) val=doc["value"]; else val=doc.as<JsonVariant>(); } else { doc.clear(); if(body.equalsIgnoreCase("true")||body.equalsIgnoreCase("false")) doc["value"] = body.equalsIgnoreCase("true"); else if(isIntegerString(body)) doc["value"] = body.toInt(); else doc["value"] = body; val = doc["value"]; }
+            for(auto *s: settings){ if(String(s->getCategory())==category && String(s->getName())==key){ if(s->fromJSON(val)){ prefs.begin("config", false); s->save(prefs); prefs.end(); String resp = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"")+category+"\",\"key\":\""+key+"\"}"; server.send(200, "application/json", resp); return; } else { server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"invalid_value\"}"); return; } } }
+            server.send(404, "application/json", "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"not_found\"}");
         });
+#endif
 
-        // Reboot
-        server.on("/config/reboot", HTTP_POST, [this]() {
-            server.send(200, "application/json", "{\"status\":\"rebooting\"}");
-            log_message("🔄 Device rebooting...");
-            delay(100);
-            reboot();
-        });
+    // Reboot
+#ifdef USE_ASYNC_WEBSERVER
+    server.on("/config/reboot", HTTP_POST, [this](AsyncWebServerRequest *request){
+        request->send(200, "application/json", "{\"status\":\"rebooting\"}");
+        log_message("🔄 Device rebooting...");
+        // Schedule reboot after short delay (simple blocking delay acceptable here)
+        delay(100);
+        reboot();
+    });
+#else
+    server.on("/config/reboot", HTTP_POST, [this]() {
+        server.send(200, "application/json", "{\"status\":\"rebooting\"}");
+        log_message("🔄 Device rebooting...");
+        delay(100);
+        reboot();
+    });
+#endif
 
         // Config JSON
-        server.on("/config.json", HTTP_GET, [this]() {
-            server.send(200, "application/json", toJSON());
-        });
+    // Configuration dump
+#ifdef USE_ASYNC_WEBSERVER
+    server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request){
+        request->send(200, "application/json", toJSON());
+    });
+#else
+    server.on("/config.json", HTTP_GET, [this]() {
+        server.send(200, "application/json", toJSON());
+    });
+#endif
+
+#ifdef ENABLE_LIVE_VALUES
+    // Live runtime values (polling JSON)
+#ifdef USE_ASYNC_WEBSERVER
+    server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){
+        request->send(200, "application/json", runtimeValuesToJSON());
+    });
+    server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){
+        request->send(200, "application/json", runtimeMetaToJSON());
+    });
+#else
+    server.on("/runtime.json", HTTP_GET, [this]() {
+        server.send(200, "application/json", runtimeValuesToJSON());
+    });
+    server.on("/runtime_meta.json", HTTP_GET, [this]() {
+        server.send(200, "application/json", runtimeMetaToJSON());
+    });
+#endif
+#endif // ENABLE_LIVE_VALUES
 
         // Save all settings
+#ifdef USE_ASYNC_WEBSERVER
+        server.on("/config/save_all", HTTP_POST,
+            [this](AsyncWebServerRequest *request){}, NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total);} 
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    DynamicJsonDocument doc(1024);
+                    deserializeJson(doc, *body);
+                    if(fromJSON(doc)){ saveAll(); request->send(200, "application/json", "{\"status\":\"ok\",\"action\":\"save_all\"}"); } else { request->send(400, "application/json", "{\"status\":\"error\",\"action\":\"save_all\",\"reason\":\"invalid\"}"); }
+                    delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+#else
         server.on("/config/save_all", HTTP_POST, [this]() {
             DynamicJsonDocument doc(1024);
-            log_message("🌐 Saving all settings...");
             deserializeJson(doc, server.arg("plain"));
-            if (fromJSON(doc)) {
-                saveAll();
-                server.send(200, "application/json", "{\"status\":\"saved\"}");
-            } else {
-                server.send(400, "application/json", "{\"status\":\"invalid\"}");
-            }
+            if (fromJSON(doc)) { saveAll(); server.send(200, "application/json", "{\"status\":\"ok\",\"action\":\"save_all\"}"); }
+            else server.send(400, "application/json", "{\"status\":\"error\",\"action\":\"save_all\",\"reason\":\"invalid\"}");
         });
+#endif
 
     // Root (serves embedded SPA)
+#ifdef USE_ASYNC_WEBSERVER
+        server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request){
+            request->send_P(200, "text/html", webhtml.getWebHTML());
+        });
+#else
         server.on("/", HTTP_GET, [this]() {
             server.send_P(200, "text/html", webhtml.getWebHTML());
         });
+#endif
 
+#ifdef USE_ASYNC_WEBSERVER
+        server.on("/", HTTP_POST,
+            [this](AsyncWebServerRequest *request){ /* response sent after body parsed */ },
+            NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total);} 
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    log_message("🌐 Received POST request to root route");
+                    log_message("🌐 Body: %s", body->c_str());
+                    request->send(200, "text/plain", "OK");
+                    delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+#else
         server.on("/", HTTP_POST, [this]() {
             log_message("🌐 Received POST request to root route");
             log_message("🌐 Body: %s", server.arg("plain"));
         });
+#endif
 
         log_message("🌐 Routes defined successfully");
     }
@@ -1033,6 +1160,153 @@ public:
     private:
         Preferences prefs;
         std::vector<BaseSetting *> settings;
+        
+#ifdef ENABLE_LIVE_VALUES
+        // ---- Runtime (non-persistent) value providers ----
+    public:
+        struct RuntimeValueProvider {
+            String name; // object name in JSON root
+            std::function<void(JsonObject&)> fill; // called to populate nested object
+        };
+
+        struct RuntimeFieldMeta {
+            String group;        // provider name (e.g. sensors/system)
+            String key;          // field key inside provider object
+            String label;        // human readable label
+            String unit;         // optional unit (e.g. °C, %, dBm)
+            int precision = 1;   // decimals for floats
+            bool isBool = false; // render as boolean indicator
+            bool hasAlarm = false; // whether this boolean participates in alarm coloring/blink
+            bool alarmWhenTrue = false; // if hasAlarm && isBool: true=>alarm else false=>alarm (default true alarm)
+            // Optional threshold ranges (for numeric coloring)
+            bool hasWarnMin = false; float warnMin = 0;
+            bool hasWarnMax = false; float warnMax = 0;
+            bool hasAlarmMin = false; float alarmMin = 0;
+            bool hasAlarmMax = false; float alarmMax = 0;
+        };
+
+        // Backward-compatible minimal definition
+        void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; _runtimeMeta.push_back(m);
+        }
+        // Extended with thresholds (pass NAN or omit to skip)
+        void defineRuntimeFieldThresholds(
+            const String &group, const String &key, const String &label, const String &unit,
+            int precision,
+            float warnMin, float warnMax,
+            float alarmMin, float alarmMax,
+            bool enableWarnMin = true, bool enableWarnMax = true,
+            bool enableAlarmMin = true, bool enableAlarmMax = true
+        ){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision;
+            if(enableWarnMin){ m.hasWarnMin = true; m.warnMin = warnMin; }
+            if(enableWarnMax){ m.hasWarnMax = true; m.warnMax = warnMax; }
+            if(enableAlarmMin){ m.hasAlarmMin = true; m.alarmMin = alarmMin; }
+            if(enableAlarmMax){ m.hasAlarmMax = true; m.alarmMax = alarmMax; }
+            _runtimeMeta.push_back(m);
+        }
+        // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics.
+        // alarmWhenTrue=true  -> true state is alarm
+        // alarmWhenTrue=false -> no alarm unless explicitly toggled via hasAlarm parameter (future extension)
+        void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; 
+            if(alarmWhenTrue){ m.hasAlarm = true; m.alarmWhenTrue = true; }
+            _runtimeMeta.push_back(m);
+        }
+
+        void addRuntimeProvider(const RuntimeValueProvider &p){ runtimeProviders.push_back(p); }
+
+        String runtimeValuesToJSON(){
+            DynamicJsonDocument d(1024);
+            JsonObject root = d.to<JsonObject>();
+            root["uptime"] = millis();
+            for(auto &prov : runtimeProviders){
+                JsonObject slot = root.createNestedObject(prov.name);
+                if (prov.fill) prov.fill(slot);
+            }
+            // expose active alarms by name (boolean map)
+            if(!_runtimeAlarms.empty()){
+                JsonObject alarms = root.createNestedObject("alarms");
+                for(auto &a : _runtimeAlarms){ alarms[a.name] = a.active; }
+            }
+            String out; serializeJson(d, out); return out;
+        }
+        String runtimeMetaToJSON(){
+            DynamicJsonDocument d(2048);
+            JsonArray arr = d.to<JsonArray>();
+            for(auto &m : _runtimeMeta){
+                JsonObject o = arr.createNestedObject();
+                o["group"] = m.group;
+                o["key"] = m.key;
+                o["label"] = m.label;
+                if(m.unit.length()) o["unit"] = m.unit;
+                o["precision"] = m.precision;
+                if(m.isBool) o["isBool"] = true;
+                if(m.isBool && m.hasAlarm){
+                    o["hasAlarm"] = true;
+                    if(m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false if omitted
+                }
+                // include thresholds only if defined to keep payload compact
+                if(m.hasWarnMin) o["warnMin"] = m.warnMin;
+                if(m.hasWarnMax) o["warnMax"] = m.warnMax;
+                if(m.hasAlarmMin) o["alarmMin"] = m.alarmMin;
+                if(m.hasAlarmMax) o["alarmMax"] = m.alarmMax;
+            }
+            String out; serializeJson(d, out); return out;
+        }
+    private:
+        std::vector<RuntimeValueProvider> runtimeProviders;
+        std::vector<RuntimeFieldMeta> _runtimeMeta;
+        // Cross-field runtime alarms
+        struct RuntimeAlarm {
+            String name; // identifier
+            std::function<bool(const JsonObject&)> condition; // receives merged runtime JSON root
+            std::function<void()> onEnter; // called when condition becomes true
+            std::function<void()> onExit;  // called when condition leaves true
+            bool active = false; // current state
+        };
+        std::vector<RuntimeAlarm> _runtimeAlarms;
+    public:
+        void defineRuntimeAlarm(const String &name,
+                                std::function<bool(const JsonObject&)> condition,
+                                std::function<void()> onEnter = nullptr,
+                                std::function<void()> onExit = nullptr){
+            _runtimeAlarms.push_back({name,condition,onEnter,onExit,false});
+        }
+        void handleRuntimeAlarms(){
+            if(_runtimeAlarms.empty()) return;
+            // Build a transient runtime JSON document (reuse existing builder without string serialize)
+            DynamicJsonDocument d(768);
+            JsonObject root = d.to<JsonObject>();
+            root["uptime"] = millis();
+            for(auto &prov : runtimeProviders){
+                JsonObject slot = root.createNestedObject(prov.name);
+                if (prov.fill) prov.fill(slot);
+            }
+            for(auto &al : _runtimeAlarms){
+                bool cond = false;
+                if(al.condition){
+                    try { cond = al.condition(root); } catch(...){ cond = false; }
+                }
+                if(cond && !al.active){
+                    al.active = true; if(al.onEnter) al.onEnter();
+                } else if(!cond && al.active){
+                    al.active = false; if(al.onExit) al.onExit();
+                }
+            }
+        }
+#endif
+#ifdef ENABLE_WEBSOCKET_PUSH
+    private:
+        AsyncWebSocket* _ws = nullptr;
+        bool _wsInitialized = false;
+        bool _wsEnabled = false;
+        bool _pushOnConnect = true;
+        uint32_t _wsInterval = 2000;
+        unsigned long _wsLastPush = 0;
+        std::function<String()> _customPayloadBuilder;
+    public:
+#endif
         WebHTML webhtml;
         static LogCallback logger;
 

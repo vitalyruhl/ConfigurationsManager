@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.3.1
+> Version 2.4.0
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
@@ -49,6 +49,188 @@ description = ESP32 C++17 Project for managing settings
 - 📡 AP Mode fallback / captive portal style entry
 - 🚀 OTA firmware upload endpoint
 - 🧪 Simple unit test scaffold (`test/basictest.cpp`)
+- 🔴 Optional live runtime values (`/runtime.json`) when built with feature flags
+- 🔁 Optional WebSocket push channel (`/ws`) in async build (`env:async`)
+  - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
+
+### Live Runtime Values & Alarm System (since 2.4.x)
+
+![Live Runtime Values & Alarm System](examples/live-values.jpg)
+
+The library can expose non‑persistent runtime / sensor values to the web UI and (optionally) over a WebSocket channel for low‑latency updates.
+
+Key building blocks:
+
+1. **Runtime Providers** (`addRuntimeProvider`)
+
+Provide a lambda that fills a nested JSON object under its name each time a payload is built.
+
+```cpp
+cfg.addRuntimeProvider({
+  .name = "sensors",
+  .fill = [](JsonObject &o){
+      o["temp"] = currentTemp;
+      o["hum"]  = currentHumidity;
+      o["dew"]  = dewPoint;
+  }
+});
+```
+
+2. **Runtime Field Metadata**
+
+Define how each field should be rendered (precision, unit) or evaluated (warn/alarm thresholds, boolean semantics) by the frontend.
+
+```cpp
+cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
+    /*warnMin*/ 1.0f, /*warnMax*/ 30.0f,
+    /*alarmMin*/ 0.0f, /*alarmMax*/ 32.0f,
+    true,true,true,true
+);
+cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1); // plain (no thresholds)
+```
+
+Frontend consumes `/runtime_meta.json` → groups, units, precision, thresholds.
+
+3. **Boolean Runtime Fields**
+
+```cpp
+// Plain (no alarm styling)
+cfg.defineRuntimeBool("flags", "tempToggle", "Temp Toggle", false);
+// Alarm boolean (blink red when true, green when safe)
+cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true);
+```
+
+Metadata adds: `isBool`, `hasAlarm`, `alarmWhenTrue` (omitted if false). Frontend derives styling:
+
+- Alarm bool safe → solid green dot  
+- Alarm bool active → blinking red  
+- Plain bool true → green, false → white outline
+
+4. **Cross‑Field Alarms** (`defineRuntimeAlarm`)
+
+Allows conditions spanning multiple providers/fields. Each alarm has:
+
+- `name`  
+- `condition(JsonObject &root)` → returns bool  
+- `onEnter()` callback (fires once when condition becomes true)  
+- `onExit()` callback (fires once when condition falls back to false)
+
+```cpp
+cfg.defineRuntimeAlarm(
+  "dewpoint_risk",
+  [](const JsonObject &root){
+      if(!root.containsKey("sensors")) return false;
+      auto sensors = root["sensors"].as<JsonObject>();
+      if(!sensors.containsKey("temp") || !sensors.containsKey("dew")) return false;
+      float t = sensors["temp"].as<float>();
+      float d = sensors["dew"].as<float>();
+      return (t - d) <= 5.0f; // risk window (≤5°C above dew point)
+  },
+  [](){ Serial.println("[ALARM] Dewpoint proximity risk ENTER"); },
+  [](){ Serial.println("[ALARM] Dewpoint proximity risk EXIT"); }
+);
+```
+
+Active alarm states are added to `/runtime.json` under an `alarms` object:
+
+```json
+{
+  "uptime": 123456,
+  "sensors": { "temp": 21.3, "hum": 44.8, "dew": 10.2 },
+  "alarms": { "dewpoint_risk": true }
+}
+```
+
+5. **Relay / Actuator Integration Example**
+
+A temperature minimum alarm driving a heater relay with hysteresis:
+
+```cpp
+#define RELAY_HEATER_PIN 25
+pinMode(RELAY_HEATER_PIN, OUTPUT);
+digitalWrite(RELAY_HEATER_PIN, LOW); // assume LOW = off
+
+cfg.defineRuntimeAlarm(
+  "temp_low",
+  [](const JsonObject &root){
+      static bool active = false; // hysteresis state
+      if(!root.containsKey("sensors")) return false;
+      auto sensors = root["sensors"].as<JsonObject>();
+      if(!sensors.containsKey("temp")) return false;
+      float t = sensors["temp"].as<float>();
+      if(active) active = (t < 0.5f); // release above +0.5°C
+      else       active = (t < 0.0f); // enter below 0.0°C
+      return active;
+  },
+  [](){ Serial.println("[ALARM] temp_low ENTER -> heater ON"); digitalWrite(RELAY_HEATER_PIN, HIGH); },
+  [](){ Serial.println("[ALARM] temp_low EXIT -> heater OFF"); digitalWrite(RELAY_HEATER_PIN, LOW); }
+);
+```
+
+6. **Evaluating Alarms**
+
+Call periodically in `loop()` (a lightweight internal merge of runtime JSON + condition checks):
+
+```cpp
+cfg.handleRuntimeAlarms();
+```
+
+You can adjust frequency (e.g. every 1–3s) depending on responsiveness needed.
+
+7. **WebSocket Push**
+
+When compiled with async + `ENABLE_WEBSOCKET_PUSH`:
+
+```cpp
+cfg.enableWebSocketPush(2000);   // broadcast every 2s
+cfg.handleWebsocketPush();       // call in loop()
+```
+
+Frontend auto‑switches: WebSocket → fallback polling (`/runtime.json`).
+
+8. **Custom Payload (Optional)**
+
+Override the generated payload:
+
+```cpp
+cfg.setCustomLivePayloadBuilder([](){
+    DynamicJsonDocument d(256);
+    d["uptime"] = millis();
+    d["heap"] = ESP.getFreeHeap();
+    String out; serializeJson(d, out); return out;
+});
+```
+
+9. **Frontend Rendering Logic (Summary)**
+
+- Uses `/runtime_meta.json` for grouping, units, thresholds, boolean semantics.  
+- `/runtime.json` supplies live values + `alarms` map.  
+- Alarm booleans blink slower (1.6s) for readability; numeric threshold violations use color + blink.
+
+10. **Memory / Footprint Notes**
+
+- Runtime doc buffers kept modest (1–2 KB per build) – adjust if you add many providers/fields.  
+- Keep provider `fill` lambdas fast; avoid blocking IO inside them.
+
+### Minimal End‑to‑End Example (Live + Alarm)
+```cpp
+// Setup (after WiFi):
+cfg.addRuntimeProvider({ .name="sys", .fill = [](JsonObject &o){ o["heap"] = ESP.getFreeHeap(); }});
+cfg.defineRuntimeField("sys", "heap", "Free Heap", "B", 0);
+cfg.addRuntimeProvider({ .name="env", .fill = [](JsonObject &o){ o["temp"] = readTempSensor(); }});
+cfg.defineRuntimeFieldThresholds("env", "temp", "Temperature", "°C", 1,
+   5.0f, 30.0f,   // warn range
+   0.0f, 40.0f,   // alarm range
+   true,true,true,true);
+cfg.defineRuntimeAlarm("too_cold",
+   [](const JsonObject &root){ return root["env"]["temp"].as<float>() < 0.0f; },
+   [](){ Serial.println("cold ENTER"); },
+   [](){ Serial.println("cold EXIT"); }
+);
+cfg.enableWebSocketPush(1500);
+```
+
+---
 
 ## Requirements
 
@@ -202,6 +384,59 @@ Set `.isPassword = true` to mask in UI. The backend stores the real value; UI ob
 pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 ```
 
+### Async Build & Live Values
+
+To build with AsyncWebServer + runtime live values + WebSocket push:
+
+```bash
+pio run -e async -t upload
+```
+
+If WebSocket isn't available (older firmware or flags disabled), the frontend automatically falls back to polling `/runtime.json` every 2 seconds.
+
+### Runtime Providers & WebSocket API
+
+Register a provider (only compiled when `-DENABLE_LIVE_VALUES`):
+
+```cpp
+cfg.addRuntimeProvider({
+  .name = "sensors",
+  .fill = [](JsonObject& o){
+      o["temp"] = readTemp();
+      o["hum"]  = readHum();
+  }
+});
+```
+
+Enable WebSocket push (only when `USE_ASYNC_WEBSERVER` + `ENABLE_WEBSOCKET_PUSH`):
+
+```cpp
+cfg.enableWebSocketPush(1500); // push every 1.5s
+```
+
+In your loop (async build):
+
+```cpp
+cfg.handleWebsocketPush(); // handles interval + broadcast
+```
+
+Provide custom payload instead of auto runtime JSON:
+
+```cpp
+cfg.setCustomLivePayloadBuilder([](){
+    DynamicJsonDocument d(256);
+    d["uptime"] = millis();
+    d["heap"] = ESP.getFreeHeap();
+    String out; serializeJson(d, out); return out;
+});
+```
+
+Immediate manual push:
+```cpp
+cfg.pushRuntimeNow();
+```
+
+
 1. Include the ConfigurationsManager library in your project.
 
 ```cpp
@@ -262,7 +497,11 @@ pio run -e usb -t clean
 - **2.2.0**: add optional pretty category names, convert static HTML to Vue3 project for better maintainability
 - **2.3.0**: introduce `ConfigOptions<T>` aggregate initialization (breaking style update) + dynamic `showIf` visibility + improved front-end auto-refresh
 - **2.3.1**: added multiple `startWebServer` static IP overloads, refactored connection logic, suppressed noisy NOT_FOUND NVS messages when keys absent, updated README
-
+- **2.4.0**: added live values over json and websocket (async build only) to show runtime values like temperature, humidity or other sensor values on webinterface
+  - Added runtime metadata (`/runtime_meta.json`) for units / precision / thresholds / boolean semantics
+  - Added boolean alarm styling & safe/alarm states
+  - Added cross‑field alarm registry (`defineRuntimeAlarm`)
+  - Added relay control example via alarm callbacks
 
 ## ToDo
 
