@@ -1,20 +1,15 @@
 #include <Arduino.h>
 #include "ConfigManager.h"
-#include <Ticker.h> // for read temperture periodically
-#include <BME280_I2C.h> // Include BME280 library Teperature and Humidity sensor
-// Web server selection (sync vs async)
-#ifdef USE_ASYNC_WEBSERVER
+#include <Ticker.h> // for read temperature periodically
+#include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
+// Always async web server now
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 AsyncWebServer server(80);
-#else
-#include <WebServer.h>
-WebServer server(80);
-#endif
 // #include <WiFiClientSecure.h>
 
 
-#define VERSION "V2.4.0"
+#define VERSION "V2.4.1"
 
 #define BUTTON_PIN_AP_MODE 13
 // Relay (Heater) output pin (adjust to your wiring). Choose a free GPIO that can drive the relay.
@@ -358,7 +353,6 @@ void setup()
 
 
 
-#ifdef ENABLE_LIVE_VALUES
     // Register example runtime provider
     cfg.addRuntimeProvider({
         .name = "system",
@@ -455,7 +449,6 @@ void setup()
         }
     );
     cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true); // show as bool alarm when true in UI
-#endif
 
     SetupStartTemperatureMeasuring();
     //-----------------------------------------------------------------
@@ -529,10 +522,8 @@ void setup()
     }
 
 
-    // Enable WebSocket push if compiled with flags
-#if defined(USE_ASYNC_WEBSERVER) && defined(ENABLE_WEBSOCKET_PUSH)
+    // Enable WebSocket push (always available)
     cfg.enableWebSocketPush(2000); // 2s Interval
-#endif
     delay(1500);
     if (WiFi.status() == WL_CONNECTED && generalSettings.allowOTA.get()) {
         cfg.setupOTA("Ota-esp32-device", generalSettings.otaPassword.get().c_str());
@@ -574,9 +565,7 @@ void loop()
     }
 
     cfg.handleClient();
-#if defined(ENABLE_WEBSOCKET_PUSH)
     cfg.handleWebsocketPush();
-#endif
     // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
     static unsigned long lastAlarmEval = 0; if(millis() - lastAlarmEval > 1500){ lastAlarmEval = millis(); cfg.handleRuntimeAlarms(); }
     cfg.handleOTA();
