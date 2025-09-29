@@ -19,7 +19,16 @@
         <div class="card" v-for="group in runtimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
           <template v-for="f in group.fields" :key="f.key">
-            <p v-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
+            <!-- Divider rendering -->
+            <hr v-if="f.isDivider" class="rt-divider" :data-label="f.label" />
+            <!-- Pure string (static or dynamic) -->
+            <p v-else-if="f.isString" class="rt-string">
+              <strong>{{ f.label }}</strong>
+              <span v-if="f.staticValue">: {{ f.staticValue }}</span>
+              <span v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined">: {{ runtime[group.name][f.key] }}</span>
+            </p>
+            <!-- Boolean / Numeric -->
+            <p v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
                :class="valueClasses(runtime[group.name][f.key], f)">
               <template v-if="f.isBool">
                 <span class="bool-dot" :class="boolDotClass(runtime[group.name][f.key], f)"></span>
@@ -273,10 +282,11 @@ function buildRuntimeGroups(){
       grouped[m.group].fields.push({ 
         key: m.key, label: m.label, unit: m.unit, precision: m.precision,
         warnMin: m.warnMin, warnMax: m.warnMax, alarmMin: m.alarmMin, alarmMax: m.alarmMax,
-        isBool: m.isBool, hasAlarm: m.hasAlarm || false, alarmWhenTrue: m.alarmWhenTrue || false
+        isBool: m.isBool, hasAlarm: m.hasAlarm || false, alarmWhenTrue: m.alarmWhenTrue || false,
+        isString: m.isString || false, isDivider: m.isDivider || false, staticValue: m.staticValue || '', order: m.order !== undefined ? m.order : 100
       });
     }
-    runtimeGroups.value = Object.values(grouped);
+    runtimeGroups.value = Object.values(grouped).map(g=>{ g.fields.sort((a,b)=>{ if(a.isDivider && b.isDivider) return a.order - b.order; if(a.order === b.order) return a.label.localeCompare(b.label); return a.order - b.order; }); return g; });
     return;
   }
   const fallback = [];
@@ -334,6 +344,9 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .bool-dot.off { background:#fff; border:1px solid #888; }
 .bool-dot.alarm { background:#d00000; animation: blink 1.6s linear infinite; }
 .bool-dot.safe { background:#2ecc71; }
+.rt-divider { border:0; border-top:1px solid #ccc; margin:.6rem 0 .4rem; position:relative; }
+.rt-divider:before { content: attr(data-label); position:absolute; top:-0.7rem; left:.4rem; background:#fff; padding:0 .3rem; font-size:.65rem; color:#999; letter-spacing:.05em; }
+.rt-string { font-size:.85rem; margin:.25rem 0; color:#333; }
 /* Slow down blink for readability */
 .live-status { text-align:center; margin-top:1rem; font-size:.85rem; color:#555; }
 h2 { color:#3498db; margin-top:0; border-bottom:2px solid #3498db; padding-bottom:10px; font-size:1.2rem; }

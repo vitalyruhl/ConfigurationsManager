@@ -229,6 +229,40 @@ cfg.defineRuntimeAlarm("too_cold",
 cfg.enableWebSocketPush(1500);
 ```
 
+#### New in 2.4.2 (Unreleased): Runtime String Fields, Dividers & Ordering
+
+You can enrich the Live view with informational text lines and visual separators and control ordering.
+
+```cpp
+// String value (dynamic: taken from provider runtime JSON key "fw")
+cfg.defineRuntimeString("system", "fw", "Firmware", CONFIGMANAGER_VERSION);
+
+// Static string (not looked up in /runtime.json)
+cfg.defineRuntimeString("system", "build", "Build", "2025-09-29", /*order*/ 5);
+
+// Divider at top of sensors group
+cfg.defineRuntimeDivider("sensors", "Environment", 0);
+
+// Ordered numeric fields
+cfg.defineRuntimeField("sensors", "temp", "Temperature", "°C", 1, /*order*/ 10);
+cfg.defineRuntimeField("sensors", "hum", "Humidity", "%", 1, /*order*/ 20);
+
+// Provider (card) ordering
+cfg.setRuntimeProviderOrder("system", 1);
+cfg.setRuntimeProviderOrder("sensors", 5);
+```
+
+Metadata additions in `/runtime_meta.json`:
+
+| Key | Meaning |
+|-----|---------|
+| `isString` | Render as plain text value (no unit/precision formatting) |
+| `isDivider` | Render a horizontal rule with label |
+| `staticValue` | Value to show even if absent from `/runtime.json` |
+| `order` | Sort hint (lower first). Default 100 |
+
+Older frontends ignore these keys gracefully.
+
 ---
 
 ## Requirements

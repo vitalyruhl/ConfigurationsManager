@@ -983,8 +983,9 @@ public:
     // ---- Runtime (non-persistent) value providers (always enabled) ----
     public:
         struct RuntimeValueProvider {
-            String name; // object name in JSON root
+            String name;                 // object name in JSON root
             std::function<void(JsonObject&)> fill; // called to populate nested object
+            int order = 100;             // ordering weight (lower first)
         };
 
         struct RuntimeFieldMeta {
@@ -1001,11 +1002,16 @@ public:
             bool hasWarnMax = false; float warnMax = 0;
             bool hasAlarmMin = false; float alarmMin = 0;
             bool hasAlarmMax = false; float alarmMax = 0;
+            // 2025.09.29 Extensions:
+            bool isString = false;    // show raw string value (no numeric formatting)
+            String staticString;      // optional fixed string content (if not from runtime.json)
+            bool isDivider = false;   // UI should render a visual separator / heading
+            int order = 100;          // relative ordering inside group (lower first)
         };
 
         // Backward-compatible minimal definition
-        void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; _runtimeMeta.push_back(m);
+        void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1, int order = 100){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order; _runtimeMeta.push_back(m);
         }
         // Extended with thresholds (pass NAN or omit to skip)
         void defineRuntimeFieldThresholds(
@@ -1014,9 +1020,10 @@ public:
             float warnMin, float warnMax,
             float alarmMin, float alarmMax,
             bool enableWarnMin = true, bool enableWarnMax = true,
-            bool enableAlarmMin = true, bool enableAlarmMax = true
+            bool enableAlarmMin = true, bool enableAlarmMax = true,
+            int order = 100
         ){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision;
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order;
             if(enableWarnMin){ m.hasWarnMin = true; m.warnMin = warnMin; }
             if(enableWarnMax){ m.hasWarnMax = true; m.warnMax = warnMax; }
             if(enableAlarmMin){ m.hasAlarmMin = true; m.alarmMin = alarmMin; }
@@ -1026,10 +1033,25 @@ public:
         // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics.
         // alarmWhenTrue=true  -> true state is alarm
         // alarmWhenTrue=false -> no alarm unless explicitly toggled via hasAlarm parameter (future extension)
-        void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; 
+        void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false, int order = 100){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; m.order=order;
             if(alarmWhenTrue){ m.hasAlarm = true; m.alarmWhenTrue = true; }
             _runtimeMeta.push_back(m);
+        }
+
+        // New: string (non-numeric, non-boolean) runtime label & value. If key is empty, acts as standalone display entry.
+        void defineRuntimeString(const String &group, const String &key, const String &label, const String &staticValue = String(), int order = 100){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isString=true; m.order=order; m.staticString = staticValue; _runtimeMeta.push_back(m);
+        }
+        // New: divider/separator inside a group. Key becomes unique synthetic id (e.g., "_div_<n>").
+        void defineRuntimeDivider(const String &group, const String &label, int order = 100){
+            static int dividerCounter = 0; // local static counter
+            RuntimeFieldMeta m; m.group=group; m.key = String("_div_") + String(++dividerCounter); m.label=label; m.isDivider=true; m.order=order; _runtimeMeta.push_back(m);
+        }
+
+        // Set / override provider order
+        void setRuntimeProviderOrder(const String &provider, int order){
+            for(auto &p : runtimeProviders){ if(p.name == provider){ p.order = order; return; } }
         }
 
         void addRuntimeProvider(const RuntimeValueProvider &p){ runtimeProviders.push_back(p); }
@@ -1038,9 +1060,14 @@ public:
             DynamicJsonDocument d(1024);
             JsonObject root = d.to<JsonObject>();
             root["uptime"] = millis();
-            for(auto &prov : runtimeProviders){
+            // Sort providers by order
+            std::vector<RuntimeValueProvider> provSorted = runtimeProviders;
+            std::sort(provSorted.begin(), provSorted.end(), [](const RuntimeValueProvider &a, const RuntimeValueProvider &b){ return a.order < b.order; });
+            for(auto &prov : provSorted){
                 JsonObject slot = root.createNestedObject(prov.name);
                 if (prov.fill) prov.fill(slot);
+                // Inject static string slots for entries that have a staticString but no key in runtime JSON
+                // (Handled in meta consumer; here we only expose actual values, static ones are not added to reduce payload
             }
             // expose active alarms by name (boolean map)
             if(!_runtimeAlarms.empty()){
@@ -1052,7 +1079,13 @@ public:
         String runtimeMetaToJSON(){
             DynamicJsonDocument d(2048);
             JsonArray arr = d.to<JsonArray>();
-            for(auto &m : _runtimeMeta){
+            // Sort by group, then order, then label
+            std::vector<RuntimeFieldMeta> metaSorted = _runtimeMeta;
+            std::sort(metaSorted.begin(), metaSorted.end(), [](const RuntimeFieldMeta &a, const RuntimeFieldMeta &b){
+                if(a.group == b.group){ if(a.order == b.order) return a.label < b.label; return a.order < b.order; }
+                return a.group < b.group;
+            });
+            for(auto &m : metaSorted){
                 JsonObject o = arr.createNestedObject();
                 o["group"] = m.group;
                 o["key"] = m.key;
@@ -1064,6 +1097,10 @@ public:
                     o["hasAlarm"] = true;
                     if(m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false if omitted
                 }
+                if(m.isString) o["isString"] = true;
+                if(m.isDivider) o["isDivider"] = true;
+                if(m.staticString.length()) o["staticValue"] = m.staticString;
+                if(m.order != 100) o["order"] = m.order;
                 // include thresholds only if defined to keep payload compact
                 if(m.hasWarnMin) o["warnMin"] = m.warnMin;
                 if(m.hasWarnMax) o["warnMax"] = m.warnMax;

@@ -170,6 +170,28 @@ void test_sta_mode_initialization() {
     TEST_ASSERT_EQUAL(WIFI_STA, WiFi.getMode());
 }
 
+void test_runtime_string_divider_and_order(){
+    // Define providers
+    testManager.addRuntimeProvider({ .name = "alpha", .fill = [](JsonObject &o){ o["v1"] = 1; }});
+    testManager.addRuntimeProvider({ .name = "beta", .fill = [](JsonObject &o){ o["v2"] = 2; }});
+    testManager.setRuntimeProviderOrder("beta", 5);
+    testManager.setRuntimeProviderOrder("alpha", 1);
+    // Define fields with ordering, string, divider
+    testManager.defineRuntimeDivider("alpha", "Section A", 0);
+    testManager.defineRuntimeField("alpha", "v1", "Value One", "", 0, 10);
+    testManager.defineRuntimeString("alpha", "build", "Build", "test-build", 5);
+    testManager.defineRuntimeField("beta", "v2", "Value Two", "", 0, 10);
+    String meta = testManager.runtimeMetaToJSON();
+    TEST_ASSERT_NOT_EQUAL(-1, meta.indexOf("isDivider"));
+    TEST_ASSERT_NOT_EQUAL(-1, meta.indexOf("isString"));
+    TEST_ASSERT_NOT_EQUAL(-1, meta.indexOf("staticValue"));
+    // Ensure provider order reflected indirectly by alpha preceding beta when reconstructed
+    String values = testManager.runtimeValuesToJSON();
+    int alphaPos = values.indexOf("\"alpha\"");
+    int betaPos = values.indexOf("\"beta\"");
+    TEST_ASSERT_TRUE(alphaPos != -1 && betaPos != -1 && alphaPos < betaPos);
+}
+
 void setup() {
     delay(1500);
     Serial.begin(115200);
@@ -217,6 +239,7 @@ void setup() {
     // WiFi / modes
     RUN_TEST(test_ap_mode_initialization);
     RUN_TEST(test_sta_mode_initialization);
+    RUN_TEST(test_runtime_string_divider_and_order);
 
     UNITY_END();
 }
