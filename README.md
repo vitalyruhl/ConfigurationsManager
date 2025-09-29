@@ -544,6 +544,7 @@ pio run -e usb -t clean
   - Added cross‑field alarm registry (`defineRuntimeAlarm`)
   - Added relay control example via alarm callbacks
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
+- **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
 
 ## ToDo
 
