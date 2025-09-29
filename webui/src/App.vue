@@ -114,7 +114,7 @@ async function loadSettings() {
     config.value = data.config || data;
     refreshKey.value++; // force re-mount
   } catch (error) {
-    notify('Fehler: ' + error.message, 'error');
+  notify('Error: ' + error.message, 'error');
   }
 }
 

@@ -18,7 +18,7 @@
 inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
 #endif
 
-#define CONFIGMANAGER_VERSION "2.4.1"
+#define CONFIGMANAGER_VERSION "2.5.0" // 2025.09.29
 
 
 // ConfigOptions must be defined before any usage in Config<T>
@@ -678,6 +678,59 @@ public:
         }
     }
 
+    // --- EXPERIMENTAL TLS SUPPORT PLACEHOLDERS ---
+    // Note: ESPAsyncWebServer does not (yet) provide native TLS on ESP32 without external forks.
+    // These helpers allow user code to provide PEM data now; future versions can enable
+    // real TLS handshaking internally without changing the public API.
+    void setTLSCredentials(const String &certPem, const String &keyPem, const String &chainPem = String()){
+        _tlsCert = certPem; _tlsKey = keyPem; _tlsChain = chainPem; _tlsConfigured = (!_tlsCert.isEmpty() && !_tlsKey.isEmpty());
+        if(_tlsConfigured){ log_message("🔐 TLS credentials staged (cert=%u bytes, key=%u bytes, chain=%u bytes)", _tlsCert.length(), _tlsKey.length(), _tlsChain.length()); }
+        else { log_message("🔐 TLS credentials cleared or incomplete"); }
+    }
+    bool hasTLSCredentials() const { return _tlsConfigured; }
+    void clearTLSCredentials(){ _tlsCert.clear(); _tlsKey.clear(); _tlsChain.clear(); _tlsConfigured=false; }
+
+    // Secure start (DHCP). Currently falls back to plain HTTP with notice.
+    void startWebServerSecure(const String &ssid, const String &password){
+        if(!_tlsConfigured){
+            log_message("⚠️ startWebServerSecure(): TLS credentials missing – falling back to HTTP");
+            startWebServer(ssid, password);
+            return;
+        }
+        log_message("🔐 (Placeholder) Starting secure web server (TLS) on 443 not yet implemented – serving plain HTTP on 80");
+        startWebServer(ssid, password);
+    }
+    // Secure start (static simplified)
+    void startWebServerSecure(const String &ipStr, const String &mask, const String &ssid, const String &password){
+        if(!_tlsConfigured){
+            log_message("⚠️ startWebServerSecure(static): TLS credentials missing – falling back to HTTP");
+            startWebServer(ipStr, mask, ssid, password);
+            return;
+        }
+        log_message("🔐 (Placeholder) Secure static start (ip/mask) – real TLS pending, using HTTP");
+        startWebServer(ipStr, mask, ssid, password);
+    }
+    // Secure start (explicit gateway)
+    void startWebServerSecure(const String &ipStr, const String &gatewayStr, const String &mask, const String &ssid, const String &password){
+        if(!_tlsConfigured){
+            log_message("⚠️ startWebServerSecure(gateway): TLS credentials missing – falling back to HTTP");
+            startWebServer(ipStr, gatewayStr, mask, ssid, password);
+            return;
+        }
+        log_message("🔐 (Placeholder) Secure static start (gateway) – real TLS pending, using HTTP");
+        startWebServer(ipStr, gatewayStr, mask, ssid, password);
+    }
+    // Secure start (explicit gateway + DNS)
+    void startWebServerSecure(const String &ipStr, const String &gatewayStr, const String &mask, const String &dnsServer, const String &ssid, const String &password){
+        if(!_tlsConfigured){
+            log_message("⚠️ startWebServerSecure(gateway+dns): TLS credentials missing – falling back to HTTP");
+            startWebServer(ipStr, gatewayStr, mask, dnsServer, ssid, password);
+            return;
+        }
+        log_message("🔐 (Placeholder) Secure static start (gateway+dns) – real TLS pending, using HTTP");
+        startWebServer(ipStr, gatewayStr, mask, dnsServer, ssid, password);
+    }
+
 private:
     void connectAndStart(const String &ssid, const String &password) {
         log_message("🔌 Connecting to WiFi SSID: %s", ssid.c_str());
@@ -798,6 +851,30 @@ public:
         server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", toJSON()); });
         server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeValuesToJSON()); });
         server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeMetaToJSON()); });
+
+        // TLS status (experimental) - lightweight (avoid large DynamicJsonDocument on memory constrained device)
+        server.on("/tls_status", HTTP_GET, [this](AsyncWebServerRequest *request){
+            log_message("/tls_status requested (configured=%s)", _tlsConfigured?"true":"false");
+            String out = F("{");
+            out += F("\"loaded\":"); out += (_tlsConfigured?"true":"false");
+            if(_tlsConfigured){
+                out += F(",\"certBytes\":"); out += _tlsCert.length();
+                out += F(",\"keyBytes\":"); out += _tlsKey.length();
+                if(_tlsChain.length()){
+                    out += F(",\"chainBytes\":"); out += _tlsChain.length();
+                }
+            }
+            out += F("}");
+            request->send(200, "application/json", out);
+        });
+        // Raw internal state for debugging
+        server.on("/tls_status_raw", HTTP_GET, [this](AsyncWebServerRequest *request){
+            String out = F("loaded="); out += (_tlsConfigured?"true":"false");
+            out += F(" certLen="); out += _tlsCert.length();
+            out += F(" keyLen="); out += _tlsKey.length();
+            out += F(" chainLen="); out += _tlsChain.length();
+            request->send(200, "text/plain", out);
+        });
 
         // Save all settings
         server.on("/config/save_all", HTTP_POST,
@@ -1166,6 +1243,12 @@ public:
         bool _otaInitialized = false;
         String _otaPassword;
         String _otaHostname;
+
+    // TLS credential storage (PEM). Future implementation will spin up secure listener.
+    String _tlsCert;      // device.cert.pem contents
+    String _tlsKey;       // device.key.pem contents
+    String _tlsChain;     // optional ca_chain.pem contents
+    bool _tlsConfigured = false; // both cert & key present
 
 };
 

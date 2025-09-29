@@ -1,11 +1,16 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.4.1 (always-async; runtime + WebSocket support built-in)
+> Version 2.5.0 - 2025.09.29
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
 
 ## Overview
+
+> ⚠️ IMPORTANT: HTTPS / TLS (2.5.0 status)
+> This version only stages certificates (loads PEM files) but still serves plain HTTP on port 80.
+> The log line `TLS credentials staged ... (Placeholder) Secure ... using HTTP` means the files were found BUT NO ENCRYPTION IS ACTIVE.
+> If you need encrypted access now, place a reverse proxy (Nginx / Caddy) in front or use a VPN.
 
 The ConfigurationsManager is a C++17 helper library & example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI and OTA update endpoint. It focuses on:
 
@@ -35,7 +40,7 @@ lib_deps = bblanchon/ArduinoJson@^7.4.1
 
 [platformio]
 description = ESP32 C++17 Project for managing settings
-```
+```text
 
 ## Features
 
@@ -72,7 +77,7 @@ cfg.addRuntimeProvider({
       o["dew"]  = dewPoint;
   }
 });
-```
+```text
 
 1. **Runtime Field Metadata**
 
@@ -544,6 +549,7 @@ pio run -e usb -t clean
   - Added cross‑field alarm registry (`defineRuntimeAlarm`)
   - Added relay control example via alarm callbacks
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
+- **2.5.0**: (in progress) Added groundwork for optional HTTPS (credential staging only – NO active TLS listener yet) – see updated SSL section
 
 ## ToDo
 
@@ -564,3 +570,106 @@ pio run -e usb -t clean
 - prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown.
 - if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty.
 - after all changes - the ota update over webinterface is not working, will be fixed in next release
+
+---
+
+## HTTPS / SSL (since V2.5.0 – experimental / staging only)
+
+HTTPS IS NOT ACTIVE YET. Version 2.5.0 only implements credential staging (loading PEM files). All requests are still plain HTTP.
+
+### A. Quick Table
+
+| If you want… | Do this now |
+|--------------|-------------|
+| Just test library | Ignore TLS, use `http://device-ip` |
+| Prepare for future HTTPS | Upload cert/key to `data/ssl` + `uploadfs` |
+| Real HTTPS today | Use reverse proxy (Nginx/Caddy) |
+| Cert rotation | Replace files + run `uploadfs` |
+
+### B. Put Files in Filesystem (NOT src/ssl for runtime)
+
+```
+data/ssl/
+  device.cert.pem
+  device.key.pem
+  ca_chain.pem (optional)
+```
+
+Upload to SPIFFS:
+
+```bash
+pio run -e usb -t uploadfs
+```
+
+### C. Self-Signed Cert Commands
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout device.key.pem \
+  -out device.cert.pem \
+  -subj "/CN=esp32.local/O=MyOrg/C=DE" \
+  -addext "subjectAltName=DNS:esp32.local"
+cp device.cert.pem ca_chain.pem # optional
+```
+
+### D. Runtime Staging Log
+
+You should see:
+
+```
+[CFG] 🔐 TLS credentials staged (...)
+[CFG] 🔐 (Placeholder) Secure ... using HTTP
+```
+Meaning: files found, still HTTP only.
+
+### E. Check Status
+
+```
+http://<device-ip>/tls_status       # JSON
+http://<device-ip>/tls_status_raw   # Plain text
+```
+
+### F. Reverse Proxy (Nginx)
+
+```nginx
+server { listen 80; server_name esp32.local; return 301 https://$host$request_uri; }
+server {
+  listen 443 ssl; server_name esp32.local;
+  ssl_certificate /etc/letsencrypt/live/esp32.local/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/esp32.local/privkey.pem;
+  location / { proxy_pass http://192.168.2.126:80; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $remote_addr; }
+}
+```
+
+### G. Reverse Proxy (Caddy)
+
+```caddyfile
+esp32.local {
+  reverse_proxy 192.168.2.126:80
+}
+```
+
+### H. Why Not Native Yet?
+
+| Constraint | Reason to delay |
+|------------|-----------------|
+| RAM cost | TLS buffers reduce headroom |
+| Async + TLS complexity | Risk of instability / fragmentation |
+| Renewal logic | Adds flash writes & complexity |
+| WebSocket TLS | Extra handshake & memory |
+
+### I. Security Notes
+
+- Private keys ignored via `.gitignore`.
+- Set calendar reminder to renew.
+- OTA password still required (auth != encryption).
+- Restrict exposure (firewall / proxy) if on WAN.
+
+### J. Future Roadmap
+
+- Optional minimal secure endpoint set.
+- Expiry + fingerprint logging.
+- Hot reload on file replacement.
+- Build flag to omit TLS code completely.
+
+---

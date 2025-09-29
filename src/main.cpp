@@ -7,6 +7,8 @@
 #include <ESPAsyncWebServer.h>
 AsyncWebServer server(80);
 // #include <WiFiClientSecure.h>
+#include <FS.h>
+#include <SPIFFS.h>
 
 
 #define VERSION "V2.4.1"
@@ -509,12 +511,58 @@ void setup()
         return; // Skip webserver setup in AP mode
     }
 
+    // --- TLS certificate loading (experimental placeholder) ---
+    // Strategy: Try SPIFFS first (mounted at /), then fall back to compiled-in src/ssl only if
+    // user later adds embedding. For now we expect user to upload PEM files to SPIFFS/LittleFS
+    // or place them in data/ssl for upload. Adjust path logic as needed.
+    if(!SPIFFS.begin(true)){
+        Serial.println("[TLS] SPIFFS mount failed (format attempted). Continuing without TLS.");
+    } else {
+        auto readFileToString = [](fs::FS &fs, const char* path)->String{
+            if(!fs.exists(path)) return String();
+            File f = fs.open(path, "r");
+            if(!f) return String();
+            String out = f.readString();
+            f.close();
+            return out;
+        };
+        String cert = readFileToString(SPIFFS, "/ssl/device.cert.pem");
+        String key  = readFileToString(SPIFFS, "/ssl/device.key.pem");
+        String chain = readFileToString(SPIFFS, "/ssl/ca_chain.pem");
+        if(cert.length() && key.length()){
+            cfg.setTLSCredentials(cert, key, chain);
+        } else {
+            Serial.println("[TLS] No complete TLS credential pair found in SPIFFS /ssl (continuing HTTP)");
+            // Debug: list files actually present under /ssl
+            if(SPIFFS.exists("/ssl")){
+                File dir = SPIFFS.open("/ssl");
+                if(dir && dir.isDirectory()){
+                    Serial.println("[TLS] Listing /ssl contents:");
+                    File f = dir.openNextFile();
+                    bool any=false;
+                    while(f){
+                        any=true;
+                        Serial.printf("       %s (%u bytes)\n", f.name(), (unsigned)f.size());
+                        f = dir.openNextFile();
+                    }
+                    if(!any) Serial.println("       (empty)");
+                } else {
+                    Serial.println("[TLS] '/ssl' exists but is not a directory (SPIFFS quirk or missing)");
+                }
+            } else {
+                Serial.println("[TLS] '/ssl' directory does not exist in SPIFFS");
+            }
+        }
+    }
+
     if (wifiSettings.useDhcp.get()) {
         Serial.println("DHCP enabled");
-        cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        if(cfg.hasTLSCredentials()) cfg.startWebServerSecure(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        else cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
     } else {
         Serial.println("DHCP disabled");
-        cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        if(cfg.hasTLSCredentials()) cfg.startWebServerSecure(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        else cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
     }
 
 

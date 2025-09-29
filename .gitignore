@@ -29,3 +29,13 @@ pnpm-debug.log*
 
 # Env
 .env*
+
+# ssl
+src/ssl/*.pem
+src/ssl/*.crt
+src/ssl/*.key
+src/ssl/*.cer
+data/ssl/*.pem
+data/ssl/*.crt
+data/ssl/*.key
+data/ssl/*.cer
