@@ -12,8 +12,6 @@ AsyncWebServer server(80);
 #define VERSION "V2.4.1"
 
 #define BUTTON_PIN_AP_MODE 13
-// Relay (Heater) output pin (adjust to your wiring). Choose a free GPIO that can drive the relay.
-#define RELAY_HEATER_PIN 25
 
 // ⚠️ Warning ⚠️
 // ESP32 has a limitation of 15 characters for the key name.
@@ -324,8 +322,6 @@ void setup()
 
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
-    pinMode(RELAY_HEATER_PIN, OUTPUT);
-    digitalWrite(RELAY_HEATER_PIN, LOW); // assume LOW = off (adjust if your relay is active LOW/HIGH)
 
     //-----------------------------------------------------------------
     // Set logger callback to log in your own way, but do this before using the cfg object!
@@ -441,7 +437,7 @@ void setup()
         },
         [](){
             Serial.println("[ALARM] Temperature below 0.0°C -> HEATER ON");
-            // digitalWrite(RELAY_HEATER_PIN, HIGH); 
+            // digitalWrite(RELAY_HEATER_PIN, HIGH);
         },
         [](){
             Serial.println("[ALARM] Temperature recovered -> HEATER OFF");
@@ -652,7 +648,7 @@ void readBme280()
   temperature = bme280.data.temperature + TempCorrectionOffset.get();
   Humidity = bme280.data.humidity + HumidityCorrectionOffset.get();
   Pressure = bme280.data.pressure;
-  
+
   Dewpoint = computeDewPoint(temperature, Humidity);
 
   // output formatted values to serial console
