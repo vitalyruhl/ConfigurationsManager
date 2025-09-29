@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.4.0
+> Version 2.4.1 (always-async; runtime + WebSocket support built-in)
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
@@ -45,15 +45,13 @@ description = ESP32 C++17 Project for managing settings
 - 🪄 Dynamic visibility of settings via `showIf` lambda (e.g. hide static IP fields while DHCP enabled)
 - 🔒 Password masking & selective exposure
 - 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
-- 🔄 Automatic WiFi reconnect helper
 - 📡 AP Mode fallback / captive portal style entry
 - 🚀 OTA firmware upload endpoint
-- 🧪 Simple unit test scaffold (`test/basictest.cpp`)
-- 🔴 Optional live runtime values (`/runtime.json`) when built with feature flags
-- 🔁 Optional WebSocket push channel (`/ws`) in async build (`env:async`)
+- 🔴 Live runtime values (`/runtime.json`)
+- 🔁 WebSocket push channel (`/ws`) (frontend auto‑fallback to polling if socket not connected)
   - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 
-### Live Runtime Values & Alarm System (since 2.4.x)
+### Live Runtime Values & Alarm System since 2.4.x
 
 ![Live Runtime Values & Alarm System](examples/live-values.jpg)
 
@@ -76,7 +74,7 @@ cfg.addRuntimeProvider({
 });
 ```
 
-2. **Runtime Field Metadata**
+1. **Runtime Field Metadata**
 
 Define how each field should be rendered (precision, unit) or evaluated (warn/alarm thresholds, boolean semantics) by the frontend.
 
@@ -91,7 +89,7 @@ cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1); // plain (no thr
 
 Frontend consumes `/runtime_meta.json` → groups, units, precision, thresholds.
 
-3. **Boolean Runtime Fields**
+1. **Boolean Runtime Fields**
 
 ```cpp
 // Plain (no alarm styling)
@@ -106,7 +104,7 @@ Metadata adds: `isBool`, `hasAlarm`, `alarmWhenTrue` (omitted if false). Fronten
 - Alarm bool active → blinking red  
 - Plain bool true → green, false → white outline
 
-4. **Cross‑Field Alarms** (`defineRuntimeAlarm`)
+1. **Cross‑Field Alarms** (`defineRuntimeAlarm`)
 
 Allows conditions spanning multiple providers/fields. Each alarm has:
 
@@ -141,7 +139,7 @@ Active alarm states are added to `/runtime.json` under an `alarms` object:
 }
 ```
 
-5. **Relay / Actuator Integration Example**
+1. **Relay / Actuator Integration Example**
 
 A temperature minimum alarm driving a heater relay with hysteresis:
 
@@ -167,7 +165,7 @@ cfg.defineRuntimeAlarm(
 );
 ```
 
-6. **Evaluating Alarms**
+1. **Evaluating Alarms**
 
 Call periodically in `loop()` (a lightweight internal merge of runtime JSON + condition checks):
 
@@ -177,18 +175,18 @@ cfg.handleRuntimeAlarms();
 
 You can adjust frequency (e.g. every 1–3s) depending on responsiveness needed.
 
-7. **WebSocket Push**
+1. **WebSocket Push**
 
-When compiled with async + `ENABLE_WEBSOCKET_PUSH`:
+No compile-time flags needed; Async server + WebSocket are part of the default build.
 
 ```cpp
 cfg.enableWebSocketPush(2000);   // broadcast every 2s
 cfg.handleWebsocketPush();       // call in loop()
 ```
 
-Frontend auto‑switches: WebSocket → fallback polling (`/runtime.json`).
+Frontend strategy: try WebSocket first → if not available, poll `/runtime.json` (2s default in UI).
 
-8. **Custom Payload (Optional)**
+1. **Custom Payload (Optional)**
 
 Override the generated payload:
 
@@ -201,18 +199,19 @@ cfg.setCustomLivePayloadBuilder([](){
 });
 ```
 
-9. **Frontend Rendering Logic (Summary)**
+1. **Frontend Rendering Logic (Summary)**
 
 - Uses `/runtime_meta.json` for grouping, units, thresholds, boolean semantics.  
 - `/runtime.json` supplies live values + `alarms` map.  
 - Alarm booleans blink slower (1.6s) for readability; numeric threshold violations use color + blink.
 
-10. **Memory / Footprint Notes**
+1. **Memory / Footprint Notes**
 
 - Runtime doc buffers kept modest (1–2 KB per build) – adjust if you add many providers/fields.  
 - Keep provider `fill` lambdas fast; avoid blocking IO inside them.
 
 ### Minimal End‑to‑End Example (Live + Alarm)
+
 ```cpp
 // Setup (after WiFi):
 cfg.addRuntimeProvider({ .name="sys", .fill = [](JsonObject &o){ o["heap"] = ESP.getFreeHeap(); }});
@@ -252,16 +251,25 @@ cfg.enableWebSocketPush(1500);
 
 ![OTA Update over web-interface](examples/ota-update-over-web.jpg)
 
-## Examples (Updated API Style Since 2.3.x)
+## Examples
+
+Example files live in the `examples/` directory:
+
+- `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
+- `main.cpp_example_bme280` – Extended sensor + thresholds + cross‑field alarms.
+- `main.cpp_publish` – Auto-generated stub used when building the `publish` environment.
+
+Below is the minimal pattern (using `ESPAsyncWebServer`).
 
 ```cpp
 #include <Arduino.h>
 #include "ConfigManager.h"
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+AsyncWebServer server(80);
 
 ConfigManagerClass cfg;
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
-WebServer server(80);
 
 // Basic setting using new aggregate initialization (ConfigOptions<T>)
 Config<int> updateInterval(ConfigOptions<int>{
@@ -327,13 +335,14 @@ void setup() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    // OTA password is another Config<String> you can define similarly
     cfg.setupOTA("Ota-esp32-device", "ota1234");
+    cfg.enableWebSocketPush(2000); // periodic push (interval ms)
   }
 }
 
 void loop() {
   cfg.handleClient();
+  cfg.handleWebsocketPush();
   cfg.handleOTA();
   delay(250);
 }
@@ -386,17 +395,13 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 
 ### Async Build & Live Values
 
-To build with AsyncWebServer + runtime live values + WebSocket push:
+The project now always uses the Async stack; no `env:async` or `-DUSE_ASYNC_WEBSERVER` define is needed.
 
-```bash
-pio run -e async -t upload
-```
-
-If WebSocket isn't available (older firmware or flags disabled), the frontend automatically falls back to polling `/runtime.json` every 2 seconds.
+If the WebSocket isn't connected the frontend transparently polls `/runtime.json`.
 
 ### Runtime Providers & WebSocket API
 
-Register a provider (only compiled when `-DENABLE_LIVE_VALUES`):
+Register a provider:
 
 ```cpp
 cfg.addRuntimeProvider({
@@ -408,7 +413,7 @@ cfg.addRuntimeProvider({
 });
 ```
 
-Enable WebSocket push (only when `USE_ASYNC_WEBSERVER` + `ENABLE_WEBSOCKET_PUSH`):
+Enable WebSocket push:
 
 ```cpp
 cfg.enableWebSocketPush(1500); // push every 1.5s
@@ -432,10 +437,10 @@ cfg.setCustomLivePayloadBuilder([](){
 ```
 
 Immediate manual push:
+
 ```cpp
 cfg.pushRuntimeNow();
 ```
-
 
 1. Include the ConfigurationsManager library in your project.
 
@@ -455,12 +460,12 @@ void setup() {
 // see the main.cpp for more information
 ```
 
-### use platform.io enviroments to upload over usb or ota
+### PlatformIO environments (usb / ota / publish)
 
 ```sh
 #See platformio.ini for details
 
-platformio run -e usb -t upload # use this to upload via usb
+pio run -e usb -t upload # upload via usb
 
 # Or via ota:
 pio run -e ota -t upload
@@ -469,8 +474,10 @@ pio run -e ota -t upload
 #pio run --target upload --upload-port <ESP32_IP_ADDRESS>
 pio run -e ota -t upload --upload-port 192.168.2.126
 
-#or over the Webinterface use http://192.168.2.126/ota_update
-# before you need to compile like this: pio run -e usb
+# Or over the Web UI: http://<device-ip>/ota_update (after first USB upload)
+
+# Minimal publish (stub) build (example code excluded):
+pio run -e publish
 
 #sometimes you get an guru-meditation error, if you upload,
 #try this:
@@ -497,11 +504,12 @@ pio run -e usb -t clean
 - **2.2.0**: add optional pretty category names, convert static HTML to Vue3 project for better maintainability
 - **2.3.0**: introduce `ConfigOptions<T>` aggregate initialization (breaking style update) + dynamic `showIf` visibility + improved front-end auto-refresh
 - **2.3.1**: added multiple `startWebServer` static IP overloads, refactored connection logic, suppressed noisy NOT_FOUND NVS messages when keys absent, updated README
-- **2.4.0**: added live values over json and websocket (async build only) to show runtime values like temperature, humidity or other sensor values on webinterface
+- **2.4.0**: added live values over json and websocket (async build only)
   - Added runtime metadata (`/runtime_meta.json`) for units / precision / thresholds / boolean semantics
   - Added boolean alarm styling & safe/alarm states
   - Added cross‑field alarm registry (`defineRuntimeAlarm`)
   - Added relay control example via alarm callbacks
+- **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
 
 ## ToDo
 
