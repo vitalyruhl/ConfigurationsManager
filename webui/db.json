@@ -1,141 +1,73 @@
 {
   "config": {
     "Limiter": {
-      "enCtrl": {
-        "value": true,
-        "displayName": "Enable Limitation",
-        "isPassword": false
-      },
-      "enMQTT": {
-        "value": true,
-        "displayName": "Enable MQTT Propagation",
-        "isPassword": false
-      }
+      "enCtrl": { "value": true,  "displayName": "Enable Limitation",        "isPassword": false, "showIf": true },
+      "enMQTT": { "value": true,  "displayName": "Enable MQTT Propagation", "isPassword": false, "showIf": true }
     },
     "Display": {
-      "Save": {
-        "value": true,
-        "displayName": "Turn Display Off",
-        "isPassword": false
-      },
-      "Time": {
-        "value": 60,
-        "displayName": "Display On-Time in Sec",
-        "isPassword": false
-      }
+      "Save": { "value": true, "displayName": "Turn Display Off",        "isPassword": false, "showIf": true },
+      "Time": { "value": 60,   "displayName": "Display On-Time in Sec", "isPassword": false, "showIf": true }
     },
     "System": {
-      "OTAEn": {
-        "value": true,
-        "displayName": "Allow OTA Updates",
-        "isPassword": false
-      },
-      "OTAPass": {
-        "value": "***",
-        "displayName": "OTA Password",
-        "isPassword": true
-      },
-      "Version": {
-        "value": "V2.1.0",
-        "displayName": "Programm-Version",
-        "isPassword": false
-      }
+      "OTAEn":   { "value": true,     "displayName": "Allow OTA Updates",   "isPassword": false, "showIf": true },
+      "OTAPass": { "value": "***",   "displayName": "OTA Password",       "isPassword": true,  "showIf": true },
+      "Version": { "value": "V2.4.1","displayName": "Program Version",    "isPassword": false, "showIf": true }
     },
     "wifi": {
-      "ssid": {
-        "value": "VivilIE",
-        "displayName": "WiFi SSID",
-        "isPassword": false
-      },
-      "password": {
-        "value": "***",
-        "displayName": "WiFi Password",
-        "isPassword": true
-      }
-    },
-    "network": {
-      "dhcp": {
-        "value": false,
-        "displayName": "Use DHCP",
-        "isPassword": false
-      }
+      "categoryPretty": "WiFi Settings",
+      "ssid":     { "value": "VivilIE",       "displayName": "WiFi SSID",       "isPassword": false, "showIf": true },
+      "password": { "value": "***",            "displayName": "WiFi Password",   "isPassword": true,  "showIf": true },
+      "dhcp":     { "value": false,             "displayName": "Use DHCP",        "isPassword": false, "showIf": true },
+      "sIP":      { "value": "192.168.2.126",  "displayName": "Static IP",       "isPassword": false, "showIf": true },
+      "GW":       { "value": "192.168.2.250",  "displayName": "Gateway",         "isPassword": false, "showIf": true },
+      "subnet":   { "value": "255.255.255.0",  "displayName": "Subnet-Mask",     "isPassword": false, "showIf": true }
     },
     "MQTT": {
       "categoryPretty": "MQTT-Section",
-      "Port": {
-        "value": 1883,
-        "displayName": "Port",
-        "isPassword": false
-      },
-      "Server": {
-        "value": "192.168.2.3",
-        "displayName": "Server-IP",
-        "isPassword": false
-      },
-      "User": {
-        "value": "housebattery",
-        "displayName": "User",
-        "isPassword": false
-      },
-      "Pass": {
-        "value": "***",
-        "displayName": "Password",
-        "isPassword": true
-      },
-      "PUT": {
-        "value": "emon/emonpi/power1",
-        "displayName": "Powerusage Topic",
-        "isPassword": false
-      },
-      "MQTTT": {
-        "value": "SolarLimiter2",
-        "displayName": "Publish-Topic",
-        "isPassword": false
-      }
-    },
-    "main": {
-      "interval": {
-        "value": 15,
-        "displayName": "Update Interval (seconds)",
-        "isPassword": false
-      },
-      "cbt": {
-        "value": 3,
-        "displayName": "Test Callback",
-        "isPassword": false
-      },
-      "tbool": {
-        "value": false,
-        "displayName": "test bool",
-        "isPassword": false
-      }
+      "Port":  { "value": 1883,            "displayName": "Port",              "isPassword": false, "showIf": true },
+      "Server":{ "value": "192.168.2.3",  "displayName": "Server-IP",          "isPassword": false, "showIf": true },
+      "User":  { "value": "housebattery", "displayName": "User",               "isPassword": false, "showIf": true },
+      "Pass":  { "value": "***",          "displayName": "Password",           "isPassword": true,  "showIf": true },
+      "PUT":   { "value": "emon/emonpi/power1", "displayName": "Powerusage Topic", "isPassword": false, "showIf": true },
+      "MQTTT": { "value": "SolarLimiter20", "displayName": "Publish-Topic",     "isPassword": false, "showIf": true }
     },
     "Temp": {
-      "categoryPretty": "Temperature Correction Settings",
-      "TCO": {
-        "value": 0.1,
-        "displayName": "Temperature Correction",
-        "isPassword": false
-      },
-      "HYO": {
-        "value": 0.1,
-        "displayName": "Humidity Correction",
-        "isPassword": false
-      },
-      "VeryLongKeyName": {
-        "value": 0.1,
-        "displayName": "key Correction long",
-        "isPassword": false
-      }
+      "categoryPretty": "Temperature Settings",
+      "TCO":       { "value": -7,    "displayName": "Temperature Correction", "isPassword": false, "showIf": true },
+      "HYO":       { "value": -10,   "displayName": "Humidity Correction",    "isPassword": false, "showIf": true },
+      "SLP":       { "value": 1013,  "displayName": "Sea Level Pressure",     "isPassword": false, "showIf": true },
+      "ReadTemp":  { "value": 10,    "displayName": "Read Temp/Humidity every (s)", "isPassword": false, "showIf": true },
+      "VeryLongKeyName": { "value": 0.1, "displayName": "key Correction long", "isPassword": false, "showIf": true }
+    },
+    "main": {
+      "interval": { "value": 15,  "displayName": "Update Interval (seconds)", "isPassword": false, "showIf": true },
+      "cbt":      { "value": 4,   "displayName": "Test Callback",           "isPassword": false, "showIf": true },
+      "tbool":    { "value": false,"displayName": "tbool",                   "isPassword": false, "showIf": true }
     },
     "VeryLongCategoryName": {
       "categoryPretty": "key Correction",
-      "VlongC": {
-        "value": 0.1,
-        "displayName": "category Correction long",
-        "isPassword": false
-      }
+      "VlongC": { "value": 10, "displayName": "category Correction long", "isPassword": false, "showIf": true }
+    },
+    "DynTest": {
+      "categoryPretty": "Dynamic Test",
+      "toggle": { "value": true,  "displayName": "Temp Toggle",        "isPassword": false, "showIf": true },
+      "trueS":  { "value": "an", "displayName": "Visible When True",  "isPassword": false, "showIf": true },
+      "falseS": { "value": "Shown if toggle = false", "displayName": "Visible When False", "isPassword": false, "showIf": false }
     }
   },
-  "version": { "value": "2.2.0" }
+  "version": { "version": "MOCK-DATA 2.4.3" },
+  "runtime": {
+    "uptime": 123456,
+    "system": { "freeHeap": 150000, "rssi": -55 },
+    "sensors": { "temp": 21.3, "hum": 45.2, "dew": 10.1, "Pressure": 1012.4 },
+    "alarms": { "dewpoint_risk": false, "temp_low": false }
+  },
+  "runtime_meta": [
+    { "group": "system",  "key": "freeHeap", "label": "Free Heap",   "unit": "B",   "precision": 0 },
+    { "group": "system",  "key": "rssi",     "label": "WiFi RSSI",  "unit": "dBm", "precision": 0 },
+    { "group": "sensors", "key": "temp",     "label": "Temperature", "unit": "°C",  "precision": 1, "warnMin": 1.0,  "warnMax": 30.0, "alarmMin": 0.0,  "alarmMax": 32.0 },
+    { "group": "sensors", "key": "hum",      "label": "Humidity",    "unit": "%",   "precision": 1, "warnMin": 30.0, "warnMax": 70.0, "alarmMin": 15.0, "alarmMax": 90.0 },
+    { "group": "sensors", "key": "dew",      "label": "Dewpoint",    "unit": "°C",  "precision": 1 },
+    { "group": "sensors", "key": "Pressure", "label": "Pressure",    "unit": "hPa", "precision": 1 }
+  ]
 }

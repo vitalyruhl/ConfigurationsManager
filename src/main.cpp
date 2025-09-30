@@ -170,15 +170,15 @@ struct WiFi_Settings // wifiSettings
     Config<String> subnet;
 
     // Shared OptionGroup constants to avoid repetition
-    static constexpr OptionGroup WIFI_GROUP{"wifi", "WiFi Settings"};
+    static constexpr OptionGroup WIFI_GROUP{.category ="wifi", .prettyCat = "WiFi Settings"};
 
     WiFi_Settings() : // Use OptionGroup helpers with shared constexpr instances
-                      wifiSsid(WIFI_GROUP.opt<String>("ssid", String("MyWiFi"), "WiFi SSID")),
-                      wifiPassword(WIFI_GROUP.opt<String>("password", String("secretpass"), "WiFi Password", true, true)),
+                      wifiSsid(WIFI_GROUP.opt<String>("ssid", "MyWiFi", "WiFi SSID")),
+                      wifiPassword(WIFI_GROUP.opt<String>("password", "secretpass", "WiFi Password", true, true)),
                       useDhcp(WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP")),
-                      staticIp(WIFI_GROUP.opt<String>("sIP", String("192.168.2.126"), "Static IP", true, false, nullptr, showIfFalse(useDhcp))),
-                      gateway(WIFI_GROUP.opt<String>("GW", String("192.168.2.250"), "Gateway", true, false, nullptr, showIfFalse(useDhcp))),
-                      subnet(WIFI_GROUP.opt<String>("subnet", String("255.255.255.0"), "Subnet-Mask", true, false, nullptr, showIfFalse(useDhcp)))
+                      staticIp(WIFI_GROUP.opt<String>("sIP", "192.168.2.126", "Static IP", true, false, nullptr, showIfFalse(useDhcp))),
+                      gateway(WIFI_GROUP.opt<String>("GW", "192.168.2.250", "Gateway", true, false, nullptr, showIfFalse(useDhcp))),
+                      subnet(WIFI_GROUP.opt<String>("subnet", "255.255.255.0", "Subnet-Mask", true, false, nullptr, showIfFalse(useDhcp)))
     {
         // Register settings with ConfigManager
         cfg.addSetting(&wifiSsid);
@@ -271,33 +271,27 @@ float Dewpoint = 0.0;    // current dewpoint in Celsius
 float Humidity = 0.0;    // current humidity in percent
 float Pressure = 0.0;    // current pressure in hPa
 
-Config<float> TempCorrectionOffset(ConfigOptions<float>{
-    .keyName = "TCO",
-    .category = "Temp",
-    .defaultValue = 0.1f,
-    .prettyName = "Temperature Correction",
-    .prettyCat = "Temperature Settings"});
-Config<float> HumidityCorrectionOffset(ConfigOptions<float>{
-    .keyName = "HYO",
-    .category = "Temp",
-    .defaultValue = 0.1f,
-    .prettyName = "Humidity Correction",
-    .prettyCat = "Temperature Settings"});
-
-Config<int> SeaLevelPressure(ConfigOptions<int>{
-    .keyName = "slp",
-    .category = "Temp",
-    .defaultValue = 1013,
-    .prettyName = "Sea Level Pressure (hPa)",
-    .prettyCat = "Temperature Settings"});
-
-Config<int> sensorInterval(ConfigOptions<int>{
-    .keyName = "interval",
-    .category = "Temp",
-    .defaultValue = 30,
-    .prettyName = "Read temperature Interval (seconds)",
-    .prettyCat = "Temperature Settings"});
-//--------------------------------------------------------------------------------------------------------------
+struct TempSettings {
+    Config<float> tempCorrection;
+    Config<float> humidityCorrection;
+    Config<int>   seaLevelPressure;
+    Config<int>   readIntervalSec;
+    // Shared OptionGroup constants to avoid repetition
+    static constexpr OptionGroup TG{.category ="Temp", .prettyCat = "Temperature Settings"};
+    TempSettings():
+        tempCorrection(TG.opt<float>("TCO", 0.1f, "Temperature Correction")),
+        humidityCorrection(TG.opt<float>("HYO", 0.1f, "Humidity Correction")),
+        seaLevelPressure(TG.opt<int>("SLP", 1013, "Sea Level Pressure")),
+        readIntervalSec(TG.opt<int>("ReadTemp", 30, "Read Temp/Humidity every (s)"))
+    {
+        cfg.addSetting(&tempCorrection);
+        cfg.addSetting(&humidityCorrection);
+        cfg.addSetting(&seaLevelPressure);
+        cfg.addSetting(&readIntervalSec);
+    }
+};
+TempSettings tempSettings;
+//-------------------------------------------------------------------------------------------------------------
 
 void setup()
 {
@@ -320,34 +314,40 @@ void setup()
 
     //-----------------------------------------------------------------
 
-    //-----------------------------------------------------------------
-    //-----------------------------------------------------------------
-    //-----------------------------------------------------------------
+    //----------------------------------------------------------------------------------------------------------------------------------
     // temperature - Sensor settings (BME280) to show how to use settings in your own code
-    cfg.addSetting(&TempCorrectionOffset);
-    cfg.addSetting(&HumidityCorrectionOffset);
-    cfg.addSetting(&SeaLevelPressure);
-    cfg.addSetting(&sensorInterval);
 
-    // Register example runtime provider
-    cfg.addRuntimeProvider({.name = "system",
-                            .fill = [](JsonObject &o)
-                            {
-                                o["freeHeap"] = ESP.getFreeHeap();
-                                o["rssi"] = WiFi.RSSI();
-                            }});
 
-    cfg.addRuntimeProvider({.name = "flags",
-                            .fill = [](JsonObject &o)
-                            {
-                                o["tempToggle"] = tempBoolToggle.get(); // yes, we can use before load all, cfg is allready initialized, but the value is not yet loaded, dont use it for logic! this a demo only for live values
-                            }});
+    //-----------------------------------------------------------------
+    //example for dynamic settings visibility
+    //-----------------------------------------------------------------
+    // Register example runtime provider with divider and additional info lines
+    //addRuntimeProvider make an section in gui
+    cfg.addRuntimeProvider({
+        .name = "system",
+        .fill = [](JsonObject &o){
+            o["rssi"] = WiFi.RSSI();//register dynamic Values
+            o["freeHeap"] = ESP.getFreeHeap();
+            o["allowOTA"] = generalSettings.allowOTA.get();
+            o["tempBoolToggle"] = tempBoolToggle.get();
+        }
+    });
+    //then add the fields to show in gui.
+        //Existing Fields:
+            //defineRuntimeField (show Value),
+            // defineRuntimeString (Show a Static String, with Static Value),
+            //defineRuntimeBool (show a boolean Value green on true, white on false, red+blink on alarm),
+            //defineRuntimeDivider (show a divider line </hr>)
+            //defineRuntimeFieldThresholds (show Value with thresholds for warn and alarm, Warn = yellow and red = Alarm)
+    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", " B", 0, /*order*/ 1);
+    cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", " dBm", 0, /*order*/ 2);
+    cfg.defineRuntimeDivider("system", "Environment", /*order*/ 3);
+    cfg.defineRuntimeString("system", "i1", "Settings:", "", /*order*/ 4);
+    cfg.defineRuntimeBool("system", "allowOTA", "Allow OTA Updates", false, /*order*/ 5);
+    cfg.defineRuntimeBool("system", "tempBoolToggle", "Temporary Bool Toggle", false, /*order*/ 6);
 
-    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "B", 0);
-    cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0);
-    cfg.defineRuntimeBool("flags", "tempToggle", "Temp Toggle", false); // no alarm styling
 
-    // Sensor data provider
+    // example for temperature and humidity sensor, with thresholds and alarms
     cfg.addRuntimeProvider({.name = "sensors",
                             .fill = [](JsonObject &o)
                             {
@@ -363,20 +363,19 @@ void setup()
     cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
                                      1.0f, 30.0f, // warnMin / warnMax
                                      0.0f, 32.0f, // alarmMin / alarmMax
-                                     true, true, true, true);
+                                     true, true, true, true, 10); // enable warnMin, enable warnMax, enable alarmMin, enable alarmMax, order
 
     cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", "%", 1,
                                      30.0f, 70.0f,
                                      15.0f, 90.0f,
-                                     true, false, true, true);
+                                     true, false, true, true, 11);
 
     // only basic field, no thresholds
-    cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1);
-    cfg.defineRuntimeField("sensors", "Pressure", "Pressure", "hPa", 1);
+    cfg.defineRuntimeField("sensors", "dew", "Dewpoint", " °C", 1, 12);
+    cfg.defineRuntimeField("sensors", "Pressure", "Pressure", " hPa", 1, 13);
 
-    // Runtime boolean alarm
-    cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true); // show as bool alarm when true
 
+    // Example for runtime alarms based on multiple fields, of course you can also use global variables too.
     // Cross-field alarm: temperature within 1.0°C above dewpoint (risk of condensation)
     cfg.defineRuntimeAlarm(
         "dewpoint_risk",
@@ -396,27 +395,21 @@ void setup()
         []()
         { Serial.println("[ALARM] Dewpoint proximity risk EXIT"); });
 
-    // Temperature MIN alarm -> Heater relay ON when temperature below alarmMin (0.0°C) and OFF when recovered.
+    // Temperature MIN alarm -> Heater relay ON when temperature below alarmMin (0.5°C) and OFF when recovered.
     // Uses a little hysteresis (enter < 0.0, exit > 0.5) to avoid fast toggling.
     cfg.defineRuntimeAlarm(
         "temp_low",
         [](const JsonObject &root)
         {
-            static bool lastState = false; // for hysteresis
-            if (!root.containsKey("sensors"))
-                return false;
-            const JsonObject sensors = root["sensors"].as<JsonObject>();
-            if (!sensors.containsKey("temp"))
-                return false;
-            float t = sensors["temp"].as<float>();
+            static bool lastState = false; // remember last state for hysteresis
             // Hysteresis: once active keep it on until t > 0.5
             if (lastState)
             { // currently active -> wait until we are clearly above release threshold
-                lastState = (t < 0.5f);
+                lastState = (temperature < 0.5f);
             }
             else
             { // currently inactive -> trigger when below entry threshold
-                lastState = (t < 0.0f);
+                lastState = (temperature < 0.0f);
             }
             return lastState;
         },
@@ -430,13 +423,15 @@ void setup()
             Serial.println("[ALARM] Temperature recovered -> HEATER OFF");
             // digitalWrite(RELAY_HEATER_PIN, LOW);
         });
-    cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true); // show as bool alarm when true in UI
+
+    // quick define a group of alarms, will be shown in gui in section "Alarms" (only on boolean)
+    cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true); // show as bool alarm when true
+    cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true);
 
     SetupStartTemperatureMeasuring();
-    //-----------------------------------------------------------------
-    //-----------------------------------------------------------------
-    //-----------------------------------------------------------------
+    //----------------------------------------------------------------------------------------------------------------------------------
 
+    //-----------------------------------------------------------------
     // Register other settings
     cfg.addSetting(&updateInterval);
     cfg.addSetting(&testCb);
@@ -445,14 +440,15 @@ void setup()
     cfg.addSetting(&VeryLongKeyName);
 
     // Register temporary dynamic test settings
-    cfg.addSetting(&tempBoolToggle);
+    cfg.addSetting(&tempBoolToggle); //show, we have used it in gui, but register it here - no problem, its only showing
     cfg.addSetting(&tempSettingAktiveOnTrue);
     cfg.addSetting(&tempSettingAktiveOnFalse);
 
-    cfg.addSetting(&sensorInterval);
+    cfg.addSetting(&tempSettings.readIntervalSec);
+    //-----------------------------------------------------------------
 
-    // 2025.09.04 New function to check all settings for errors
-    cfg.checkSettingsForErrors();
+
+    cfg.checkSettingsForErrors();// 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
 
     try
     {
@@ -611,7 +607,7 @@ void SetupStartTemperatureMeasuring()
     else
     {
         Serial.println("ready to using BME280. Sart Ticker...");
-        int iv = sensorInterval.get();
+        int iv = tempSettings.readIntervalSec.get();
         if (iv < 2)
             iv = 2;
         temperatureTicker.attach((float)iv, readBme280); // Attach ticker with configured interval
@@ -638,20 +634,20 @@ static float computeDewPoint(float temperatureC, float relHumidityPct)
 void readBme280()
 {
     //   set sea-level pressure
-    bme280.setSeaLevelPressure(SeaLevelPressure.get());
+    bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
 
     bme280.read();
 
-    temperature = bme280.data.temperature + TempCorrectionOffset.get();
-    Humidity = bme280.data.humidity + HumidityCorrectionOffset.get();
+    temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
+    Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
     Pressure = bme280.data.pressure;
 
     Dewpoint = computeDewPoint(temperature, Humidity);
 
     // output formatted values to serial console
     Serial.println("-----------------------");
-    Serial.printf("\r\nTemperature: %2.1lf °C | offset: %2.1lf K", temperature, TempCorrectionOffset.get());
-    Serial.printf("\r\nHumidity   : %2.1lf %rH | offset: %2.1lf %rH", Humidity, HumidityCorrectionOffset.get());
+    Serial.printf("\r\nTemperature: %2.1lf °C | offset: %2.1lf K", temperature, tempSettings.tempCorrection.get());
+    Serial.printf("\r\nHumidity   : %2.1lf %rH | offset: %2.1lf %rH", Humidity, tempSettings.humidityCorrection.get());
     Serial.printf("\r\nDewpoint   : %2.1lf °C", Dewpoint);
     Serial.printf("\r\nPressure   : %4.0lf hPa", Pressure);
     Serial.printf("\r\nAltitude   : %4.2lf m", bme280.data.altitude);

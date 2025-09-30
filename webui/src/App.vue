@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 id="mainHeader">Device {{ version }}</h1>
+    <h1 id="mainHeader" class="ta-center">{{ version }}</h1>
     <div class="tabs">
       <button :class="{active: activeTab==='live'}" @click="activeTab='live'">Live</button>
       <button :class="{active: activeTab==='settings'}" @click="switchToSettings()">Settings</button>
@@ -18,6 +18,7 @@
       <div class="live-cards">
         <div class="card" v-for="group in runtimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
+
           <template v-for="f in group.fields" :key="f.key">
             <!-- Divider rendering -->
             <hr v-if="f.isDivider" class="rt-divider" :data-label="f.label" />
@@ -39,7 +40,8 @@
               </template>
             </p>
           </template>
-          <p v-if="group.name==='system' && runtime.uptime !== undefined">Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
+          <hr v-if="group.name==='system' && runtime.uptime !== undefined" class="rt-divider,uptime" />
+          <p v-if="group.name==='system' && runtime.uptime !== undefined" class="uptime">Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
         </div>
       </div>
       <div class="live-status">Mode: {{ wsConnected? 'WebSocket' : 'Polling' }}</div>
@@ -245,8 +247,8 @@ function initLive(){
   const url = proto + location.host + '/ws';
   try {
     ws = new WebSocket(url);
-    ws.onopen = ()=>{ 
-      wsConnected.value = true; 
+    ws.onopen = ()=>{
+      wsConnected.value = true;
       setTimeout(()=>{ if(!runtime.value.uptime) fetchRuntime(); }, 300);
     };
     ws.onclose = ()=>{ wsConnected.value = false; fallbackPolling(); };
@@ -279,7 +281,7 @@ function buildRuntimeGroups(){
     const grouped = {};
     for(const m of runtimeMeta.value){
       if(!grouped[m.group]) grouped[m.group] = { name: m.group, title: capitalize(m.group), fields: [] };
-      grouped[m.group].fields.push({ 
+      grouped[m.group].fields.push({
         key: m.key, label: m.label, unit: m.unit, precision: m.precision,
         warnMin: m.warnMin, warnMax: m.warnMax, alarmMin: m.alarmMin, alarmMax: m.alarmMax,
         isBool: m.isBool, hasAlarm: m.hasAlarm || false, alarmWhenTrue: m.alarmWhenTrue || false,
@@ -302,27 +304,27 @@ function buildRuntimeGroups(){
 function capitalize(s){ if(!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
 function formatValue(val, meta){ if(val == null) return ''; if(typeof val === 'number'){ if(meta && typeof meta.precision === 'number' && !Number.isInteger(val)){ try { return val.toFixed(meta.precision); } catch(e){ return val; } } return val; } return val; }
 function severityClass(val, meta){ if(typeof val !== 'number' || !meta) return ''; if(meta.alarmMin!==undefined && meta.alarmMin!==null && meta.alarmMin!=='' && meta.alarmMin!==false && !Number.isNaN(meta.alarmMin) && val < meta.alarmMin) return 'sev-alarm'; if(meta.alarmMax!==undefined && meta.alarmMax!==null && meta.alarmMax!=='' && meta.alarmMax!==false && !Number.isNaN(meta.alarmMax) && val > meta.alarmMax) return 'sev-alarm'; if(meta.warnMin!==undefined && meta.warnMin!==null && !Number.isNaN(meta.warnMin) && val < meta.warnMin) return 'sev-warn'; if(meta.warnMax!==undefined && meta.warnMax!==null && !Number.isNaN(meta.warnMax) && val > meta.warnMax) return 'sev-warn'; return ''; }
-function valueClasses(val, meta){ 
-  if(meta && meta.isBool){ 
+function valueClasses(val, meta){
+  if(meta && meta.isBool){
     if(meta.hasAlarm){
-      const alarm = isBoolAlarm(val, meta); 
+      const alarm = isBoolAlarm(val, meta);
       return alarm ? 'sev-alarm bool-row' : 'bool-row';
     }
     return 'bool-row';
-  } 
-  return severityClass(val, meta); 
+  }
+  return severityClass(val, meta);
 }
 function isBoolAlarm(val, meta){ if(!meta || !meta.isBool || !meta.hasAlarm) return false; if(meta.alarmWhenTrue) return !!val; return !val; }
-function boolDotClass(val, meta){ 
+function boolDotClass(val, meta){
   if(!meta || !meta.isBool){ return ''; }
   if(meta.hasAlarm){
-    const alarm = isBoolAlarm(val, meta); 
+    const alarm = isBoolAlarm(val, meta);
     if(alarm) return 'alarm';
     // safe state colorization for alarm booleans: show green when non-alarm
     return 'safe';
   }
   // plain boolean without alarm semantics
-  return val ? 'on' : 'off'; 
+  return val ? 'on' : 'off';
 }
 function fallbackPolling(){ if (pollTimer) clearInterval(pollTimer); fetchRuntime(); pollTimer = setInterval(fetchRuntime, 2000); }
 </script>
@@ -347,8 +349,11 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .rt-divider { border:0; border-top:1px solid #ccc; margin:.6rem 0 .4rem; position:relative; }
 .rt-divider:before { content: attr(data-label); position:absolute; top:-0.7rem; left:.4rem; background:#fff; padding:0 .3rem; font-size:.65rem; color:#999; letter-spacing:.05em; }
 .rt-string { font-size:.85rem; margin:.25rem 0; color:#333; }
+.ta-center { text-align:center; }
+.uptime { font-size:.85rem; color:#555; margin-top:.5rem;padding:.5rem;text-align: center;}
 /* Slow down blink for readability */
 .live-status { text-align:center; margin-top:1rem; font-size:.85rem; color:#555; }
+h1 { color:#3498db; margin-top:.20rem; border-bottom:2px solid #3498db; padding-bottom:.20rem; font-size:1.8rem; font-weight: bold; min-width: 120px;}
 h2 { color:#3498db; margin-top:0; border-bottom:2px solid #3498db; padding-bottom:10px; font-size:1.2rem; }
 label { font-weight: bold; min-width: 120px; }
 input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
