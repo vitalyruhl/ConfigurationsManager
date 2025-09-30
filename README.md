@@ -51,6 +51,9 @@ description = ESP32 C++17 Project for managing settings
 - 🔁 WebSocket push channel (`/ws`) (frontend auto‑fallback to polling if socket not connected)
   - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 
+>To see how i use it in my project, check out my GitHub (most features are used in this project):
+>[https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
+
 ### Live Runtime Values & Alarm System since 2.4.x
 
 ![Live Runtime Values & Alarm System](examples/live-values.jpg)
