@@ -94,6 +94,40 @@ cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1); // plain (no thr
 
 Frontend consumes `/runtime_meta.json` → groups, units, precision, thresholds.
 
+#### Styling Runtime Fields (2.5.0)
+
+Runtime metadata now ships optional **style overrides** so you can tweak how individual values appear in the web UI without touching the Vue code. Each field carries a `RuntimeFieldStyle` structure that maps logical targets (`label`, `values`, `unit`, `state`, `stateDotOnTrue`, `stateDotOnFalse`, `stateDotOnAlarm`, …) to CSS property/value pairs plus an optional `visible` flag. The backend merges your overrides with type-specific defaults, ensuring the UI always has sensible fallbacks.
+
+```cpp
+// Boolean alarm rendered with a yellow dot and text when true
+{
+  auto dewpointStyle = ConfigManagerClass::defaultBoolStyle(/*alarmWhenTrue=*/true);
+  dewpointStyle.rule("stateDotOnAlarm")
+    .set("background", "#f1c40f")
+    .set("border", "none")
+    .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
+    .set("animation", "none");
+  dewpointStyle.rule("state").set("color", "#f1c40f").set("fontWeight", "600");
+  cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, 100, dewpointStyle);
+}
+
+// Thresholded numeric field with custom label/value/unit styling
+{
+  auto tempFieldStyle = ConfigManagerClass::defaultNumericStyle(true);
+  tempFieldStyle.rule("label").set("color", "#d00000").set("fontWeight", "700");
+  tempFieldStyle.rule("values").set("color", "#0b3d91").set("fontWeight", "700");
+  tempFieldStyle.rule("unit").set("color", "#000000").set("fontWeight", "700");
+  cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
+                   1.0f, 30.0f,
+                   0.0f, 32.0f,
+                   true, true, true, true,
+                   10,
+                   tempFieldStyle);
+}
+```
+
+If a rule doesn’t exist yet, `rule("target")` creates it on first use. Use `.setVisible(false)` (or `.setVisible(true)`) to show/hide elements such as the unit column for text-only rows. On the frontend side the style object is emitted verbatim inside `/runtime_meta.json`, so you can inspect the live payload to verify the CSS being applied.
+
 1. **Boolean Runtime Fields**
 
 ```cpp

@@ -9,6 +9,8 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <exception>
+#include <algorithm>
+#include <cstdint>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
@@ -1202,6 +1204,81 @@ public:
             int order = 100;             // ordering weight (lower first)
         };
 
+        struct RuntimeFieldStyleProperty {
+            String name;
+            String value;
+        };
+
+        struct RuntimeFieldStyleRule {
+            String key;
+            bool hasVisible = false;
+            bool visible = true;
+            std::vector<RuntimeFieldStyleProperty> properties;
+
+            RuntimeFieldStyleRule& setVisible(bool v){
+                hasVisible = true;
+                visible = v;
+                return *this;
+            }
+
+            RuntimeFieldStyleRule& set(const String& property, const String& val){
+                for(auto &p : properties){
+                    if(p.name == property){
+                        p.value = val;
+                        return *this;
+                    }
+                }
+                properties.push_back({property, val});
+                return *this;
+            }
+        };
+
+        struct RuntimeFieldStyle {
+            std::vector<RuntimeFieldStyleRule> rules;
+
+            RuntimeFieldStyleRule& rule(const String& name){
+                for(auto &r : rules){
+                    if(r.key == name) return r;
+                }
+                RuntimeFieldStyleRule entry;
+                entry.key = name;
+                rules.push_back(entry);
+                return rules.back();
+            }
+
+            const RuntimeFieldStyleRule* find(const String& name) const {
+                for(const auto &r : rules){
+                    if(r.key == name) return &r;
+                }
+                return nullptr;
+            }
+
+            bool empty() const { return rules.empty(); }
+
+            void merge(const RuntimeFieldStyle& other){
+                for(const auto &r : other.rules){
+                    RuntimeFieldStyleRule &target = rule(r.key);
+                    if(r.hasVisible){
+                        target.hasVisible = true;
+                        target.visible = r.visible;
+                    }
+                    for(const auto &prop : r.properties){
+                        bool replaced = false;
+                        for(auto &existing : target.properties){
+                            if(existing.name == prop.name){
+                                existing.value = prop.value;
+                                replaced = true;
+                                break;
+                            }
+                        }
+                        if(!replaced){
+                            target.properties.push_back(prop);
+                        }
+                    }
+                }
+            }
+        };
+
         struct RuntimeFieldMeta {
             String group;        // provider name (e.g. sensors/system)
             String key;          // field key inside provider object
@@ -1209,8 +1286,6 @@ public:
             String unit;         // optional unit (e.g. °C, %, dBm)
             int precision = 1;   // decimals for floats
             bool isBool = false; // render as boolean indicator
-            bool hasAlarm = false; // whether this boolean participates in alarm coloring/blink
-            bool alarmWhenTrue = false; // if hasAlarm && isBool: true=>alarm else false=>alarm (default true alarm)
             // Optional threshold ranges (for numeric coloring)
             bool hasWarnMin = false; float warnMin = 0;
             bool hasWarnMax = false; float warnMax = 0;
@@ -1221,11 +1296,99 @@ public:
             String staticString;      // optional fixed string content (if not from runtime.json)
             bool isDivider = false;   // UI should render a visual separator / heading
             int order = 100;          // relative ordering inside group (lower first)
+            int8_t boolAlarmValue = -1; // -1 -> no alarm semantics, 1 -> true means alarm
+            RuntimeFieldStyle style;
         };
 
+        static RuntimeFieldStyle defaultNumericStyle(bool hasUnit = true){
+            RuntimeFieldStyle style;
+            style.rule("label").set("fontWeight", "600");
+
+            RuntimeFieldStyleRule &valueRule = style.rule("values");
+            valueRule.set("fontWeight", "600");
+            valueRule.set("textAlign", "right");
+            valueRule.set("fontVariantNumeric", "tabular-nums");
+
+            RuntimeFieldStyleRule &unitRule = style.rule("unit");
+            if(hasUnit){
+                unitRule.set("fontWeight", "600");
+                unitRule.set("color", "#666");
+                unitRule.set("textAlign", "left");
+                unitRule.setVisible(true);
+            } else {
+                unitRule.setVisible(false);
+            }
+            return style;
+        }
+
+        static RuntimeFieldStyle defaultBoolStyle(bool alarmWhenTrue = false){
+            RuntimeFieldStyle style;
+            style.rule("label").set("fontWeight", "600");
+
+            RuntimeFieldStyleRule &stateRule = style.rule("state");
+            stateRule.set("fontWeight", "600");
+            stateRule.set("textAlign", "right");
+
+            RuntimeFieldStyleRule &unitRule = style.rule("unit");
+            unitRule.setVisible(false);
+
+            RuntimeFieldStyleRule &dotTrue = style.rule("stateDotOnTrue");
+            dotTrue.setVisible(true);
+            dotTrue.set("background", "#2ecc71");
+            dotTrue.set("border", "none");
+            dotTrue.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
+
+            RuntimeFieldStyleRule &dotFalse = style.rule("stateDotOnFalse");
+            dotFalse.setVisible(true);
+            dotFalse.set("background", "#ffffff");
+            dotFalse.set("border", "1px solid #888");
+            dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
+
+            if(alarmWhenTrue){
+                dotFalse.set("background", "#2ecc71");
+                dotFalse.set("border", "none");
+                RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm");
+                dotAlarm.setVisible(true);
+                dotAlarm.set("background", "#d00000");
+                dotAlarm.set("animation", "blink 1.6s linear infinite");
+                dotAlarm.set("boxShadow", "0 0 4px rgba(208,0,0,0.7)");
+            }
+            return style;
+        }
+
+        static RuntimeFieldStyle defaultStringStyle(){
+            RuntimeFieldStyle style;
+            style.rule("label").set("fontWeight", "600");
+
+            RuntimeFieldStyleRule &valueRule = style.rule("values");
+            valueRule.set("fontWeight", "500");
+            valueRule.set("textAlign", "left");
+
+            RuntimeFieldStyleRule &unitRule = style.rule("unit");
+            unitRule.setVisible(false);
+            return style;
+        }
+
         // Backward-compatible minimal definition
-        void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1, int order = 100){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order; _runtimeMeta.push_back(m);
+        void defineRuntimeField(const String &group,
+                                const String &key,
+                                const String &label,
+                                const String &unit = String(),
+                                int precision = 1,
+                                int order = 100,
+                                const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+            RuntimeFieldMeta m;
+            m.group = group;
+            m.key = key;
+            m.label = label;
+            m.unit = unit;
+            m.precision = precision;
+            m.order = order;
+            m.style = defaultNumericStyle(unit.length() > 0);
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
+            _runtimeMeta.push_back(m);
         }
         // Extended with thresholds (pass NAN or omit to skip)
         void defineRuntimeFieldThresholds(
@@ -1235,27 +1398,60 @@ public:
             float alarmMin, float alarmMax,
             bool enableWarnMin = true, bool enableWarnMax = true,
             bool enableAlarmMin = true, bool enableAlarmMax = true,
-            int order = 100
+            int order = 100,
+            const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()
         ){
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order;
             if(enableWarnMin){ m.hasWarnMin = true; m.warnMin = warnMin; }
             if(enableWarnMax){ m.hasWarnMax = true; m.warnMax = warnMax; }
             if(enableAlarmMin){ m.hasAlarmMin = true; m.alarmMin = alarmMin; }
             if(enableAlarmMax){ m.hasAlarmMax = true; m.alarmMax = alarmMax; }
+            m.style = defaultNumericStyle(unit.length() > 0);
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
             _runtimeMeta.push_back(m);
         }
-        // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics.
-        // alarmWhenTrue=true  -> true state is alarm
-        // alarmWhenTrue=false -> no alarm unless explicitly toggled via hasAlarm parameter (future extension)
-        void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false, int order = 100){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; m.order=order;
-            if(alarmWhenTrue){ m.hasAlarm = true; m.alarmWhenTrue = true; }
+    // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics (true state treated as alarm).
+        void defineRuntimeBool(const String &group,
+                               const String &key,
+                               const String &label,
+                               bool alarmWhenTrue=false,
+                               int order = 100,
+                               const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+            RuntimeFieldMeta m;
+            m.group = group;
+            m.key = key;
+            m.label = label;
+            m.isBool = true;
+            m.order = order;
+            if(alarmWhenTrue){ m.boolAlarmValue = 1; }
+            m.style = defaultBoolStyle(alarmWhenTrue);
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
             _runtimeMeta.push_back(m);
         }
 
         // New: string (non-numeric, non-boolean) runtime label & value. If key is empty, acts as standalone display entry.
-        void defineRuntimeString(const String &group, const String &key, const String &label, const String &staticValue = String(), int order = 100){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isString=true; m.order=order; m.staticString = staticValue; _runtimeMeta.push_back(m);
+        void defineRuntimeString(const String &group,
+                                 const String &key,
+                                 const String &label,
+                                 const String &staticValue = String(),
+                                 int order = 100,
+                                 const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+            RuntimeFieldMeta m;
+            m.group = group;
+            m.key = key;
+            m.label = label;
+            m.isString = true;
+            m.order = order;
+            m.staticString = staticValue;
+            m.style = defaultStringStyle();
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
+            _runtimeMeta.push_back(m);
         }
         // New: divider/separator inside a group. Key becomes unique synthetic id (e.g., "_div_<n>").
         void defineRuntimeDivider(const String &group, const String &label, int order = 100){
@@ -1291,7 +1487,7 @@ public:
             String out; serializeJson(d, out); return out;
         }
         String runtimeMetaToJSON(){
-            DynamicJsonDocument d(2048);
+            DynamicJsonDocument d(4096);
             JsonArray arr = d.to<JsonArray>();
             // Sort by group, then order, then label
             std::vector<RuntimeFieldMeta> metaSorted = _runtimeMeta;
@@ -1307,10 +1503,6 @@ public:
                 if(m.unit.length()) o["unit"] = m.unit;
                 o["precision"] = m.precision;
                 if(m.isBool) o["isBool"] = true;
-                if(m.isBool && m.hasAlarm){
-                    o["hasAlarm"] = true;
-                    if(m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false if omitted
-                }
                 if(m.isString) o["isString"] = true;
                 if(m.isDivider) o["isDivider"] = true;
                 if(m.staticString.length()) o["staticValue"] = m.staticString;
@@ -1320,6 +1512,24 @@ public:
                 if(m.hasWarnMax) o["warnMax"] = m.warnMax;
                 if(m.hasAlarmMin) o["alarmMin"] = m.alarmMin;
                 if(m.hasAlarmMax) o["alarmMax"] = m.alarmMax;
+                if(m.boolAlarmValue != -1){
+                    o["boolAlarmValue"] = (m.boolAlarmValue == 1);
+                }
+                if(!m.style.empty()){
+                    JsonObject styleObj = o.createNestedObject("style");
+                    for(const auto &rule : m.style.rules){
+                        if(!rule.key.length()) continue;
+                        JsonObject ruleObj = styleObj.createNestedObject(rule.key);
+                        if(rule.hasVisible){
+                            ruleObj["visible"] = rule.visible;
+                        }
+                        for(const auto &prop : rule.properties){
+                            if(prop.name.length()){
+                                ruleObj[prop.name.c_str()] = prop.value;
+                            }
+                        }
+                    }
+                }
             }
             String out; serializeJson(d, out); return out;
         }

@@ -39,17 +39,22 @@
             <div v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
                :class="['rt-row', valueClasses(runtime[group.name][f.key], f)]">
               <template v-if="f.isBool">
-                <span class="rt-label bool-label">
-                  <span class="bool-dot" :class="boolDotClass(runtime[group.name][f.key], f)"></span>
+                <span class="rt-label bool-label" v-if="fieldVisible(f, 'label')" :style="fieldCss(f, 'label')">
+                  <span class="bool-dot" v-if="boolDotVisible(runtime[group.name][f.key], f)" :style="boolDotStyle(runtime[group.name][f.key], f)"></span>
                   {{ f.label }}
                 </span>
-                <span class="rt-value">{{ formatBool(runtime[group.name][f.key], f) }}</span>
-                <span class="rt-unit"></span>
+                <span class="rt-label bool-label" v-else></span>
+                <span class="rt-value" v-if="fieldVisible(f, 'state')" :style="fieldCss(f, 'state')">{{ formatBool(runtime[group.name][f.key], f) }}</span>
+                <span class="rt-value" v-else></span>
+                <span class="rt-unit" v-if="fieldVisible(f, 'unit', false)" :style="fieldCss(f, 'unit')"></span>
+                <span class="rt-unit" v-else></span>
               </template>
               <template v-else>
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value">{{ formatValue(runtime[group.name][f.key], f) }}</span>
-                <span class="rt-unit" v-if="f.unit">{{ f.unit }}</span>
+                <span class="rt-label" v-if="fieldVisible(f, 'label')" :style="fieldCss(f, 'label')">{{ f.label }}</span>
+                <span class="rt-label" v-else></span>
+                <span class="rt-value" v-if="fieldVisible(f, 'values')" :style="fieldCss(f, 'values')">{{ formatValue(runtime[group.name][f.key], f) }}</span>
+                <span class="rt-value" v-else></span>
+                <span class="rt-unit" v-if="fieldVisible(f, 'unit', !!f.unit)" :style="fieldCss(f, 'unit')">{{ f.unit }}</span>
                 <span class="rt-unit" v-else></span>
               </template>
             </div>
@@ -390,10 +395,21 @@ function buildRuntimeGroups(){
     for(const m of runtimeMeta.value){
       if(!grouped[m.group]) grouped[m.group] = { name: m.group, title: capitalize(m.group), fields: [] };
       grouped[m.group].fields.push({
-        key: m.key, label: m.label, unit: m.unit, precision: m.precision,
-        warnMin: m.warnMin, warnMax: m.warnMax, alarmMin: m.alarmMin, alarmMax: m.alarmMax,
-        isBool: m.isBool, hasAlarm: m.hasAlarm || false, alarmWhenTrue: m.alarmWhenTrue || false,
-        isString: m.isString || false, isDivider: m.isDivider || false, staticValue: m.staticValue || '', order: m.order !== undefined ? m.order : 100
+        key: m.key,
+        label: m.label,
+        unit: m.unit,
+        precision: m.precision,
+        warnMin: m.warnMin,
+        warnMax: m.warnMax,
+        alarmMin: m.alarmMin,
+        alarmMax: m.alarmMax,
+        isBool: m.isBool,
+        boolAlarmValue: typeof m.boolAlarmValue === 'boolean' ? !!m.boolAlarmValue : undefined,
+        isString: m.isString || false,
+        isDivider: m.isDivider || false,
+        staticValue: m.staticValue || '',
+        order: m.order !== undefined ? m.order : 100,
+        style: m.style || null
       });
     }
     runtimeGroups.value = Object.values(grouped).map(g=>{ g.fields.sort((a,b)=>{ if(a.isDivider && b.isDivider) return a.order - b.order; if(a.order === b.order) return a.label.localeCompare(b.label); return a.order - b.order; }); return g; });
@@ -415,25 +431,68 @@ function formatBool(val){ return val ? 'On' : 'Off'; }
 function severityClass(val, meta){ if(typeof val !== 'number' || !meta) return ''; if(meta.alarmMin!==undefined && meta.alarmMin!==null && meta.alarmMin!=='' && meta.alarmMin!==false && !Number.isNaN(meta.alarmMin) && val < meta.alarmMin) return 'sev-alarm'; if(meta.alarmMax!==undefined && meta.alarmMax!==null && meta.alarmMax!=='' && meta.alarmMax!==false && !Number.isNaN(meta.alarmMax) && val > meta.alarmMax) return 'sev-alarm'; if(meta.warnMin!==undefined && meta.warnMin!==null && !Number.isNaN(meta.warnMin) && val < meta.warnMin) return 'sev-warn'; if(meta.warnMax!==undefined && meta.warnMax!==null && !Number.isNaN(meta.warnMax) && val > meta.warnMax) return 'sev-warn'; return ''; }
 function valueClasses(val, meta){
   if(meta && meta.isBool){
-    if(meta.hasAlarm){
-      const alarm = isBoolAlarm(val, meta);
-      return alarm ? 'sev-alarm bool-row' : 'bool-row';
+    const classes = ['bool-row'];
+    if(typeof meta.boolAlarmValue === 'boolean' && !!val === meta.boolAlarmValue){
+      classes.push('sev-alarm');
     }
-    return 'bool-row';
+    return classes.join(' ');
   }
   return severityClass(val, meta);
 }
-function isBoolAlarm(val, meta){ if(!meta || !meta.isBool || !meta.hasAlarm) return false; if(meta.alarmWhenTrue) return !!val; return !val; }
-function boolDotClass(val, meta){
-  if(!meta || !meta.isBool){ return ''; }
-  if(meta.hasAlarm){
-    const alarm = isBoolAlarm(val, meta);
-    if(alarm) return 'alarm';
-    // safe state colorization for alarm booleans: show green when non-alarm
-    return 'safe';
+
+function fieldRule(meta, key){
+  if(!meta || !meta.style) return null;
+  return meta.style[key] || null;
+}
+
+function fieldVisible(meta, key, fallback = true){
+  const rule = fieldRule(meta, key);
+  if(!rule || rule.visible === undefined) return fallback;
+  return !!rule.visible;
+}
+
+function fieldCss(meta, key){
+  const rule = fieldRule(meta, key);
+  if(!rule) return {};
+  const css = {};
+  Object.entries(rule).forEach(([k, v]) => {
+    if(k === 'visible') return;
+    css[k] = v;
+  });
+  return css;
+}
+
+function selectBoolDotRule(val, meta){
+  if(!meta || !meta.style) return null;
+  const boolVal = !!val;
+  const style = meta.style;
+  if(typeof meta.boolAlarmValue === 'boolean' && boolVal === meta.boolAlarmValue){
+    if(style.stateDotOnAlarm) return style.stateDotOnAlarm;
   }
-  // plain boolean without alarm semantics
-  return val ? 'on' : 'off';
+  if(boolVal && style.stateDotOnTrue) return style.stateDotOnTrue;
+  if(!boolVal && style.stateDotOnFalse) return style.stateDotOnFalse;
+  if(boolVal && style.stateDotOnFalse) return style.stateDotOnFalse;
+  if(!boolVal && style.stateDotOnTrue) return style.stateDotOnTrue;
+  if(style.stateDotOnAlarm) return style.stateDotOnAlarm;
+  return null;
+}
+
+function boolDotVisible(val, meta){
+  const rule = selectBoolDotRule(val, meta);
+  if(!rule) return false;
+  if(rule.visible === undefined) return true;
+  return !!rule.visible;
+}
+
+function boolDotStyle(val, meta){
+  const rule = selectBoolDotRule(val, meta);
+  if(!rule) return {};
+  const css = {};
+  Object.entries(rule).forEach(([k, v]) => {
+    if(k === 'visible') return;
+    css[k] = v;
+  });
+  return css;
 }
 function fallbackPolling(){ if (pollTimer) clearInterval(pollTimer); fetchRuntime(); pollTimer = setInterval(fetchRuntime, 2000); }
 </script>
@@ -457,11 +516,7 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .rt-row.sev-alarm { color:#d00000; font-weight:700; animation: blink 1.6s linear infinite; }
 @keyframes blink { 50% { opacity:0.30; } }
 .rt-row.bool-row .rt-label { display:flex; align-items:center; gap:.4rem; }
-.bool-dot { width:.85rem; height:.85rem; border-radius:50%; display:inline-block; box-shadow:0 0 2px rgba(0,0,0,.4); }
-.bool-dot.on { background:#2ecc71; }
-.bool-dot.off { background:#fff; border:1px solid #888; }
-.bool-dot.alarm { background:#d00000; animation: blink 1.6s linear infinite; }
-.bool-dot.safe { background:#2ecc71; }
+.bool-dot { width:.85rem; height:.85rem; border-radius:50%; display:inline-block; }
 .rt-divider { border:0; border-top:1px solid #ccc; margin:.6rem 0 .4rem; position:relative; }
 .rt-divider:before { content: attr(data-label); position:absolute; top:-0.7rem; left:.4rem; background:#fff; padding:0 .3rem; font-size:.65rem; color:#999; letter-spacing:.05em; }
 .rt-string { color:#333; }
