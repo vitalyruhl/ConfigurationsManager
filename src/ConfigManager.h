@@ -18,7 +18,7 @@
 inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
 #endif
 
-#define CONFIGMANAGER_VERSION "2.4.1"
+#define CONFIGMANAGER_VERSION "2.4.3" //2025.09.30
 
 
 // ConfigOptions must be defined before any usage in Config<T>
@@ -34,6 +34,50 @@ struct ConfigOptions {
     void (*cb)(T) = nullptr;
     std::function<bool()> showIf = nullptr;
 };
+#if __cplusplus >= 201703L
+// --------------------------------------------------------------------------------------------------
+// OptionGroup Helper (Variant 1 Factory) - reduces boilerplate when many settings share same category
+// Usage example:
+//   constexpr OptionGroup WIFI{"wifi", "Network Settings"};
+//   Config<String> wifiSsid( WIFI.opt<String>("ssid", "MyWiFi", "WiFi SSID") );
+//   Config<String> wifiPassword( WIFI.opt<String>("password", "secret", "WiFi Password", true, true) );
+//   // With dynamic visibility (showIf):
+//   Config<String> staticIp( NET.opt<String>("sIP", "192.168.0.50", "Static IP", true, false, nullptr, [this](){ return !useDhcp.get(); }) );
+// Notes:
+//  - prettyCat automatically set from group.prettyCat
+//  - prettyName optional; if nullptr display will fallback to keyName (handled in Config<T>)
+//  - showInWeb defaults to true
+//  - isPassword defaults to false
+//  - cb (raw function pointer) & showIf (std::function) optional
+//  - Works for all T supported by Config<T>
+// --------------------------------------------------------------------------------------------------
+struct OptionGroup {
+    const char* category;
+    const char* prettyCat; // may be nullptr -> falls back to category
+
+    template<typename T>
+    ConfigOptions<T> opt(const char* keyName,
+                         T defaultValue,
+                         const char* prettyName = nullptr,
+                         bool showInWeb = true,
+                         bool isPassword = false,
+                         void (*cb)(T) = nullptr,
+                         std::function<bool()> showIf = nullptr) const {
+        return ConfigOptions<T>{
+            keyName,
+            category,
+            defaultValue,
+            prettyName,
+            prettyCat ? prettyCat : category,
+            showInWeb,
+            isPassword,
+            cb,
+            showIf
+        };
+    }
+};
+#endif
+
 #pragma once
 
 
@@ -381,6 +425,17 @@ class BaseSetting {
         return showInWeb;
     }
 };
+
+// --------------------------------------------------------------------------------------------------
+// Visibility helper factories (global scope) - placed after Config<T> so that Config is complete.
+// Usage in user code (main.cpp):
+//   staticIp( WIFI_GROUP.opt<String>("sIP", "192.168.0.50", "Static IP", true, false, nullptr, showIfFalse(useDhcp)) );
+//   advanced( GROUP.opt<int>("adv", 1, "Advanced", true, false, nullptr, showIfTrue(expertFlag)) );
+// These helpers avoid repetitive lambdas like: [this](){ return !flag.get(); }
+// --------------------------------------------------------------------------------------------------
+inline std::function<bool()> showIfTrue (const Config<bool>& flag){ return [&flag](){ return flag.get(); }; }
+inline std::function<bool()> showIfFalse(const Config<bool>& flag){ return [&flag](){ return !flag.get(); }; }
+// --------------------------------------------------------------------------------------------------
 
 class ConfigManagerClass {
 

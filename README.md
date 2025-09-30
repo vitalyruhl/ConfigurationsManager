@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.4.1 (always-async; runtime + WebSocket support built-in)
+> Version 2.4.3 (2025.09.30)
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
@@ -49,7 +49,8 @@ description = ESP32 C++17 Project for managing settings
 - 🚀 OTA firmware upload endpoint
 - 🔴 Live runtime values (`/runtime.json`)
 - 🔁 WebSocket push channel (`/ws`) (frontend auto‑fallback to polling if socket not connected)
-  - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
+- Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
+- 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
 >To see how i use it in my project, check out my GitHub (most features are used in this project):
 >[https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
@@ -406,6 +407,81 @@ Config<int> hiddenUnlessEnabled(ConfigOptions<int>{
 });
 ```
 
+### Reducing Boilerplate with OptionGroup (since 2.4.3)
+
+When many settings share the same category & pretty category, you can use `OptionGroup` to avoid repetition.
+
+Before:
+
+```cpp
+Config<String> wifiSsid(ConfigOptions<String>{
+  .keyName="ssid", .category="wifi", .defaultValue="MyWiFi",
+  .prettyName="WiFi SSID", .prettyCat="Network Settings"
+});
+Config<String> wifiPassword(ConfigOptions<String>{
+  .keyName="password", .category="wifi", .defaultValue="secretpass",
+  .prettyName="WiFi Password", .prettyCat="Network Settings",
+  .showInWeb = true, .isPassword = true
+});
+```
+
+After (factory pattern):
+
+```cpp
+constexpr OptionGroup WIFI_GROUP{"wifi", "Network Settings"};
+
+Config<String> wifiSsid( WIFI_GROUP.opt<String>(
+  "ssid", String("MyWiFi"), "WiFi SSID") );
+
+Config<String> wifiPassword( WIFI_GROUP.opt<String>(
+  "password", String("secretpass"), "WiFi Password", true, true) );
+```
+
+The template `opt<T>(key, defaultValue, prettyName, showInWeb, isPassword, cb, showIf)` returns a fully populated `ConfigOptions<T>`.
+
+### Visibility Helper Functions
+
+To replace repeating lambdas like `[this](){ return !this->useDhcp.get(); }`, two helper factories are available:
+
+```cpp
+inline std::function<bool()> showIfTrue (const Config<bool>& flag);
+inline std::function<bool()> showIfFalse(const Config<bool>& flag);
+```
+
+Usage inside a settings struct:
+
+```cpp
+struct WiFi_Settings {
+  Config<bool> useDhcp;
+  Config<String> staticIp;
+  Config<String> gateway;
+  Config<String> subnet;
+
+  WiFi_Settings() :
+    useDhcp(    WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP") ),
+    staticIp(   WIFI_GROUP.opt<String>("sIP",    String("192.168.2.126"), "Static IP",    true, false, nullptr, showIfFalse(useDhcp) ) ),
+    gateway(    WIFI_GROUP.opt<String>("GW",     String("192.168.2.250"), "Gateway",      true, false, nullptr, showIfFalse(useDhcp) ) ),
+    subnet(     WIFI_GROUP.opt<String>("subnet", String("255.255.255.0"), "Subnet-Mask",  true, false, nullptr, showIfFalse(useDhcp) ) )
+  { /* addSetting(...) */ }
+};
+```
+
+Benefits:
+
+- Less visual noise → easier to scan core semantics
+- Lower risk of copy/paste mistakes (e.g., forgetting to invert a condition)
+- Consistent semantics across different settings groups
+
+### Migration Tips
+
+1. Introduce one `constexpr OptionGroup` per logical category (e.g. `wifi`, `network`, `MQTT`).
+2. Gradually refactor: old style (`ConfigOptions{...}`) and new factory style can coexist.
+3. For dynamic visibility tied to a boolean `Config<bool>` field, prefer `showIfTrue/False(flag)`.
+4. Keep complex logic (multi-field dependencies) in a dedicated lambda or helper—helpers are intended only for simple flag toggles.
+5. If you need a callback (`cb`) and a C++ lambda, prefer setting `.cb` for plain function pointer or call `setCallback()` after construction.
+
+---
+
 ### Static IP Helper Overloads
 
 Overloads now available:
@@ -548,6 +624,7 @@ pio run -e usb -t clean
   - Added relay control example via alarm callbacks
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
 - **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
+- **2.4.3**: added OptionGroup factory (`OptionGroup::opt<T>()`) + visibility helpers `showIfTrue/showIfFalse` to reduce boilerplate; documentation updates
 
 ## ToDo
 
