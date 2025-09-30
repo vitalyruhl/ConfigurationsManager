@@ -18,7 +18,7 @@
 inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
 #endif
 
-#define CONFIGMANAGER_VERSION "2.4.3" //2025.09.30
+#define CONFIGMANAGER_VERSION "2.5.0" //2025.09.30
 
 
 // ConfigOptions must be defined before any usage in Config<T>

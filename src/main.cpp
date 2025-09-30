@@ -8,7 +8,7 @@
 AsyncWebServer server(80);
 // #include <WiFiClientSecure.h>
 
-#define VERSION "V2.4.1"
+#define VERSION "V2.5.0"
 #define APP_NAME "CM-BME280-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
@@ -360,12 +360,12 @@ void setup()
 
     // Runtime field metadata for dynamic UI
     // With thresholds: warn (yellow) and alarm (red). Example ranges; adjust as needed.
-    cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
+    cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", " °C", 1,
                                      1.0f, 30.0f, // warnMin / warnMax
                                      0.0f, 32.0f, // alarmMin / alarmMax
                                      true, true, true, true, 10); // enable warnMin, enable warnMax, enable alarmMin, enable alarmMax, order
 
-    cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", "%", 1,
+    cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", " %", 1,
                                      30.0f, 70.0f,
                                      15.0f, 90.0f,
                                      true, false, true, true, 11);
