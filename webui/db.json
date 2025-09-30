@@ -58,7 +58,7 @@
   "version": { "version": "MOCK-DATA 2.4.3" },
   "runtime": {
     "uptime": 123456,
-    "system": { "freeHeap": 150000, "rssi": -55 },
+  "system": { "freeHeap": 150000, "rssi": -55, "allowOTA": true },
     "sensors": { "temp": 21.3, "hum": 45.2, "dew": 10.1, "Pressure": 1012.4 },
     "alarms": { "dewpoint_risk": false, "temp_low": false }
   },

@@ -4,7 +4,9 @@
     <div class="tabs">
       <button :class="{active: activeTab==='live'}" @click="activeTab='live'">Live</button>
       <button :class="{active: activeTab==='settings'}" @click="switchToSettings()">Settings</button>
+      <button class="flash-btn" @click="startFlash" :disabled="!canFlash">Flash</button>
     </div>
+    <input ref="otaFileInput" type="file" accept=".bin,.bin.gz" class="hidden-file-input" @change="onFlashFileSelected" />
 
     <!-- Toast notifications -->
     <div class="toast-wrapper">
@@ -70,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import Category from './components/Category.vue';
 
 const config = ref({});
@@ -78,6 +80,8 @@ const refreshKey = ref(0); // forces re-render of settings tree
 const version = ref('');
 const refreshing = ref(false);
 const activeTab = ref('live');
+const flashing = ref(false);
+const otaFileInput = ref(null);
 
 // Toast notifications
 const toasts = ref([]); // {id, message, type, sticky, ts}
@@ -92,6 +96,17 @@ const wsConnected = ref(false);
 // Runtime metadata state for dynamic grouping
 const runtimeMeta = ref([]); // raw metadata array from /runtime_meta.json
 const runtimeGroups = ref([]); // transformed groups -> [{ name, title, fields:[{key,label,unit,precision}]}]
+
+const canFlash = computed(() => {
+  const systemConfig = config.value?.System;
+  let allow = false;
+  if (systemConfig && systemConfig.OTAEn && typeof systemConfig.OTAEn.value !== 'undefined') {
+    allow = !!systemConfig.OTAEn.value;
+  } else if (runtime.value.system && typeof runtime.value.system.allowOTA !== 'undefined') {
+    allow = !!runtime.value.system.allowOTA;
+  }
+  return allow && !flashing.value;
+});
 
 function notify(message, type='info', duration=3000, sticky=false, id=null){
   if(id==null) id = ++toastCounter;
@@ -229,6 +244,85 @@ function rebootDevice() {
     .catch(error => notify('Error: ' + error.message, 'error'));
 }
 
+function startFlash() {
+  if (!canFlash.value) {
+    notify('OTA updates are disabled in device settings.', 'error');
+    return;
+  }
+  if (!otaFileInput.value) {
+    notify('Browser file input not ready.', 'error');
+    return;
+  }
+  otaFileInput.value.value = '';
+  otaFileInput.value.click();
+}
+
+async function onFlashFileSelected(event) {
+  const files = event.target?.files;
+  if (!files || !files.length) {
+    return;
+  }
+  const file = files[0];
+  if (!file) {
+    return;
+  }
+  if (!canFlash.value) {
+    notify('OTA updates are disabled in device settings.', 'error');
+    return;
+  }
+  if (file.size === 0) {
+    notify('Selected file is empty.', 'error');
+    otaFileInput.value.value = '';
+    return;
+  }
+
+  let password = window.prompt('Enter OTA password', '');
+  if (password === null) {
+    otaFileInput.value.value = '';
+    return; // user cancelled
+  }
+  password = password.trim();
+
+  const headers = new Headers();
+  if (password.length) {
+    headers.append('X-OTA-PASSWORD', password);
+  }
+
+  const form = new FormData();
+  form.append('firmware', file, file.name);
+
+  flashing.value = true;
+  const toastId = notify(`Uploading ${file.name}...`, 'info', 15000, true);
+  try {
+    const response = await fetch('/ota_update', {
+      method: 'POST',
+      headers,
+      body: form
+    });
+
+    let payload = {};
+    const text = await response.text();
+    try { payload = text ? JSON.parse(text) : {}; } catch (e) { payload = { status: 'error', reason: text || 'invalid_response' }; }
+
+    if (response.status === 401) {
+      updateToast(toastId, 'Unauthorized: wrong OTA password.', 'error', 6000);
+    } else if (response.status === 403 || payload.reason === 'ota_disabled') {
+      updateToast(toastId, 'OTA updates are disabled on this device.', 'error', 6000);
+    } else if (!response.ok || payload.status !== 'ok') {
+      const reason = payload.reason || response.statusText || 'Upload failed';
+      updateToast(toastId, `Flash failed: ${reason}`, 'error', 6000);
+    } else {
+      updateToast(toastId, 'Flash uploaded. Device will reboot shortly.', 'success', 12000);
+      notify('Waiting for device to reboot...', 'info', 8000);
+    }
+  } catch (error) {
+    updateToast(toastId, `Flash failed: ${error.message}`, 'error', 6000);
+  } finally {
+    flashing.value = false;
+    if (otaFileInput.value) otaFileInput.value.value = '';
+  }
+}
+
 onMounted(() => {
   loadSettings();
   injectVersion();
@@ -334,6 +428,9 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .tabs { display:flex; gap:.5rem; justify-content:center; margin-bottom:1rem; }
 .tabs button { background:#ddd; color:#222; width:auto; padding:.5rem 1rem; }
 .tabs button.active { background:#3498db; color:#fff; }
+.flash-btn { background:#8e44ad; color:#fff; }
+.flash-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.hidden-file-input { display:none; }
 .live-cards { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; }
 .card { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.15); padding:0.75rem 1rem; border-radius:8px; min-width:140px; }
 .live-cards .card p { margin:0.25rem 0; }

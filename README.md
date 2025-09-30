@@ -47,6 +47,7 @@ description = ESP32 C++17 Project for managing settings
 - 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
 - 📡 AP Mode fallback / captive portal style entry
 - 🚀 OTA firmware upload endpoint
+- ⚡ Flash firmware directly from the web UI (password-protected HTTP OTA)
 - 🔴 Live runtime values (`/runtime.json`)
 - 🔁 WebSocket push channel (`/ws`) (frontend auto‑fallback to polling if socket not connected)
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
@@ -288,6 +289,17 @@ Older frontends ignore these keys gracefully.
 >OTA Update over web-interface
 
 ![OTA Update over web-interface](examples/ota-update-over-web.jpg)
+
+## Flash Firmware via Web UI
+
+The embedded single-page app now exposes a `Flash` action beside the `Settings` tab so you can push new firmware without leaving the browser.
+
+1. Enable `Allow OTA Updates` under **System** and set an `OTA Password` (leave empty to allow unauthenticated uploads).
+2. Click **Flash** and pick the compiled `.bin` (or `.bin.gz`) image produced by PlatformIO / Arduino.
+3. Enter the OTA password when prompted. The SPA sends it as the `X-OTA-PASSWORD` header so it never ends up inside the firmware payload.
+4. Watch the toast notifications for progress. On success the device reboots automatically; the UI keeps polling until it comes back online.
+
+The backend remains fully asynchronous (`ESPAsyncWebServer`)—the new `/ota_update` handler streams chunks into the `Update` API while still performing password checks. HTTP uploads are rejected when OTA is disabled, the password is missing/incorrect, or the upload fails integrity checks.
 
 ## Examples
 

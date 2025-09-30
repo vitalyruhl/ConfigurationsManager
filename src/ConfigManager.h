@@ -762,10 +762,142 @@ public:
         log_message("🌐 Defining routes...");
         // Serve version at /version (always async)
         server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(200, "text/plain", CONFIGMANAGER_VERSION); });
-        // OTA upload via HTTP form removed in always-async build; ArduinoOTA is recommended.
-        server.on("/ota_update", HTTP_GET, [](AsyncWebServerRequest *request){
-            request->send(200, "text/plain", "HTTP OTA upload form not provided in async build. Use ArduinoOTA.");
+        struct OtaUploadContext {
+            bool authorized = false;
+            bool began = false;
+            bool success = false;
+            bool hasError = false;
+            String errorReason;
+            size_t written = 0;
+        };
+
+        server.on("/ota_update", HTTP_GET, [this](AsyncWebServerRequest *request){
+            if(!_otaEnabled){
+                request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+                return;
+            }
+            request->send(200, "application/json", "{\"status\":\"ready\"}");
         });
+
+        server.on("/ota_update", HTTP_POST,
+            [this](AsyncWebServerRequest *request){
+                auto *ctx = static_cast<OtaUploadContext*>(request->_tempObject);
+                auto cleanup = [request, ctx](){
+                    if(ctx){ delete ctx; request->_tempObject = nullptr; }
+                };
+
+                if(!_otaEnabled){
+                    request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+                    cleanup();
+                    return;
+                }
+
+                if(!ctx){
+                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_context\"}");
+                    cleanup();
+                    return;
+                }
+
+                if(ctx->hasError){
+                    if(ctx->began){ Update.abort(); }
+                    if(ctx->errorReason == "missing_password" || ctx->errorReason == "unauthorized"){
+                        request->send(401, "application/json", "{\"status\":\"error\",\"reason\":\"unauthorized\"}");
+                    } else if(ctx->errorReason == "ota_disabled"){
+                        request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+                    } else {
+                        String payload = String("{\"status\":\"error\",\"reason\":\"") + ctx->errorReason + "\"}";
+                        request->send(500, "application/json", payload);
+                    }
+                    cleanup();
+                    return;
+                }
+
+                if(!ctx->success){
+                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete_upload\"}");
+                    cleanup();
+                    return;
+                }
+
+                request->onDisconnect([this](){
+                    log_message("🔁 OTA HTTP: reboot after upload");
+                    delay(250);
+                    reboot();
+                });
+                request->send(200, "application/json", "{\"status\":\"ok\",\"action\":\"reboot\"}");
+                cleanup();
+            },
+            [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+                OtaUploadContext *ctx = static_cast<OtaUploadContext*>(request->_tempObject);
+
+                if(index == 0){
+                    ctx = new OtaUploadContext();
+                    request->_tempObject = ctx;
+
+                    if(!_otaEnabled){
+                        ctx->hasError = true;
+                        ctx->errorReason = "ota_disabled";
+                        return;
+                    }
+
+                    if(!_otaPassword.isEmpty()){
+                        AsyncWebHeader *hdr = request->getHeader("X-OTA-PASSWORD");
+                        if(!hdr){
+                            ctx->hasError = true;
+                            ctx->errorReason = "missing_password";
+                            return;
+                        }
+                        if(hdr->value() != _otaPassword){
+                            ctx->hasError = true;
+                            ctx->errorReason = "unauthorized";
+                            return;
+                        }
+                    }
+                    ctx->authorized = true;
+
+                    size_t expected = request->contentLength();
+                    if(expected == 0){
+                        ctx->hasError = true;
+                        ctx->errorReason = "empty_upload";
+                        return;
+                    }
+
+                    if(!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
+                        ctx->hasError = true;
+                        ctx->errorReason = "begin_failed";
+                        Update.printError(Serial);
+                        return;
+                    }
+
+                    ctx->began = true;
+                    log_message("📦 OTA HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
+                }
+
+                if(!ctx || ctx->hasError){
+                    return;
+                }
+
+                if(len){
+                    if(Update.write(data, len) != len){
+                        ctx->hasError = true;
+                        ctx->errorReason = "write_failed";
+                        Update.printError(Serial);
+                        return;
+                    }
+                    ctx->written += len;
+                }
+
+                if(final){
+                    if(Update.end(true)){
+                        ctx->success = true;
+                        log_message("✅ OTA HTTP upload finished (%lu bytes written)", static_cast<unsigned long>(ctx->written));
+                    } else {
+                        ctx->hasError = true;
+                        ctx->errorReason = "end_failed";
+                        Update.printError(Serial);
+                    }
+                }
+            }
+        );
 
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest *request){ for (auto *s : settings) s->setDefault(); saveAll(); log_message("🌐 All settings reset to default"); request->send(200, "application/json", "{\"status\":\"reset\"}"); });
