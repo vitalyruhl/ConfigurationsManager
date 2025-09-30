@@ -38,6 +38,22 @@ AsyncWebServer server(80);
 ConfigManagerClass cfg;                                               // Create an instance of ConfigManager before using it in structures etc.
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
 
+// -------------------------------------------------------------------
+// Global theme override test: make all h1 headings orange without underline
+// Served via /user_theme.css and auto-injected by the frontend if present.
+// NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
+static const char GLOBAL_TEST_THEME[] PROGMEM = R"CSS(
+/* Global test theme override */
+html body h1 {text-decoration: none !important; border-bottom: none !important; }
+h3 { color: orange }
+
+/* Temperature field styling */
+/* Targets: provider group 'sensors', key 'temp' */
+.rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:#d00000; font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:#d00000; font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:#d00000; font-weight:900; }
+)CSS";
+
 // (Server instance moved into conditional above)
 int cbTestValue = 0;
 
@@ -276,18 +292,21 @@ struct TempSettings {
     Config<float> humidityCorrection;
     Config<int>   seaLevelPressure;
     Config<int>   readIntervalSec;
+    Config<float> dewpointRiskWindow; // ΔT (°C) über Taupunkt, ab der Risiko-Alarm auslöst
     // Shared OptionGroup constants to avoid repetition
     static constexpr OptionGroup TG{.category ="Temp", .prettyCat = "Temperature Settings"};
     TempSettings():
         tempCorrection(TG.opt<float>("TCO", 0.1f, "Temperature Correction")),
         humidityCorrection(TG.opt<float>("HYO", 0.1f, "Humidity Correction")),
         seaLevelPressure(TG.opt<int>("SLP", 1013, "Sea Level Pressure")),
-        readIntervalSec(TG.opt<int>("ReadTemp", 30, "Read Temp/Humidity every (s)"))
+        readIntervalSec(TG.opt<int>("ReadTemp", 30, "Read Temp/Humidity every (s)")),
+        dewpointRiskWindow(TG.opt<float>("DPWin", 1.5f, "Dewpoint Risk Window (°C)"))
     {
         cfg.addSetting(&tempCorrection);
         cfg.addSetting(&humidityCorrection);
         cfg.addSetting(&seaLevelPressure);
         cfg.addSetting(&readIntervalSec);
+        cfg.addSetting(&dewpointRiskWindow);
     }
 };
 TempSettings tempSettings;
@@ -314,6 +333,7 @@ void setup()
 
     //-----------------------------------------------------------------
     cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    cfg.setCustomCss(GLOBAL_TEST_THEME, sizeof(GLOBAL_TEST_THEME) - 1);// Register global CSS override
     //----------------------------------------------------------------------------------------------------------------------------------
     // temperature - Sensor settings (BME280) to show how to use settings in your own code
 
@@ -360,16 +380,11 @@ void setup()
 
     // Runtime field metadata for dynamic UI
     // With thresholds: warn (yellow) and alarm (red). Example ranges; adjust as needed.
-    {
-        auto tempFieldStyle = ConfigManagerClass::defaultNumericStyle(true);
-        tempFieldStyle.rule("label").set("color", "#d00000").set("fontWeight", "700");
-        tempFieldStyle.rule("values").set("color", "#0b3d91").set("fontWeight", "700");
-        tempFieldStyle.rule("unit").set("color", "#000000").set("fontWeight", "700");
-        cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
-                                         1.0f, 30.0f, // warnMin / warnMax
-                                         0.0f, 32.0f, // alarmMin / alarmMax
-                                         true, true, true, true, 10, tempFieldStyle);
-    }
+    // Define temperature field without custom style meta (CSS overrides will handle presentation)
+    cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
+                                     1.0f, 30.0f, // warnMin / warnMax
+                                     0.0f, 32.0f, // alarmMin / alarmMax
+                                     true, true, true, true, 10);
 
     cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", "%", 1,
                                      30.0f, 70.0f,
@@ -387,6 +402,8 @@ void setup()
         "dewpoint_risk",
         [](const JsonObject &root)
         {
+            // User-configurable window above dewpoint at which risk alarm triggers
+            float dewpointRiskWindow = tempSettings.dewpointRiskWindow.get();
             if (!root.containsKey("sensors"))
                 return false;
             const JsonObject sensors = root["sensors"].as<JsonObject>();
@@ -394,7 +411,7 @@ void setup()
                 return false;
             float t = sensors["temp"].as<float>();
             float d = sensors["dew"].as<float>();
-            return (t - d) <= 1.2f; // risk window
+            return (t - d) <= dewpointRiskWindow; // risk window
         },
         []()
         { Serial.println("[ALARM] Dewpoint proximity risk ENTER"); }, // here you could also trigger a relay or similar
@@ -411,7 +428,7 @@ void setup()
             // Hysteresis: once active keep it on until t > 0.5
             if (lastState)
             { // currently active -> wait until we are clearly above release threshold
-                lastState = (temperature < 0.5f);
+                lastState = (temperature > 0.5f);
             }
             else
             { // currently inactive -> trigger when below entry threshold
@@ -430,22 +447,23 @@ void setup()
             // digitalWrite(RELAY_HEATER_PIN, LOW);
         });
 
-    // quick define a group of alarms, will be shown in gui in section "Alarms" (only on boolean)
-    {
-        auto dewpointRiskStyle = ConfigManagerClass::defaultBoolStyle(true);
-        dewpointRiskStyle.rule("stateDotOnTrue")
-            .set("background", "#f1c40f")
-            .set("border", "none")
-            .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
-            .set("animation", "none");
-        dewpointRiskStyle.rule("stateDotOnAlarm")
-            .set("background", "#f1c40f")
-            .set("border", "none")
-            .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
-            .set("animation", "none");
-        cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100, dewpointRiskStyle);
-    }
-    cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true);
+        cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100);
+
+        { // Custom styling for the too-low-temperature alarm (yellow, no blink, instead of red standard)
+            auto tooLowTempStyleOverride = ConfigManagerClass::defaultBoolStyle(true);
+            tooLowTempStyleOverride.rule("stateDotOnTrue")
+                .set("background", "#f1c40f")
+                .set("border", "none")
+                .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
+                .set("animation", "none");
+            tooLowTempStyleOverride.rule("stateDotOnAlarm")
+                .set("background", "#f1c40f")
+                .set("border", "none")
+                .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
+                .set("animation", "none");
+            cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true, /*order*/ 100, tooLowTempStyleOverride);
+        }
+
 
     SetupStartTemperatureMeasuring();
     //----------------------------------------------------------------------------------------------------------------------------------

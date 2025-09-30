@@ -14,6 +14,7 @@
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
+// #define development // Uncomment (or add -Ddevelopment to build flags) to enable dev-only export & runtime_meta override routes
 
 #ifdef UNIT_TEST
 // Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
@@ -1014,6 +1015,76 @@ public:
         server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", toJSON()); });
         server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeValuesToJSON()); });
         server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeMetaToJSON()); });
+#ifdef development
+        server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request){
+            String cfgJson = toJSON();
+            String rtJson = runtimeValuesToJSON();
+            String metaJson = runtimeMetaToJSON();
+            DynamicJsonDocument doc(8192);
+            if(deserializeJson(doc["config"], cfgJson) || deserializeJson(doc["runtime"], rtJson) || deserializeJson(doc["runtime_meta"], metaJson)){
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"bundle_build_failed\"}");
+                return;
+            }
+            doc["exportVersion"] = CONFIGMANAGER_VERSION;
+            String out; serializeJson(doc, out);
+            request->send(200, "application/json", out);
+        });
+        server.on("/runtime_meta/override", HTTP_POST,
+            [this](AsyncWebServerRequest *request){}, NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    DynamicJsonDocument doc(8192);
+                    DeserializationError err = deserializeJson(doc, *body);
+                    if(err || !doc.is<JsonArray>()){
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json_array\"}");
+                        delete body; request->_tempObject=nullptr; return;
+                    }
+                    _runtimeMetaOverride.clear();
+                    for(JsonVariant v : doc.as<JsonArray>()){
+                        if(!v.is<JsonObject>()) continue;
+                        RuntimeFieldMeta m; JsonObject o = v.as<JsonObject>();
+                        m.group = String(o["group"].as<const char*>()?o["group"].as<const char*>():"");
+                        m.key = String(o["key"].as<const char*>()?o["key"].as<const char*>():"");
+                        m.label = String(o["label"].as<const char*>()?o["label"].as<const char*>():m.key.c_str());
+                        m.unit = String(o["unit"].as<const char*>()?o["unit"].as<const char*>():"");
+                        m.precision = o.containsKey("precision") ? o["precision"].as<int>() : 1;
+                        if(o["isBool"].as<bool>()) m.isBool = true;
+                        if(o["isString"].as<bool>()) m.isString = true;
+                        if(o["isDivider"].as<bool>()) m.isDivider = true;
+                        if(o.containsKey("order")) m.order = o["order"].as<int>();
+                        if(o.containsKey("warnMin")){ m.hasWarnMin = true; m.warnMin = o["warnMin"].as<float>(); }
+                        if(o.containsKey("warnMax")){ m.hasWarnMax = true; m.warnMax = o["warnMax"].as<float>(); }
+                        if(o.containsKey("alarmMin")){ m.hasAlarmMin = true; m.alarmMin = o["alarmMin"].as<float>(); }
+                        if(o.containsKey("alarmMax")){ m.hasAlarmMax = true; m.alarmMax = o["alarmMax"].as<float>(); }
+                        if(o.containsKey("boolAlarmValue")) m.boolAlarmValue = o["boolAlarmValue"].as<bool>()?1:-1;
+                        if(o.containsKey("style") && !_disableRuntimeStyleMeta){
+                            JsonObject st = o["style"].as<JsonObject>();
+                            for(auto kv : st){ RuntimeFieldStyleRule &r = m.style.rule(String(kv.key().c_str())); JsonObject ruleObj = kv.value().as<JsonObject>(); if(ruleObj.containsKey("visible")) r.setVisible(ruleObj["visible"].as<bool>()); for(auto prop : ruleObj){ String pk = prop.key().c_str(); if(pk=="visible") continue; r.set(pk, String(prop.value().as<const char*>()?prop.value().as<const char*>():"")); } }
+                        }
+                        if(m.group.length() && m.key.length()) _runtimeMetaOverride.push_back(m);
+                    }
+                    _runtimeMetaOverrideActive = true;
+                    request->send(200, "application/json", "{\"status\":\"ok\",\"count\":" + String(_runtimeMetaOverride.size()) + "}" );
+                    delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+        server.on("/runtime_meta/override", HTTP_DELETE, [this](AsyncWebServerRequest *request){ _runtimeMetaOverride.clear(); _runtimeMetaOverrideActive=false; request->send(200, "application/json", "{\"status\":\"cleared\"}"); });
+        server.on("/runtime_meta/override", HTTP_GET, [this](AsyncWebServerRequest *request){ String payload = String("{\"active\":") + (_runtimeMetaOverrideActive?"true":"false") + ",\"count\":" + String(_runtimeMetaOverride.size()) + "}"; request->send(200, "application/json", payload); });
+#endif
+        // Optional user supplied global CSS override (served if configured)
+        server.on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest *request){
+            if(getCustomCss() && getCustomCssLen()>0){
+                log_message("[THEME] Serving user_theme.css (%u bytes)", (unsigned)getCustomCssLen());
+                request->send(200, "text/css", String(getCustomCss()));
+            } else {
+                log_message("[THEME] No custom CSS configured (204)");
+                request->send(204); // No Content
+            }
+        });
 
         // Save all settings
         server.on("/config/save_all", HTTP_POST,
@@ -1300,6 +1371,18 @@ public:
             RuntimeFieldStyle style;
         };
 
+        // Feature flags / theming helpers
+        bool _disableRuntimeStyleMeta = false; // if true, omit style objects from runtime_meta
+        const char* _customCss = nullptr;      // pointer to optional globally injected CSS (not persisted)
+        size_t _customCssLen = 0;              // optional length (0 -> strlen)
+    public:
+        void disableRuntimeStyleMeta(bool v){ _disableRuntimeStyleMeta = v; }
+        bool isRuntimeStyleMetaDisabled() const { return _disableRuntimeStyleMeta; }
+        // Provide a pointer to a compile-time or static CSS string. Not copied -> keep storage alive.
+        void setCustomCss(const char* css, size_t len = 0){ _customCss = css; _customCssLen = len; }
+        const char* getCustomCss() const { return _customCss; }
+        size_t getCustomCssLen() const { return _customCss ? (_customCssLen? _customCssLen : strlen(_customCss)) : 0; }
+
         static RuntimeFieldStyle defaultNumericStyle(bool hasUnit = true){
             RuntimeFieldStyle style;
             style.rule("label").set("fontWeight", "600");
@@ -1311,10 +1394,10 @@ public:
 
             RuntimeFieldStyleRule &unitRule = style.rule("unit");
             if(hasUnit){
-                unitRule.set("fontWeight", "600");
-                unitRule.set("color", "#000");
-                unitRule.set("textAlign", "left");
-                unitRule.setVisible(true);
+                // unitRule.set("fontWeight", "600");
+                // unitRule.set("color", "#000");
+                // unitRule.set("textAlign", "left");
+                // unitRule.setVisible(true);
             } else {
                 unitRule.setVisible(false);
             }
@@ -1490,7 +1573,12 @@ public:
             DynamicJsonDocument d(4096);
             JsonArray arr = d.to<JsonArray>();
             // Sort by group, then order, then label
-            std::vector<RuntimeFieldMeta> metaSorted = _runtimeMeta;
+            std::vector<RuntimeFieldMeta> metaSorted;
+#ifdef development
+            if(_runtimeMetaOverrideActive) metaSorted = _runtimeMetaOverride; else metaSorted = _runtimeMeta;
+#else
+            metaSorted = _runtimeMeta;
+#endif
             std::sort(metaSorted.begin(), metaSorted.end(), [](const RuntimeFieldMeta &a, const RuntimeFieldMeta &b){
                 if(a.group == b.group){ if(a.order == b.order) return a.label < b.label; return a.order < b.order; }
                 return a.group < b.group;
@@ -1515,18 +1603,14 @@ public:
                 if(m.boolAlarmValue != -1){
                     o["boolAlarmValue"] = (m.boolAlarmValue == 1);
                 }
-                if(!m.style.empty()){
+                if(!_disableRuntimeStyleMeta && !m.style.empty()){
                     JsonObject styleObj = o.createNestedObject("style");
                     for(const auto &rule : m.style.rules){
                         if(!rule.key.length()) continue;
                         JsonObject ruleObj = styleObj.createNestedObject(rule.key);
-                        if(rule.hasVisible){
-                            ruleObj["visible"] = rule.visible;
-                        }
+                        if(rule.hasVisible){ ruleObj["visible"] = rule.visible; }
                         for(const auto &prop : rule.properties){
-                            if(prop.name.length()){
-                                ruleObj[prop.name.c_str()] = prop.value;
-                            }
+                            if(prop.name.length()) ruleObj[prop.name.c_str()] = prop.value;
                         }
                     }
                 }
@@ -1535,7 +1619,11 @@ public:
         }
     private:
         std::vector<RuntimeValueProvider> runtimeProviders;
-        std::vector<RuntimeFieldMeta> _runtimeMeta;
+    std::vector<RuntimeFieldMeta> _runtimeMeta;
+#ifdef development
+    std::vector<RuntimeFieldMeta> _runtimeMetaOverride; // injected via /runtime_meta/override
+    bool _runtimeMetaOverrideActive = false;
+#endif
         // Cross-field runtime alarms
         struct RuntimeAlarm {
             String name; // identifier

@@ -42,8 +42,12 @@
               <span class="rt-unit"></span>
             </div>
             <!-- Boolean / Numeric -->
-            <div v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
-               :class="['rt-row', valueClasses(runtime[group.name][f.key], f)]">
+        <div v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
+          :class="['rt-row', valueClasses(runtime[group.name][f.key], f)]"
+          :data-group="group.name"
+          :data-key="f.key"
+          :data-type="f.isBool ? 'bool' : (f.isString ? 'string' : 'numeric')"
+          :data-state="f.isBool ? boolState(runtime[group.name][f.key], f) : null">
               <template v-if="f.isBool">
                 <span class="rt-label bool-label" v-if="fieldVisible(f, 'label')" :style="fieldCss(f, 'label')">
                   <span class="bool-dot" v-if="boolDotVisible(runtime[group.name][f.key], f)" :style="boolDotStyle(runtime[group.name][f.key], f)"></span>
@@ -401,6 +405,14 @@ onMounted(() => {
     /* ignore */
   }
 
+  // Load optional user theme CSS (global override)
+  try {
+    fetch('/user_theme.css?ts=' + Date.now())
+      .then(r => r.status === 200 ? r.text() : '')
+      .then(css => { if(css && css.trim().length){ const existing=document.getElementById('user-theme-css'); if(existing) existing.remove(); const el=document.createElement('style'); el.id='user-theme-css'; el.textContent=css; document.head.appendChild(el);} })
+      .catch(()=>{});
+  } catch(e){ /* ignore */ }
+
   loadSettings();
   injectVersion();
   initLive();
@@ -499,6 +511,13 @@ function valueClasses(val, meta){
   return severityClass(val, meta);
 }
 
+function boolState(val, meta){
+  if(!meta || !meta.isBool) return '';
+  const v = !!val;
+  if(typeof meta.boolAlarmValue === 'boolean' && v === meta.boolAlarmValue) return 'alarm';
+  return v ? 'on' : 'off';
+}
+
 function fieldRule(meta, key){
   if(!meta) return null;
   const rules = ensureStyleRules(meta);
@@ -565,7 +584,7 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .live-cards .card .rt-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:.35rem; margin:.2rem 0; font-size:.9rem; }
 .rt-label { font-weight:600; text-align:left; display:flex; align-items:center; gap:.35rem; }
 .rt-value { text-align:right; font-variant-numeric:tabular-nums; }
-.rt-unit { text-align:left; font-size:.8rem; color:#666; min-width:2.5ch; white-space:nowrap; }
+.rt-unit { text-align:left; font-size:.8rem; color:#000; min-width:2.5ch; white-space:nowrap; font-weight:600; }
 .rt-row.sev-warn { color:#b58900; font-weight:600; }
 .rt-row.sev-alarm { color:#d00000; font-weight:700; animation: blink 1.6s linear infinite; }
 @keyframes blink { 50% { opacity:0.30; } }

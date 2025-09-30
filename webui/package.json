@@ -6,6 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "mock-server": "nodemon --watch db.json --exec \"json-server --watch db.json --port 32000\"",
+    "bridge": "node deviceBridge.js",
+    "bridge-dev": "npm-run-all --parallel bridge dev",
     "test": "npm-run-all --parallel mock-server dev"
   },
   "dependencies": {

@@ -1,19 +1,19 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.4.3 (2025.09.30)
+> Version 2.5.0 (2025.09.30)
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
 
 ## Overview
 
-The ConfigurationsManager is a C++17 helper library & example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI and OTA update endpoint. It focuses on:
+ConfigurationsManager is a C++17 helper library + example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI (settings + live runtime dashboard + OTA flashing). It focuses on:
 
-- Type‑safe templated `Config<T>` wrappers
+-- Type‑safe templated `Config<T>` wrappers
 - Central registration + bulk load/save functions
 - Optional pretty display names and pretty category names (decouple storage key from UI)
 - Automatic key truncation safety (category + key <= 15 chars total in NVS) with friendly UI name preserved
-- Dynamic conditional visibility (`showIf` lambdas)
+-- Dynamic conditional visibility (`showIf` lambdas)
 - Callbacks on value change
 - OTA update integration
 - Static or DHCP WiFi startup helpers (multiple overloads)
@@ -49,14 +49,14 @@ description = ESP32 C++17 Project for managing settings
 - 🚀 OTA firmware upload endpoint
 - ⚡ Flash firmware directly from the web UI (password-protected HTTP OTA)
 - 🔴 Live runtime values (`/runtime.json`)
-- 🔁 WebSocket push channel (`/ws`) (frontend auto‑fallback to polling if socket not connected)
+- 🎨 Two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
 >To see how i use it in my project, check out my GitHub (most features are used in this project):
 >[https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
 
-### Live Runtime Values & Alarm System since 2.4.x
+### Live Runtime Values & Alarm System
 
 ![Live Runtime Values & Alarm System](examples/live-values.jpg)
 
@@ -94,7 +94,7 @@ cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1); // plain (no thr
 
 Frontend consumes `/runtime_meta.json` → groups, units, precision, thresholds.
 
-#### Styling Runtime Fields (2.5.0)
+#### Styling Runtime Fields (Quick Glimpse)
 
 Runtime metadata now ships optional **style overrides** so you can tweak how individual values appear in the web UI without touching the Vue code. Each field carries a `RuntimeFieldStyle` structure that maps logical targets (`label`, `values`, `unit`, `state`, `stateDotOnTrue`, `stateDotOnFalse`, `stateDotOnAlarm`, …) to CSS property/value pairs plus an optional `visible` flag. The backend merges your overrides with type-specific defaults, ensuring the UI always has sensible fallbacks.
 
@@ -126,7 +126,9 @@ Runtime metadata now ships optional **style overrides** so you can tweak how ind
 }
 ```
 
-If a rule doesn’t exist yet, `rule("target")` creates it on first use. Use `.setVisible(false)` (or `.setVisible(true)`) to show/hide elements such as the unit column for text-only rows. On the frontend side the style object is emitted verbatim inside `/runtime_meta.json`, so you can inspect the live payload to verify the CSS being applied.
+If a rule doesn’t exist yet, `rule("target")` creates it. Use `.setVisible(false)` to hide an element (e.g. boolean state text). Frontend consumes the style object verbatim inside `/runtime_meta.json`.
+
+Full documentation moved to: `docs/STYLING.md` and `docs/THEMING.md`.
 
 1. **Boolean Runtime Fields**
 
@@ -268,7 +270,7 @@ cfg.defineRuntimeAlarm("too_cold",
 cfg.enableWebSocketPush(1500);
 ```
 
-#### New in 2.4.2 (Unreleased): Runtime String Fields, Dividers & Ordering
+#### Runtime String Fields, Dividers & Ordering
 
 You can enrich the Live view with informational text lines and visual separators and control ordering.
 
@@ -304,11 +306,21 @@ Older frontends ignore these keys gracefully.
 
 ---
 
+## Documentation Index
+
+| Topic | File |
+|-------|------|
+| Settings & OptionGroup | `docs/SETTINGS.md` |
+| Runtime Providers & Alarms | `docs/RUNTIME.md` |
+| Styling (per-field metadata) | `docs/STYLING.md` |
+| Theming (global CSS + disabling metadata) | `docs/THEMING.md` |
+| OTA Flash Workflow | (this README) |
+
 ## Requirements
 
 - ESP32 development board
-- Arduino IDE or PlatformIO
-- add _build_flags = -std=gnu++17_ and _build_unflags = -std=gnu++11_ to your platformio.ini file
+- PlatformIO (preferred) or Arduino IDE
+- Add `-std=gnu++17` (and remove default gnu++11) in `platformio.ini`
 
 ## Screenshots
 
@@ -645,6 +657,10 @@ pio run -e usb -t clean
 
 ```
 
+## Custom Theme (Global CSS)
+
+Provide one stylesheet at `/user_theme.css` by calling `setCustomCss()` and optionally shrink `/runtime_meta.json` by `disableRuntimeStyleMeta(true)`. See `docs/THEMING.md` for detailed selectors & examples.
+
 ## Version History
 
 - **1.0.0**: Initial release with basic features.
@@ -670,7 +686,7 @@ pio run -e usb -t clean
   - Added relay control example via alarm callbacks
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
 - **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
-- **2.5.0**: added OptionGroup factory (`OptionGroup::opt<T>()`) + visibility helpers `showIfTrue/showIfFalse` to reduce boilerplate; documentation updates, Add OTA firmware upload via web UI with password protection(configurable over init and web UI)
+- **2.5.0**: OptionGroup + visibility helpers, runtime field styling metadata, boolean dot styling refinements, hybrid theming (disable style meta + `/user_theme.css`), OTA flash UI improvements.
 
 ## ToDo
 
