@@ -145,7 +145,7 @@ async function injectVersion() {
     const response = await fetch('/version');
     if (!response.ok) throw new Error('Version fetch failed');
     const data = await response.text();
-    version.value = 'V' + data;
+    version.value = '' + data;
   } catch (e) {
     version.value = '';
   }
@@ -313,6 +313,7 @@ async function onFlashFileSelected(event) {
       updateToast(toastId, `Flash failed: ${reason}`, 'error', 6000);
     } else {
       updateToast(toastId, 'Flash uploaded. Device will reboot shortly.', 'success', 12000);
+      notify('Flash successful! Device is rebooting...', 'success', 6000);
       notify('Waiting for device to reboot...', 'info', 8000);
     }
   } catch (error) {

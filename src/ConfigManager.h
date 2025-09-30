@@ -441,6 +441,14 @@ class ConfigManagerClass {
 
 public:
 
+    ConfigManagerClass(){
+    #ifdef APP_NAME
+        _appName = APP_NAME;
+    #else
+        _appName = "ConfigManager";
+    #endif
+    }
+
     BaseSetting *findSetting(const String &category, const String &key) {
         for (auto *s : settings)
         {
@@ -470,6 +478,12 @@ public:
 
         logger(buffer);
     }
+
+    void setAppName(const String& name){
+        if(name.length()) _appName = name;
+        else _appName = "ConfigManager";
+    }
+    const String& getAppName() const { return _appName; }
 
     void triggerLoggerTest() {
        log_message("Test message abcdefghijklmnop");
@@ -761,7 +775,12 @@ public:
     void defineRoutes() {
         log_message("🌐 Defining routes...");
         // Serve version at /version (always async)
-        server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(200, "text/plain", CONFIGMANAGER_VERSION); });
+        server.on("/version", HTTP_GET, [this](AsyncWebServerRequest *request){
+            String payload = _appName;
+            if(payload.length()) payload += " ";
+            payload += CONFIGMANAGER_VERSION;
+            request->send(200, "text/plain", payload);
+        });
         struct OtaUploadContext {
             bool authorized = false;
             bool began = false;
@@ -769,6 +788,7 @@ public:
             bool hasError = false;
             String errorReason;
             size_t written = 0;
+            int statusCode = 200;
         };
 
         server.on("/ota_update", HTTP_GET, [this](AsyncWebServerRequest *request){
@@ -793,37 +813,38 @@ public:
                 }
 
                 if(!ctx){
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_context\"}");
+                    request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"no_context\"}");
                     cleanup();
                     return;
                 }
 
-                if(ctx->hasError){
-                    if(ctx->began){ Update.abort(); }
-                    if(ctx->errorReason == "missing_password" || ctx->errorReason == "unauthorized"){
-                        request->send(401, "application/json", "{\"status\":\"error\",\"reason\":\"unauthorized\"}");
-                    } else if(ctx->errorReason == "ota_disabled"){
-                        request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
-                    } else {
-                        String payload = String("{\"status\":\"error\",\"reason\":\"") + ctx->errorReason + "\"}";
-                        request->send(500, "application/json", payload);
-                    }
+                if(ctx->hasError || Update.hasError()){
+                    int code = ctx->statusCode ? ctx->statusCode : 500;
+                    if(ctx->began && !ctx->hasError){ Update.abort(); }
+                    String reason = ctx->errorReason.length() ? ctx->errorReason : String("upload_failed");
+                    log_message("❌ OTA HTTP error (%d): %s", code, reason.c_str());
+                    String payload = String("{\"status\":\"error\",\"reason\":\"") + reason + "\"}";
+                    request->send(code, "application/json", payload);
                     cleanup();
                     return;
                 }
 
-                if(!ctx->success){
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete_upload\"}");
+                if(!ctx->began || !ctx->success){
+                    log_message("❌ OTA HTTP upload incomplete");
+                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete\"}");
                     cleanup();
                     return;
                 }
 
+                AsyncWebServerResponse *response = request->beginResponse(200, "application/json", "{\"status\":\"ok\",\"action\":\"reboot\"}");
+                response->addHeader("Connection", "close");
                 request->onDisconnect([this](){
-                    log_message("🔁 OTA HTTP: reboot after upload");
-                    delay(250);
+                    log_message("🔁 OTA HTTP: client disconnected, rebooting...");
+                    delay(500);
                     reboot();
                 });
-                request->send(200, "application/json", "{\"status\":\"ok\",\"action\":\"reboot\"}");
+                request->send(response);
+                log_message("✅ OTA HTTP upload success (%lu bytes)", static_cast<unsigned long>(ctx->written));
                 cleanup();
             },
             [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
@@ -835,6 +856,7 @@ public:
 
                     if(!_otaEnabled){
                         ctx->hasError = true;
+                        ctx->statusCode = 403;
                         ctx->errorReason = "ota_disabled";
                         return;
                     }
@@ -843,11 +865,13 @@ public:
                         AsyncWebHeader *hdr = request->getHeader("X-OTA-PASSWORD");
                         if(!hdr){
                             ctx->hasError = true;
+                            ctx->statusCode = 401;
                             ctx->errorReason = "missing_password";
                             return;
                         }
                         if(hdr->value() != _otaPassword){
                             ctx->hasError = true;
+                            ctx->statusCode = 401;
                             ctx->errorReason = "unauthorized";
                             return;
                         }
@@ -857,12 +881,14 @@ public:
                     size_t expected = request->contentLength();
                     if(expected == 0){
                         ctx->hasError = true;
+                        ctx->statusCode = 400;
                         ctx->errorReason = "empty_upload";
                         return;
                     }
 
                     if(!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
                         ctx->hasError = true;
+                        ctx->statusCode = 500;
                         ctx->errorReason = "begin_failed";
                         Update.printError(Serial);
                         return;
@@ -872,13 +898,14 @@ public:
                     log_message("📦 OTA HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
                 }
 
-                if(!ctx || ctx->hasError){
+                if(!ctx || ctx->hasError || !ctx->authorized){
                     return;
                 }
 
                 if(len){
                     if(Update.write(data, len) != len){
                         ctx->hasError = true;
+                        ctx->statusCode = 500;
                         ctx->errorReason = "write_failed";
                         Update.printError(Serial);
                         return;
@@ -889,9 +916,9 @@ public:
                 if(final){
                     if(Update.end(true)){
                         ctx->success = true;
-                        log_message("✅ OTA HTTP upload finished (%lu bytes written)", static_cast<unsigned long>(ctx->written));
                     } else {
                         ctx->hasError = true;
+                        ctx->statusCode = 500;
                         ctx->errorReason = "end_failed";
                         Update.printError(Serial);
                     }
@@ -1353,6 +1380,7 @@ public:
         bool _otaInitialized = false;
         String _otaPassword;
         String _otaHostname;
+    String _appName;
 
 };
 

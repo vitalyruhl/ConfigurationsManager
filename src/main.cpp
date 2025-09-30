@@ -9,7 +9,7 @@ AsyncWebServer server(80);
 // #include <WiFiClientSecure.h>
 
 #define VERSION "V2.4.1"
-
+#define APP_NAME "CM-BME280-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
 // ⚠️ Warning ⚠️
@@ -313,7 +313,7 @@ void setup()
             Serial.println(msg); });
 
     //-----------------------------------------------------------------
-
+    cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     //----------------------------------------------------------------------------------------------------------------------------------
     // temperature - Sensor settings (BME280) to show how to use settings in your own code
 

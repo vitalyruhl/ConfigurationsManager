@@ -636,24 +636,19 @@ pio run -e usb -t clean
   - Added relay control example via alarm callbacks
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
 - **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
-- **2.4.3**: added OptionGroup factory (`OptionGroup::opt<T>()`) + visibility helpers `showIfTrue/showIfFalse` to reduce boilerplate; documentation updates
+- **2.5.0**: added OptionGroup factory (`OptionGroup::opt<T>()`) + visibility helpers `showIfTrue/showIfFalse` to reduce boilerplate; documentation updates, Add OTA firmware upload via web UI with password protection(configurable over init and web UI)
 
 ## ToDo
 
-- HTTPS Support
-- add optional order number for settings to show on webinterface
+- HTTPS Support (original async lib not support https 😒 )
 - add optional order number for categories to show on webinterface
 - add optional description for settings to show on webinterface as tooltip
 - add optional show-password flag to show password on webinterface, and or console
 - add reset to default for single settings
-- add configurable OTA route
-- add configurable OTA password for webinterface
 - i18n Support
 - make c++ V11 support
 
 ## known Issues
 
-- **Save all** button works only, if you saved value ones over single save-button
 - prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown.
 - if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty.
-- after all changes - the ota update over webinterface is not working, will be fixed in next release
