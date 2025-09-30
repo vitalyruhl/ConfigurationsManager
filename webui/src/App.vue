@@ -17,6 +17,12 @@
     </div>
 
     <section v-if="activeTab==='live'" class="live-view">
+      <div class="live-controls">
+        <label class="bool-toggle">
+          <input type="checkbox" v-model="showBoolStateText">
+          <span>Show state text</span>
+        </label>
+      </div>
       <div class="live-cards">
         <div class="card" v-for="group in runtimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
@@ -44,7 +50,7 @@
                   {{ f.label }}
                 </span>
                 <span class="rt-label bool-label" v-else></span>
-                <span class="rt-value" v-if="fieldVisible(f, 'state')" :style="fieldCss(f, 'state')">{{ formatBool(runtime[group.name][f.key], f) }}</span>
+                <span class="rt-value" v-if="showBoolStateText && fieldVisible(f, 'state')" :style="fieldCss(f, 'state')">{{ formatBool(runtime[group.name][f.key], f) }}</span>
                 <span class="rt-value" v-else></span>
                 <span class="rt-unit" v-if="fieldVisible(f, 'unit', false)" :style="fieldCss(f, 'unit')"></span>
                 <span class="rt-unit" v-else></span>
@@ -90,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import Category from './components/Category.vue';
 
 const config = ref({});
@@ -99,6 +105,7 @@ const version = ref('');
 const refreshing = ref(false);
 const activeTab = ref('live');
 const flashing = ref(false);
+const showBoolStateText = ref(false);
 const otaFileInput = ref(null);
 
 // Toast notifications
@@ -114,6 +121,44 @@ const wsConnected = ref(false);
 // Runtime metadata state for dynamic grouping
 const runtimeMeta = ref([]); // raw metadata array from /runtime_meta.json
 const runtimeGroups = ref([]); // transformed groups -> [{ name, title, fields:[{key,label,unit,precision}]}]
+
+function normalizeStyle(style){
+  if(!style || typeof style !== 'object') return null;
+  const normalized = {};
+  Object.entries(style).forEach(([ruleKey, ruleValue]) => {
+    if(!ruleValue || typeof ruleValue !== 'object') return;
+    const { visible, ...rest } = ruleValue;
+    const cssProps = { ...rest };
+    normalized[ruleKey] = {
+      css: cssProps,
+      visible: Object.prototype.hasOwnProperty.call(ruleValue, 'visible') ? !!visible : undefined
+    };
+  });
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+function ensureStyleRules(meta){
+  if(!meta) return null;
+  if(meta.styleRules) return meta.styleRules;
+  if(meta.style){
+    const normalized = normalizeStyle(meta.style);
+    if(normalized){
+      meta.styleRules = normalized;
+      return meta.styleRules;
+    }
+  }
+  return null;
+}
+
+watch(showBoolStateText, (val) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('cm_showBoolStateText', val ? '1' : '0');
+    }
+  } catch (e) {
+    /* ignore */
+  }
+});
 
 const canFlash = computed(() => {
   const systemConfig = config.value?.System;
@@ -343,6 +388,19 @@ async function onFlashFileSelected(event) {
 }
 
 onMounted(() => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem('cm_showBoolStateText');
+      if (stored === '1') {
+        showBoolStateText.value = true;
+      } else if (stored === '0') {
+        showBoolStateText.value = false;
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
   loadSettings();
   injectVersion();
   initLive();
@@ -409,7 +467,8 @@ function buildRuntimeGroups(){
         isDivider: m.isDivider || false,
         staticValue: m.staticValue || '',
         order: m.order !== undefined ? m.order : 100,
-        style: m.style || null
+        style: m.style || null,
+        styleRules: normalizeStyle(m.style || null)
       });
     }
     runtimeGroups.value = Object.values(grouped).map(g=>{ g.fields.sort((a,b)=>{ if(a.isDivider && b.isDivider) return a.order - b.order; if(a.order === b.order) return a.label.localeCompare(b.label); return a.order - b.order; }); return g; });
@@ -441,8 +500,10 @@ function valueClasses(val, meta){
 }
 
 function fieldRule(meta, key){
-  if(!meta || !meta.style) return null;
-  return meta.style[key] || null;
+  if(!meta) return null;
+  const rules = ensureStyleRules(meta);
+  if(!rules) return null;
+  return rules[key] || null;
 }
 
 function fieldVisible(meta, key, fallback = true){
@@ -454,26 +515,21 @@ function fieldVisible(meta, key, fallback = true){
 function fieldCss(meta, key){
   const rule = fieldRule(meta, key);
   if(!rule) return {};
-  const css = {};
-  Object.entries(rule).forEach(([k, v]) => {
-    if(k === 'visible') return;
-    css[k] = v;
-  });
-  return css;
+  return rule.css || {};
 }
 
 function selectBoolDotRule(val, meta){
-  if(!meta || !meta.style) return null;
+  const rules = ensureStyleRules(meta);
+  if(!rules) return null;
   const boolVal = !!val;
-  const style = meta.style;
   if(typeof meta.boolAlarmValue === 'boolean' && boolVal === meta.boolAlarmValue){
-    if(style.stateDotOnAlarm) return style.stateDotOnAlarm;
+    if(rules.stateDotOnAlarm) return rules.stateDotOnAlarm;
   }
-  if(boolVal && style.stateDotOnTrue) return style.stateDotOnTrue;
-  if(!boolVal && style.stateDotOnFalse) return style.stateDotOnFalse;
-  if(boolVal && style.stateDotOnFalse) return style.stateDotOnFalse;
-  if(!boolVal && style.stateDotOnTrue) return style.stateDotOnTrue;
-  if(style.stateDotOnAlarm) return style.stateDotOnAlarm;
+  if(boolVal && rules.stateDotOnTrue) return rules.stateDotOnTrue;
+  if(!boolVal && rules.stateDotOnFalse) return rules.stateDotOnFalse;
+  if(boolVal && rules.stateDotOnFalse) return rules.stateDotOnFalse;
+  if(!boolVal && rules.stateDotOnTrue) return rules.stateDotOnTrue;
+  if(rules.stateDotOnAlarm) return rules.stateDotOnAlarm;
   return null;
 }
 
@@ -487,12 +543,7 @@ function boolDotVisible(val, meta){
 function boolDotStyle(val, meta){
   const rule = selectBoolDotRule(val, meta);
   if(!rule) return {};
-  const css = {};
-  Object.entries(rule).forEach(([k, v]) => {
-    if(k === 'visible') return;
-    css[k] = v;
-  });
-  return css;
+  return rule.css || {};
 }
 function fallbackPolling(){ if (pollTimer) clearInterval(pollTimer); fetchRuntime(); pollTimer = setInterval(fetchRuntime, 2000); }
 </script>
@@ -506,6 +557,9 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .flash-btn:disabled { opacity:0.5; cursor:not-allowed; }
 .hidden-file-input { display:none; }
 .live-cards { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; }
+.live-controls { display:flex; justify-content:flex-end; align-items:center; margin:0 0 .5rem; }
+.bool-toggle { display:flex; align-items:center; gap:.4rem; font-size:.85rem; color:#555; cursor:pointer; }
+.bool-toggle input { cursor:pointer; accent-color:#3498db; }
 .card { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.15); padding:0.75rem 1rem; border-radius:8px; min-width:140px; }
 .rt-table { display:flex; flex-direction:column; gap:.15rem; }
 .live-cards .card .rt-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:.35rem; margin:.2rem 0; font-size:.9rem; }

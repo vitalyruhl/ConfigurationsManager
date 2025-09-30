@@ -433,12 +433,16 @@ void setup()
     // quick define a group of alarms, will be shown in gui in section "Alarms" (only on boolean)
     {
         auto dewpointRiskStyle = ConfigManagerClass::defaultBoolStyle(true);
+        dewpointRiskStyle.rule("stateDotOnTrue")
+            .set("background", "#f1c40f")
+            .set("border", "none")
+            .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
+            .set("animation", "none");
         dewpointRiskStyle.rule("stateDotOnAlarm")
             .set("background", "#f1c40f")
             .set("border", "none")
             .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
             .set("animation", "none");
-        dewpointRiskStyle.rule("state").set("color", "#f1c40f");
         cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100, dewpointRiskStyle);
     }
     cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true);

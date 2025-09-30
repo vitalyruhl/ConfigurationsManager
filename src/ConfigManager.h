@@ -1312,7 +1312,7 @@ public:
             RuntimeFieldStyleRule &unitRule = style.rule("unit");
             if(hasUnit){
                 unitRule.set("fontWeight", "600");
-                unitRule.set("color", "#666");
+                unitRule.set("color", "#000");
                 unitRule.set("textAlign", "left");
                 unitRule.setVisible(true);
             } else {
@@ -1340,8 +1340,8 @@ public:
 
             RuntimeFieldStyleRule &dotFalse = style.rule("stateDotOnFalse");
             dotFalse.setVisible(true);
-            dotFalse.set("background", "#ffffff");
-            dotFalse.set("border", "1px solid #888");
+            dotFalse.set("background", "#888");
+            dotFalse.set("border", "1px solid #000");
             dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
 
             if(alarmWhenTrue){
