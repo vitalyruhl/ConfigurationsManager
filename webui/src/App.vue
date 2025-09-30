@@ -21,27 +21,40 @@
         <div class="card" v-for="group in runtimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
 
-          <template v-for="f in group.fields" :key="f.key">
+          <div class="rt-table">
+            <template v-for="f in group.fields" :key="f.key">
             <!-- Divider rendering -->
             <hr v-if="f.isDivider" class="rt-divider" :data-label="f.label" />
             <!-- Pure string (static or dynamic) -->
-            <p v-else-if="f.isString" class="rt-string">
-              <strong>{{ f.label }}</strong>
-              <span v-if="f.staticValue">: {{ f.staticValue }}</span>
-              <span v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined">: {{ runtime[group.name][f.key] }}</span>
-            </p>
+            <div v-else-if="f.isString" class="rt-row rt-string">
+              <span class="rt-label">{{ f.label }}</span>
+              <span class="rt-value">
+                <template v-if="f.staticValue">{{ f.staticValue }}</template>
+                <template v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined">{{ runtime[group.name][f.key] }}</template>
+                <template v-else>—</template>
+              </span>
+              <span class="rt-unit"></span>
+            </div>
             <!-- Boolean / Numeric -->
-            <p v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
-               :class="valueClasses(runtime[group.name][f.key], f)">
+            <div v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
+               :class="['rt-row', valueClasses(runtime[group.name][f.key], f)]">
               <template v-if="f.isBool">
-                <span class="bool-dot" :class="boolDotClass(runtime[group.name][f.key], f)"></span>
-                {{ f.label }}
+                <span class="rt-label bool-label">
+                  <span class="bool-dot" :class="boolDotClass(runtime[group.name][f.key], f)"></span>
+                  {{ f.label }}
+                </span>
+                <span class="rt-value">{{ formatBool(runtime[group.name][f.key], f) }}</span>
+                <span class="rt-unit"></span>
               </template>
               <template v-else>
-                {{ f.label }}: {{ formatValue(runtime[group.name][f.key], f) }}<span v-if="f.unit"> {{ f.unit }}</span>
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value">{{ formatValue(runtime[group.name][f.key], f) }}</span>
+                <span class="rt-unit" v-if="f.unit">{{ f.unit }}</span>
+                <span class="rt-unit" v-else></span>
               </template>
-            </p>
-          </template>
+            </div>
+            </template>
+          </div>
           <hr v-if="group.name==='system' && runtime.uptime !== undefined" class="rt-divider,uptime" />
           <p v-if="group.name==='system' && runtime.uptime !== undefined" class="uptime">Uptime: {{ Math.floor((runtime.uptime||0)/1000) }} s</p>
         </div>
@@ -398,6 +411,7 @@ function buildRuntimeGroups(){
 
 function capitalize(s){ if(!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
 function formatValue(val, meta){ if(val == null) return ''; if(typeof val === 'number'){ if(meta && typeof meta.precision === 'number' && !Number.isInteger(val)){ try { return val.toFixed(meta.precision); } catch(e){ return val; } } return val; } return val; }
+function formatBool(val){ return val ? 'On' : 'Off'; }
 function severityClass(val, meta){ if(typeof val !== 'number' || !meta) return ''; if(meta.alarmMin!==undefined && meta.alarmMin!==null && meta.alarmMin!=='' && meta.alarmMin!==false && !Number.isNaN(meta.alarmMin) && val < meta.alarmMin) return 'sev-alarm'; if(meta.alarmMax!==undefined && meta.alarmMax!==null && meta.alarmMax!=='' && meta.alarmMax!==false && !Number.isNaN(meta.alarmMax) && val > meta.alarmMax) return 'sev-alarm'; if(meta.warnMin!==undefined && meta.warnMin!==null && !Number.isNaN(meta.warnMin) && val < meta.warnMin) return 'sev-warn'; if(meta.warnMax!==undefined && meta.warnMax!==null && !Number.isNaN(meta.warnMax) && val > meta.warnMax) return 'sev-warn'; return ''; }
 function valueClasses(val, meta){
   if(meta && meta.isBool){
@@ -434,11 +448,15 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .hidden-file-input { display:none; }
 .live-cards { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; }
 .card { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.15); padding:0.75rem 1rem; border-radius:8px; min-width:140px; }
-.live-cards .card p { margin:0.25rem 0; }
-.sev-warn { color:#b58900; font-weight:600; }
-.sev-alarm { color:#d00000; font-weight:700; animation: blink 1.6s linear infinite; }
+.rt-table { display:flex; flex-direction:column; gap:.15rem; }
+.live-cards .card .rt-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:.35rem; margin:.2rem 0; font-size:.9rem; }
+.rt-label { font-weight:600; text-align:left; display:flex; align-items:center; gap:.35rem; }
+.rt-value { text-align:right; font-variant-numeric:tabular-nums; }
+.rt-unit { text-align:left; font-size:.8rem; color:#666; min-width:2.5ch; white-space:nowrap; }
+.rt-row.sev-warn { color:#b58900; font-weight:600; }
+.rt-row.sev-alarm { color:#d00000; font-weight:700; animation: blink 1.6s linear infinite; }
 @keyframes blink { 50% { opacity:0.30; } }
-.bool-row { display:flex; align-items:center; gap:.4rem; }
+.rt-row.bool-row .rt-label { display:flex; align-items:center; gap:.4rem; }
 .bool-dot { width:.85rem; height:.85rem; border-radius:50%; display:inline-block; box-shadow:0 0 2px rgba(0,0,0,.4); }
 .bool-dot.on { background:#2ecc71; }
 .bool-dot.off { background:#fff; border:1px solid #888; }
@@ -446,7 +464,8 @@ body { font-family: Arial, sans-serif; margin: 1rem; background-color: #f0f0f0; 
 .bool-dot.safe { background:#2ecc71; }
 .rt-divider { border:0; border-top:1px solid #ccc; margin:.6rem 0 .4rem; position:relative; }
 .rt-divider:before { content: attr(data-label); position:absolute; top:-0.7rem; left:.4rem; background:#fff; padding:0 .3rem; font-size:.65rem; color:#999; letter-spacing:.05em; }
-.rt-string { font-size:.85rem; margin:.25rem 0; color:#333; }
+.rt-string { color:#333; }
+.rt-string .rt-value { text-align:left; font-weight:400; }
 .ta-center { text-align:center; }
 .uptime { font-size:.85rem; color:#555; margin-top:.5rem;padding:.5rem;text-align: center;}
 /* Slow down blink for readability */

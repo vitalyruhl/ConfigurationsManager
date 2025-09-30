@@ -339,8 +339,8 @@ void setup()
             //defineRuntimeBool (show a boolean Value green on true, white on false, red+blink on alarm),
             //defineRuntimeDivider (show a divider line </hr>)
             //defineRuntimeFieldThresholds (show Value with thresholds for warn and alarm, Warn = yellow and red = Alarm)
-    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", " B", 0, /*order*/ 1);
-    cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", " dBm", 0, /*order*/ 2);
+    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "Bytes", 0, /*order*/ 2);
+    cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0, /*order*/ 1);
     cfg.defineRuntimeDivider("system", "Environment", /*order*/ 3);
     cfg.defineRuntimeString("system", "i1", "Settings:", "", /*order*/ 4);
     cfg.defineRuntimeBool("system", "allowOTA", "Allow OTA Updates", false, /*order*/ 5);
@@ -360,19 +360,19 @@ void setup()
 
     // Runtime field metadata for dynamic UI
     // With thresholds: warn (yellow) and alarm (red). Example ranges; adjust as needed.
-    cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", " °C", 1,
+    cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
                                      1.0f, 30.0f, // warnMin / warnMax
                                      0.0f, 32.0f, // alarmMin / alarmMax
                                      true, true, true, true, 10); // enable warnMin, enable warnMax, enable alarmMin, enable alarmMax, order
 
-    cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", " %", 1,
+    cfg.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", "%", 1,
                                      30.0f, 70.0f,
                                      15.0f, 90.0f,
                                      true, false, true, true, 11);
 
     // only basic field, no thresholds
-    cfg.defineRuntimeField("sensors", "dew", "Dewpoint", " °C", 1, 12);
-    cfg.defineRuntimeField("sensors", "Pressure", "Pressure", " hPa", 1, 13);
+    cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1, 12);
+    cfg.defineRuntimeField("sensors", "Pressure", "Pressure", "hPa", 1, 13);
 
 
     // Example for runtime alarms based on multiple fields, of course you can also use global variables too.
