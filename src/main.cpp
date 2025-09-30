@@ -38,27 +38,29 @@ AsyncWebServer server(80);
 ConfigManagerClass cfg;                                               // Create an instance of ConfigManager before using it in structures etc.
 ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
 
+//--------------------------------------------------------------------
+// Forward declarations of functions
+void SetupCheckForAPModeButton();
+void blinkBuidInLED(int BlinkCount, int blinkRate);
+
+
 // -------------------------------------------------------------------
 // Global theme override test: make all h1 headings orange without underline
 // Served via /user_theme.css and auto-injected by the frontend if present.
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
-static const char GLOBAL_TEST_THEME[] PROGMEM = R"CSS(
+static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 /* Global test theme override */
-html body h1 {text-decoration: none !important; border-bottom: none !important; }
-h3 { color: orange }
+h3 { color: orange; text-decoration: underline; }
 
 /* Temperature field styling */
 /* Targets: provider group 'sensors', key 'temp' */
-.rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:#d00000; font-weight:900; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:#d00000; font-weight:900; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:#d00000; font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:rgba(16, 23, 158, 1); font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:rgba(16, 23, 158, 1); font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:rgba(16, 23, 158, 1); font-weight:900; }
 )CSS";
 
 // (Server instance moved into conditional above)
 int cbTestValue = 0;
-
-// Here, global variables are used without a struct, e.g., Config is a helper class for the settings stored in ConfigManager.h
-// 2025.08.17 Breaking Changes in Interface --> now with struct initialization
 
 // minimal Init
 Config<bool> testBool(ConfigOptions<bool>{
@@ -66,6 +68,8 @@ Config<bool> testBool(ConfigOptions<bool>{
     .category = "main",
     .defaultValue = true});
 
+
+//---------------------------------------------------------------------------------------------------
 // extended version with UI-friendly prettyName and prettyCategory
 // Improved version since V2.0.0
 
@@ -82,6 +86,7 @@ Config<float> VeryLongCategoryName(ConfigOptions<float>{
     .defaultValue = 0.1f,
     .prettyName = "category Correction long",
     .prettyCat = "key Correction"});
+
 Config<float> VeryLongKeyName(ConfigOptions<float>{
     .keyName = "VeryLongKeyName",
     .category = "Temp",
@@ -89,6 +94,9 @@ Config<float> VeryLongKeyName(ConfigOptions<float>{
     .prettyName = "key Correction long",
     .prettyCat = "key Correction"});
 
+
+
+//---------------------------------------------------------------------------------------------------
 // ---- Temporary dynamic visibility test settings ----
 // Category kept short ("DynTest") to avoid key truncation when combined with key names.
 Config<bool> tempBoolToggle(ConfigOptions<bool>{
@@ -97,6 +105,7 @@ Config<bool> tempBoolToggle(ConfigOptions<bool>{
     .defaultValue = true,
     .prettyName = "Temp Toggle",
     .prettyCat = "Dynamic Test"});
+
 Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
     .keyName = "trueS",
     .category = "DynTest",
@@ -105,6 +114,7 @@ Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
     .prettyCat = "Dynamic Test",
     .showIf = []()
     { return tempBoolToggle.get(); }});
+
 Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
     .keyName = "falseS",
     .category = "DynTest",
@@ -115,11 +125,8 @@ Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
     { return !tempBoolToggle.get(); }});
 // ---- End temporary dynamic visibility test settings ----
 
-//--------------------------------------------------------------------
-// Forward declarations of functions
-void SetupCheckForAPModeButton();
-void blinkBuidInLED(int BlinkCount, int blinkRate);
 
+//---------------------------------------------------------------------------------------------------
 // Example: Callback usage
 void testCallback(int val); // Callback function for testCb here defined, later implemented...
 Config<int> testCb(ConfigOptions<int>{
@@ -130,9 +137,10 @@ Config<int> testCb(ConfigOptions<int>{
     .showInWeb = true,
     .isPassword = false,
     .cb = testCallback});
-#pragma endregion
-//--------------------------------------------------------------------
 
+
+
+//---------------------------------------------------------------------------------------------------
 // Example: Using structures for grouped settings
 // General configuration (structure example)
 struct General_Settings
@@ -261,9 +269,8 @@ struct MQTT_Settings
 
 MQTT_Settings mqttSettings; // mqttSettings
 
-#pragma endregion
 
-//--------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------
 // implement read temperature function and variables to show how to unse live values
 //--------------------------------------------------------------------------------------------------------------
 // set the I2C address for the BME280 sensor for temperature and humidity
@@ -278,6 +285,7 @@ MQTT_Settings mqttSettings; // mqttSettings
 BME280_I2C bme280;
 Ticker temperatureTicker;
 
+// forward declarations
 void readBme280();                                                      // read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
 void SetupStartTemperatureMeasuring();                                  // setup the BME280 temperature and humidity sensor
 static float computeDewPoint(float temperatureC, float relHumidityPct); // compute the dewpoint from temperature and humidity
@@ -333,7 +341,7 @@ void setup()
 
     //-----------------------------------------------------------------
     cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    cfg.setCustomCss(GLOBAL_TEST_THEME, sizeof(GLOBAL_TEST_THEME) - 1);// Register global CSS override
+    cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);// Register global CSS override
     //----------------------------------------------------------------------------------------------------------------------------------
     // temperature - Sensor settings (BME280) to show how to use settings in your own code
 
@@ -352,13 +360,15 @@ void setup()
             o["tempBoolToggle"] = tempBoolToggle.get();
         }
     });
+
     //then add the fields to show in gui.
         //Existing Fields:
             //defineRuntimeField (show Value),
-            // defineRuntimeString (Show a Static String, with Static Value),
+            //defineRuntimeString (Show a Static String, with Static Value),
             //defineRuntimeBool (show a boolean Value green on true, white on false, red+blink on alarm),
             //defineRuntimeDivider (show a divider line </hr>)
             //defineRuntimeFieldThresholds (show Value with thresholds for warn and alarm, Warn = yellow and red = Alarm)
+
     cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "Bytes", 0, /*order*/ 2);
     cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0, /*order*/ 1);
     cfg.defineRuntimeDivider("system", "Environment", /*order*/ 3);
@@ -380,7 +390,6 @@ void setup()
 
     // Runtime field metadata for dynamic UI
     // With thresholds: warn (yellow) and alarm (red). Example ranges; adjust as needed.
-    // Define temperature field without custom style meta (CSS overrides will handle presentation)
     cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
                                      1.0f, 30.0f, // warnMin / warnMax
                                      0.0f, 32.0f, // alarmMin / alarmMax
@@ -402,8 +411,7 @@ void setup()
         "dewpoint_risk",
         [](const JsonObject &root)
         {
-            // User-configurable window above dewpoint at which risk alarm triggers
-            float dewpointRiskWindow = tempSettings.dewpointRiskWindow.get();
+            float dewpointRiskWindow = tempSettings.dewpointRiskWindow.get();// User-configurable window above dewpoint at which risk alarm triggers
             if (!root.containsKey("sensors"))
                 return false;
             const JsonObject sensors = root["sensors"].as<JsonObject>();
@@ -449,7 +457,10 @@ void setup()
 
         cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100);
 
-        { // Custom styling for the too-low-temperature alarm (yellow, no blink, instead of red standard)
+        {
+            // Custom styling for the too-low-temperature alarm (yellow, no blink, instead of red standard)
+            // please note this css derectives will applyed to the element-style, so it cannot be overwritten by themes etc.
+            // use GLOBAL_THEME_OVERRIDE for global css changes
             auto tooLowTempStyleOverride = ConfigManagerClass::defaultBoolStyle(true);
             tooLowTempStyleOverride.rule("stateDotOnTrue")
                 .set("background", "#f1c40f")
@@ -464,11 +475,10 @@ void setup()
             cfg.defineRuntimeBool("alarms", "temp_low", "too low temperature", true, /*order*/ 100, tooLowTempStyleOverride);
         }
 
-
     SetupStartTemperatureMeasuring();
     //----------------------------------------------------------------------------------------------------------------------------------
 
-    //-----------------------------------------------------------------
+    //----------------------------------------------------------------------------------------------------------------------------------
     // Register other settings
     cfg.addSetting(&updateInterval);
     cfg.addSetting(&testCb);
@@ -482,14 +492,14 @@ void setup()
     cfg.addSetting(&tempSettingAktiveOnFalse);
 
     cfg.addSetting(&tempSettings.readIntervalSec);
-    //-----------------------------------------------------------------
+    //----------------------------------------------------------------------------------------------------------------------------------
 
 
     cfg.checkSettingsForErrors();// 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
 
     try
     {
-        cfg.loadAll(); // Load all settings from preferences
+        cfg.loadAll(); // Load all settings from preferences, is nessesary before using the settings!
     }
     catch (const std::exception &e)
     {
@@ -513,6 +523,7 @@ void setup()
     cfg.saveAll();
     delay(300);
 
+    //nesseasary settings for webserver and wifi
     if (wifiSettings.wifiSsid.get().length() == 0)
     {
         Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
@@ -536,9 +547,12 @@ void setup()
         cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
     }
 
-    // Enable WebSocket push (always available)
-    cfg.enableWebSocketPush(2000); // 2s Interval
-    delay(1500);
+    delay(500); //wait for wifi connection a bit
+
+    cfg.enableWebSocketPush(2000); // 2s Interval for push updates to clients - if not set, ui will use polling
+    
+
+    // if you want to use OTA, set it up here
     if (WiFi.status() == WL_CONNECTED && generalSettings.allowOTA.get())
     {
         cfg.setupOTA("Ota-esp32-device", generalSettings.otaPassword.get().c_str());
@@ -548,6 +562,7 @@ void setup()
 
 void loop()
 {
+    //check if wifi is connected, if not try to reconnect
     if (WiFi.getMode() == WIFI_AP)
     {
         blinkBuidInLED(3, 100);
@@ -564,6 +579,7 @@ void loop()
         blinkBuidInLED(1, 100);
     }
 
+    // Example periodic update of testCb value
     static unsigned long lastPrint = 0;
     int interval = max(updateInterval.get(), 1); // Prevent zero interval
     if (millis() - lastPrint > interval * 1000)
@@ -573,14 +589,18 @@ void loop()
         // Serial.printf("Loop --> WiFi status: %s\n", WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
         cbTestValue++;
         testCb.set(cbTestValue);
-        if (cbTestValue > 10)
+        if (cbTestValue > 100)
         {
             cbTestValue = 0;
         }
     }
 
+    //nessesary for webserver and wifi to handle clients and websocket
     cfg.handleClient();
     cfg.handleWebsocketPush();
+    cfg.handleOTA();
+
+
     // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
     static unsigned long lastAlarmEval = 0;
     if (millis() - lastAlarmEval > 1500)
@@ -588,14 +608,13 @@ void loop()
         lastAlarmEval = millis();
         cfg.handleRuntimeAlarms();
     }
-    cfg.handleOTA();
 
-    static unsigned long lastOTAmessage = 0;
-    if (millis() - lastOTAmessage > 10000)
-    {
-        lastOTAmessage = millis();
-        Serial.printf("OTA Status: %s\n", cfg.getOTAStatus().c_str());
-    }
+    // static unsigned long lastOTAmessage = 0;
+    // if (millis() - lastOTAmessage > 10000)
+    // {
+    //     lastOTAmessage = millis();
+    //     Serial.printf("OTA Status: %s\n", cfg.getOTAStatus().c_str());
+    // }
 
     delay(500);
 }
