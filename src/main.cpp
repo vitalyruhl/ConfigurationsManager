@@ -406,13 +406,14 @@ void setup()
     // Local state for heater override
     static bool heaterState = false;
     // Optional divider (order 89) before controls
-    // cfg.defineRuntimeDivider("Hand overrides", "Manual Controls", 81);
-    // // Action button (order 90)
-    // cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test Button", [](){ cbTestButton(); }, 82);
-    // // Heater toggle (order 91)
-    // cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 83);
+    cfg.defineRuntimeDivider("Hand overrides", "Manual Controls", 81);
+    // Action button (order 90)
+    cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test Button", [](){ cbTestButton(); }, 82);
+    // Heater toggle (order 91)
+    cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 83);
 
     // cfg.defineRuntimeDivider("Hand overrides", "More Controls", 88); // another divider (order 91)
+    
     // Stateful button (acts like on/off toggle with dynamic label states handled client-side) order 92
     static bool stateBtnState = false;
     cfg.defineRuntimeStateButton("Hand overrides", "sb_mode", "Mode Button", [](){ return stateBtnState; }, [](bool v){ stateBtnState = v; Serial.printf("[STATE_BUTTON] sb_mode -> %s\n", v?"ON":"OFF"); }, /*init*/ false, 91);

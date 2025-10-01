@@ -1065,67 +1065,7 @@ public:
             for(auto &fs : _runtimeFloatSliders){ if(fs.group==g && fs.key==k){ if(fs.setter) fs.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
-#ifdef development
-        server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request){
-            String cfgJson = toJSON();
-            String rtJson = runtimeValuesToJSON();
-            String metaJson = runtimeMetaToJSON();
-            DynamicJsonDocument doc(8192);
-            if(deserializeJson(doc["config"], cfgJson) || deserializeJson(doc["runtime"], rtJson) || deserializeJson(doc["runtime_meta"], metaJson)){
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"bundle_build_failed\"}");
-                return;
-            }
-            doc["exportVersion"] = CONFIGMANAGER_VERSION;
-            String out; serializeJson(doc, out);
-            request->send(200, "application/json", out);
-        });
-        server.on("/runtime_meta/override", HTTP_POST,
-            [this](AsyncWebServerRequest *request){}, NULL,
-            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
-                String *body = static_cast<String*>(request->_tempObject);
-                body->concat(String((const char*)data).substring(0,len));
-                if(index+len==total){
-                    DynamicJsonDocument doc(8192);
-                    DeserializationError err = deserializeJson(doc, *body);
-                    if(err || !doc.is<JsonArray>()){
-                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json_array\"}");
-                        delete body; request->_tempObject=nullptr; return;
-                    }
-                    _runtimeMetaOverride.clear();
-                    for(JsonVariant v : doc.as<JsonArray>()){
-                        if(!v.is<JsonObject>()) continue;
-                        RuntimeFieldMeta m; JsonObject o = v.as<JsonObject>();
-                        m.group = String(o["group"].as<const char*>()?o["group"].as<const char*>():"");
-                        m.key = String(o["key"].as<const char*>()?o["key"].as<const char*>():"");
-                        m.label = String(o["label"].as<const char*>()?o["label"].as<const char*>():m.key.c_str());
-                        m.unit = String(o["unit"].as<const char*>()?o["unit"].as<const char*>():"");
-                        m.precision = o.containsKey("precision") ? o["precision"].as<int>() : 1;
-                        if(o["isBool"].as<bool>()) m.isBool = true;
-                        if(o["isString"].as<bool>()) m.isString = true;
-                        if(o["isDivider"].as<bool>()) m.isDivider = true;
-                        if(o.containsKey("order")) m.order = o["order"].as<int>();
-                        if(o.containsKey("warnMin")){ m.hasWarnMin = true; m.warnMin = o["warnMin"].as<float>(); }
-                        if(o.containsKey("warnMax")){ m.hasWarnMax = true; m.warnMax = o["warnMax"].as<float>(); }
-                        if(o.containsKey("alarmMin")){ m.hasAlarmMin = true; m.alarmMin = o["alarmMin"].as<float>(); }
-                        if(o.containsKey("alarmMax")){ m.hasAlarmMax = true; m.alarmMax = o["alarmMax"].as<float>(); }
-                        if(o.containsKey("boolAlarmValue")) m.boolAlarmValue = o["boolAlarmValue"].as<bool>()?1:-1;
-                        if(o.containsKey("style") && !_disableRuntimeStyleMeta){
-                            JsonObject st = o["style"].as<JsonObject>();
-                            for(auto kv : st){ RuntimeFieldStyleRule &r = m.style.rule(String(kv.key().c_str())); JsonObject ruleObj = kv.value().as<JsonObject>(); if(ruleObj.containsKey("visible")) r.setVisible(ruleObj["visible"].as<bool>()); for(auto prop : ruleObj){ String pk = prop.key().c_str(); if(pk=="visible") continue; r.set(pk, String(prop.value().as<const char*>()?prop.value().as<const char*>():"")); } }
-                        }
-                        if(m.group.length() && m.key.length()) _runtimeMetaOverride.push_back(m);
-                    }
-                    _runtimeMetaOverrideActive = true;
-                    request->send(200, "application/json", "{\"status\":\"ok\",\"count\":" + String(_runtimeMetaOverride.size()) + "}" );
-                    delete body; request->_tempObject=nullptr;
-                }
-            }
-        );
-        server.on("/runtime_meta/override", HTTP_DELETE, [this](AsyncWebServerRequest *request){ _runtimeMetaOverride.clear(); _runtimeMetaOverrideActive=false; request->send(200, "application/json", "{\"status\":\"cleared\"}"); });
-        server.on("/runtime_meta/override", HTTP_GET, [this](AsyncWebServerRequest *request){ String payload = String("{\"active\":") + (_runtimeMetaOverrideActive?"true":"false") + ",\"count\":" + String(_runtimeMetaOverride.size()) + "}"; request->send(200, "application/json", payload); });
-#endif
-        // Optional user supplied global CSS override (served if configured)
+
         server.on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest *request){
             if(getCustomCss() && getCustomCssLen()>0){
                 log_message("[THEME] Serving user_theme.css (%u bytes)", (unsigned)getCustomCssLen());
@@ -1237,13 +1177,6 @@ public:
         // Initialize OTA only when WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
 
-            // (Optional debug) Uncomment if you need detailed WiFi info:
-            // log_message("WiFi Status: %d", WiFi.status());
-            // log_message("Local IP: %s", WiFi.localIP().toString().c_str());
-            // log_message("Subnet Mask: %s", WiFi.subnetMask().toString().c_str());
-            // log_message("Gateway IP: %s", WiFi.gatewayIP().toString().c_str());
-
-
             ArduinoOTA
                 .onStart([this]() {
                     String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
@@ -1266,7 +1199,7 @@ public:
                 });
 
             if (_otaHostname.isEmpty()) {
-                ArduinoOTA.setHostname("esp32-device");
+                ArduinoOTA.setHostname("esp32-dev");
             }
             else{
                 ArduinoOTA.setHostname(_otaHostname.c_str());
@@ -1289,8 +1222,7 @@ public:
 
 
         }else {
-            log_message("OTA: Waiting for WiFi connection...");
-            // log_message("WiFi Status: %d\n", WiFi.status());
+            // log_message("OTA: Waiting for WiFi connection...");
         }
     }
 
@@ -1455,10 +1387,6 @@ public:
 
             RuntimeFieldStyleRule &unitRule = style.rule("unit");
             if(hasUnit){
-                // unitRule.set("fontWeight", "600");
-                // unitRule.set("color", "#000");
-                // unitRule.set("textAlign", "left");
-                // unitRule.setVisible(true);
             } else {
                 unitRule.setVisible(false);
             }
