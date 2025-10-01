@@ -1034,6 +1034,37 @@ public:
             for(auto &c : _runtimeCheckboxes){ if(c.group==g && c.key==k){ if(c.setter) c.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
+        // Stateful button toggle
+        server.on("/runtime_action/state_button", HTTP_POST, [this](AsyncWebServerRequest *request){
+            AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
+            AsyncWebParameter *pk = request->getParam("key"); if(!pk) pk = request->getParam("key", true);
+            AsyncWebParameter *pv = request->getParam("value"); if(!pv) pv = request->getParam("value", true);
+            if(!pg || !pk || !pv){ request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}"); return; }
+            bool v = pv->value().equalsIgnoreCase("true") || pv->value()=="1";
+            String g = pg->value(); String k = pk->value();
+            for(auto &sb : _runtimeStateButtons){ if(sb.group==g && sb.key==k){ if(sb.setter) sb.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
+            request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
+        });
+        // Int slider update
+        server.on("/runtime_action/int_slider", HTTP_POST, [this](AsyncWebServerRequest *request){
+            AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
+            AsyncWebParameter *pk = request->getParam("key"); if(!pk) pk = request->getParam("key", true);
+            AsyncWebParameter *pv = request->getParam("value"); if(!pv) pv = request->getParam("value", true);
+            if(!pg || !pk || !pv){ request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}"); return; }
+            String g = pg->value(); String k = pk->value(); int val = pv->value().toInt();
+            for(auto &is : _runtimeIntSliders){ if(is.group==g && is.key==k){ if(is.setter) is.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
+            request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
+        });
+        // Float slider update
+        server.on("/runtime_action/float_slider", HTTP_POST, [this](AsyncWebServerRequest *request){
+            AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
+            AsyncWebParameter *pk = request->getParam("key"); if(!pk) pk = request->getParam("key", true);
+            AsyncWebParameter *pv = request->getParam("value"); if(!pv) pv = request->getParam("value", true);
+            if(!pg || !pk || !pv){ request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}"); return; }
+            String g = pg->value(); String k = pk->value(); float val = pv->value().toFloat();
+            for(auto &fs : _runtimeFloatSliders){ if(fs.group==g && fs.key==k){ if(fs.setter) fs.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
+            request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
+        });
 #ifdef development
         server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request){
             String cfgJson = toJSON();
@@ -1378,6 +1409,14 @@ public:
             bool isBool = false; // render as boolean indicator
             bool isButton = false; // interactive stateless button
             bool isCheckbox = false; // interactive two-way checkbox
+            bool isStateButton = false; // stateful on/off style button (momentary toggle) without persistence
+            bool isIntSlider = false;   // transient int slider control
+            bool isFloatSlider = false; // transient float slider control
+            // Slider config
+            int intMin = 0; int intMax = 100; int intInit = 0; // for int slider
+            float floatMin = 0.0f; float floatMax = 1.0f; float floatInit = 0.0f; int floatPrecision = 2; // for float slider
+            // State button current state hint (reported in runtime JSON)
+            bool initialState = false;
             String card;         // optional custom card assignment (UI grouping)
             // Optional threshold ranges (for numeric coloring)
             bool hasWarnMin = false; float warnMin = 0;
@@ -1594,6 +1633,60 @@ public:
             _runtimeCheckboxes.push_back({group,key,getter,setter});
         }
 
+        // Stateful runtime button (has on/off state; toggles and invokes callback)
+        struct _StateButtonDef { String group; String key; std::function<bool()> getter; std::function<void(bool)> setter; };
+        std::vector<_StateButtonDef> _runtimeStateButtons;
+        void defineRuntimeStateButton(const String &group,
+                                      const String &key,
+                                      const String &label,
+                                      std::function<bool()> getter,
+                                      std::function<void(bool)> setter,
+                                      bool initState = false,
+                                      int order = 100,
+                                      const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
+                                      const String &card = String()){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isStateButton = true; m.order=order; m.initialState = initState; m.style = defaultBoolStyle(false); m.card = card; m.style.rule("unit").setVisible(false);
+            if(!styleOverride.empty()) m.style.merge(styleOverride);
+            _runtimeMeta.push_back(m);
+            _runtimeStateButtons.push_back({group,key,getter,setter});
+        }
+
+        // Int slider (transient; not persisted)
+        struct _IntSliderDef { String group; String key; std::function<int()> getter; std::function<void(int)> setter; int minV; int maxV; };
+        std::vector<_IntSliderDef> _runtimeIntSliders;
+        void defineRuntimeIntSlider(const String &group,
+                                    const String &key,
+                                    const String &label,
+                                    int minValue, int maxValue, int initValue,
+                                    std::function<int()> getter,
+                                    std::function<void(int)> setter,
+                                    int order = 100,
+                                    const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
+                                    const String &card = String()){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isIntSlider=true; m.order=order; m.intMin=minValue; m.intMax=maxValue; m.intInit=initValue; m.card = card; m.style = defaultNumericStyle();
+            if(!styleOverride.empty()) m.style.merge(styleOverride);
+            _runtimeMeta.push_back(m);
+            _runtimeIntSliders.push_back({group,key,getter,setter,minValue,maxValue});
+        }
+
+        // Float slider (transient; not persisted)
+        struct _FloatSliderDef { String group; String key; std::function<float()> getter; std::function<void(float)> setter; float minV; float maxV; };
+        std::vector<_FloatSliderDef> _runtimeFloatSliders;
+        void defineRuntimeFloatSlider(const String &group,
+                                      const String &key,
+                                      const String &label,
+                                      float minValue, float maxValue, float initValue, int precision,
+                                      std::function<float()> getter,
+                                      std::function<void(float)> setter,
+                                      int order = 100,
+                                      const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
+                                      const String &card = String()){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isFloatSlider=true; m.order=order; m.floatMin=minValue; m.floatMax=maxValue; m.floatInit=initValue; m.precision = precision; m.floatPrecision = precision; m.card = card; m.style = defaultNumericStyle();
+            if(!styleOverride.empty()) m.style.merge(styleOverride);
+            _runtimeMeta.push_back(m);
+            _runtimeFloatSliders.push_back({group,key,getter,setter,minValue,maxValue});
+        }
+
         // Set / override provider order
         void setRuntimeProviderOrder(const String &provider, int order){
             for(auto &p : runtimeProviders){ if(p.name == provider){ p.order = order; return; } }
@@ -1602,7 +1695,7 @@ public:
         void addRuntimeProvider(const RuntimeValueProvider &p){ runtimeProviders.push_back(p); }
 
         String runtimeValuesToJSON(){
-            DynamicJsonDocument d(1024);
+            DynamicJsonDocument d(2048);
             JsonObject root = d.to<JsonObject>();
             root["uptime"] = millis();
             // Sort providers by order
@@ -1611,14 +1704,15 @@ public:
             for(auto &prov : provSorted){
                 JsonObject slot = root.createNestedObject(prov.name);
                 if (prov.fill) prov.fill(slot);
-                // Inject checkbox states (if not already provided by provider)
-                for(const auto &cbx : _runtimeCheckboxes){
-                    if(cbx.group == prov.name){
-                        if(!slot.containsKey(cbx.key.c_str()) && cbx.getter){ slot[cbx.key] = cbx.getter(); }
-                    }
-                }
+                // Inject checkbox states
+                for(const auto &cbx : _runtimeCheckboxes){ if(cbx.group == prov.name && !slot.containsKey(cbx.key.c_str()) && cbx.getter){ slot[cbx.key] = cbx.getter(); } }
+                // Inject state buttons
+                for(const auto &sb : _runtimeStateButtons){ if(sb.group == prov.name && !slot.containsKey(sb.key.c_str()) && sb.getter){ slot[sb.key] = sb.getter(); } }
+                // Inject int sliders
+                for(const auto &is : _runtimeIntSliders){ if(is.group == prov.name && !slot.containsKey(is.key.c_str()) && is.getter){ slot[is.key] = is.getter(); } }
+                // Inject float sliders
+                for(const auto &fs : _runtimeFloatSliders){ if(fs.group == prov.name && !slot.containsKey(fs.key.c_str()) && fs.getter){ slot[fs.key] = fs.getter(); } }
             }
-            // expose active alarms by name (boolean map)
             if(!_runtimeAlarms.empty()){
                 JsonObject alarms = root.createNestedObject("alarms");
                 for(auto &a : _runtimeAlarms){ alarms[a.name] = a.active; }
@@ -1649,6 +1743,13 @@ public:
                 if(m.isBool) o["isBool"] = true;
                 if(m.isButton) o["isButton"] = true;
                 if(m.isCheckbox) o["isCheckbox"] = true;
+                if(m.isStateButton) { o["isStateButton"] = true; o["initState"] = m.initialState; }
+                if(m.isIntSlider){
+                    o["isIntSlider"] = true; o["min"] = m.intMin; o["max"] = m.intMax; o["init"] = m.intInit;
+                }
+                if(m.isFloatSlider){
+                    o["isFloatSlider"] = true; o["min"] = m.floatMin; o["max"] = m.floatMax; o["init"] = m.floatInit; o["precision"] = m.floatPrecision;
+                }
                 if(m.isString) o["isString"] = true;
                 if(m.isDivider) o["isDivider"] = true;
                 if(m.staticString.length()) o["staticValue"] = m.staticString;

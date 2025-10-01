@@ -57,6 +57,32 @@
                 </span>
                 <span class="rt-unit"></span>
               </div>
+              <!-- Stateful Button -->
+              <div v-else-if="f.isStateButton" class="rt-row rt-action" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value">
+                  <button class="rt-btn" :class="{'on': runtime[group.name] && runtime[group.name][f.key]}" @click="onStateButton(group.name,f)">{{ f.label }}: {{ runtime[group.name] && runtime[group.name][f.key] ? 'ON' : 'OFF' }}</button>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
+              <!-- Int Slider -->
+              <div v-else-if="f.isIntSlider" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value slider-wrap">
+                  <input type="range" :min="f.min" :max="f.max" step="1" :value="runtime[group.name] && runtime[group.name][f.key] !== undefined ? runtime[group.name][f.key] : f.init" @input="onIntSlider(group.name,f,$event)" />
+                  <span class="slider-val">{{ runtime[group.name] && runtime[group.name][f.key] !== undefined ? runtime[group.name][f.key] : f.init }}</span>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
+              <!-- Float Slider -->
+              <div v-else-if="f.isFloatSlider" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value slider-wrap">
+                  <input type="range" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="runtime[group.name] && runtime[group.name][f.key] !== undefined ? runtime[group.name][f.key] : f.init" @input="onFloatSlider(group.name,f,$event)" />
+                  <span class="slider-val">{{ formatFloatDisplay(group.name,f) }}</span>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
               <!-- Interactive Checkbox (toggle) -->
               <div v-else-if="f.isCheckbox" class="rt-row rt-toggle" :data-group="group.name" :data-key="f.key">
                 <span class="rt-label">{{ f.label }}</span>
@@ -636,38 +662,28 @@ onBeforeUnmount(() => {
 function initLive() {
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
   const url = proto + location.host + "/ws";
+  startWebSocket(url);
+}
+let wsRetry = 0;
+function startWebSocket(url){
   try {
+    if(ws){ try { ws.close(); } catch(e){} }
     ws = new WebSocket(url);
     ws.onopen = () => {
       wsConnected.value = true;
-      setTimeout(() => {
-        if (!runtime.value.uptime) fetchRuntime();
-      }, 300);
+      wsRetry = 0;
+      setTimeout(()=>{ if(!runtime.value.uptime) fetchRuntime(); }, 300);
     };
-    ws.onclose = () => {
-      wsConnected.value = false;
-      fallbackPolling();
-    };
-    ws.onerror = () => {
-      wsConnected.value = false;
-      fallbackPolling();
-    };
-    ws.onmessage = (ev) => {
-      try {
-        runtime.value = JSON.parse(ev.data);
-      } catch (e) {}
-    };
-    setTimeout(() => {
-      if (!wsConnected.value) {
-        try {
-          ws.close();
-        } catch (e) {}
-        fallbackPolling();
-      }
-    }, 1500);
-  } catch (e) {
-    fallbackPolling();
-  }
+    ws.onclose = () => { wsConnected.value = false; scheduleWsReconnect(url); };
+    ws.onerror = () => { wsConnected.value = false; scheduleWsReconnect(url); };
+    ws.onmessage = (ev) => { try { runtime.value = JSON.parse(ev.data); } catch(e){} };
+  } catch(e){ scheduleWsReconnect(url); }
+}
+function scheduleWsReconnect(url){
+  const delay = Math.min(5000, 300 + wsRetry * wsRetry * 200);
+  wsRetry++;
+  setTimeout(()=>{ startWebSocket(url); }, delay);
+  if(!pollTimer){ fallbackPolling(); }
 }
 
 async function fetchRuntime() {
@@ -712,9 +728,15 @@ function buildRuntimeGroups() {
         alarmMin: m.alarmMin,
         alarmMax: m.alarmMax,
         isBool: m.isBool,
-        isButton: m.isButton || false,
-        isCheckbox: m.isCheckbox || false,
-  card: m.card || null,
+    isButton: m.isButton || false,
+    isStateButton: m.isStateButton || false,
+    isIntSlider: m.isIntSlider || false,
+    isFloatSlider: m.isFloatSlider || false,
+    isCheckbox: m.isCheckbox || false,
+    card: m.card || null,
+    min: m.min,
+    max: m.max,
+    init: m.init,
         boolAlarmValue:
           typeof m.boolAlarmValue === "boolean"
             ? !!m.boolAlarmValue
@@ -838,6 +860,49 @@ async function triggerRuntimeButton(group, key){
     // refresh runtime quickly to reflect any side effects
     fetchRuntime();
   } catch(e){ notify(`Button error: ${e.message}`,'error'); }
+}
+async function onStateButton(group,f){
+  const cur = runtime.value[group] && runtime.value[group][f.key];
+  const next = !cur;
+  try {
+    const res = await fetch(`/runtime_action/state_button?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${next?'true':'false'}`, {method:'POST'});
+    if(!res.ok){ notify(`State btn failed: ${f.key}`,'error'); return; }
+    if(!runtime.value[group]) runtime.value[group] = {};
+    runtime.value[group][f.key] = next;
+    notify(`${f.key}: ${next?'ON':'OFF'}`,'info',1200);
+  } catch(e){ notify(`State btn error: ${e.message}`,'error'); }
+}
+let intSliderDebounce = {};
+function onIntSlider(group,f,ev){
+  const val = parseInt(ev.target.value,10);
+  if(!runtime.value[group]) runtime.value[group] = {};
+  runtime.value[group][f.key] = val;
+  if(intSliderDebounce[f.key]) clearTimeout(intSliderDebounce[f.key]);
+  intSliderDebounce[f.key] = setTimeout(async ()=>{
+    try { await fetch(`/runtime_action/int_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); }
+    catch(e){ notify(`Int slider error: ${e.message}`,'error'); }
+  },150);
+}
+let floatSliderDebounce = {};
+function onFloatSlider(group,f,ev){
+  const val = parseFloat(ev.target.value);
+  if(!runtime.value[group]) runtime.value[group] = {};
+  runtime.value[group][f.key] = val;
+  if(floatSliderDebounce[f.key]) clearTimeout(floatSliderDebounce[f.key]);
+  floatSliderDebounce[f.key] = setTimeout(async ()=>{
+    try { await fetch(`/runtime_action/float_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); }
+    catch(e){ notify(`Float slider error: ${e.message}`,'error'); }
+  },180);
+}
+function floatSliderStep(f){
+  if(f.precision && f.precision>0){ return 1/Math.pow(10,f.precision); }
+  return 0.1;
+}
+function formatFloatDisplay(group,f){
+  const v = runtime.value[group] && runtime.value[group][f.key];
+  if(v===undefined || v===null) return f.init !== undefined ? f.init : 0;
+  const p = f.precision!==undefined? f.precision:2;
+  return typeof v === 'number' ? v.toFixed(p) : v;
 }
 
 let checkboxDebounceTimer = null;
@@ -1101,6 +1166,44 @@ h3 {
   color: #d00000;
   font-weight: 700;
   animation: blink 1.6s linear infinite;
+}
+
+/* Slider specific styling */
+.rt-row.rt-slider {
+  border: 1px solid #e0e0e0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  background: #fafafa;
+  box-shadow: inset 0 0 0 1px #ffffff, 0 1px 2px rgba(0,0,0,0.05);
+  position: relative;
+}
+.rt-row.rt-slider:hover {
+  border-color: #d0d0d0;
+  background: #f5f5f5;
+}
+.rt-row.rt-slider .slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 10rem;
+}
+.rt-row.rt-slider input[type=range] {
+  width: 8rem;
+  accent-color: #ff9800;
+  cursor: pointer;
+}
+.rt-row.rt-slider .slider-val {
+  font-weight: 600;
+  min-width: 3.2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rt-row.rt-action .rt-btn.on {
+  background: #2e7d32;
+  color: #fff;
+}
+.rt-row.rt-action .rt-btn.on:hover {
+  background: #256628;
 }
 @keyframes blink {
   50% {
