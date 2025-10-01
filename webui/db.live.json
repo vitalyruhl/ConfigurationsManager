@@ -1,0 +1,553 @@
+{
+  "config": {
+    "Limiter": {
+      "enCtrl": {
+        "value": true,
+        "displayName": "Enable Limitation",
+        "isPassword": false,
+        "showIf": true
+      },
+      "enMQTT": {
+        "value": true,
+        "displayName": "Enable MQTT Propagation",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "Display": {
+      "Save": {
+        "value": true,
+        "displayName": "Turn Display Off",
+        "isPassword": false,
+        "showIf": true
+      },
+      "Time": {
+        "value": 60,
+        "displayName": "Display On-Time in Sec",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "System": {
+      "OTAEn": {
+        "value": true,
+        "displayName": "Allow OTA Updates",
+        "isPassword": false,
+        "showIf": true
+      },
+      "OTAPass": {
+        "value": "***",
+        "displayName": "OTA Password",
+        "isPassword": true,
+        "showIf": true
+      },
+      "Version": {
+        "value": "V2.5.0",
+        "displayName": "Program Version",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "wifi": {
+      "categoryPretty": "WiFi Settings",
+      "ssid": {
+        "value": "VivilIE",
+        "displayName": "WiFi SSID",
+        "isPassword": false,
+        "showIf": true
+      },
+      "password": {
+        "value": "***",
+        "displayName": "WiFi Password",
+        "isPassword": true,
+        "showIf": true
+      },
+      "dhcp": {
+        "value": false,
+        "displayName": "Use DHCP",
+        "isPassword": false,
+        "showIf": true
+      },
+      "sIP": {
+        "value": "192.168.2.126",
+        "displayName": "Static IP",
+        "isPassword": false,
+        "showIf": true
+      },
+      "GW": {
+        "value": "192.168.2.250",
+        "displayName": "Gateway",
+        "isPassword": false,
+        "showIf": true
+      },
+      "subnet": {
+        "value": "255.255.255.0",
+        "displayName": "Subnet-Mask",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "MQTT": {
+      "categoryPretty": "MQTT-Section",
+      "Port": {
+        "value": 1883,
+        "displayName": "Port",
+        "isPassword": false,
+        "showIf": true
+      },
+      "Server": {
+        "value": "192.168.2.3",
+        "displayName": "Server-IP",
+        "isPassword": false,
+        "showIf": true
+      },
+      "User": {
+        "value": "housebattery",
+        "displayName": "User",
+        "isPassword": false,
+        "showIf": true
+      },
+      "Pass": {
+        "value": "***",
+        "displayName": "Password",
+        "isPassword": true,
+        "showIf": true
+      },
+      "PUT": {
+        "value": "emon/emonpi/power1",
+        "displayName": "Powerusage Topic",
+        "isPassword": false,
+        "showIf": true
+      },
+      "MQTTT": {
+        "value": "SolarLimiter2",
+        "displayName": "Publish-Topic",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "Temp": {
+      "categoryPretty": "Temperature Settings",
+      "TCO": {
+        "value": -7,
+        "displayName": "Temperature Correction",
+        "isPassword": false,
+        "showIf": true
+      },
+      "HYO": {
+        "value": -10,
+        "displayName": "Humidity Correction",
+        "isPassword": false,
+        "showIf": true
+      },
+      "SLP": {
+        "value": 1013,
+        "displayName": "Sea Level Pressure",
+        "isPassword": false,
+        "showIf": true
+      },
+      "ReadTemp": {
+        "value": 10,
+        "displayName": "Read Temp/Humidity every (s)",
+        "isPassword": false,
+        "showIf": true
+      },
+      "DPWin": {
+        "value": 21.5,
+        "displayName": "Dewpoint Risk Window (°C)",
+        "isPassword": false,
+        "showIf": true
+      },
+      "VeryLongKeyName": {
+        "value": 0.1,
+        "displayName": "key Correction long",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "main": {
+      "interval": {
+        "value": 15,
+        "displayName": "Update Interval (seconds)",
+        "isPassword": false,
+        "showIf": true
+      },
+      "cbt": {
+        "value": 18,
+        "displayName": "Test Callback",
+        "isPassword": false,
+        "showIf": true
+      },
+      "tbool": {
+        "value": false,
+        "displayName": "tbool",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "VeryLongCategoryName": {
+      "categoryPretty": "key Correction",
+      "VlongC": {
+        "value": 10,
+        "displayName": "category Correction long",
+        "isPassword": false,
+        "showIf": true
+      }
+    },
+    "DynTest": {
+      "categoryPretty": "Dynamic Test",
+      "toggle": {
+        "value": false,
+        "displayName": "Temp Toggle",
+        "isPassword": false,
+        "showIf": true
+      },
+      "trueS": {
+        "value": "an",
+        "displayName": "Visible When True",
+        "isPassword": false,
+        "showIf": false
+      },
+      "falseS": {
+        "value": "Shown if toggle = false",
+        "displayName": "Visible When False",
+        "isPassword": false,
+        "showIf": true
+      }
+    }
+  },
+  "runtime": {
+    "uptime": 83739,
+    "system": {
+      "rssi": -39,
+      "rssiBars": "Excellent",
+      "freeHeap": 196,
+      "loopAvg": 210.8666667
+    },
+    "sensors": {
+      "temp": 19.16,
+      "hum": 29.23438,
+      "dew": 0.793841,
+      "Pressure": 1028.46
+    },
+    "alarms": {
+      "dewpoint_risk": true,
+      "temp_low": false
+    }
+  },
+  "runtime_meta": [
+    {
+      "group": "alarms",
+      "key": "dewpoint_risk",
+      "label": "Dewpoint Risk",
+      "precision": 1,
+      "isBool": true,
+      "boolAlarmValue": true,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "state": {
+          "fontWeight": "600",
+          "textAlign": "right"
+        },
+        "unit": {
+          "visible": false
+        },
+        "stateDotOnTrue": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnFalse": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnAlarm": {
+          "visible": true,
+          "background": "#d00000",
+          "animation": "blink 1.6s linear infinite",
+          "boxShadow": "0 0 4px rgba(208,0,0,0.7)"
+        }
+      }
+    },
+    {
+      "group": "alarms",
+      "key": "temp_low",
+      "label": "too low temperature",
+      "precision": 1,
+      "isBool": true,
+      "boolAlarmValue": true,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "state": {
+          "fontWeight": "600",
+          "textAlign": "right"
+        },
+        "unit": {
+          "visible": false
+        },
+        "stateDotOnTrue": {
+          "visible": true,
+          "background": "#f1c40f",
+          "border": "none",
+          "boxShadow": "0 0 4px rgba(241,196,15,0.7)",
+          "animation": "none"
+        },
+        "stateDotOnFalse": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnAlarm": {
+          "visible": true,
+          "background": "#f1c40f",
+          "animation": "none",
+          "boxShadow": "0 0 4px rgba(241,196,15,0.7)",
+          "border": "none"
+        }
+      }
+    },
+    {
+      "group": "sensors",
+      "key": "temp",
+      "label": "Temperature",
+      "unit": "°C",
+      "precision": 1,
+      "order": 10,
+      "warnMin": 1,
+      "warnMax": 30,
+      "alarmMin": 0,
+      "alarmMax": 32,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "sensors",
+      "key": "hum",
+      "label": "Humidity",
+      "unit": "%",
+      "precision": 1,
+      "order": 11,
+      "warnMin": 30,
+      "alarmMin": 15,
+      "alarmMax": 90,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "sensors",
+      "key": "dew",
+      "label": "Dewpoint",
+      "unit": "°C",
+      "precision": 1,
+      "order": 12,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "sensors",
+      "key": "Pressure",
+      "label": "Pressure",
+      "unit": "hPa",
+      "precision": 1,
+      "order": 13,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "system",
+      "key": "rssi",
+      "label": "WiFi RSSI",
+      "unit": "dBm",
+      "precision": 0,
+      "order": 1,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "system",
+      "key": "freeHeap",
+      "label": "Free Heap",
+      "unit": "KB",
+      "precision": 0,
+      "order": 2,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "system",
+      "key": "_div_1",
+      "label": "Environment",
+      "precision": 1,
+      "isDivider": true,
+      "order": 3
+    },
+    {
+      "group": "system",
+      "key": "i1",
+      "label": "Settings:",
+      "precision": 1,
+      "isString": true,
+      "order": 4,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "500",
+          "textAlign": "left"
+        },
+        "unit": {
+          "visible": false
+        }
+      }
+    },
+    {
+      "group": "system",
+      "key": "allowOTA",
+      "label": "Allow OTA Updates",
+      "precision": 1,
+      "isBool": true,
+      "order": 5,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "state": {
+          "fontWeight": "600",
+          "textAlign": "right"
+        },
+        "unit": {
+          "visible": false
+        },
+        "stateDotOnTrue": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnFalse": {
+          "visible": true,
+          "background": "#888",
+          "border": "1px solid #000",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        }
+      }
+    },
+    {
+      "group": "system",
+      "key": "tempBoolToggle",
+      "label": "Temporary Bool Toggle",
+      "precision": 1,
+      "isBool": true,
+      "order": 6,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "state": {
+          "fontWeight": "600",
+          "textAlign": "right"
+        },
+        "unit": {
+          "visible": false
+        },
+        "stateDotOnTrue": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnFalse": {
+          "visible": true,
+          "background": "#888",
+          "border": "1px solid #000",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        }
+      }
+    },
+    {
+      "group": "system",
+      "key": "loopAvg",
+      "label": "Loop Avg",
+      "unit": "ms",
+      "precision": 2,
+      "order": 7,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    }
+  ],
+  "version": "CM-BME280-Demo 2.5.0",
+  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
+  "ts": 1759303779459
+}

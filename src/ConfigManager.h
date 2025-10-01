@@ -9,16 +9,19 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <exception>
+#include <algorithm>
+#include <cstdint>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
+// #define development // Uncomment (or add -Ddevelopment to build flags) to enable dev-only export & runtime_meta override routes
 
 #ifdef UNIT_TEST
 // Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
 inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
 #endif
 
-#define CONFIGMANAGER_VERSION "2.4.1"
+#define CONFIGMANAGER_VERSION "2.5.0" //2025.09.30
 
 
 // ConfigOptions must be defined before any usage in Config<T>
@@ -34,6 +37,50 @@ struct ConfigOptions {
     void (*cb)(T) = nullptr;
     std::function<bool()> showIf = nullptr;
 };
+#if __cplusplus >= 201703L
+// --------------------------------------------------------------------------------------------------
+// OptionGroup Helper (Variant 1 Factory) - reduces boilerplate when many settings share same category
+// Usage example:
+//   constexpr OptionGroup WIFI{"wifi", "Network Settings"};
+//   Config<String> wifiSsid( WIFI.opt<String>("ssid", "MyWiFi", "WiFi SSID") );
+//   Config<String> wifiPassword( WIFI.opt<String>("password", "secret", "WiFi Password", true, true) );
+//   // With dynamic visibility (showIf):
+//   Config<String> staticIp( NET.opt<String>("sIP", "192.168.0.50", "Static IP", true, false, nullptr, [this](){ return !useDhcp.get(); }) );
+// Notes:
+//  - prettyCat automatically set from group.prettyCat
+//  - prettyName optional; if nullptr display will fallback to keyName (handled in Config<T>)
+//  - showInWeb defaults to true
+//  - isPassword defaults to false
+//  - cb (raw function pointer) & showIf (std::function) optional
+//  - Works for all T supported by Config<T>
+// --------------------------------------------------------------------------------------------------
+struct OptionGroup {
+    const char* category;
+    const char* prettyCat; // may be nullptr -> falls back to category
+
+    template<typename T>
+    ConfigOptions<T> opt(const char* keyName,
+                         T defaultValue,
+                         const char* prettyName = nullptr,
+                         bool showInWeb = true,
+                         bool isPassword = false,
+                         void (*cb)(T) = nullptr,
+                         std::function<bool()> showIf = nullptr) const {
+        return ConfigOptions<T>{
+            keyName,
+            category,
+            defaultValue,
+            prettyName,
+            prettyCat ? prettyCat : category,
+            showInWeb,
+            isPassword,
+            cb,
+            showIf
+        };
+    }
+};
+#endif
+
 #pragma once
 
 
@@ -382,9 +429,28 @@ class BaseSetting {
     }
 };
 
+// --------------------------------------------------------------------------------------------------
+// Visibility helper factories (global scope) - placed after Config<T> so that Config is complete.
+// Usage in user code (main.cpp):
+//   staticIp( WIFI_GROUP.opt<String>("sIP", "192.168.0.50", "Static IP", true, false, nullptr, showIfFalse(useDhcp)) );
+//   advanced( GROUP.opt<int>("adv", 1, "Advanced", true, false, nullptr, showIfTrue(expertFlag)) );
+// These helpers avoid repetitive lambdas like: [this](){ return !flag.get(); }
+// --------------------------------------------------------------------------------------------------
+inline std::function<bool()> showIfTrue (const Config<bool>& flag){ return [&flag](){ return flag.get(); }; }
+inline std::function<bool()> showIfFalse(const Config<bool>& flag){ return [&flag](){ return !flag.get(); }; }
+// --------------------------------------------------------------------------------------------------
+
 class ConfigManagerClass {
 
 public:
+
+    ConfigManagerClass(){
+    #ifdef APP_NAME
+        _appName = APP_NAME;
+    #else
+        _appName = "ConfigManager";
+    #endif
+    }
 
     BaseSetting *findSetting(const String &category, const String &key) {
         for (auto *s : settings)
@@ -415,6 +481,12 @@ public:
 
         logger(buffer);
     }
+
+    void setAppName(const String& name){
+        if(name.length()) _appName = name;
+        else _appName = "ConfigManager";
+    }
+    const String& getAppName() const { return _appName; }
 
     void triggerLoggerTest() {
        log_message("Test message abcdefghijklmnop");
@@ -706,11 +778,156 @@ public:
     void defineRoutes() {
         log_message("🌐 Defining routes...");
         // Serve version at /version (always async)
-        server.on("/version", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(200, "text/plain", CONFIGMANAGER_VERSION); });
-        // OTA upload via HTTP form removed in always-async build; ArduinoOTA is recommended.
-        server.on("/ota_update", HTTP_GET, [](AsyncWebServerRequest *request){
-            request->send(200, "text/plain", "HTTP OTA upload form not provided in async build. Use ArduinoOTA.");
+        server.on("/version", HTTP_GET, [this](AsyncWebServerRequest *request){
+            String payload = _appName;
+            if(payload.length()) payload += " ";
+            payload += CONFIGMANAGER_VERSION;
+            request->send(200, "text/plain", payload);
         });
+        struct OtaUploadContext {
+            bool authorized = false;
+            bool began = false;
+            bool success = false;
+            bool hasError = false;
+            String errorReason;
+            size_t written = 0;
+            int statusCode = 200;
+        };
+
+        server.on("/ota_update", HTTP_GET, [this](AsyncWebServerRequest *request){
+            if(!_otaEnabled){
+                request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+                return;
+            }
+            request->send(200, "application/json", "{\"status\":\"ready\"}");
+        });
+
+        server.on("/ota_update", HTTP_POST,
+            [this](AsyncWebServerRequest *request){
+                auto *ctx = static_cast<OtaUploadContext*>(request->_tempObject);
+                auto cleanup = [request, ctx](){
+                    if(ctx){ delete ctx; request->_tempObject = nullptr; }
+                };
+
+                if(!_otaEnabled){
+                    request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+                    cleanup();
+                    return;
+                }
+
+                if(!ctx){
+                    request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"no_context\"}");
+                    cleanup();
+                    return;
+                }
+
+                if(ctx->hasError || Update.hasError()){
+                    int code = ctx->statusCode ? ctx->statusCode : 500;
+                    if(ctx->began && !ctx->hasError){ Update.abort(); }
+                    String reason = ctx->errorReason.length() ? ctx->errorReason : String("upload_failed");
+                    log_message("❌ OTA HTTP error (%d): %s", code, reason.c_str());
+                    String payload = String("{\"status\":\"error\",\"reason\":\"") + reason + "\"}";
+                    request->send(code, "application/json", payload);
+                    cleanup();
+                    return;
+                }
+
+                if(!ctx->began || !ctx->success){
+                    log_message("❌ OTA HTTP upload incomplete");
+                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete\"}");
+                    cleanup();
+                    return;
+                }
+
+                AsyncWebServerResponse *response = request->beginResponse(200, "application/json", "{\"status\":\"ok\",\"action\":\"reboot\"}");
+                response->addHeader("Connection", "close");
+                request->onDisconnect([this](){
+                    log_message("🔁 OTA HTTP: client disconnected, rebooting...");
+                    delay(500);
+                    reboot();
+                });
+                request->send(response);
+                log_message("✅ OTA HTTP upload success (%lu bytes)", static_cast<unsigned long>(ctx->written));
+                cleanup();
+            },
+            [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+                OtaUploadContext *ctx = static_cast<OtaUploadContext*>(request->_tempObject);
+
+                if(index == 0){
+                    ctx = new OtaUploadContext();
+                    request->_tempObject = ctx;
+
+                    if(!_otaEnabled){
+                        ctx->hasError = true;
+                        ctx->statusCode = 403;
+                        ctx->errorReason = "ota_disabled";
+                        return;
+                    }
+
+                    if(!_otaPassword.isEmpty()){
+                        AsyncWebHeader *hdr = request->getHeader("X-OTA-PASSWORD");
+                        if(!hdr){
+                            ctx->hasError = true;
+                            ctx->statusCode = 401;
+                            ctx->errorReason = "missing_password";
+                            return;
+                        }
+                        if(hdr->value() != _otaPassword){
+                            ctx->hasError = true;
+                            ctx->statusCode = 401;
+                            ctx->errorReason = "unauthorized";
+                            return;
+                        }
+                    }
+                    ctx->authorized = true;
+
+                    size_t expected = request->contentLength();
+                    if(expected == 0){
+                        ctx->hasError = true;
+                        ctx->statusCode = 400;
+                        ctx->errorReason = "empty_upload";
+                        return;
+                    }
+
+                    if(!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
+                        ctx->hasError = true;
+                        ctx->statusCode = 500;
+                        ctx->errorReason = "begin_failed";
+                        Update.printError(Serial);
+                        return;
+                    }
+
+                    ctx->began = true;
+                    log_message("📦 OTA HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
+                }
+
+                if(!ctx || ctx->hasError || !ctx->authorized){
+                    return;
+                }
+
+                if(len){
+                    if(Update.write(data, len) != len){
+                        ctx->hasError = true;
+                        ctx->statusCode = 500;
+                        ctx->errorReason = "write_failed";
+                        Update.printError(Serial);
+                        return;
+                    }
+                    ctx->written += len;
+                }
+
+                if(final){
+                    if(Update.end(true)){
+                        ctx->success = true;
+                    } else {
+                        ctx->hasError = true;
+                        ctx->statusCode = 500;
+                        ctx->errorReason = "end_failed";
+                        Update.printError(Serial);
+                    }
+                }
+            }
+        );
 
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest *request){ for (auto *s : settings) s->setDefault(); saveAll(); log_message("🌐 All settings reset to default"); request->send(200, "application/json", "{\"status\":\"reset\"}"); });
@@ -798,6 +1015,76 @@ public:
         server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", toJSON()); });
         server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeValuesToJSON()); });
         server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeMetaToJSON()); });
+#ifdef development
+        server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request){
+            String cfgJson = toJSON();
+            String rtJson = runtimeValuesToJSON();
+            String metaJson = runtimeMetaToJSON();
+            DynamicJsonDocument doc(8192);
+            if(deserializeJson(doc["config"], cfgJson) || deserializeJson(doc["runtime"], rtJson) || deserializeJson(doc["runtime_meta"], metaJson)){
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"bundle_build_failed\"}");
+                return;
+            }
+            doc["exportVersion"] = CONFIGMANAGER_VERSION;
+            String out; serializeJson(doc, out);
+            request->send(200, "application/json", out);
+        });
+        server.on("/runtime_meta/override", HTTP_POST,
+            [this](AsyncWebServerRequest *request){}, NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    DynamicJsonDocument doc(8192);
+                    DeserializationError err = deserializeJson(doc, *body);
+                    if(err || !doc.is<JsonArray>()){
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json_array\"}");
+                        delete body; request->_tempObject=nullptr; return;
+                    }
+                    _runtimeMetaOverride.clear();
+                    for(JsonVariant v : doc.as<JsonArray>()){
+                        if(!v.is<JsonObject>()) continue;
+                        RuntimeFieldMeta m; JsonObject o = v.as<JsonObject>();
+                        m.group = String(o["group"].as<const char*>()?o["group"].as<const char*>():"");
+                        m.key = String(o["key"].as<const char*>()?o["key"].as<const char*>():"");
+                        m.label = String(o["label"].as<const char*>()?o["label"].as<const char*>():m.key.c_str());
+                        m.unit = String(o["unit"].as<const char*>()?o["unit"].as<const char*>():"");
+                        m.precision = o.containsKey("precision") ? o["precision"].as<int>() : 1;
+                        if(o["isBool"].as<bool>()) m.isBool = true;
+                        if(o["isString"].as<bool>()) m.isString = true;
+                        if(o["isDivider"].as<bool>()) m.isDivider = true;
+                        if(o.containsKey("order")) m.order = o["order"].as<int>();
+                        if(o.containsKey("warnMin")){ m.hasWarnMin = true; m.warnMin = o["warnMin"].as<float>(); }
+                        if(o.containsKey("warnMax")){ m.hasWarnMax = true; m.warnMax = o["warnMax"].as<float>(); }
+                        if(o.containsKey("alarmMin")){ m.hasAlarmMin = true; m.alarmMin = o["alarmMin"].as<float>(); }
+                        if(o.containsKey("alarmMax")){ m.hasAlarmMax = true; m.alarmMax = o["alarmMax"].as<float>(); }
+                        if(o.containsKey("boolAlarmValue")) m.boolAlarmValue = o["boolAlarmValue"].as<bool>()?1:-1;
+                        if(o.containsKey("style") && !_disableRuntimeStyleMeta){
+                            JsonObject st = o["style"].as<JsonObject>();
+                            for(auto kv : st){ RuntimeFieldStyleRule &r = m.style.rule(String(kv.key().c_str())); JsonObject ruleObj = kv.value().as<JsonObject>(); if(ruleObj.containsKey("visible")) r.setVisible(ruleObj["visible"].as<bool>()); for(auto prop : ruleObj){ String pk = prop.key().c_str(); if(pk=="visible") continue; r.set(pk, String(prop.value().as<const char*>()?prop.value().as<const char*>():"")); } }
+                        }
+                        if(m.group.length() && m.key.length()) _runtimeMetaOverride.push_back(m);
+                    }
+                    _runtimeMetaOverrideActive = true;
+                    request->send(200, "application/json", "{\"status\":\"ok\",\"count\":" + String(_runtimeMetaOverride.size()) + "}" );
+                    delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+        server.on("/runtime_meta/override", HTTP_DELETE, [this](AsyncWebServerRequest *request){ _runtimeMetaOverride.clear(); _runtimeMetaOverrideActive=false; request->send(200, "application/json", "{\"status\":\"cleared\"}"); });
+        server.on("/runtime_meta/override", HTTP_GET, [this](AsyncWebServerRequest *request){ String payload = String("{\"active\":") + (_runtimeMetaOverrideActive?"true":"false") + ",\"count\":" + String(_runtimeMetaOverride.size()) + "}"; request->send(200, "application/json", payload); });
+#endif
+        // Optional user supplied global CSS override (served if configured)
+        server.on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest *request){
+            if(getCustomCss() && getCustomCssLen()>0){
+                log_message("[THEME] Serving user_theme.css (%u bytes)", (unsigned)getCustomCssLen());
+                request->send(200, "text/css", String(getCustomCss()));
+            } else {
+                log_message("[THEME] No custom CSS configured (204)");
+                request->send(204); // No Content
+            }
+        });
 
         // Save all settings
         server.on("/config/save_all", HTTP_POST,
@@ -988,6 +1275,81 @@ public:
             int order = 100;             // ordering weight (lower first)
         };
 
+        struct RuntimeFieldStyleProperty {
+            String name;
+            String value;
+        };
+
+        struct RuntimeFieldStyleRule {
+            String key;
+            bool hasVisible = false;
+            bool visible = true;
+            std::vector<RuntimeFieldStyleProperty> properties;
+
+            RuntimeFieldStyleRule& setVisible(bool v){
+                hasVisible = true;
+                visible = v;
+                return *this;
+            }
+
+            RuntimeFieldStyleRule& set(const String& property, const String& val){
+                for(auto &p : properties){
+                    if(p.name == property){
+                        p.value = val;
+                        return *this;
+                    }
+                }
+                properties.push_back({property, val});
+                return *this;
+            }
+        };
+
+        struct RuntimeFieldStyle {
+            std::vector<RuntimeFieldStyleRule> rules;
+
+            RuntimeFieldStyleRule& rule(const String& name){
+                for(auto &r : rules){
+                    if(r.key == name) return r;
+                }
+                RuntimeFieldStyleRule entry;
+                entry.key = name;
+                rules.push_back(entry);
+                return rules.back();
+            }
+
+            const RuntimeFieldStyleRule* find(const String& name) const {
+                for(const auto &r : rules){
+                    if(r.key == name) return &r;
+                }
+                return nullptr;
+            }
+
+            bool empty() const { return rules.empty(); }
+
+            void merge(const RuntimeFieldStyle& other){
+                for(const auto &r : other.rules){
+                    RuntimeFieldStyleRule &target = rule(r.key);
+                    if(r.hasVisible){
+                        target.hasVisible = true;
+                        target.visible = r.visible;
+                    }
+                    for(const auto &prop : r.properties){
+                        bool replaced = false;
+                        for(auto &existing : target.properties){
+                            if(existing.name == prop.name){
+                                existing.value = prop.value;
+                                replaced = true;
+                                break;
+                            }
+                        }
+                        if(!replaced){
+                            target.properties.push_back(prop);
+                        }
+                    }
+                }
+            }
+        };
+
         struct RuntimeFieldMeta {
             String group;        // provider name (e.g. sensors/system)
             String key;          // field key inside provider object
@@ -995,8 +1357,6 @@ public:
             String unit;         // optional unit (e.g. °C, %, dBm)
             int precision = 1;   // decimals for floats
             bool isBool = false; // render as boolean indicator
-            bool hasAlarm = false; // whether this boolean participates in alarm coloring/blink
-            bool alarmWhenTrue = false; // if hasAlarm && isBool: true=>alarm else false=>alarm (default true alarm)
             // Optional threshold ranges (for numeric coloring)
             bool hasWarnMin = false; float warnMin = 0;
             bool hasWarnMax = false; float warnMax = 0;
@@ -1007,11 +1367,111 @@ public:
             String staticString;      // optional fixed string content (if not from runtime.json)
             bool isDivider = false;   // UI should render a visual separator / heading
             int order = 100;          // relative ordering inside group (lower first)
+            int8_t boolAlarmValue = -1; // -1 -> no alarm semantics, 1 -> true means alarm
+            RuntimeFieldStyle style;
         };
 
+        // Feature flags / theming helpers
+        bool _disableRuntimeStyleMeta = false; // if true, omit style objects from runtime_meta
+        const char* _customCss = nullptr;      // pointer to optional globally injected CSS (not persisted)
+        size_t _customCssLen = 0;              // optional length (0 -> strlen)
+    public:
+        void disableRuntimeStyleMeta(bool v){ _disableRuntimeStyleMeta = v; }
+        bool isRuntimeStyleMetaDisabled() const { return _disableRuntimeStyleMeta; }
+        // Provide a pointer to a compile-time or static CSS string. Not copied -> keep storage alive.
+        void setCustomCss(const char* css, size_t len = 0){ _customCss = css; _customCssLen = len; }
+        const char* getCustomCss() const { return _customCss; }
+        size_t getCustomCssLen() const { return _customCss ? (_customCssLen? _customCssLen : strlen(_customCss)) : 0; }
+
+        static RuntimeFieldStyle defaultNumericStyle(bool hasUnit = true){
+            RuntimeFieldStyle style;
+            style.rule("label").set("fontWeight", "600");
+
+            RuntimeFieldStyleRule &valueRule = style.rule("values");
+            valueRule.set("fontWeight", "600");
+            valueRule.set("textAlign", "right");
+            valueRule.set("fontVariantNumeric", "tabular-nums");
+
+            RuntimeFieldStyleRule &unitRule = style.rule("unit");
+            if(hasUnit){
+                // unitRule.set("fontWeight", "600");
+                // unitRule.set("color", "#000");
+                // unitRule.set("textAlign", "left");
+                // unitRule.setVisible(true);
+            } else {
+                unitRule.setVisible(false);
+            }
+            return style;
+        }
+
+        static RuntimeFieldStyle defaultBoolStyle(bool alarmWhenTrue = false){
+            RuntimeFieldStyle style;
+            style.rule("label").set("fontWeight", "600");
+
+            RuntimeFieldStyleRule &stateRule = style.rule("state");
+            stateRule.set("fontWeight", "600");
+            stateRule.set("textAlign", "right");
+
+            RuntimeFieldStyleRule &unitRule = style.rule("unit");
+            unitRule.setVisible(false);
+
+            RuntimeFieldStyleRule &dotTrue = style.rule("stateDotOnTrue");
+            dotTrue.setVisible(true);
+            dotTrue.set("background", "#2ecc71");
+            dotTrue.set("border", "none");
+            dotTrue.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
+
+            RuntimeFieldStyleRule &dotFalse = style.rule("stateDotOnFalse");
+            dotFalse.setVisible(true);
+            dotFalse.set("background", "#888");
+            dotFalse.set("border", "1px solid #000");
+            dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
+
+            if(alarmWhenTrue){
+                dotFalse.set("background", "#2ecc71");
+                dotFalse.set("border", "none");
+                RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm");
+                dotAlarm.setVisible(true);
+                dotAlarm.set("background", "#d00000");
+                dotAlarm.set("animation", "blink 1.6s linear infinite");
+                dotAlarm.set("boxShadow", "0 0 4px rgba(208,0,0,0.7)");
+            }
+            return style;
+        }
+
+        static RuntimeFieldStyle defaultStringStyle(){
+            RuntimeFieldStyle style;
+            style.rule("label").set("fontWeight", "600");
+
+            RuntimeFieldStyleRule &valueRule = style.rule("values");
+            valueRule.set("fontWeight", "500");
+            valueRule.set("textAlign", "left");
+
+            RuntimeFieldStyleRule &unitRule = style.rule("unit");
+            unitRule.setVisible(false);
+            return style;
+        }
+
         // Backward-compatible minimal definition
-        void defineRuntimeField(const String &group, const String &key, const String &label, const String &unit = String(), int precision = 1, int order = 100){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order; _runtimeMeta.push_back(m);
+        void defineRuntimeField(const String &group,
+                                const String &key,
+                                const String &label,
+                                const String &unit = String(),
+                                int precision = 1,
+                                int order = 100,
+                                const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+            RuntimeFieldMeta m;
+            m.group = group;
+            m.key = key;
+            m.label = label;
+            m.unit = unit;
+            m.precision = precision;
+            m.order = order;
+            m.style = defaultNumericStyle(unit.length() > 0);
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
+            _runtimeMeta.push_back(m);
         }
         // Extended with thresholds (pass NAN or omit to skip)
         void defineRuntimeFieldThresholds(
@@ -1021,27 +1481,60 @@ public:
             float alarmMin, float alarmMax,
             bool enableWarnMin = true, bool enableWarnMax = true,
             bool enableAlarmMin = true, bool enableAlarmMax = true,
-            int order = 100
+            int order = 100,
+            const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()
         ){
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order;
             if(enableWarnMin){ m.hasWarnMin = true; m.warnMin = warnMin; }
             if(enableWarnMax){ m.hasWarnMax = true; m.warnMax = warnMax; }
             if(enableAlarmMin){ m.hasAlarmMin = true; m.alarmMin = alarmMin; }
             if(enableAlarmMax){ m.hasAlarmMax = true; m.alarmMax = alarmMax; }
+            m.style = defaultNumericStyle(unit.length() > 0);
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
             _runtimeMeta.push_back(m);
         }
-        // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics.
-        // alarmWhenTrue=true  -> true state is alarm
-        // alarmWhenTrue=false -> no alarm unless explicitly toggled via hasAlarm parameter (future extension)
-        void defineRuntimeBool(const String &group, const String &key, const String &label, bool alarmWhenTrue=false, int order = 100){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isBool=true; m.order=order;
-            if(alarmWhenTrue){ m.hasAlarm = true; m.alarmWhenTrue = true; }
+    // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics (true state treated as alarm).
+        void defineRuntimeBool(const String &group,
+                               const String &key,
+                               const String &label,
+                               bool alarmWhenTrue=false,
+                               int order = 100,
+                               const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+            RuntimeFieldMeta m;
+            m.group = group;
+            m.key = key;
+            m.label = label;
+            m.isBool = true;
+            m.order = order;
+            if(alarmWhenTrue){ m.boolAlarmValue = 1; }
+            m.style = defaultBoolStyle(alarmWhenTrue);
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
             _runtimeMeta.push_back(m);
         }
 
         // New: string (non-numeric, non-boolean) runtime label & value. If key is empty, acts as standalone display entry.
-        void defineRuntimeString(const String &group, const String &key, const String &label, const String &staticValue = String(), int order = 100){
-            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isString=true; m.order=order; m.staticString = staticValue; _runtimeMeta.push_back(m);
+        void defineRuntimeString(const String &group,
+                                 const String &key,
+                                 const String &label,
+                                 const String &staticValue = String(),
+                                 int order = 100,
+                                 const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+            RuntimeFieldMeta m;
+            m.group = group;
+            m.key = key;
+            m.label = label;
+            m.isString = true;
+            m.order = order;
+            m.staticString = staticValue;
+            m.style = defaultStringStyle();
+            if(!styleOverride.empty()){
+                m.style.merge(styleOverride);
+            }
+            _runtimeMeta.push_back(m);
         }
         // New: divider/separator inside a group. Key becomes unique synthetic id (e.g., "_div_<n>").
         void defineRuntimeDivider(const String &group, const String &label, int order = 100){
@@ -1077,10 +1570,15 @@ public:
             String out; serializeJson(d, out); return out;
         }
         String runtimeMetaToJSON(){
-            DynamicJsonDocument d(2048);
+            DynamicJsonDocument d(4096);
             JsonArray arr = d.to<JsonArray>();
             // Sort by group, then order, then label
-            std::vector<RuntimeFieldMeta> metaSorted = _runtimeMeta;
+            std::vector<RuntimeFieldMeta> metaSorted;
+#ifdef development
+            if(_runtimeMetaOverrideActive) metaSorted = _runtimeMetaOverride; else metaSorted = _runtimeMeta;
+#else
+            metaSorted = _runtimeMeta;
+#endif
             std::sort(metaSorted.begin(), metaSorted.end(), [](const RuntimeFieldMeta &a, const RuntimeFieldMeta &b){
                 if(a.group == b.group){ if(a.order == b.order) return a.label < b.label; return a.order < b.order; }
                 return a.group < b.group;
@@ -1093,10 +1591,6 @@ public:
                 if(m.unit.length()) o["unit"] = m.unit;
                 o["precision"] = m.precision;
                 if(m.isBool) o["isBool"] = true;
-                if(m.isBool && m.hasAlarm){
-                    o["hasAlarm"] = true;
-                    if(m.alarmWhenTrue) o["alarmWhenTrue"] = true; // default false if omitted
-                }
                 if(m.isString) o["isString"] = true;
                 if(m.isDivider) o["isDivider"] = true;
                 if(m.staticString.length()) o["staticValue"] = m.staticString;
@@ -1106,12 +1600,30 @@ public:
                 if(m.hasWarnMax) o["warnMax"] = m.warnMax;
                 if(m.hasAlarmMin) o["alarmMin"] = m.alarmMin;
                 if(m.hasAlarmMax) o["alarmMax"] = m.alarmMax;
+                if(m.boolAlarmValue != -1){
+                    o["boolAlarmValue"] = (m.boolAlarmValue == 1);
+                }
+                if(!_disableRuntimeStyleMeta && !m.style.empty()){
+                    JsonObject styleObj = o.createNestedObject("style");
+                    for(const auto &rule : m.style.rules){
+                        if(!rule.key.length()) continue;
+                        JsonObject ruleObj = styleObj.createNestedObject(rule.key);
+                        if(rule.hasVisible){ ruleObj["visible"] = rule.visible; }
+                        for(const auto &prop : rule.properties){
+                            if(prop.name.length()) ruleObj[prop.name.c_str()] = prop.value;
+                        }
+                    }
+                }
             }
             String out; serializeJson(d, out); return out;
         }
     private:
         std::vector<RuntimeValueProvider> runtimeProviders;
-        std::vector<RuntimeFieldMeta> _runtimeMeta;
+    std::vector<RuntimeFieldMeta> _runtimeMeta;
+#ifdef development
+    std::vector<RuntimeFieldMeta> _runtimeMetaOverride; // injected via /runtime_meta/override
+    bool _runtimeMetaOverrideActive = false;
+#endif
         // Cross-field runtime alarms
         struct RuntimeAlarm {
             String name; // identifier
@@ -1166,6 +1678,77 @@ public:
         bool _otaInitialized = false;
         String _otaPassword;
         String _otaHostname;
+    String _appName;
+    // Built-in system provider support
+    bool _builtinSystemProviderEnabled = false;
+    bool _builtinSystemProviderRegistered = false;
+    // cached loop average (if user wants to push their own they still can redefine) - user code can update via updateLoopAvg
+    double _loopAvgMs = 0.0;
+    unsigned long _loopWindowStart = 0;
+    uint32_t _loopSamples = 0;
+    double _loopAccumMs = 0.0;
+
+public:
+    // Call from loop() to update rolling average (3s window) if builtin system provider is enabled.
+    void updateLoopTiming(){
+        if(!_builtinSystemProviderEnabled) return;
+        static unsigned long lastMicros = micros();
+        unsigned long nowMicros = micros();
+        unsigned long delta = nowMicros - lastMicros; // overflow safe unsigned arithmetic
+        lastMicros = nowMicros;
+        double ms = (double)delta / 1000.0;
+        _loopAccumMs += ms;
+        _loopSamples++;
+        unsigned long nowMs = millis();
+        if(_loopWindowStart == 0) _loopWindowStart = nowMs;
+        if(nowMs - _loopWindowStart >= 3000){
+            if(_loopSamples > 0){
+                _loopAvgMs = _loopAccumMs / (double)_loopSamples;
+            }
+            _loopAccumMs = 0.0;
+            _loopSamples = 0;
+            _loopWindowStart = nowMs;
+        }
+    }
+
+    // Simple RSSI quality to emoji (bars) mapping
+    static const char* rssiEmoji(int rssi){
+        //todo:search for better svg or emoji for
+        // Typical RSSI: -30 (excellent) to -90 (bad)
+        if(rssi >= -50) return "Excellent"; // Excellent
+        if(rssi >= -60) return "Good"; // Good
+        if(rssi >= -67) return "Fair"; // Fair
+        if(rssi >= -75) return "Weak"; // Weak
+        return "Very weak / none"; // Very weak / none
+    }
+
+    // Enable built-in system provider (must be called in setup before starting web server)
+    void enableBuiltinSystemProvider(bool alsoDefineMeta = true){
+        if(_builtinSystemProviderEnabled) return; // idempotent
+        _builtinSystemProviderEnabled = true;
+        if(!_builtinSystemProviderRegistered){
+            addRuntimeProvider({
+                .name = "system",
+                .fill = [this](JsonObject &o){
+                    o["rssi"] = WiFi.isConnected() ? WiFi.RSSI() : 0;
+                    o["rssiBars"] = rssiEmoji(WiFi.isConnected()? WiFi.RSSI(): -100);
+                    o["freeHeap"] = (uint32_t)(ESP.getFreeHeap()/1024); // KB
+                    o["loopAvg"] = _loopAvgMs; // ms avg over last window
+                },
+                .order = 0
+            });
+            if(alsoDefineMeta){
+                // Order values chosen to interleave nicely; user can override later.
+                defineRuntimeField("system","rssi","WiFi RSSI","dBm",0,1);
+                defineRuntimeString("system","rssiBars","Signal","",2); // will show string bars
+                defineRuntimeField("system","freeHeap","Free Heap","KB",0,3);
+                defineRuntimeField("system","loopAvg","Loop Avg","ms",2,4);
+            }
+            _builtinSystemProviderRegistered = true;
+        }
+    }
+
+    bool isBuiltinSystemProviderEnabled() const { return _builtinSystemProviderEnabled; }
 
 };
 

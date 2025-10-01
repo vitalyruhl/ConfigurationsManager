@@ -1,19 +1,19 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.4.1 (always-async; runtime + WebSocket support built-in)
+> Version 2.5.0 (2025.09.30)
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
 
 ## Overview
 
-The ConfigurationsManager is a C++17 helper library & example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI and OTA update endpoint. It focuses on:
+ConfigurationsManager is a C++17 helper library + example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI (settings + live runtime dashboard + OTA flashing). It focuses on:
 
-- Type‑safe templated `Config<T>` wrappers
+-- Type‑safe templated `Config<T>` wrappers
 - Central registration + bulk load/save functions
 - Optional pretty display names and pretty category names (decouple storage key from UI)
 - Automatic key truncation safety (category + key <= 15 chars total in NVS) with friendly UI name preserved
-- Dynamic conditional visibility (`showIf` lambdas)
+-- Dynamic conditional visibility (`showIf` lambdas)
 - Callbacks on value change
 - OTA update integration
 - Static or DHCP WiFi startup helpers (multiple overloads)
@@ -47,14 +47,16 @@ description = ESP32 C++17 Project for managing settings
 - 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
 - 📡 AP Mode fallback / captive portal style entry
 - 🚀 OTA firmware upload endpoint
+- ⚡ Flash firmware directly from the web UI (password-protected HTTP OTA)
 - 🔴 Live runtime values (`/runtime.json`)
-- 🔁 WebSocket push channel (`/ws`) (frontend auto‑fallback to polling if socket not connected)
-  - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
+- 🎨 Two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
+- Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
+- 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
 >To see how i use it in my project, check out my GitHub (most features are used in this project):
 >[https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
 
-### Live Runtime Values & Alarm System since 2.4.x
+### Live Runtime Values & Alarm System
 
 ![Live Runtime Values & Alarm System](examples/live-values.jpg)
 
@@ -91,6 +93,42 @@ cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1); // plain (no thr
 ```
 
 Frontend consumes `/runtime_meta.json` → groups, units, precision, thresholds.
+
+#### Styling Runtime Fields (Quick Glimpse)
+
+Runtime metadata now ships optional **style overrides** so you can tweak how individual values appear in the web UI without touching the Vue code. Each field carries a `RuntimeFieldStyle` structure that maps logical targets (`label`, `values`, `unit`, `state`, `stateDotOnTrue`, `stateDotOnFalse`, `stateDotOnAlarm`, …) to CSS property/value pairs plus an optional `visible` flag. The backend merges your overrides with type-specific defaults, ensuring the UI always has sensible fallbacks.
+
+```cpp
+// Boolean alarm rendered with a yellow dot and text when true
+{
+  auto dewpointStyle = ConfigManagerClass::defaultBoolStyle(/*alarmWhenTrue=*/true);
+  dewpointStyle.rule("stateDotOnAlarm")
+    .set("background", "#f1c40f")
+    .set("border", "none")
+    .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
+    .set("animation", "none");
+  dewpointStyle.rule("state").set("color", "#f1c40f").set("fontWeight", "600");
+  cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, 100, dewpointStyle);
+}
+
+// Thresholded numeric field with custom label/value/unit styling
+{
+  auto tempFieldStyle = ConfigManagerClass::defaultNumericStyle(true);
+  tempFieldStyle.rule("label").set("color", "#d00000").set("fontWeight", "700");
+  tempFieldStyle.rule("values").set("color", "#0b3d91").set("fontWeight", "700");
+  tempFieldStyle.rule("unit").set("color", "#000000").set("fontWeight", "700");
+  cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
+                   1.0f, 30.0f,
+                   0.0f, 32.0f,
+                   true, true, true, true,
+                   10,
+                   tempFieldStyle);
+}
+```
+
+If a rule doesn’t exist yet, `rule("target")` creates it. Use `.setVisible(false)` to hide an element (e.g. boolean state text). Frontend consumes the style object verbatim inside `/runtime_meta.json`.
+
+Full documentation moved to: `docs/STYLING.md` and `docs/THEMING.md`.
 
 1. **Boolean Runtime Fields**
 
@@ -232,7 +270,7 @@ cfg.defineRuntimeAlarm("too_cold",
 cfg.enableWebSocketPush(1500);
 ```
 
-#### New in 2.4.2 (Unreleased): Runtime String Fields, Dividers & Ordering
+#### Runtime String Fields, Dividers & Ordering
 
 You can enrich the Live view with informational text lines and visual separators and control ordering.
 
@@ -268,11 +306,21 @@ Older frontends ignore these keys gracefully.
 
 ---
 
+## Documentation Index
+
+| Topic | File |
+|-------|------|
+| Settings & OptionGroup | `docs/SETTINGS.md` |
+| Runtime Providers & Alarms | `docs/RUNTIME.md` |
+| Styling (per-field metadata) | `docs/STYLING.md` |
+| Theming (global CSS + disabling metadata) | `docs/THEMING.md` |
+| OTA Flash Workflow | (this README) |
+
 ## Requirements
 
 - ESP32 development board
-- Arduino IDE or PlatformIO
-- add _build_flags = -std=gnu++17_ and _build_unflags = -std=gnu++11_ to your platformio.ini file
+- PlatformIO (preferred) or Arduino IDE
+- Add `-std=gnu++17` (and remove default gnu++11) in `platformio.ini`
 
 ## Screenshots
 
@@ -287,6 +335,17 @@ Older frontends ignore these keys gracefully.
 >OTA Update over web-interface
 
 ![OTA Update over web-interface](examples/ota-update-over-web.jpg)
+
+## Flash Firmware via Web UI
+
+The embedded single-page app now exposes a `Flash` action beside the `Settings` tab so you can push new firmware without leaving the browser.
+
+1. Enable `Allow OTA Updates` under **System** and set an `OTA Password` (leave empty to allow unauthenticated uploads).
+2. Click **Flash** and pick the compiled `.bin` (or `.bin.gz`) image produced by PlatformIO / Arduino.
+3. Enter the OTA password when prompted. The SPA sends it as the `X-OTA-PASSWORD` header so it never ends up inside the firmware payload.
+4. Watch the toast notifications for progress. On success the device reboots automatically; the UI keeps polling until it comes back online.
+
+The backend remains fully asynchronous (`ESPAsyncWebServer`)—the new `/ota_update` handler streams chunks into the `Update` API while still performing password checks. HTTP uploads are rejected when OTA is disabled, the password is missing/incorrect, or the upload fails integrity checks.
 
 ## Examples
 
@@ -406,6 +465,81 @@ Config<int> hiddenUnlessEnabled(ConfigOptions<int>{
 });
 ```
 
+### Reducing Boilerplate with OptionGroup (since 2.4.3)
+
+When many settings share the same category & pretty category, you can use `OptionGroup` to avoid repetition.
+
+Before:
+
+```cpp
+Config<String> wifiSsid(ConfigOptions<String>{
+  .keyName="ssid", .category="wifi", .defaultValue="MyWiFi",
+  .prettyName="WiFi SSID", .prettyCat="Network Settings"
+});
+Config<String> wifiPassword(ConfigOptions<String>{
+  .keyName="password", .category="wifi", .defaultValue="secretpass",
+  .prettyName="WiFi Password", .prettyCat="Network Settings",
+  .showInWeb = true, .isPassword = true
+});
+```
+
+After (factory pattern):
+
+```cpp
+constexpr OptionGroup WIFI_GROUP{"wifi", "Network Settings"};
+
+Config<String> wifiSsid( WIFI_GROUP.opt<String>(
+  "ssid", String("MyWiFi"), "WiFi SSID") );
+
+Config<String> wifiPassword( WIFI_GROUP.opt<String>(
+  "password", String("secretpass"), "WiFi Password", true, true) );
+```
+
+The template `opt<T>(key, defaultValue, prettyName, showInWeb, isPassword, cb, showIf)` returns a fully populated `ConfigOptions<T>`.
+
+### Visibility Helper Functions
+
+To replace repeating lambdas like `[this](){ return !this->useDhcp.get(); }`, two helper factories are available:
+
+```cpp
+inline std::function<bool()> showIfTrue (const Config<bool>& flag);
+inline std::function<bool()> showIfFalse(const Config<bool>& flag);
+```
+
+Usage inside a settings struct:
+
+```cpp
+struct WiFi_Settings {
+  Config<bool> useDhcp;
+  Config<String> staticIp;
+  Config<String> gateway;
+  Config<String> subnet;
+
+  WiFi_Settings() :
+    useDhcp(    WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP") ),
+    staticIp(   WIFI_GROUP.opt<String>("sIP",    String("192.168.2.126"), "Static IP",    true, false, nullptr, showIfFalse(useDhcp) ) ),
+    gateway(    WIFI_GROUP.opt<String>("GW",     String("192.168.2.250"), "Gateway",      true, false, nullptr, showIfFalse(useDhcp) ) ),
+    subnet(     WIFI_GROUP.opt<String>("subnet", String("255.255.255.0"), "Subnet-Mask",  true, false, nullptr, showIfFalse(useDhcp) ) )
+  { /* addSetting(...) */ }
+};
+```
+
+Benefits:
+
+- Less visual noise → easier to scan core semantics
+- Lower risk of copy/paste mistakes (e.g., forgetting to invert a condition)
+- Consistent semantics across different settings groups
+
+### Migration Tips
+
+1. Introduce one `constexpr OptionGroup` per logical category (e.g. `wifi`, `network`, `MQTT`).
+2. Gradually refactor: old style (`ConfigOptions{...}`) and new factory style can coexist.
+3. For dynamic visibility tied to a boolean `Config<bool>` field, prefer `showIfTrue/False(flag)`.
+4. Keep complex logic (multi-field dependencies) in a dedicated lambda or helper—helpers are intended only for simple flag toggles.
+5. If you need a callback (`cb`) and a C++ lambda, prefer setting `.cb` for plain function pointer or call `setCallback()` after construction.
+
+---
+
 ### Static IP Helper Overloads
 
 Overloads now available:
@@ -523,6 +657,10 @@ pio run -e usb -t clean
 
 ```
 
+## Custom Theme (Global CSS)
+
+Provide one stylesheet at `/user_theme.css` by calling `setCustomCss()` and optionally shrink `/runtime_meta.json` by `disableRuntimeStyleMeta(true)`. See `docs/THEMING.md` for detailed selectors & examples.
+
 ## Version History
 
 - **1.0.0**: Initial release with basic features.
@@ -548,23 +686,19 @@ pio run -e usb -t clean
   - Added relay control example via alarm callbacks
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
 - **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
+- **2.5.0**: OptionGroup + visibility helpers, runtime field styling metadata, boolean dot styling refinements, hybrid theming (disable style meta + `/user_theme.css`), OTA flash UI improvements.
 
 ## ToDo
 
-- HTTPS Support
-- add optional order number for settings to show on webinterface
+- HTTPS Support (original async lib not support https 😒 )
 - add optional order number for categories to show on webinterface
 - add optional description for settings to show on webinterface as tooltip
 - add optional show-password flag to show password on webinterface, and or console
 - add reset to default for single settings
-- add configurable OTA route
-- add configurable OTA password for webinterface
 - i18n Support
 - make c++ V11 support
 
 ## known Issues
 
-- **Save all** button works only, if you saved value ones over single save-button
 - prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown.
 - if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty.
-- after all changes - the ota update over webinterface is not working, will be fixed in next release

@@ -1,0 +1,16 @@
+[
+  { "group": "alarms",  "key": "dewpoint_risk",   "label": "Dewpoint Risk",        "precision": 1, "isBool": true,  "boolAlarmValue": true },
+  { "group": "alarms",  "key": "temp_low",        "label": "too low temperature",   "precision": 1, "isBool": true,  "boolAlarmValue": true },
+
+  { "group": "sensors", "key": "temp",            "label": "Temperature",  "unit": "°C",  "precision": 1, "order": 10, "warnMin": 1,  "warnMax": 30, "alarmMin": 0,  "alarmMax": 32 },
+  { "group": "sensors", "key": "hum",             "label": "Humidity",     "unit": "%",   "precision": 1, "order": 11, "warnMin": 30, "alarmMin": 15, "alarmMax": 90 },
+  { "group": "sensors", "key": "dew",             "label": "Dewpoint",     "unit": "°C",  "precision": 1, "order": 12 },
+  { "group": "sensors", "key": "Pressure",        "label": "Pressure",     "unit": "hPa", "precision": 1, "order": 13 },
+
+  { "group": "system",  "key": "rssi",            "label": "WiFi RSSI",    "unit": "dBm",   "precision": 0, "order": 1 },
+  { "group": "system",  "key": "freeHeap",        "label": "Free Heap",    "unit": "Bytes", "precision": 0, "order": 2 },
+  { "group": "system",  "key": "_div_1",          "label": "Environment",  "isDivider": true,               "order": 3 },
+  { "group": "system",  "key": "i1",              "label": "Settings:",    "isString": true,                "order": 4 },
+  { "group": "system",  "key": "allowOTA",        "label": "Allow OTA Updates",        "precision": 1, "isBool": true, "order": 5 },
+  { "group": "system",  "key": "tempBoolToggle",  "label": "Temporary Bool Toggle",     "precision": 1, "isBool": true, "order": 6 }
+]
