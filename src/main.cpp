@@ -101,9 +101,9 @@ void cbTestButton();
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 h3 { color: orange; text-decoration: underline; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }
+.rw[data-group="sensors"][data-key="temp"] .lab { color:rgba(16, 23, 198, 1); font-weight:900; }
+.rw[data-group="sensors"][data-key="temp"] .val { color:rgba(16, 23, 198, 1); font-weight:900; }
+.rw[data-group="sensors"][data-key="temp"] .un  { color:rgba(16, 23, 198, 1); font-weight:900; }
 )CSS";
 
 // (Server instance moved into conditional above)

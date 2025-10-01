@@ -39,19 +39,19 @@ public:
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
 /* Built-in ConfigManager runtime bool indicator palette */
-.rt-row.bool-row[data-state="on"] .bool-dot {
+.rw.br[data-state="on"] .bd {
     background: #2ecc71;
     border: none;
     box-shadow: 0 0 2px rgba(0,0,0,0.4);
 }
 
-.rt-row.bool-row[data-state="off"] .bool-dot {
+.rw.br[data-state="off"] .bd {
     background: #888;
     border: 1px solid #000;
     box-shadow: 0 0 2px rgba(0,0,0,0.4);
 }
 
-.rt-row.bool-row[data-state="alarm"] .bool-dot {
+.rw.br[data-state="alarm"] .bd {
     background: #d00000;
     border: none;
     box-shadow: 0 0 4px rgba(208,0,0,0.7);

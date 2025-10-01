@@ -12,6 +12,7 @@ You can combine them or disable metadata and rely purely on your own CSS.
 Each runtime field may carry a `style` object inside `/runtime_meta.json`. That object groups rules keyed by logical targets:
 
 Targets (examples):
+
 - label
 - values (numeric/text value span)
 - unit (unit column)
@@ -35,6 +36,7 @@ cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, 100, s);
 If a rule is missing it is created the first time you call rule("target").
 
 Hide an element:
+
 ```cpp
 s.rule("state").setVisible(false);
 ```
@@ -64,29 +66,31 @@ Instead of (or in addition to) JSON style rules you can provide a single custom 
 
 Each runtime row exposes stable selectors:
 
-```
-<div class="rt-row" data-group="sensors" data-key="temp" data-type="numeric" data-state="safe|warn|alarm|on|off"></div>
+```html
+<div class="rw" data-group="sensors" data-key="temp" data-type="numeric" data-state="safe|warn|alarm|on|off"></div>
 ```
 
 Write CSS like:
 
 ```css
 /* Temperature alarm highlight */
-.rt-row[data-group="sensors"][data-key="temp"][data-state="alarm"] .rt-value { color:#ff2222; font-weight:700; }
+.rw[data-group="sensors"][data-key="temp"][data-state="alarm"] .val { color:#ff2222; font-weight:700; }
 
 /* Boolean active */
-.rt-row[data-type="bool"][data-state="on"] .rt-state-dot { background:#12c912; }
+.rw[data-type="bool"][data-state="on"] .bd { background:#12c912; }
 
 /* Hide all boolean state text globally */
-.rt-row[data-type="bool"] .rt-state-text { display:none; }
+.rw[data-type="bool"] .val { display:none; }
 ```
 
 ### Disabling Style Metadata
 
 Call:
+
 ```cpp
 cfg.disableRuntimeStyleMeta(true);
 ```
+
 Then define your look entirely in `/user_theme.css`.
 
 ### Supplying Custom CSS

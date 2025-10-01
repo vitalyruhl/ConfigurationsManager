@@ -45,79 +45,79 @@
         <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
 
-          <div class="rt-table">
+          <div class="tbl">
             <template v-for="f in group.fields" :key="f.key">
               <!-- Divider rendering -->
-              <hr v-if="f.isDivider" class="rt-divider" :data-label="f.label" />
+              <hr v-if="f.isDivider" class="dv" :data-label="f.label" />
               <!-- Interactive Button -->
-              <div v-else-if="f.isButton" class="rt-row rt-action" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value">
-                  <button class="rt-btn" @click="triggerRuntimeButton(group.name, f.key)">{{ f.label }}</button>
+              <div v-else-if="f.isButton" class="rw act" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val">
+                  <button class="btn" @click="triggerRuntimeButton(group.name, f.key)">{{ f.label }}</button>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Stateful Button -->
-              <div v-else-if="f.isStateButton" class="rt-row rt-action" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value">
-                  <button class="rt-btn" :class="{'on': runtime[group.name] && runtime[group.name][f.key]}" @click="onStateButton(group.name,f)">{{ f.label }}: {{ runtime[group.name] && runtime[group.name][f.key] ? 'ON' : 'OFF' }}</button>
+              <div v-else-if="f.isStateButton" class="rw act" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val">
+                  <button class="btn" :class="{'on': runtime[group.name] && runtime[group.name][f.key]}" @click="onStateButton(group.name,f)">{{ f.label }}: {{ runtime[group.name] && runtime[group.name][f.key] ? 'ON' : 'OFF' }}</button>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Int Slider (explicit set) -->
-              <div v-else-if="f.isIntSlider" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value slider-wrap">
+              <div v-else-if="f.isIntSlider" class="rw sl" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val sw">
                   <input type="range" :min="f.min" :max="f.max" step="1" :value="tempSliderValue(group.name,f)" @input="onIntSliderLocal(group.name,f,$event)" />
-                  <span class="slider-val">{{ tempSliderValue(group.name,f) }}</span>
-                  <button class="set-btn" @click="commitIntSlider(group.name,f)">Set</button>
+                  <span class="sv">{{ tempSliderValue(group.name,f) }}</span>
+                  <button class="sb" @click="commitIntSlider(group.name,f)">Set</button>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Float Slider (explicit set) -->
-              <div v-else-if="f.isFloatSlider" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value slider-wrap">
+              <div v-else-if="f.isFloatSlider" class="rw sl" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val sw">
                   <input type="range" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="tempSliderValue(group.name,f)" @input="onFloatSliderLocal(group.name,f,$event)" />
-                  <span class="slider-val">{{ formatTempFloat(group.name,f) }}</span>
-                  <button class="set-btn" @click="commitFloatSlider(group.name,f)">Set</button>
+                  <span class="sv">{{ formatTempFloat(group.name,f) }}</span>
+                  <button class="sb" @click="commitFloatSlider(group.name,f)">Set</button>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Int Input -->
-              <div v-else-if="f.isIntInput" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value slider-wrap">
+              <div v-else-if="f.isIntInput" class="rw sl" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val sw">
                   <input type="number" :min="f.min" :max="f.max" step="1" :value="tempInputValue(group.name,f)" @input="onIntInputLocal(group.name,f,$event)" class="num-input" />
-                  <button class="set-btn" @click="commitIntInput(group.name,f)">Set</button>
+                  <button class="sb" @click="commitIntInput(group.name,f)">Set</button>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Float Input -->
-              <div v-else-if="f.isFloatInput" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value slider-wrap">
+              <div v-else-if="f.isFloatInput" class="rw sl" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val sw">
                   <input type="number" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="tempInputValue(group.name,f)" @input="onFloatInputLocal(group.name,f,$event)" class="num-input" />
-                  <button class="set-btn" @click="commitFloatInput(group.name,f)">Set</button>
+                  <button class="sb" @click="commitFloatInput(group.name,f)">Set</button>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Interactive Checkbox (toggle) -->
-              <div v-else-if="f.isCheckbox" class="rt-row rt-toggle" :data-group="group.name" :data-key="f.key">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value">
+              <div v-else-if="f.isCheckbox" class="rw tg" :data-group="group.name" :data-key="f.key">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val">
                   <label class="switch">
                     <input type="checkbox" :checked="runtime[group.name] && runtime[group.name][f.key]" @change="onRuntimeCheckbox(group.name, f.key, $event.target.checked)" />
                     <span class="slider round"></span>
                   </label>
                 </span>
-                <span class="rt-unit"></span>
+                <span class="un"></span>
               </div>
               <!-- Pure string (static or dynamic) -->
-              <div v-else-if="f.isString" class="rt-row rt-string">
-                <span class="rt-label">{{ f.label }}</span>
-                <span class="rt-value">
+              <div v-else-if="f.isString" class="rw str">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val">
                   <template v-if="f.staticValue">{{ f.staticValue }}</template>
                   <template
                     v-else-if="
@@ -128,7 +128,7 @@
                   >
                   <template v-else>—</template>
                 </span>
-                <span class="rt-unit"></span>
+                  <span class="un"></span>
               </div>
               <!-- Boolean / Numeric -->
               <div
@@ -136,73 +136,71 @@
                   runtime[group.name] &&
                   runtime[group.name][f.key] !== undefined
                 "
-                :class="['rt-row', valueClasses(runtime[group.name][f.key], f)]"
+                  :class='["rw", valueClasses(runtime[group.name][f.key], f)]'
                 :data-group="group.name"
                 :data-key="f.key"
-                :data-type="
-                  f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'
-                "
+                  :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
                 :data-state="
                   f.isBool ? boolState(runtime[group.name][f.key], f) : null
                 "
               >
                 <template v-if="f.isBool">
                   <span
-                    class="rt-label bool-label"
+                      class="lab bl"
                     v-if="fieldVisible(f, 'label')"
                     :style="fieldCss(f, 'label')"
                   >
                     <span
-                      class="bool-dot"
+                        class="bd"
                       v-if="boolDotVisible(runtime[group.name][f.key], f)"
                       :style="boolDotStyle(runtime[group.name][f.key], f)"
                     ></span>
                     {{ f.label }}
                   </span>
-                  <span class="rt-label bool-label" v-else></span>
+                    <span class="lab bl" v-else></span>
                   <span
-                    class="rt-value"
+                      class="val"
                     v-if="showBoolStateText && fieldVisible(f, 'state')"
                     :style="fieldCss(f, 'state')"
                     >{{ formatBool(runtime[group.name][f.key], f) }}</span
                   >
-                  <span class="rt-value" v-else></span>
+                    <span class="val" v-else></span>
                   <span
-                    class="rt-unit"
+                      class="un"
                     v-if="fieldVisible(f, 'unit', false)"
                     :style="fieldCss(f, 'unit')"
                   ></span>
-                  <span class="rt-unit" v-else></span>
+                    <span class="un" v-else></span>
                 </template>
                 <template v-else>
                   <span
-                    class="rt-label"
+                      class="lab"
                     v-if="fieldVisible(f, 'label')"
                     :style="fieldCss(f, 'label')"
                     >{{ f.label }}</span
                   >
-                  <span class="rt-label" v-else></span>
+                    <span class="lab" v-else></span>
                   <span
-                    class="rt-value"
+                      class="val"
                     v-if="fieldVisible(f, 'values')"
                     :style="fieldCss(f, 'values')"
                     >{{ formatValue(runtime[group.name][f.key], f) }}</span
                   >
-                  <span class="rt-value" v-else></span>
+                    <span class="val" v-else></span>
                   <span
-                    class="rt-unit"
+                      class="un"
                     v-if="fieldVisible(f, 'unit', !!f.unit)"
                     :style="fieldCss(f, 'unit')"
                     >{{ f.unit }}</span
                   >
-                  <span class="rt-unit" v-else></span>
+                    <span class="un" v-else></span>
                 </template>
               </div>
             </template>
           </div>
           <hr
-            v-if="group.name === 'system' && runtime.uptime !== undefined"
-            class="rt-divider"
+              v-if="group.name === 'system' && runtime.uptime !== undefined"
+              class="dv"
           />
           <p
             v-if="group.name === 'system' && runtime.uptime !== undefined"
@@ -216,10 +214,10 @@
           >
             Loop Avg: {{ typeof runtime.system.loopAvg === 'number' ? runtime.system.loopAvg.toFixed(2) : runtime.system.loopAvg }} ms
           </p>
-          <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="rt-table">
-            <div class="rt-row control-row">
-              <span class="rt-label">Show state text</span>
-              <label class="switch rt-value">
+          <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
+            <div class="rw cr">
+              <span class="lab">Show state text</span>
+              <label class="switch val">
                 <input type="checkbox" v-model="showBoolStateText" class="switch" />
                 <span class="slider round"></span>
               </label>
@@ -285,6 +283,7 @@ const runtime = ref({});
 let pollTimer = null;
 let ws = null;
 const wsConnected = ref(false);
+const rURIComp = encodeURIComponent; //reduce encodeURIComponent -> rURIComp - we save lot of bytes.
 // Runtime metadata state for dynamic grouping
 const runtimeMeta = ref([]); // raw metadata array from /runtime_meta.json
 const runtimeGroups = ref([]); // transformed groups -> [{ name, title, fields:[{key,label,unit,precision}]}]
@@ -416,9 +415,9 @@ async function applySingle(category, key, value) {
   const toastId = notify(`Applying: ${opKey} ...`, "info", 7000, true);
   try {
     const response = await fetch(
-      `/config/apply?category=${encodeURIComponent(
+      `/config/apply?category=${rURIComp(
         category
-      )}&key=${encodeURIComponent(key)}`,
+      )}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -443,9 +442,9 @@ async function saveSingle(category, key, value) {
   const toastId = notify(`Saving: ${opKey} ...`, "info", 7000, true);
   try {
     const response = await fetch(
-      `/config/save?category=${encodeURIComponent(
+      `/config/save?category=${rURIComp(
         category
-      )}&key=${encodeURIComponent(key)}`,
+      )}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -545,7 +544,7 @@ function rebootDevice() {
 
 function startFlash() {
   if (!canFlash.value) {
-    notify("OTA updates are disabled in device settings.", "error");
+    notify("OTA is disabled", "error");
     return;
   }
   if (!otaFileInput.value) {
@@ -566,7 +565,7 @@ async function onFlashFileSelected(event) {
     return;
   }
   if (!canFlash.value) {
-    notify("OTA updates are disabled in device settings.", "error");
+    notify("OTA is disabled", "error");
     return;
   }
   if (file.size === 0) {
@@ -610,24 +609,14 @@ async function onFlashFileSelected(event) {
     if (response.status === 401) {
       updateToast(toastId, "Unauthorized: wrong OTA password.", "error", 6000);
     } else if (response.status === 403 || payload.reason === "ota_disabled") {
-      updateToast(
-        toastId,
-        "OTA updates are disabled on this device.",
-        "error",
-        6000
-      );
+      updateToast(toastId, "OTA disabled", "error", 6000);
     } else if (!response.ok || payload.status !== "ok") {
       const reason = payload.reason || response.statusText || "Upload failed";
       updateToast(toastId, `Flash failed: ${reason}`, "error", 6000);
     } else {
-      updateToast(
-        toastId,
-        "Flash uploaded. Device will reboot shortly.",
-        "success",
-        12000
-      );
-      notify("Flash successful! Device is rebooting...", "success", 6000);
-      notify("Waiting for device to reboot...", "info", 8000);
+      updateToast(toastId, "Flash done!", "success", 9000);
+      notify("Flash done!", "success", 6000);
+      notify("Waiting for reboot...", "info", 8000);
     }
   } catch (error) {
     updateToast(toastId, `Flash failed: ${error.message}`, "error", 6000);
@@ -922,7 +911,7 @@ function runtimeHasValue(groupName, key) {
 
 async function triggerRuntimeButton(group, key){
   try {
-    const res = await fetch(`/runtime_action/button?group=${encodeURIComponent(group)}&key=${encodeURIComponent(key)}`, { method:'POST'});
+  const res = await fetch(`/runtime_action/button?group=${rURIComp(group)}&key=${rURIComp(key)}`, { method:'POST'});
     if(!res.ok){ notify(`Button failed: ${group}/${key}`,'error'); return; }
     notify(`Button: ${key}`,'success',1500);
     // refresh runtime quickly to reflect any side effects
@@ -933,7 +922,7 @@ async function onStateButton(group,f){
   const cur = runtime.value[group] && runtime.value[group][f.key];
   const next = !cur;
   try {
-    const res = await fetch(`/runtime_action/state_button?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${next?'true':'false'}`, {method:'POST'});
+  const res = await fetch(`/runtime_action/state_button?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${next?'true':'false'}`, {method:'POST'});
     if(!res.ok){ notify(`State btn failed: ${f.key}`,'error'); return; }
     if(!runtime.value[group]) runtime.value[group] = {};
     runtime.value[group][f.key] = next;
@@ -947,7 +936,7 @@ function onIntSlider(group,f,ev){
   runtime.value[group][f.key] = val;
   if(intSliderDebounce[f.key]) clearTimeout(intSliderDebounce[f.key]);
   intSliderDebounce[f.key] = setTimeout(async ()=>{
-    try { await fetch(`/runtime_action/int_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); }
+  try { await fetch(`/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); }
     catch(e){ notify(`Int slider error: ${e.message}`,'error'); }
   },150);
 }
@@ -958,7 +947,7 @@ function onFloatSlider(group,f,ev){
   runtime.value[group][f.key] = val;
   if(floatSliderDebounce[f.key]) clearTimeout(floatSliderDebounce[f.key]);
   floatSliderDebounce[f.key] = setTimeout(async ()=>{
-    try { await fetch(`/runtime_action/float_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); }
+  try { await fetch(`/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); }
     catch(e){ notify(`Float slider error: ${e.message}`,'error'); }
   },180);
 }
@@ -988,11 +977,11 @@ async function commitIntInput(group,f){ const val = tempInputValue(group,f); awa
 async function commitFloatInput(group,f){ const val = tempInputValue(group,f); await sendFloat(group,f,val); }
 
 async function sendInt(group,f,val){
-  try { const r = await fetch(`/runtime_action/int_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
+  try { const r = await fetch(`/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
   catch(e){ notify(`Set error ${f.key}: ${e.message}`,'error'); }
 }
 async function sendFloat(group,f,val){
-  try { const r = await fetch(`/runtime_action/float_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
+  try { const r = await fetch(`/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
   catch(e){ notify(`Set error ${f.key}: ${e.message}`,'error'); }
 }
 function floatSliderStep(f){
@@ -1011,7 +1000,7 @@ async function onRuntimeCheckbox(group, key, value){
   if(checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
   checkboxDebounceTimer = setTimeout(async ()=>{
     try {
-      const res = await fetch(`/runtime_action/checkbox?group=${encodeURIComponent(group)}&key=${encodeURIComponent(key)}&value=${value?'true':'false'}`, { method:'POST'});
+  const res = await fetch(`/runtime_action/checkbox?group=${rURIComp(group)}&key=${rURIComp(key)}&value=${value?'true':'false'}`, { method:'POST'});
       if(!res.ok){ notify(`Toggle failed: ${group}/${key}`,'error'); return; }
       notify(`${key}: ${value?'ON':'OFF'}`,'info',1200);
       fetchRuntime();
@@ -1078,7 +1067,7 @@ function severityClass(val, meta) {
 }
 function valueClasses(val, meta) {
   if (meta && meta.isBool) {
-    const classes = ["bool-row"];
+    const classes = ["br"];
     if (
       typeof meta.boolAlarmValue === "boolean" &&
       !!val === meta.boolAlarmValue
@@ -1227,12 +1216,12 @@ h3 {
   border-radius: 8px;
   min-width: 15rem;
 }
-.rt-table {
+.tbl {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
-.live-cards .card .rt-row {
+.live-cards .card .rw {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -1240,18 +1229,18 @@ h3 {
   margin: 0.2rem 0;
   font-size: 0.9rem;
 }
-.rt-label {
+.lab {
   font-weight: 600;
   text-align: left;
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
-.rt-value {
+.val {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.rt-unit {
+.un {
   text-align: left;
   font-size: 0.8rem;
   color: #000;
@@ -1259,18 +1248,18 @@ h3 {
   white-space: nowrap;
   font-weight: 600;
 }
-.rt-row.sev-warn {
+.rw.sev-warn {
   color: #b58900;
   font-weight: 600;
 }
-.rt-row.sev-alarm {
+.rw.sev-alarm {
   color: #d00000;
   font-weight: 700;
   animation: blink 1.6s linear infinite;
 }
 
 /* Slider specific styling */
-.rt-row.rt-slider {
+.rw.sl {
   border: 1px solid #e0e0e0;
   padding: 0.35rem 0.5rem;
   border-radius: 6px;
@@ -1278,28 +1267,28 @@ h3 {
   box-shadow: inset 0 0 0 1px #ffffff, 0 1px 2px rgba(0,0,0,0.05);
   position: relative;
 }
-.rt-row.rt-slider:hover {
+.rw.sl:hover {
   border-color: #d0d0d0;
   background: #f5f5f5;
 }
-.rt-row.rt-slider .slider-wrap {
+.rw.sl .sw {
   display: flex;
   align-items: center;
   gap: .5rem;
   min-width: 10rem;
 }
-.rt-row.rt-slider input[type=range] {
+.rw.sl input[type=range] {
   width: 8rem;
   accent-color: #ff9800;
   cursor: pointer;
 }
-.rt-row.rt-slider .slider-val {
+.rw.sl .sv {
   font-weight: 600;
   min-width: 3.2ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.rt-row.rt-slider .set-btn {
+.rw.sl .sb {
   background:#1976d2;
   color:#fff;
   border:none;
@@ -1311,8 +1300,8 @@ h3 {
   letter-spacing:.5px;
   text-transform:uppercase;
 }
-.rt-row.rt-slider .set-btn:hover { background:#125a9f; }
-.rt-row.rt-slider .num-input {
+.rw.sl .sb:hover { background:#125a9f; }
+.rw.sl .num-input {
   width:5.5rem;
   padding:0.2rem 0.3rem;
   border:1px solid #bbb;
@@ -1320,12 +1309,12 @@ h3 {
   font-size:0.75rem;
   background:#fff;
 }
-.rt-row.rt-slider .num-input:focus { outline:1px solid #1976d2; }
-.rt-row.rt-action .rt-btn.on {
+.rw.sl .num-input:focus { outline:1px solid #1976d2; }
+.rw.act .btn.on {
   background: #2e7d32;
   color: #fff;
 }
-.rt-row.rt-action .rt-btn.on:hover {
+.rw.act .btn.on:hover {
   background: #256628;
 }
 @keyframes blink {
@@ -1333,26 +1322,26 @@ h3 {
     opacity: 0.3;
   }
 }
-.rt-row.bool-row .rt-label {
+.rw.br .lab {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-.rt-row.control-row { grid-template-columns: minmax(0,1fr) auto !important; }
-.rt-row.control-row .rt-value { justify-self: end; }
-.bool-dot {
+.rw.cr { grid-template-columns: minmax(0,1fr) auto !important; }
+.rw.cr .val { justify-self: end; }
+.bd {
   width: 0.85rem;
   height: 0.85rem;
   border-radius: 50%;
   display: inline-block;
 }
-.rt-divider {
+.dv {
   border: 0;
   border-top: 1px solid #ccc;
   margin: 0.6rem 0 0.4rem;
   position: relative;
 }
-.rt-divider:before {
+.dv:before {
   content: attr(data-label);
   position: absolute;
   top: -0.7rem;
@@ -1363,10 +1352,10 @@ h3 {
   color: #999;
   letter-spacing: 0.05em;
 }
-.rt-string {
+.str {
   color: #333;
 }
-.rt-string .rt-value {
+.str .val {
   text-align: left;
   font-weight: 400;
 }

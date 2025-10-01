@@ -618,6 +618,6 @@
     }
   ],
   "version": "CM-BME280-Demo 2.6.0",
-  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
+  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rw[data-group=\"sensors\"][data-key=\"temp\"] .lab { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rw[data-group=\"sensors\"][data-key=\"temp\"] .val { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rw[data-group=\"sensors\"][data-key=\"temp\"] .un  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
   "ts": 1759334840795
 }
