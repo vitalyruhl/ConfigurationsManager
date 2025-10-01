@@ -173,7 +173,7 @@
         "showIf": true
       },
       "cbt": {
-        "value": 2,
+        "value": 18,
         "displayName": "Test Callback",
         "isPassword": false,
         "showIf": true
@@ -217,18 +217,19 @@
     }
   },
   "runtime": {
-    "uptime": 281338,
+    "uptime": 818047,
     "system": {
-      "rssi": -40,
-      "freeHeap": 202656,
+      "rssi": -38,
+      "freeHeap": 196,
       "allowOTA": true,
-      "tempBoolToggle": false
+      "tempBoolToggle": false,
+      "loopAvg": 210.5056667
     },
     "sensors": {
-      "temp": 19.68,
-      "hum": 28.94434,
-      "dew": 1.104599,
-      "Pressure": 1025.94
+      "temp": 19.01,
+      "hum": 29.59082,
+      "dew": 0.832357,
+      "Pressure": 1028.29
     },
     "alarms": {
       "dewpoint_risk": true,
@@ -420,7 +421,7 @@
       "group": "system",
       "key": "freeHeap",
       "label": "Free Heap",
-      "unit": "Bytes",
+      "unit": "KB",
       "precision": 0,
       "order": 2,
       "style": {
@@ -526,9 +527,28 @@
           "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
         }
       }
+    },
+    {
+      "group": "system",
+      "key": "loopAvg",
+      "label": "Loop Avg",
+      "unit": "ms",
+      "precision": 2,
+      "order": 7,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
     }
   ],
   "version": "CM-BME280-Demo 2.5.0",
-  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-label { color:rgba(16, 23, 158, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-value { color:rgba(16, 23, 158, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-unit  { color:rgba(16, 23, 158, 1); font-weight:900; }\n",
-  "ts": 1759268256489
+  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
+  "ts": 1759302900277
 }

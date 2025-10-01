@@ -54,9 +54,9 @@ h3 { color: orange; text-decoration: underline; }
 
 /* Temperature field styling */
 /* Targets: provider group 'sensors', key 'temp' */
-.rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:rgba(16, 23, 158, 1); font-weight:900; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:rgba(16, 23, 158, 1); font-weight:900; }
-.rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:rgba(16, 23, 158, 1); font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }
+.rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }
 )CSS";
 
 // (Server instance moved into conditional above)
@@ -295,6 +295,13 @@ float Dewpoint = 0.0;    // current dewpoint in Celsius
 float Humidity = 0.0;    // current humidity in percent
 float Pressure = 0.0;    // current pressure in hPa
 
+// Loop timing metrics (3s rolling average of loop duration in ms)
+static unsigned long loopLastMicros = 0;
+static uint32_t loopSamples = 0;
+static double loopAccumMs = 0.0;
+static double loopAvgMs = 0.0;
+static unsigned long loopAvgWindowStart = 0; // ms since boot
+
 struct TempSettings {
     Config<float> tempCorrection;
     Config<float> humidityCorrection;
@@ -355,9 +362,9 @@ void setup()
         .name = "system",
         .fill = [](JsonObject &o){
             o["rssi"] = WiFi.RSSI();//register dynamic Values
-            o["freeHeap"] = ESP.getFreeHeap();
+            o["freeHeap"] = (uint32_t)(ESP.getFreeHeap() / 1024); // KB
             o["allowOTA"] = generalSettings.allowOTA.get();
-            o["tempBoolToggle"] = tempBoolToggle.get();
+            o["loopAvg"] = loopAvgMs; // average loop time ms over window
         }
     });
 
@@ -369,12 +376,11 @@ void setup()
             //defineRuntimeDivider (show a divider line </hr>)
             //defineRuntimeFieldThresholds (show Value with thresholds for warn and alarm, Warn = yellow and red = Alarm)
 
-    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "Bytes", 0, /*order*/ 2);
     cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0, /*order*/ 1);
+    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "KB", 0, /*order*/ 2);
     cfg.defineRuntimeDivider("system", "Environment", /*order*/ 3);
-    cfg.defineRuntimeString("system", "i1", "Settings:", "", /*order*/ 4);
     cfg.defineRuntimeBool("system", "allowOTA", "Allow OTA Updates", false, /*order*/ 5);
-    cfg.defineRuntimeBool("system", "tempBoolToggle", "Temporary Bool Toggle", false, /*order*/ 6);
+    cfg.defineRuntimeField("system", "loopAvg", "Loop Avg", "ms", 2, /*order*/ 7);
 
 
     // example for temperature and humidity sensor, with thresholds and alarms
@@ -616,7 +622,25 @@ void loop()
     //     Serial.printf("OTA Status: %s\n", cfg.getOTAStatus().c_str());
     // }
 
-    delay(500);
+    // Measure loop cycle time (exclude delay itself) using micros
+    unsigned long nowMicros = micros();
+    if(loopLastMicros != 0){
+        unsigned long diff = nowMicros - loopLastMicros;
+        double ms = diff / 1000.0;
+        loopAccumMs += ms;
+        loopSamples++;
+        unsigned long nowMs = millis();
+        if(loopAvgWindowStart == 0) loopAvgWindowStart = nowMs;
+        if(nowMs - loopAvgWindowStart >= 3000){ // 3s window
+            if(loopSamples > 0) loopAvgMs = loopAccumMs / (double)loopSamples;
+            loopSamples = 0;
+            loopAccumMs = 0.0;
+            loopAvgWindowStart = nowMs;
+        }
+    }
+    loopLastMicros = nowMicros;
+
+    delay(10); // reduce artificial inflation of loop cycle; lower than previous 500ms
 }
 
 void testCallback(int val)
