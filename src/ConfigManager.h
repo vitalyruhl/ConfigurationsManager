@@ -1679,6 +1679,76 @@ public:
         String _otaPassword;
         String _otaHostname;
     String _appName;
+    // Built-in system provider support
+    bool _builtinSystemProviderEnabled = false;
+    bool _builtinSystemProviderRegistered = false;
+    // cached loop average (if user wants to push their own they still can redefine) - user code can update via updateLoopAvg
+    double _loopAvgMs = 0.0;
+    unsigned long _loopWindowStart = 0;
+    uint32_t _loopSamples = 0;
+    double _loopAccumMs = 0.0;
+
+public:
+    // Call from loop() to update rolling average (3s window) if builtin system provider is enabled.
+    void updateLoopTiming(){
+        if(!_builtinSystemProviderEnabled) return;
+        static unsigned long lastMicros = micros();
+        unsigned long nowMicros = micros();
+        unsigned long delta = nowMicros - lastMicros; // overflow safe unsigned arithmetic
+        lastMicros = nowMicros;
+        double ms = (double)delta / 1000.0;
+        _loopAccumMs += ms;
+        _loopSamples++;
+        unsigned long nowMs = millis();
+        if(_loopWindowStart == 0) _loopWindowStart = nowMs;
+        if(nowMs - _loopWindowStart >= 3000){
+            if(_loopSamples > 0){
+                _loopAvgMs = _loopAccumMs / (double)_loopSamples;
+            }
+            _loopAccumMs = 0.0;
+            _loopSamples = 0;
+            _loopWindowStart = nowMs;
+        }
+    }
+
+    // Simple RSSI quality to emoji (bars) mapping
+    static const char* rssiEmoji(int rssi){
+        //todo:search for better svg or emoji for
+        // Typical RSSI: -30 (excellent) to -90 (bad)
+        if(rssi >= -50) return "Excellent"; // Excellent
+        if(rssi >= -60) return "Good"; // Good
+        if(rssi >= -67) return "Fair"; // Fair
+        if(rssi >= -75) return "Weak"; // Weak
+        return "Very weak / none"; // Very weak / none
+    }
+
+    // Enable built-in system provider (must be called in setup before starting web server)
+    void enableBuiltinSystemProvider(bool alsoDefineMeta = true){
+        if(_builtinSystemProviderEnabled) return; // idempotent
+        _builtinSystemProviderEnabled = true;
+        if(!_builtinSystemProviderRegistered){
+            addRuntimeProvider({
+                .name = "system",
+                .fill = [this](JsonObject &o){
+                    o["rssi"] = WiFi.isConnected() ? WiFi.RSSI() : 0;
+                    o["rssiBars"] = rssiEmoji(WiFi.isConnected()? WiFi.RSSI(): -100);
+                    o["freeHeap"] = (uint32_t)(ESP.getFreeHeap()/1024); // KB
+                    o["loopAvg"] = _loopAvgMs; // ms avg over last window
+                },
+                .order = 0
+            });
+            if(alsoDefineMeta){
+                // Order values chosen to interleave nicely; user can override later.
+                defineRuntimeField("system","rssi","WiFi RSSI","dBm",0,1);
+                defineRuntimeString("system","rssiBars","Signal","",2); // will show string bars
+                defineRuntimeField("system","freeHeap","Free Heap","KB",0,3);
+                defineRuntimeField("system","loopAvg","Loop Avg","ms",2,4);
+            }
+            _builtinSystemProviderRegistered = true;
+        }
+    }
+
+    bool isBuiltinSystemProviderEnabled() const { return _builtinSystemProviderEnabled; }
 
 };
 

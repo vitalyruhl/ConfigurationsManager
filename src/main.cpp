@@ -295,13 +295,6 @@ float Dewpoint = 0.0;    // current dewpoint in Celsius
 float Humidity = 0.0;    // current humidity in percent
 float Pressure = 0.0;    // current pressure in hPa
 
-// Loop timing metrics (3s rolling average of loop duration in ms)
-static unsigned long loopLastMicros = 0;
-static uint32_t loopSamples = 0;
-static double loopAccumMs = 0.0;
-static double loopAvgMs = 0.0;
-static unsigned long loopAvgWindowStart = 0; // ms since boot
-
 struct TempSettings {
     Config<float> tempCorrection;
     Config<float> humidityCorrection;
@@ -349,6 +342,7 @@ void setup()
     //-----------------------------------------------------------------
     cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);// Register global CSS override
+    cfg.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
     // temperature - Sensor settings (BME280) to show how to use settings in your own code
 
@@ -358,16 +352,8 @@ void setup()
     //-----------------------------------------------------------------
     // Register example runtime provider with divider and additional info lines
     //addRuntimeProvider make an section in gui
-    cfg.addRuntimeProvider({
-        .name = "system",
-        .fill = [](JsonObject &o){
-            o["rssi"] = WiFi.RSSI();//register dynamic Values
-            o["freeHeap"] = (uint32_t)(ESP.getFreeHeap() / 1024); // KB
-            o["allowOTA"] = generalSettings.allowOTA.get();
-            o["loopAvg"] = loopAvgMs; // average loop time ms over window
-        }
-    });
 
+    
     //then add the fields to show in gui.
         //Existing Fields:
             //defineRuntimeField (show Value),
@@ -375,13 +361,6 @@ void setup()
             //defineRuntimeBool (show a boolean Value green on true, white on false, red+blink on alarm),
             //defineRuntimeDivider (show a divider line </hr>)
             //defineRuntimeFieldThresholds (show Value with thresholds for warn and alarm, Warn = yellow and red = Alarm)
-
-    cfg.defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0, /*order*/ 1);
-    cfg.defineRuntimeField("system", "freeHeap", "Free Heap", "KB", 0, /*order*/ 2);
-    cfg.defineRuntimeDivider("system", "Environment", /*order*/ 3);
-    cfg.defineRuntimeBool("system", "allowOTA", "Allow OTA Updates", false, /*order*/ 5);
-    cfg.defineRuntimeField("system", "loopAvg", "Loop Avg", "ms", 2, /*order*/ 7);
-
 
     // example for temperature and humidity sensor, with thresholds and alarms
     cfg.addRuntimeProvider({.name = "sensors",
@@ -568,6 +547,8 @@ void setup()
 
 void loop()
 {
+    cfg.updateLoopTiming(); // Update internal loop timing metrics for system provider
+
     //check if wifi is connected, if not try to reconnect
     if (WiFi.getMode() == WIFI_AP)
     {
@@ -614,31 +595,6 @@ void loop()
         lastAlarmEval = millis();
         cfg.handleRuntimeAlarms();
     }
-
-    // static unsigned long lastOTAmessage = 0;
-    // if (millis() - lastOTAmessage > 10000)
-    // {
-    //     lastOTAmessage = millis();
-    //     Serial.printf("OTA Status: %s\n", cfg.getOTAStatus().c_str());
-    // }
-
-    // Measure loop cycle time (exclude delay itself) using micros
-    unsigned long nowMicros = micros();
-    if(loopLastMicros != 0){
-        unsigned long diff = nowMicros - loopLastMicros;
-        double ms = diff / 1000.0;
-        loopAccumMs += ms;
-        loopSamples++;
-        unsigned long nowMs = millis();
-        if(loopAvgWindowStart == 0) loopAvgWindowStart = nowMs;
-        if(nowMs - loopAvgWindowStart >= 3000){ // 3s window
-            if(loopSamples > 0) loopAvgMs = loopAccumMs / (double)loopSamples;
-            loopSamples = 0;
-            loopAccumMs = 0.0;
-            loopAvgWindowStart = nowMs;
-        }
-    }
-    loopLastMicros = nowMicros;
 
     delay(10); // reduce artificial inflation of loop cycle; lower than previous 500ms
 }
