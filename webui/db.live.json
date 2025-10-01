@@ -217,18 +217,18 @@
     }
   },
   "runtime": {
-    "uptime": 229091,
+    "uptime": 1283302,
     "system": {
-      "rssi": -39,
+      "rssi": -40,
       "rssiBars": "Excellent",
       "freeHeap": 193,
-      "loopAvg": 1.014200135
+      "loopAvg": 1.010441226
     },
     "sensors": {
-      "temp": 20.76,
-      "hum": 19.73438,
-      "dew": -3.22141,
-      "Pressure": 1027.82
+      "temp": 20.84,
+      "hum": 20.01855,
+      "dew": -2.96295,
+      "Pressure": 1027.99
     },
     "Hand overrides": {
       "sb_mode": true,
@@ -619,5 +619,5 @@
   ],
   "version": "CM-BME280-Demo 2.6.0",
   "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
-  "ts": 1759333394893
+  "ts": 1759334449109
 }
