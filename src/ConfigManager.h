@@ -21,7 +21,7 @@
 inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
 #endif
 
-#define CONFIGMANAGER_VERSION "2.5.0" //2025.09.30
+#define CONFIGMANAGER_VERSION "2.6.0" //2025.09.30
 
 
 // ConfigOptions must be defined before any usage in Config<T>
@@ -1015,6 +1015,25 @@ public:
         server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", toJSON()); });
         server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeValuesToJSON()); });
         server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeMetaToJSON()); });
+        // Interactive runtime control endpoints
+        server.on("/runtime_action/button", HTTP_POST, [this](AsyncWebServerRequest *request){
+            AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
+            AsyncWebParameter *pk = request->getParam("key"); if(!pk) pk = request->getParam("key", true);
+            if(!pg || !pk){ request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}"); return; }
+            String g = pg->value(); String k = pk->value();
+            for(auto &b : _runtimeButtons){ if(b.group==g && b.key==k){ if(b.onPress) b.onPress(); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
+            request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
+        });
+        server.on("/runtime_action/checkbox", HTTP_POST, [this](AsyncWebServerRequest *request){
+            AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
+            AsyncWebParameter *pk = request->getParam("key"); if(!pk) pk = request->getParam("key", true);
+            AsyncWebParameter *pv = request->getParam("value"); if(!pv) pv = request->getParam("value", true);
+            if(!pg || !pk || !pv){ request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}"); return; }
+            bool v = pv->value().equalsIgnoreCase("true") || pv->value()=="1";
+            String g = pg->value(); String k = pk->value();
+            for(auto &c : _runtimeCheckboxes){ if(c.group==g && c.key==k){ if(c.setter) c.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
+            request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
+        });
 #ifdef development
         server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request){
             String cfgJson = toJSON();
@@ -1357,6 +1376,9 @@ public:
             String unit;         // optional unit (e.g. °C, %, dBm)
             int precision = 1;   // decimals for floats
             bool isBool = false; // render as boolean indicator
+            bool isButton = false; // interactive stateless button
+            bool isCheckbox = false; // interactive two-way checkbox
+            String card;         // optional custom card assignment (UI grouping)
             // Optional threshold ranges (for numeric coloring)
             bool hasWarnMin = false; float warnMin = 0;
             bool hasWarnMax = false; float warnMax = 0;
@@ -1542,6 +1564,36 @@ public:
             RuntimeFieldMeta m; m.group=group; m.key = String("_div_") + String(++dividerCounter); m.label=label; m.isDivider=true; m.order=order; _runtimeMeta.push_back(m);
         }
 
+        // Interactive stateless button
+        void defineRuntimeButton(const String &group,
+                                 const String &key,
+                                 const String &label,
+                                 std::function<void()> onPress,
+                                 int order = 100,
+                                 const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
+                                 const String &card = String()){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isButton=true; m.order=order; m.precision=0; m.style = defaultStringStyle(); m.card = card;
+            if(!styleOverride.empty()) m.style.merge(styleOverride);
+            _runtimeMeta.push_back(m);
+            _runtimeButtons.push_back({group,key,onPress});
+        }
+
+        // Interactive checkbox (toggle)
+        void defineRuntimeCheckbox(const String &group,
+                                   const String &key,
+                                   const String &label,
+                                   std::function<bool()> getter,
+                                   std::function<void(bool)> setter,
+                                   int order = 100,
+                                   const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
+                                   const String &card = String()){
+            RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isCheckbox=true; m.order=order; m.precision=0; m.style = defaultBoolStyle(false); m.card = card;
+            m.style.rule("unit").setVisible(false);
+            if(!styleOverride.empty()) m.style.merge(styleOverride);
+            _runtimeMeta.push_back(m);
+            _runtimeCheckboxes.push_back({group,key,getter,setter});
+        }
+
         // Set / override provider order
         void setRuntimeProviderOrder(const String &provider, int order){
             for(auto &p : runtimeProviders){ if(p.name == provider){ p.order = order; return; } }
@@ -1559,8 +1611,12 @@ public:
             for(auto &prov : provSorted){
                 JsonObject slot = root.createNestedObject(prov.name);
                 if (prov.fill) prov.fill(slot);
-                // Inject static string slots for entries that have a staticString but no key in runtime JSON
-                // (Handled in meta consumer; here we only expose actual values, static ones are not added to reduce payload
+                // Inject checkbox states (if not already provided by provider)
+                for(const auto &cbx : _runtimeCheckboxes){
+                    if(cbx.group == prov.name){
+                        if(!slot.containsKey(cbx.key.c_str()) && cbx.getter){ slot[cbx.key] = cbx.getter(); }
+                    }
+                }
             }
             // expose active alarms by name (boolean map)
             if(!_runtimeAlarms.empty()){
@@ -1591,10 +1647,13 @@ public:
                 if(m.unit.length()) o["unit"] = m.unit;
                 o["precision"] = m.precision;
                 if(m.isBool) o["isBool"] = true;
+                if(m.isButton) o["isButton"] = true;
+                if(m.isCheckbox) o["isCheckbox"] = true;
                 if(m.isString) o["isString"] = true;
                 if(m.isDivider) o["isDivider"] = true;
                 if(m.staticString.length()) o["staticValue"] = m.staticString;
                 if(m.order != 100) o["order"] = m.order;
+                if(m.card.length()) o["card"] = m.card;
                 // include thresholds only if defined to keep payload compact
                 if(m.hasWarnMin) o["warnMin"] = m.warnMin;
                 if(m.hasWarnMax) o["warnMax"] = m.warnMax;
@@ -1624,6 +1683,10 @@ public:
     std::vector<RuntimeFieldMeta> _runtimeMetaOverride; // injected via /runtime_meta/override
     bool _runtimeMetaOverrideActive = false;
 #endif
+        struct RuntimeButton { String group; String key; std::function<void()> onPress; };
+        struct RuntimeCheckbox { String group; String key; std::function<bool()> getter; std::function<void(bool)> setter; };
+        std::vector<RuntimeButton> _runtimeButtons;
+        std::vector<RuntimeCheckbox> _runtimeCheckboxes;
         // Cross-field runtime alarms
         struct RuntimeAlarm {
             String name; // identifier

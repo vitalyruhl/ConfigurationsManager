@@ -49,6 +49,25 @@
             <template v-for="f in group.fields" :key="f.key">
               <!-- Divider rendering -->
               <hr v-if="f.isDivider" class="rt-divider" :data-label="f.label" />
+              <!-- Interactive Button -->
+              <div v-else-if="f.isButton" class="rt-row rt-action" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value">
+                  <button class="rt-btn" @click="triggerRuntimeButton(group.name, f.key)">{{ f.label }}</button>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
+              <!-- Interactive Checkbox (toggle) -->
+              <div v-else-if="f.isCheckbox" class="rt-row rt-toggle" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value">
+                  <label class="switch">
+                    <input type="checkbox" :checked="runtime[group.name] && runtime[group.name][f.key]" @change="onRuntimeCheckbox(group.name, f.key, $event.target.checked)" />
+                    <span class="slider round"></span>
+                  </label>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
               <!-- Pure string (static or dynamic) -->
               <div v-else-if="f.isString" class="rt-row rt-string">
                 <span class="rt-label">{{ f.label }}</span>
@@ -693,6 +712,9 @@ function buildRuntimeGroups() {
         alarmMin: m.alarmMin,
         alarmMax: m.alarmMax,
         isBool: m.isBool,
+        isButton: m.isButton || false,
+        isCheckbox: m.isCheckbox || false,
+  card: m.card || null,
         boolAlarmValue:
           typeof m.boolAlarmValue === "boolean"
             ? !!m.boolAlarmValue
@@ -721,6 +743,8 @@ function buildRuntimeGroups() {
               order: 999, // appended at end when no meta info
               isBool: typeof sys[k] === 'boolean',
               isString: typeof sys[k] === 'string',
+              isButton:false,
+              isCheckbox:false,
               isDivider: false,
               staticValue: '',
               style: null,
@@ -737,6 +761,8 @@ function buildRuntimeGroups() {
           order: 999,
           isBool: typeof sys[k] === 'boolean',
           isString: typeof sys[k] === 'string',
+          isButton:false,
+          isCheckbox:false,
           isDivider: false,
           staticValue: '',
           style:null,
@@ -753,6 +779,24 @@ function buildRuntimeGroups() {
       });
       return g;
     });
+
+    // Extract custom control cards (fields with card property) into standalone groups
+    const extraCards = {};
+    for (const g of runtimeGroups.value) {
+      g.fields = g.fields.filter(f => {
+        if (f.card) {
+          if(!extraCards[f.card]) extraCards[f.card] = { name: f.card, title: capitalize(f.card), fields: [] };
+          extraCards[f.card].fields.push(f);
+          return false; // remove from original group
+        }
+        return true;
+      });
+    }
+    for (const cardName in extraCards) {
+      // sort inside card
+      extraCards[cardName].fields.sort((a,b)=>{ if(a.order===b.order) return a.label.localeCompare(b.label); return a.order-b.order; });
+      runtimeGroups.value.push(extraCards[cardName]);
+    }
     return;
   }
   const fallback = [];
@@ -784,6 +828,29 @@ function buildRuntimeGroups() {
     });
   }
   runtimeGroups.value = fallback;
+}
+
+async function triggerRuntimeButton(group, key){
+  try {
+    const res = await fetch(`/runtime_action/button?group=${encodeURIComponent(group)}&key=${encodeURIComponent(key)}`, { method:'POST'});
+    if(!res.ok){ notify(`Button failed: ${group}/${key}`,'error'); return; }
+    notify(`Button: ${key}`,'success',1500);
+    // refresh runtime quickly to reflect any side effects
+    fetchRuntime();
+  } catch(e){ notify(`Button error: ${e.message}`,'error'); }
+}
+
+let checkboxDebounceTimer = null;
+async function onRuntimeCheckbox(group, key, value){
+  if(checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
+  checkboxDebounceTimer = setTimeout(async ()=>{
+    try {
+      const res = await fetch(`/runtime_action/checkbox?group=${encodeURIComponent(group)}&key=${encodeURIComponent(key)}&value=${value?'true':'false'}`, { method:'POST'});
+      if(!res.ok){ notify(`Toggle failed: ${group}/${key}`,'error'); return; }
+      notify(`${key}: ${value?'ON':'OFF'}`,'info',1200);
+      fetchRuntime();
+    } catch(e){ notify(`Toggle error ${key}: ${e.message}`,'error'); }
+  }, 160); // small debounce
 }
 
 function capitalize(s) {

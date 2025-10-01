@@ -2,13 +2,14 @@
 #include "ConfigManager.h"
 #include <Ticker.h>     // for read temperature periodically
 #include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
+#include "Wire.h"
 // Always async web server now
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 AsyncWebServer server(80);
 // #include <WiFiClientSecure.h>
 
-#define VERSION "V2.5.0"
+#define VERSION "V2.6.0"
 #define APP_NAME "CM-BME280-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
@@ -41,8 +42,10 @@ ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initial
 //--------------------------------------------------------------------
 // Forward declarations of functions
 void SetupCheckForAPModeButton();
-void blinkBuidInLED(int BlinkCount, int blinkRate);
-
+void blinkBuidInLED(int BlinkCount, int blinkRate); // legacy (blocking) blink – will be phased out
+void updateStatusLED();                              // new non-blocking status LED handler
+void setHeaterState(bool on);
+void cbTestButton();
 
 // -------------------------------------------------------------------
 // Global theme override test: make all h1 headings orange without underline
@@ -326,6 +329,9 @@ void setup()
 
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
+    if (BUTTON_PIN_AP_MODE == LED_BUILTIN) {
+        Serial.println("⚠️  WARNING: BUTTON_PIN_AP_MODE uses same pin as LED_BUILTIN – this will cause flicker/conflicts. Choose a different GPIO.");
+    }
 
     //-----------------------------------------------------------------
     // Set logger callback to log in your own way, but do this before using the cfg object!
@@ -388,6 +394,30 @@ void setup()
     // only basic field, no thresholds
     cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1, 12);
     cfg.defineRuntimeField("sensors", "Pressure", "Pressure", "hPa", 1, 13);
+
+
+
+
+    // Add interactive controls (demo): test button + heater toggle on system group
+    cfg.addRuntimeProvider({
+        .name = "Hand overrides",
+        .fill = [](JsonObject &o){ /* optionally expose current override states later */ }
+    });
+    // Local state for heater override
+    static bool heaterState = false;
+    // Optional divider (order 89) before controls
+    cfg.defineRuntimeDivider("Hand overrides", "Manual Controls", 89);
+    // Action button (order 90)
+    cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test Button", [](){ cbTestButton(); }, 90);
+    // Heater toggle (order 91)
+    cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 91);
+
+
+
+
+    // cfg.defineRuntimeButton("Hand overrides","testBtn","Test Button", [](){ cbTestButton(); }, 90, ConfigManagerClass::RuntimeFieldStyle(), "controls");
+    // static bool heaterState = false; // track last commanded state
+    // cfg.defineRuntimeCheckbox("Hand overrides","heater","Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 91, ConfigManagerClass::RuntimeFieldStyle(), "controls");
 
 
     // Example for runtime alarms based on multiple fields, of course you can also use global variables too.
@@ -550,21 +580,13 @@ void loop()
     cfg.updateLoopTiming(); // Update internal loop timing metrics for system provider
 
     //check if wifi is connected, if not try to reconnect
-    if (WiFi.getMode() == WIFI_AP)
-    {
-        blinkBuidInLED(3, 100);
+    // Non-blocking status LED update replaces prior blocking blinkBuidInLED calls
+    if (WiFi.getMode() != WIFI_AP && WiFi.status() != WL_CONNECTED) {
+        Serial.println("❌ WiFi not connected!");
+        cfg.reconnectWifi();
+        // still update LED pattern to 'disconnected'
     }
-    else
-    {
-        if (WiFi.status() != WL_CONNECTED)
-        {
-            Serial.println("❌ WiFi not connected!");
-            cfg.reconnectWifi();
-            delay(1000);
-            return;
-        }
-        blinkBuidInLED(1, 100);
-    }
+    updateStatusLED();
 
     // Example periodic update of testCb value
     static unsigned long lastPrint = 0;
@@ -596,7 +618,8 @@ void loop()
         cfg.handleRuntimeAlarms();
     }
 
-    delay(10); // reduce artificial inflation of loop cycle; lower than previous 500ms
+    // Small yield without hard delay to keep loop fast; remove large blocking delays elsewhere
+    delay(1);
 }
 
 void testCallback(int val)
@@ -699,4 +722,78 @@ void blinkBuidInLED(int BlinkCount, int blinkRate)
         digitalWrite(LED_BUILTIN, LOW);
         delay(blinkRate);
     }
+}
+
+// ------------------------------------------------------------------
+// Non-blocking status LED pattern
+//  States / patterns:
+//   - AP mode: fast blink (100ms on / 100ms off)
+//   - Connected STA: slow heartbeat (on 60ms every 2s)
+//   - Connecting / disconnected: double blink (2 quick pulses every 1s)
+// ------------------------------------------------------------------
+void updateStatusLED() {
+    static unsigned long lastChange = 0;
+    static uint8_t phase = 0;
+    unsigned long now = millis();
+
+    bool apMode = WiFi.getMode() == WIFI_AP;
+    bool connected = !apMode && WiFi.status() == WL_CONNECTED;
+
+    if (apMode) {
+        // simple fast blink 5Hz (100/100)
+        if (now - lastChange >= 100) {
+            lastChange = now;
+            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+        }
+        return;
+    }
+
+    if (connected) {
+        // heartbeat: brief flash every 2s
+        switch (phase) {
+            case 0: // LED off idle
+                if (now - lastChange >= 2000) { phase = 1; lastChange = now; digitalWrite(LED_BUILTIN, HIGH); }
+                break;
+            case 1: // LED on briefly
+                if (now - lastChange >= 60) { phase = 0; lastChange = now; digitalWrite(LED_BUILTIN, LOW); }
+                break;
+        }
+        return;
+    }
+
+    // disconnected / connecting: double blink every ~1s
+    switch (phase) {
+        case 0: // idle off
+            if (now - lastChange >= 1000) { phase = 1; lastChange = now; digitalWrite(LED_BUILTIN, HIGH); }
+            break;
+        case 1: // first on
+            if (now - lastChange >= 80) { phase = 2; lastChange = now; digitalWrite(LED_BUILTIN, LOW); }
+            break;
+        case 2: // gap
+            if (now - lastChange >= 120) { phase = 3; lastChange = now; digitalWrite(LED_BUILTIN, HIGH); }
+            break;
+        case 3: // second on
+            if (now - lastChange >= 80) { phase = 4; lastChange = now; digitalWrite(LED_BUILTIN, LOW); }
+            break;
+        case 4: // tail gap back to idle
+            if (now - lastChange >= 200) { phase = 0; lastChange = now; }
+            break;
+    }
+}
+
+#define HEATER_PIN 5
+#define LowActiveRelay true // Set to true if relay is active LOW, false if active HIGH
+void setHeaterState(bool on){
+    pinMode(HEATER_PIN, OUTPUT); // Example pin for heater relay
+    if(on){
+        Serial.println("Heater ON");
+        digitalWrite(HEATER_PIN, LowActiveRelay ? LOW : HIGH); // Example: turn on heater relay
+    } else {
+        Serial.println("Heater OFF");
+        digitalWrite(HEATER_PIN, LowActiveRelay ? HIGH : LOW); // Example: turn off heater relay
+    }
+}
+
+void cbTestButton(){
+    Serial.println("Test Button pressed!");
 }
