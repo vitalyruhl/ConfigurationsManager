@@ -42,7 +42,7 @@
 
     <section v-if="activeTab === 'live'" class="live-view">
       <div class="live-cards">
-        <div class="card" v-for="group in runtimeGroups" :key="group.name">
+        <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
           <h3>{{ group.title }}</h3>
 
           <div class="rt-table">
@@ -288,6 +288,9 @@ const wsConnected = ref(false);
 // Runtime metadata state for dynamic grouping
 const runtimeMeta = ref([]); // raw metadata array from /runtime_meta.json
 const runtimeGroups = ref([]); // transformed groups -> [{ name, title, fields:[{key,label,unit,precision}]}]
+const displayRuntimeGroups = computed(() =>
+  runtimeGroups.value.filter((group) => groupHasVisibleContent(group))
+);
 
 function normalizeStyle(style) {
   if (!style || typeof style !== "object") return null;
@@ -872,6 +875,49 @@ function buildRuntimeGroups() {
     });
   }
   runtimeGroups.value = fallback;
+}
+
+function groupHasVisibleContent(group) {
+  if (!group || !Array.isArray(group.fields) || group.fields.length === 0) {
+    return false;
+  }
+  return group.fields.some((field) => fieldHasVisibleContent(group.name, field));
+}
+
+function fieldHasVisibleContent(groupName, field) {
+  if (!field || field.isDivider) {
+    return false;
+  }
+  if (isInteractiveField(field)) {
+    return true;
+  }
+  if (field.isString) {
+    if (field.staticValue && String(field.staticValue).trim().length) {
+      return true;
+    }
+    return runtimeHasValue(groupName, field.key);
+  }
+  return runtimeHasValue(groupName, field.key);
+}
+
+function isInteractiveField(field) {
+  return !!(
+    field.isButton ||
+    field.isStateButton ||
+    field.isIntSlider ||
+    field.isFloatSlider ||
+    field.isCheckbox ||
+    field.isIntInput ||
+    field.isFloatInput
+  );
+}
+
+function runtimeHasValue(groupName, key) {
+  const groupData = runtime.value[groupName];
+  if (groupData && groupData[key] !== undefined && groupData[key] !== null) {
+    return true;
+  }
+  return false;
 }
 
 async function triggerRuntimeButton(group, key){

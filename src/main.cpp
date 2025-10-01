@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------------------------------------------------
 #ifndef CM_ENABLE_RUNTIME_CONTROLS
 #define CM_ENABLE_RUNTIME_CONTROLS 1
-#endif
+#endif // CM_ENABLE_RUNTIME_ALARMS
 #ifndef CM_ENABLE_RUNTIME_BUTTONS
 #define CM_ENABLE_RUNTIME_BUTTONS 1
 #endif
@@ -26,7 +26,7 @@
 #define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1
 #endif
 #ifndef CM_ENABLE_RUNTIME_ALARMS
-#define CM_ENABLE_RUNTIME_ALARMS 1
+#define CM_ENABLE_RUNTIME_ALARMS 0
 #endif
 #ifndef CM_ENABLE_WS_PUSH
 #define CM_ENABLE_WS_PUSH 1
@@ -35,7 +35,7 @@
 #define CM_ENABLE_THEMING 1
 #endif
 #ifndef CM_ENABLE_STYLE_RULES
-#define CM_ENABLE_STYLE_RULES 1
+#define CM_ENABLE_STYLE_RULES 0
 #endif
 #ifndef CM_ENABLE_USER_CSS
 #define CM_ENABLE_USER_CSS 1
@@ -475,53 +475,53 @@ void setup()
 
     // Example for runtime alarms based on multiple fields, of course you can also use global variables too.
     // Cross-field alarm: temperature within 1.0°C above dewpoint (risk of condensation)
-    cfg.defineRuntimeAlarm(
-        "dewpoint_risk",
-        [](const JsonObject &root)
-        {
-            float dewpointRiskWindow = tempSettings.dewpointRiskWindow.get();// User-configurable window above dewpoint at which risk alarm triggers
-            if (!root.containsKey("sensors"))
-                return false;
-            const JsonObject sensors = root["sensors"].as<JsonObject>();
-            if (!sensors.containsKey("temp") || !sensors.containsKey("dew"))
-                return false;
-            float t = sensors["temp"].as<float>();
-            float d = sensors["dew"].as<float>();
-            return (t - d) <= dewpointRiskWindow; // risk window
-        },
-        []()
-        { Serial.println("[ALARM] Dewpoint proximity risk ENTER"); }, // here you could also trigger a relay or similar
-        []()
-        { Serial.println("[ALARM] Dewpoint proximity risk EXIT"); });
+        cfg.defineRuntimeAlarm(
+            "dewpoint_risk",
+            [](const JsonObject &root)
+            {
+                float dewpointRiskWindow = tempSettings.dewpointRiskWindow.get();// User-configurable window above dewpoint at which risk alarm triggers
+                if (!root.containsKey("sensors"))
+                    return false;
+                const JsonObject sensors = root["sensors"].as<JsonObject>();
+                if (!sensors.containsKey("temp") || !sensors.containsKey("dew"))
+                    return false;
+                float t = sensors["temp"].as<float>();
+                float d = sensors["dew"].as<float>();
+                return (t - d) <= dewpointRiskWindow; // risk window
+            },
+            []()
+            { Serial.println("[ALARM] Dewpoint proximity risk ENTER"); }, // here you could also trigger a relay or similar
+            []()
+            { Serial.println("[ALARM] Dewpoint proximity risk EXIT"); });
 
-    // Temperature MIN alarm -> Heater relay ON when temperature below alarmMin (0.5°C) and OFF when recovered.
-    // Uses a little hysteresis (enter < 0.0, exit > 0.5) to avoid fast toggling.
-    cfg.defineRuntimeAlarm(
-        "temp_low",
-        [](const JsonObject &root)
-        {
-            static bool lastState = false; // remember last state for hysteresis
-            // Hysteresis: once active keep it on until t > 0.5
-            if (lastState)
-            { // currently active -> wait until we are clearly above release threshold
-                lastState = (temperature > 0.5f);
-            }
-            else
-            { // currently inactive -> trigger when below entry threshold
-                lastState = (temperature < 0.0f);
-            }
-            return lastState;
-        },
-        []()
-        {
-            Serial.println("[ALARM] Temperature below 0.0°C -> HEATER ON");
-            // digitalWrite(RELAY_HEATER_PIN, HIGH);
-        },
-        []()
-        {
-            Serial.println("[ALARM] Temperature recovered -> HEATER OFF");
-            // digitalWrite(RELAY_HEATER_PIN, LOW);
-        });
+        // Temperature MIN alarm -> Heater relay ON when temperature below alarmMin (0.5°C) and OFF when recovered.
+        // Uses a little hysteresis (enter < 0.0, exit > 0.5) to avoid fast toggling.
+        cfg.defineRuntimeAlarm(
+            "temp_low",
+            [](const JsonObject &root)
+            {
+                static bool lastState = false; // remember last state for hysteresis
+                // Hysteresis: once active keep it on until t > 0.5
+                if (lastState)
+                { // currently active -> wait until we are clearly above release threshold
+                    lastState = (temperature > 0.5f);
+                }
+                else
+                { // currently inactive -> trigger when below entry threshold
+                    lastState = (temperature < 0.0f);
+                }
+                return lastState;
+            },
+            []()
+            {
+                Serial.println("[ALARM] Temperature below 0.0°C -> HEATER ON");
+                // digitalWrite(RELAY_HEATER_PIN, HIGH);
+            },
+            []()
+            {
+                Serial.println("[ALARM] Temperature recovered -> HEATER OFF");
+                // digitalWrite(RELAY_HEATER_PIN, LOW);
+            });
 
         cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100);
 
@@ -661,7 +661,6 @@ void loop()
     cfg.handleClient();
     cfg.handleWebsocketPush();
     cfg.handleOTA();
-
 
     // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
     static unsigned long lastAlarmEval = 0;

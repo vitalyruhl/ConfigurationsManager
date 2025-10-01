@@ -18,7 +18,7 @@
 #endif
 
 #ifndef CM_ENABLE_STYLE_RULES
-#define CM_ENABLE_STYLE_RULES 1
+#define CM_ENABLE_STYLE_RULES 0
 #endif
 
 #ifndef CM_ENABLE_RUNTIME_META
@@ -75,4 +75,8 @@
 
 #ifndef CM_ENABLE_LOGGING
 #define CM_ENABLE_LOGGING 1
+#endif
+
+#ifndef CM_ENABLE_VERBOSE_LOGGING
+#define CM_ENABLE_VERBOSE_LOGGING 0
 #endif
