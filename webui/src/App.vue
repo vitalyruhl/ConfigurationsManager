@@ -65,21 +65,41 @@
                 </span>
                 <span class="rt-unit"></span>
               </div>
-              <!-- Int Slider -->
+              <!-- Int Slider (explicit set) -->
               <div v-else-if="f.isIntSlider" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
                 <span class="rt-label">{{ f.label }}</span>
                 <span class="rt-value slider-wrap">
-                  <input type="range" :min="f.min" :max="f.max" step="1" :value="runtime[group.name] && runtime[group.name][f.key] !== undefined ? runtime[group.name][f.key] : f.init" @input="onIntSlider(group.name,f,$event)" />
-                  <span class="slider-val">{{ runtime[group.name] && runtime[group.name][f.key] !== undefined ? runtime[group.name][f.key] : f.init }}</span>
+                  <input type="range" :min="f.min" :max="f.max" step="1" :value="tempSliderValue(group.name,f)" @input="onIntSliderLocal(group.name,f,$event)" />
+                  <span class="slider-val">{{ tempSliderValue(group.name,f) }}</span>
+                  <button class="set-btn" @click="commitIntSlider(group.name,f)">Set</button>
                 </span>
                 <span class="rt-unit"></span>
               </div>
-              <!-- Float Slider -->
+              <!-- Float Slider (explicit set) -->
               <div v-else-if="f.isFloatSlider" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
                 <span class="rt-label">{{ f.label }}</span>
                 <span class="rt-value slider-wrap">
-                  <input type="range" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="runtime[group.name] && runtime[group.name][f.key] !== undefined ? runtime[group.name][f.key] : f.init" @input="onFloatSlider(group.name,f,$event)" />
-                  <span class="slider-val">{{ formatFloatDisplay(group.name,f) }}</span>
+                  <input type="range" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="tempSliderValue(group.name,f)" @input="onFloatSliderLocal(group.name,f,$event)" />
+                  <span class="slider-val">{{ formatTempFloat(group.name,f) }}</span>
+                  <button class="set-btn" @click="commitFloatSlider(group.name,f)">Set</button>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
+              <!-- Int Input -->
+              <div v-else-if="f.isIntInput" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value slider-wrap">
+                  <input type="number" :min="f.min" :max="f.max" step="1" :value="tempInputValue(group.name,f)" @input="onIntInputLocal(group.name,f,$event)" class="num-input" />
+                  <button class="set-btn" @click="commitIntInput(group.name,f)">Set</button>
+                </span>
+                <span class="rt-unit"></span>
+              </div>
+              <!-- Float Input -->
+              <div v-else-if="f.isFloatInput" class="rt-row rt-slider" :data-group="group.name" :data-key="f.key">
+                <span class="rt-label">{{ f.label }}</span>
+                <span class="rt-value slider-wrap">
+                  <input type="number" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="tempInputValue(group.name,f)" @input="onFloatInputLocal(group.name,f,$event)" class="num-input" />
+                  <button class="set-btn" @click="commitFloatInput(group.name,f)">Set</button>
                 </span>
                 <span class="rt-unit"></span>
               </div>
@@ -737,6 +757,8 @@ function buildRuntimeGroups() {
     min: m.min,
     max: m.max,
     init: m.init,
+  isIntInput: m.isIntInput || false,
+  isFloatInput: m.isFloatInput || false,
         boolAlarmValue:
           typeof m.boolAlarmValue === "boolean"
             ? !!m.boolAlarmValue
@@ -893,6 +915,39 @@ function onFloatSlider(group,f,ev){
     try { await fetch(`/runtime_action/float_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); }
     catch(e){ notify(`Float slider error: ${e.message}`,'error'); }
   },180);
+}
+// --- New explicit-control helper state ---
+const tempControlCache = {}; // keyed by group.key -> value
+function keyFor(group,f){ return group+"::"+f.key; }
+function currentRuntimeValue(group,f){
+  if(runtime.value[group] && runtime.value[group][f.key] !== undefined) return runtime.value[group][f.key];
+  return f.init !== undefined ? f.init : 0;
+}
+function tempSliderValue(group,f){
+  const k = keyFor(group,f);
+  if(tempControlCache[k] !== undefined) return tempControlCache[k];
+  return currentRuntimeValue(group,f);
+}
+function onIntSliderLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseInt(ev.target.value,10); }
+function onFloatSliderLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseFloat(ev.target.value); }
+function formatTempFloat(group,f){ const v = parseFloat(tempSliderValue(group,f)); const p = f.precision!==undefined?f.precision:2; return isNaN(v)?'-':v.toFixed(p); }
+async function commitIntSlider(group,f){ const val = tempSliderValue(group,f); await sendInt(group,f,val); }
+async function commitFloatSlider(group,f){ const val = tempSliderValue(group,f); await sendFloat(group,f,val); }
+
+// Inputs
+function tempInputValue(group,f){ return tempSliderValue(group,f); }
+function onIntInputLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseInt(ev.target.value,10); }
+function onFloatInputLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseFloat(ev.target.value); }
+async function commitIntInput(group,f){ const val = tempInputValue(group,f); await sendInt(group,f,val); }
+async function commitFloatInput(group,f){ const val = tempInputValue(group,f); await sendFloat(group,f,val); }
+
+async function sendInt(group,f,val){
+  try { const r = await fetch(`/runtime_action/int_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
+  catch(e){ notify(`Set error ${f.key}: ${e.message}`,'error'); }
+}
+async function sendFloat(group,f,val){
+  try { const r = await fetch(`/runtime_action/float_slider?group=${encodeURIComponent(group)}&key=${encodeURIComponent(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
+  catch(e){ notify(`Set error ${f.key}: ${e.message}`,'error'); }
 }
 function floatSliderStep(f){
   if(f.precision && f.precision>0){ return 1/Math.pow(10,f.precision); }
@@ -1198,6 +1253,28 @@ h3 {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.rt-row.rt-slider .set-btn {
+  background:#1976d2;
+  color:#fff;
+  border:none;
+  padding:0.25rem 0.6rem;
+  border-radius:4px;
+  cursor:pointer;
+  font-size:0.72rem;
+  font-weight:600;
+  letter-spacing:.5px;
+  text-transform:uppercase;
+}
+.rt-row.rt-slider .set-btn:hover { background:#125a9f; }
+.rt-row.rt-slider .num-input {
+  width:5.5rem;
+  padding:0.2rem 0.3rem;
+  border:1px solid #bbb;
+  border-radius:4px;
+  font-size:0.75rem;
+  background:#fff;
+}
+.rt-row.rt-slider .num-input:focus { outline:1px solid #1976d2; }
 .rt-row.rt-action .rt-btn.on {
   background: #2e7d32;
   color: #fff;
