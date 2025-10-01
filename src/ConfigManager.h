@@ -13,15 +13,51 @@
 #include <cstdint>
 #include <ArduinoOTA.h>
 #include <Update.h>  // Required for U_FLASH
+
+#include "ConfigManagerConfig.h"
+
+#if CM_EMBED_WEBUI
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
+#endif
 // #define development // Uncomment (or add -Ddevelopment to build flags) to enable dev-only export & runtime_meta override routes
 
-#ifdef UNIT_TEST
-// Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
-inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
+#if CM_EMBED_WEBUI
+    #ifdef UNIT_TEST
+    // Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
+    inline const char* WebHTML::getWebHTML() { return WEB_HTML; }
+    #endif
+#else
+class WebHTML {
+public:
+    static const char* getWebHTML() { return ""; }
+};
 #endif
 
 #define CONFIGMANAGER_VERSION "2.6.0" //2025.09.30
+
+#if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
+inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
+/* Built-in ConfigManager runtime bool indicator palette */
+.rt-row.bool-row[data-state="on"] .bool-dot {
+    background: #2ecc71;
+    border: none;
+    box-shadow: 0 0 2px rgba(0,0,0,0.4);
+}
+
+.rt-row.bool-row[data-state="off"] .bool-dot {
+    background: #888;
+    border: 1px solid #000;
+    box-shadow: 0 0 2px rgba(0,0,0,0.4);
+}
+
+.rt-row.bool-row[data-state="alarm"] .bool-dot {
+    background: #d00000;
+    border: none;
+    box-shadow: 0 0 4px rgba(208,0,0,0.7);
+    animation: blink 1.6s linear infinite;
+}
+)CSS";
+#endif
 
 
 // ConfigOptions must be defined before any usage in Config<T>
@@ -87,6 +123,12 @@ struct OptionGroup {
 // Server abstraction
 extern AsyncWebServer server; // always async now
 class ConfigManagerClass; // Forward declaration
+
+#if CM_ENABLE_LOGGING
+#define CM_LOG(...) ConfigManagerClass::log_message(__VA_ARGS__)
+#else
+#define CM_LOG(...) do { } while(0)
+#endif
 
 enum class SettingType { BOOL, INT, FLOAT, STRING, PASSWORD };
 
@@ -290,11 +332,15 @@ class BaseSetting {
 
     public:
     // Optional: showIf function for web visibility dependency
+#if CM_ENABLE_DYNAMIC_VISIBILITY
     std::function<bool()> showIfFunc = nullptr;
     bool shouldShowInWebDynamic() const {
         if (showIfFunc) return showIfFunc();
         return showInWeb;
     }
+#else
+    bool shouldShowInWebDynamic() const { return showInWeb; }
+#endif
 
     T get() const { return value; }
 
@@ -326,8 +372,10 @@ class BaseSetting {
             opts.isPassword),
           value(opts.defaultValue),
           defaultValue(opts.defaultValue),
-          originalCallback(opts.cb),
-          showIfFunc(opts.showIf)
+          originalCallback(opts.cb)
+#if CM_ENABLE_DYNAMIC_VISIBILITY
+          , showIfFunc(opts.showIf)
+#endif
     {
         if (hasError() && logger) {
             logger(getError());
@@ -424,7 +472,9 @@ class BaseSetting {
         return true;
     }
     bool isVisible() const override {
+#if CM_ENABLE_DYNAMIC_VISIBILITY
         if (showIfFunc) return showIfFunc();
+#endif
         return showInWeb;
     }
 };
@@ -436,8 +486,13 @@ class BaseSetting {
 //   advanced( GROUP.opt<int>("adv", 1, "Advanced", true, false, nullptr, showIfTrue(expertFlag)) );
 // These helpers avoid repetitive lambdas like: [this](){ return !flag.get(); }
 // --------------------------------------------------------------------------------------------------
+#if CM_ENABLE_DYNAMIC_VISIBILITY
 inline std::function<bool()> showIfTrue (const Config<bool>& flag){ return [&flag](){ return flag.get(); }; }
 inline std::function<bool()> showIfFalse(const Config<bool>& flag){ return [&flag](){ return !flag.get(); }; }
+#else
+inline std::function<bool()> showIfTrue (const Config<bool>&){ return [](){ return true; }; }
+inline std::function<bool()> showIfFalse(const Config<bool>&){ return [](){ return true; }; }
+#endif
 // --------------------------------------------------------------------------------------------------
 
 class ConfigManagerClass {
@@ -466,6 +521,7 @@ public:
     //new logging-callback functions
     typedef std::function<void(const char*)> LogCallback;
 
+#if CM_ENABLE_LOGGING
     static void setLogger(LogCallback cb) {
         logger = cb;
     }
@@ -481,6 +537,10 @@ public:
 
         logger(buffer);
     }
+#else
+    static void setLogger(LogCallback) { }
+    static void log_message(const char*, ...) { }
+#endif
 
     void setAppName(const String& name){
         if(name.length()) _appName = name;
@@ -489,7 +549,7 @@ public:
     const String& getAppName() const { return _appName; }
 
     void triggerLoggerTest() {
-       log_message("Test message abcdefghijklmnop");
+    CM_LOG("Test message abcdefghijklmnop");
     }
 
     // 2025.09.04 - error handling for settings with key length issues
@@ -499,15 +559,15 @@ public:
         // Check for uniqueness among already added settings
         for (auto* s : settings) {
             if (strcmp(s->getKey(), truncatedKey) == 0) {
-                log_message("[ERROR] Setting with key '%s' already exists after truncation. Not adding duplicate.", truncatedKey);
-                log_message("[ERROR] This setting will not be stored or available in the web interface.");
+                CM_LOG("[ERROR] Setting with key '%s' already exists after truncation. Not adding duplicate.", truncatedKey);
+                CM_LOG("[ERROR] This setting will not be stored or available in the web interface.");
                 return;
             }
         }
         // If unique, add
         settings.push_back(setting);
         setting->setLogger([this](const char* msg) {
-            this->log_message("%s", msg);
+            CM_LOG("%s", msg);
         });
     }
 
@@ -516,12 +576,12 @@ public:
     // We now check for key existence first to avoid noisy output.
         prefs.begin("config", false); // Read-write mode
         for (auto *s : settings) {
-            log_message("loadAll(): Loading %s (type: %d)", s->getKey(), static_cast<int>(s->getType()));
+            CM_LOG("loadAll(): Loading %s (type: %d)", s->getKey(), static_cast<int>(s->getType()));
             s->load(prefs);
 
             if (!prefs.isKey(s->getKey())) {
                 s->save(prefs); // Save default value if key not found
-                log_message("loadAll(): Saved default value for: %s", s->getKey());
+                CM_LOG("loadAll(): Saved default value for: %s", s->getKey());
             }
 
         }
@@ -549,14 +609,15 @@ public:
     }
 
     void reboot() {
-        log_message("🔄 Rebooting...");
+        CM_LOG("🔄 Rebooting...");
         delay(1000);
         ESP.restart();
     }
 
     void handleClient() { /* no-op for async */ }
 
-    // WebSocket push (always available)
+    // WebSocket push (optional)
+#if CM_ENABLE_WS_PUSH
     void handleWebsocketPush(){
         if(!_wsEnabled) return;
         unsigned long now = millis();
@@ -568,17 +629,17 @@ public:
         if(!_wsInitialized){
             _ws = new AsyncWebSocket("/ws");
             _ws->onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len){
-                if(type == WS_EVT_CONNECT){ log_message("[WS] Client connect %u", client->id()); if(_pushOnConnect) pushRuntimeNow(); }
-                else if(type == WS_EVT_DISCONNECT){ log_message("[WS] Client disconnect %u", client->id()); }
+                if(type == WS_EVT_CONNECT){ CM_LOG("[WS] Client connect %u", client->id()); if(_pushOnConnect) pushRuntimeNow(); }
+                else if(type == WS_EVT_DISCONNECT){ CM_LOG("[WS] Client disconnect %u", client->id()); }
                 else if(type == WS_EVT_DATA){ /* ignore */ }
             });
             server.addHandler(_ws);
             _wsInitialized = true;
-            log_message("[WS] Handler registered at /ws");
+            CM_LOG("[WS] Handler registered at /ws");
         }
         _wsInterval = intervalMs;
         _wsEnabled = true;
-        log_message("[WS] Push enabled interval=%lu ms", (unsigned long)_wsInterval);
+        CM_LOG("[WS] Push enabled interval=%lu ms", (unsigned long)_wsInterval);
         // Immediate first push so UI does not wait for first interval
         pushRuntimeNow();
     }
@@ -596,11 +657,20 @@ public:
         }
         _ws->textAll(payload);
     }
+#else
+    void handleWebsocketPush(){}
+    void enableWebSocketPush(uint32_t = 2000){}
+    void disableWebSocketPush(){}
+    void setWebSocketInterval(uint32_t){}
+    void setPushOnConnect(bool){}
+    void setCustomLivePayloadBuilder(std::function<String()>){}
+    void pushRuntimeNow(){}
+#endif
 
     void handleClientSecure() { /* future TLS hook */ }
 
     void reconnectWifi() {
-        log_message("🔄 Reconnecting to WiFi...");
+    CM_LOG("🔄 Reconnecting to WiFi...");
         WiFi.disconnect();
         delay(1000);
         WiFi.reconnect();
@@ -665,11 +735,11 @@ public:
     }
 
     void startAccessPoint(const String &ipStr, const String &mask, const String &APName, const String &pwd) {
-        log_message("🌐 Configuring AP %s...\n", APName.c_str());
-        log_message("🌐 Setting static IP %s...\n", ipStr.c_str());
-        log_message("🌐 Setting subnet mask %s...\n", mask.c_str());
-        log_message("🌐 Setting password %s...\n", pwd.c_str());
-        log_message("🌐 Setting gateway %s...\n", ipStr.c_str());
+    CM_LOG("🌐 Configuring AP %s...\n", APName.c_str());
+    CM_LOG("🌐 Setting static IP %s...\n", ipStr.c_str());
+    CM_LOG("🌐 Setting subnet mask %s...\n", mask.c_str());
+    CM_LOG("🌐 Setting password %s...\n", pwd.c_str());
+    CM_LOG("🌐 Setting gateway %s...\n", ipStr.c_str());
 
         IPAddress localIP, gateway, subnet;
         localIP.fromString(ipStr);
@@ -680,13 +750,13 @@ public:
         WiFi.softAPConfig(localIP, gateway, subnet);
 
         if (strcmp(pwd.c_str(), "") == 0) {
-            log_message("🌐 AP without password");
+            CM_LOG("🌐 AP without password");
             WiFi.softAP(APName);
         } else {
-            log_message("🌐 AP with password: %s", pwd.c_str());
+            CM_LOG("🌐 AP with password: %s", pwd.c_str());
             WiFi.softAP(APName, pwd);
         }
-        log_message("🌐 AP started at: %s", WiFi.softAPIP().toString().c_str());
+        CM_LOG("🌐 AP started at: %s", WiFi.softAPIP().toString().c_str());
         defineRoutes();
         server.begin();
     }
@@ -698,7 +768,7 @@ public:
         subnet.fromString(mask);
         // Derive gateway: keep network part of ip and .1 as common default
         gateway = IPAddress((uint32_t)ip & (uint32_t)subnet | 0x01000000); // Build x.y.z.1
-        log_message("🌐 Static (simplified) IP: %s Gateway(auto): %s Mask: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str());
+    CM_LOG("🌐 Static (simplified) IP: %s Gateway(auto): %s Mask: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str());
         WiFi.config(ip, gateway, subnet, dns);
         connectAndStart(ssid, password);
     }
@@ -709,7 +779,7 @@ public:
         ip.fromString(ipStr);
         gateway.fromString(gatewayStr);
         subnet.fromString(mask);
-        log_message("🌐 Static IP: %s Gateway: %s Mask: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str());
+    CM_LOG("🌐 Static IP: %s Gateway: %s Mask: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str());
         WiFi.config(ip, gateway, subnet, dns);
         connectAndStart(ssid, password);
     }
@@ -721,13 +791,13 @@ public:
         gateway.fromString(gatewayStr);
         subnet.fromString(mask);
         dns.fromString(dnsServer);
-        log_message("🌐 Static IP: %s Gateway: %s Mask: %s DNS: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str(), dns.toString().c_str());
+    CM_LOG("🌐 Static IP: %s Gateway: %s Mask: %s DNS: %s", ip.toString().c_str(), gateway.toString().c_str(), subnet.toString().c_str(), dns.toString().c_str());
         WiFi.config(ip, gateway, subnet, dns);
         connectAndStart(ssid, password);
     }
 
     void startWebServer(const String &ssid, const String &password) {
-        log_message("🌐 DHCP mode active - Connecting to WiFi...");
+    CM_LOG("🌐 DHCP mode active - Connecting to WiFi...");
         WiFi.mode(WIFI_STA); // Set WiFi mode to Station bugfix for unit test
         WiFi.begin(ssid.c_str(), password.c_str());
 
@@ -736,47 +806,47 @@ public:
 
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
             delay(250);
-            log_message(".");
+            CM_LOG(".");
         }
 
         if (WiFi.status() == WL_CONNECTED) {
-            log_message("\n✅ WiFi connected via DHCP!");
-            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
+            CM_LOG("\n✅ WiFi connected via DHCP!");
+            CM_LOG("🌐 IP address: %s", WiFi.localIP().toString().c_str());
 
             defineRoutes();
             server.begin();
         } else {
-            log_message("\n❌ DHCP connection failed!");
+            CM_LOG("\n❌ DHCP connection failed!");
         }
     }
 
 private:
     void connectAndStart(const String &ssid, const String &password) {
-        log_message("🔌 Connecting to WiFi SSID: %s", ssid.c_str());
+    CM_LOG("🔌 Connecting to WiFi SSID: %s", ssid.c_str());
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid.c_str(), password.c_str());
         unsigned long startAttemptTime = millis();
         const unsigned long timeout = 10000;
         while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
             delay(250);
-            log_message(".");
+            CM_LOG(".");
         }
         if (WiFi.status() == WL_CONNECTED) {
-            log_message("\n✅ WiFi connected!");
-            log_message("🌐 IP address: %s", WiFi.localIP().toString().c_str());
-            log_message("🌐 Defining routes...");
+            CM_LOG("\n✅ WiFi connected!");
+            CM_LOG("🌐 IP address: %s", WiFi.localIP().toString().c_str());
+            CM_LOG("🌐 Defining routes...");
             defineRoutes();
-            log_message("🌐 Starting web server...");
+            CM_LOG("🌐 Starting web server...");
             server.begin();
-            log_message("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
+            CM_LOG("🖥️  Web server running at: %s", WiFi.localIP().toString().c_str());
         } else {
-            log_message("\n❌ Failed to connect to WiFi!");
+            CM_LOG("\n❌ Failed to connect to WiFi!");
         }
     }
 public:
 
     void defineRoutes() {
-        log_message("🌐 Defining routes...");
+    CM_LOG("🌐 Defining routes...");
         // Serve version at /version (always async)
         server.on("/version", HTTP_GET, [this](AsyncWebServerRequest *request){
             String payload = _appName;
@@ -825,7 +895,7 @@ public:
                     int code = ctx->statusCode ? ctx->statusCode : 500;
                     if(ctx->began && !ctx->hasError){ Update.abort(); }
                     String reason = ctx->errorReason.length() ? ctx->errorReason : String("upload_failed");
-                    log_message("❌ OTA HTTP error (%d): %s", code, reason.c_str());
+                    CM_LOG("❌ OTA HTTP error (%d): %s", code, reason.c_str());
                     String payload = String("{\"status\":\"error\",\"reason\":\"") + reason + "\"}";
                     request->send(code, "application/json", payload);
                     cleanup();
@@ -833,7 +903,7 @@ public:
                 }
 
                 if(!ctx->began || !ctx->success){
-                    log_message("❌ OTA HTTP upload incomplete");
+                    CM_LOG("❌ OTA HTTP upload incomplete");
                     request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete\"}");
                     cleanup();
                     return;
@@ -842,12 +912,12 @@ public:
                 AsyncWebServerResponse *response = request->beginResponse(200, "application/json", "{\"status\":\"ok\",\"action\":\"reboot\"}");
                 response->addHeader("Connection", "close");
                 request->onDisconnect([this](){
-                    log_message("🔁 OTA HTTP: client disconnected, rebooting...");
+                    CM_LOG("🔁 OTA HTTP: client disconnected, rebooting...");
                     delay(500);
                     reboot();
                 });
                 request->send(response);
-                log_message("✅ OTA HTTP upload success (%lu bytes)", static_cast<unsigned long>(ctx->written));
+                CM_LOG("✅ OTA HTTP upload success (%lu bytes)", static_cast<unsigned long>(ctx->written));
                 cleanup();
             },
             [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
@@ -898,7 +968,7 @@ public:
                     }
 
                     ctx->began = true;
-                    log_message("📦 OTA HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
+                    CM_LOG("📦 OTA HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
                 }
 
                 if(!ctx || ctx->hasError || !ctx->authorized){
@@ -930,7 +1000,7 @@ public:
         );
 
         // Reset to Defaults
-        server.on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest *request){ for (auto *s : settings) s->setDefault(); saveAll(); log_message("🌐 All settings reset to default"); request->send(200, "application/json", "{\"status\":\"reset\"}"); });
+    server.on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest *request){ for (auto *s : settings) s->setDefault(); saveAll(); CM_LOG("🌐 All settings reset to default"); request->send(200, "application/json", "{\"status\":\"reset\"}"); });
 
         // Apply single setting (async body handler)
         server.on("/config/apply", HTTP_POST,
@@ -948,7 +1018,7 @@ public:
                     if(!pCat || !pKey){ request->send(400, "application/json", "{\"status\":\"missing_params\"}"); delete body; request->_tempObject=nullptr; return; }
                     String category = pCat->value();
                     String key = pKey->value();
-                    log_message("🌐 Apply: %s/%s", category.c_str(), key.c_str());
+                    CM_LOG("🌐 Apply: %s/%s", category.c_str(), key.c_str());
                     DynamicJsonDocument doc(256);
                     DeserializationError err = deserializeJson(doc, *body);
                     auto isIntegerString = [](const String &s)->bool { if(!s.length()) return false; int st=0; if(s[0]=='-'&&s.length()>1) st=1; for(int i=st;i<(int)s.length();++i){ if(s[i]<'0'||s[i]>'9') return false;} return true; };
@@ -1005,7 +1075,7 @@ public:
     // Reboot
     server.on("/config/reboot", HTTP_POST, [this](AsyncWebServerRequest *request){
         request->send(200, "application/json", "{\"status\":\"rebooting\"}");
-        log_message("🔄 Device rebooting...");
+    CM_LOG("🔄 Device rebooting...");
         // Schedule reboot after short delay (simple blocking delay acceptable here)
         delay(100);
         reboot();
@@ -1015,6 +1085,7 @@ public:
         server.on("/config.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", toJSON()); });
         server.on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeValuesToJSON()); });
         server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request){ request->send(200, "application/json", runtimeMetaToJSON()); });
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_BUTTONS
         // Interactive runtime control endpoints
         server.on("/runtime_action/button", HTTP_POST, [this](AsyncWebServerRequest *request){
             AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
@@ -1024,6 +1095,8 @@ public:
             for(auto &b : _runtimeButtons){ if(b.group==g && b.key==k){ if(b.onPress) b.onPress(); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
+#endif
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
         server.on("/runtime_action/checkbox", HTTP_POST, [this](AsyncWebServerRequest *request){
             AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
             AsyncWebParameter *pk = request->getParam("key"); if(!pk) pk = request->getParam("key", true);
@@ -1034,6 +1107,8 @@ public:
             for(auto &c : _runtimeCheckboxes){ if(c.group==g && c.key==k){ if(c.setter) c.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
+#endif
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
         // Stateful button toggle
         server.on("/runtime_action/state_button", HTTP_POST, [this](AsyncWebServerRequest *request){
             AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
@@ -1045,6 +1120,8 @@ public:
             for(auto &sb : _runtimeStateButtons){ if(sb.group==g && sb.key==k){ if(sb.setter) sb.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
+#endif
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
         // Int slider update
         server.on("/runtime_action/int_slider", HTTP_POST, [this](AsyncWebServerRequest *request){
             AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
@@ -1055,6 +1132,8 @@ public:
             for(auto &is : _runtimeIntSliders){ if(is.group==g && is.key==k){ if(is.setter) is.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
+#endif
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
         // Float slider update
         server.on("/runtime_action/float_slider", HTTP_POST, [this](AsyncWebServerRequest *request){
             AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
@@ -1065,16 +1144,98 @@ public:
             for(auto &fs : _runtimeFloatSliders){ if(fs.group==g && fs.key==k){ if(fs.setter) fs.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
         });
-
-        server.on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest *request){
-            if(getCustomCss() && getCustomCssLen()>0){
-                log_message("[THEME] Serving user_theme.css (%u bytes)", (unsigned)getCustomCssLen());
-                request->send(200, "text/css", String(getCustomCss()));
-            } else {
-                log_message("[THEME] No custom CSS configured (204)");
-                request->send(204); // No Content
+#endif
+#ifdef development
+        server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request){
+            String cfgJson = toJSON();
+            String rtJson = runtimeValuesToJSON();
+            String metaJson = runtimeMetaToJSON();
+            DynamicJsonDocument doc(8192);
+            if(deserializeJson(doc["config"], cfgJson) || deserializeJson(doc["runtime"], rtJson) || deserializeJson(doc["runtime_meta"], metaJson)){
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"bundle_build_failed\"}");
+                return;
             }
+            doc["exportVersion"] = CONFIGMANAGER_VERSION;
+            String out; serializeJson(doc, out);
+            request->send(200, "application/json", out);
         });
+        server.on("/runtime_meta/override", HTTP_POST,
+            [this](AsyncWebServerRequest *request){}, NULL,
+            [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
+                String *body = static_cast<String*>(request->_tempObject);
+                body->concat(String((const char*)data).substring(0,len));
+                if(index+len==total){
+                    DynamicJsonDocument doc(8192);
+                    DeserializationError err = deserializeJson(doc, *body);
+                    if(err || !doc.is<JsonArray>()){
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json_array\"}");
+                        delete body; request->_tempObject=nullptr; return;
+                    }
+                    _runtimeMetaOverride.clear();
+                    for(JsonVariant v : doc.as<JsonArray>()){
+                        if(!v.is<JsonObject>()) continue;
+                        RuntimeFieldMeta m; JsonObject o = v.as<JsonObject>();
+                        m.group = String(o["group"].as<const char*>()?o["group"].as<const char*>():"");
+                        m.key = String(o["key"].as<const char*>()?o["key"].as<const char*>():"");
+                        m.label = String(o["label"].as<const char*>()?o["label"].as<const char*>():m.key.c_str());
+                        m.unit = String(o["unit"].as<const char*>()?o["unit"].as<const char*>():"");
+                        m.precision = o.containsKey("precision") ? o["precision"].as<int>() : 1;
+                        if(o["isBool"].as<bool>()) m.isBool = true;
+                        if(o["isString"].as<bool>()) m.isString = true;
+                        if(o["isDivider"].as<bool>()) m.isDivider = true;
+                        if(o.containsKey("order")) m.order = o["order"].as<int>();
+                        if(o.containsKey("warnMin")){ m.hasWarnMin = true; m.warnMin = o["warnMin"].as<float>(); }
+                        if(o.containsKey("warnMax")){ m.hasWarnMax = true; m.warnMax = o["warnMax"].as<float>(); }
+                        if(o.containsKey("alarmMin")){ m.hasAlarmMin = true; m.alarmMin = o["alarmMin"].as<float>(); }
+                        if(o.containsKey("alarmMax")){ m.hasAlarmMax = true; m.alarmMax = o["alarmMax"].as<float>(); }
+                        if(o.containsKey("boolAlarmValue")) m.boolAlarmValue = o["boolAlarmValue"].as<bool>()?1:-1;
+#if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
+                        if(o.containsKey("style") && !_disableRuntimeStyleMeta){
+                            JsonObject st = o["style"].as<JsonObject>();
+                            for(auto kv : st){ RuntimeFieldStyleRule &r = m.style.rule(String(kv.key().c_str())); JsonObject ruleObj = kv.value().as<JsonObject>(); if(ruleObj.containsKey("visible")) r.setVisible(ruleObj["visible"].as<bool>()); for(auto prop : ruleObj){ String pk = prop.key().c_str(); if(pk=="visible") continue; r.set(pk, String(prop.value().as<const char*>()?prop.value().as<const char*>():"")); } }
+                        }
+#endif
+                        if(m.group.length() && m.key.length()) _runtimeMetaOverride.push_back(m);
+                    }
+                    _runtimeMetaOverrideActive = true;
+                    request->send(200, "application/json", "{\"status\":\"ok\",\"count\":" + String(_runtimeMetaOverride.size()) + "}" );
+                    delete body; request->_tempObject=nullptr;
+                }
+            }
+        );
+        server.on("/runtime_meta/override", HTTP_DELETE, [this](AsyncWebServerRequest *request){ _runtimeMetaOverride.clear(); _runtimeMetaOverrideActive=false; request->send(200, "application/json", "{\"status\":\"cleared\"}"); });
+        server.on("/runtime_meta/override", HTTP_GET, [this](AsyncWebServerRequest *request){ String payload = String("{\"active\":") + (_runtimeMetaOverrideActive?"true":"false") + ",\"count\":" + String(_runtimeMetaOverride.size()) + "}"; request->send(200, "application/json", payload); });
+#endif
+        // Optional user supplied global CSS override (served if configured)
+#if CM_ENABLE_THEMING && CM_ENABLE_USER_CSS
+        server.on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest *request){
+            const bool hasBuiltin = hasBuiltinCss();
+            const bool hasCustom = getCustomCss() && getCustomCssLen()>0;
+            if(!hasBuiltin && !hasCustom){
+                CM_LOG("[THEME] No CSS configured (204)");
+                request->send(204);
+                return;
+            }
+
+            AsyncResponseStream *response = request->beginResponseStream("text/css");
+            if(hasBuiltin && _builtinCssLen){
+                CM_LOG("[THEME] Adding built-in runtime CSS (%u bytes)", (unsigned)_builtinCssLen);
+                response->write(_builtinCss, _builtinCssLen);
+                if(hasCustom) response->print("\n\n");
+            }
+            if(hasCustom){
+                auto len = getCustomCssLen();
+                CM_LOG("[THEME] Appending custom CSS (%u bytes)", (unsigned)len);
+                if(_customCss && len){
+                    response->write(_customCss, len);
+                } else if(_customCss){
+                    response->print(_customCss);
+                }
+            }
+            request->send(response);
+        });
+#endif
 
         // Save all settings
         server.on("/config/save_all", HTTP_POST,
@@ -1103,15 +1264,15 @@ public:
                 String *body = static_cast<String*>(request->_tempObject);
                 body->concat(String((const char*)data).substring(0,len));
                 if(index+len==total){
-                    log_message("🌐 Received POST request to root route");
-                    log_message("🌐 Body: %s", body->c_str());
+                    CM_LOG("🌐 Received POST request to root route");
+                    CM_LOG("🌐 Body: %s", body->c_str());
                     request->send(200, "text/plain", "OK");
                     delete body; request->_tempObject=nullptr;
                 }
             }
         );
 
-        log_message("🌐 Routes defined successfully");
+    CM_LOG("🌐 Routes defined successfully");
     }
 
     void remove(String category, String key) {
@@ -1137,20 +1298,21 @@ public:
             delete s;
         }
         settings.clear();
-        log_message("🌐 All settings cleared");
+    CM_LOG("🌐 All settings cleared");
         prefs.begin("config", false);
         prefs.clear();
         prefs.end();
-        log_message("🌐 Preferences cleared");
+    CM_LOG("🌐 Preferences cleared");
     }
 
     void clearAllFromPrefs() {
         prefs.begin("config", false);
         prefs.clear();
         prefs.end();
-        log_message("🌐 All preferences cleared");
+    CM_LOG("🌐 All preferences cleared");
     }
 
+    #if CM_ENABLE_OTA
     bool isOTAInitialized() const { return _otaInitialized; }
 
     String getOTAStatus() const {
@@ -1163,14 +1325,12 @@ public:
         _otaHostname = hostname.isEmpty() ? "esp32-device" : hostname;
         _otaPassword = password;
         _otaEnabled = true;
-        log_message("🛜 OTA Enabled (Hostname: %s)", _otaHostname.c_str());
+    CM_LOG("🛜 OTA Enabled (Hostname: %s)", _otaHostname.c_str());
     }
 
     void handleOTA() {
-        // if (!_otaEnabled || _otaInitialized) return;
-
         if (!_otaEnabled) {
-            log_message("OTA: Not enabled");
+            CM_LOG("OTA: Not enabled");
             return;
         }
 
@@ -1180,26 +1340,26 @@ public:
             ArduinoOTA
                 .onStart([this]() {
                     String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-                    log_message("📡 OTA Update Start: %s", type.c_str());
+                    CM_LOG("📡 OTA Update Start: %s", type.c_str());
                 })
                 .onEnd([this]() {
-                    log_message("OTA Update finished");
+                    CM_LOG("OTA Update finished");
                 })
                 .onProgress([this](unsigned int progress, unsigned int total) {
-                    log_message("OTA Progress: %u%%", (progress * 100) / total);
+                    CM_LOG("OTA Progress: %u%%", (progress * 100) / total);
                 })
 
                 .onError([this](ota_error_t error) {
-                    log_message("OTA Error[%u]:", error);
-                    if (error == OTA_AUTH_ERROR) log_message("Authentication failed");
-                    else if (error == OTA_BEGIN_ERROR) log_message("Begin failed");
-                    else if (error == OTA_CONNECT_ERROR) log_message("Connection failed");
-                    else if (error == OTA_RECEIVE_ERROR) log_message("Receive failed");
-                    else if (error == OTA_END_ERROR) log_message("End failed");
+                    CM_LOG("OTA Error[%u]:", error);
+                    if (error == OTA_AUTH_ERROR) CM_LOG("Authentication failed");
+                    else if (error == OTA_BEGIN_ERROR) CM_LOG("Begin failed");
+                    else if (error == OTA_CONNECT_ERROR) CM_LOG("Connection failed");
+                    else if (error == OTA_RECEIVE_ERROR) CM_LOG("Receive failed");
+                    else if (error == OTA_END_ERROR) CM_LOG("End failed");
                 });
 
             if (_otaHostname.isEmpty()) {
-                ArduinoOTA.setHostname("esp32-dev");
+                ArduinoOTA.setHostname("esp32-device");
             }
             else{
                 ArduinoOTA.setHostname(_otaHostname.c_str());
@@ -1215,14 +1375,13 @@ public:
             ArduinoOTA.begin();
             _otaInitialized = true;
 
-        if (_otaInitialized) {
-            ArduinoOTA.handle();  // This is crucial for handling requests
-            return;
-        }
+            if (_otaInitialized) {
+                ArduinoOTA.handle();  // This is crucial for handling requests
+                return;
+            }
 
-
-        }else {
-            // log_message("OTA: Waiting for WiFi connection...");
+        } else {
+            CM_LOG("OTA: Waiting for WiFi connection...");
         }
     }
 
@@ -1231,15 +1390,22 @@ public:
             // TODO: There is no official ArduinoOTA stop API. If future versions expose one, replace this placeholder.
             ArduinoOTA.end(); // Placeholder (currently not part of core ArduinoOTA)
             _otaInitialized = false;
-            log_message("🛜 OTA Stopped");
+            CM_LOG("🛜 OTA Stopped");
         }
         _otaEnabled = false;
     }
+    #else
+    bool isOTAInitialized() const { return false; }
+    String getOTAStatus() const { return "disabled"; }
+    void setupOTA(const String& = "", const String& = ""){}
+    void handleOTA(){}
+    void stopOTA(){}
+    #endif
 
     void checkSettingsForErrors() {
         for (auto *s : settings) {
             if (s->hasError()) {
-                log_message("[ERROR] Setting %s/%s has errors: %s",
+                CM_LOG("[ERROR] Setting %s/%s has errors: %s",
                         s->getCategory(), s->getName(), s->getError());
             }
         }
@@ -1257,6 +1423,7 @@ public:
             int order = 100;             // ordering weight (lower first)
         };
 
+        #if CM_ENABLE_STYLE_RULES
         struct RuntimeFieldStyleProperty {
             String name;
             String value;
@@ -1331,6 +1498,22 @@ public:
                 }
             }
         };
+        #else
+        struct RuntimeFieldStyleProperty {};
+
+        struct RuntimeFieldStyleRule {
+            RuntimeFieldStyleRule& setVisible(bool){ return *this; }
+            RuntimeFieldStyleRule& set(const String&, const String&){ return *this; }
+        };
+
+        struct RuntimeFieldStyle {
+            RuntimeFieldStyleRule dummyRule;
+            RuntimeFieldStyleRule& rule(const String&){ return dummyRule; }
+            const RuntimeFieldStyleRule* find(const String&) const { return nullptr; }
+            bool empty() const { return true; }
+            void merge(const RuntimeFieldStyle&){}
+        };
+        #endif
 
         struct RuntimeFieldMeta {
             String group;        // provider name (e.g. sensors/system)
@@ -1364,80 +1547,71 @@ public:
             RuntimeFieldStyle style;
         };
 
-        // Feature flags / theming helpers
-        bool _disableRuntimeStyleMeta = false; // if true, omit style objects from runtime_meta
-        const char* _customCss = nullptr;      // pointer to optional globally injected CSS (not persisted)
-        size_t _customCssLen = 0;              // optional length (0 -> strlen)
+    // Feature flags / theming helpers
+#if CM_ENABLE_THEMING
+    bool _disableRuntimeStyleMeta = false; // if true, omit style objects from runtime_meta
+    const char* _customCss = nullptr;      // pointer to optional globally injected CSS (not persisted)
+    size_t _customCssLen = 0;              // optional length (0 -> strlen)
+#if CM_ENABLE_STYLE_RULES
+    const char* _builtinCss = CM_DEFAULT_RUNTIME_STYLE_CSS;
+    size_t _builtinCssLen = sizeof(CM_DEFAULT_RUNTIME_STYLE_CSS) - 1;
+#else
+    const char* _builtinCss = nullptr;
+    size_t _builtinCssLen = 0;
+#endif
+#endif
     public:
-        void disableRuntimeStyleMeta(bool v){ _disableRuntimeStyleMeta = v; }
-        bool isRuntimeStyleMetaDisabled() const { return _disableRuntimeStyleMeta; }
-        // Provide a pointer to a compile-time or static CSS string. Not copied -> keep storage alive.
-        void setCustomCss(const char* css, size_t len = 0){ _customCss = css; _customCssLen = len; }
-        const char* getCustomCss() const { return _customCss; }
-        size_t getCustomCssLen() const { return _customCss ? (_customCssLen? _customCssLen : strlen(_customCss)) : 0; }
+#if CM_ENABLE_THEMING
+    void disableRuntimeStyleMeta(bool v){ _disableRuntimeStyleMeta = v; }
+    bool isRuntimeStyleMetaDisabled() const { return _disableRuntimeStyleMeta; }
+    // Provide a pointer to a compile-time or static CSS string. Not copied -> keep storage alive.
+    void setCustomCss(const char* css, size_t len = 0){ _customCss = css; _customCssLen = len; }
+    const char* getCustomCss() const { return _customCss; }
+    size_t getCustomCssLen() const { return _customCss ? (_customCssLen? _customCssLen : strlen(_customCss)) : 0; }
+    void disableBuiltinCss(){ _builtinCss = nullptr; _builtinCssLen = 0; }
+    const char* getBuiltinCss() const { return _builtinCss; }
+    size_t getBuiltinCssLen() const { return _builtinCss ? _builtinCssLen : 0; }
+    bool hasBuiltinCss() const { return _builtinCss && _builtinCssLen > 0; }
+#else
+    void disableRuntimeStyleMeta(bool){}
+    bool isRuntimeStyleMetaDisabled() const { return true; }
+    void setCustomCss(const char*, size_t = 0){}
+    const char* getCustomCss() const { return nullptr; }
+    size_t getCustomCssLen() const { return 0; }
+    void disableBuiltinCss(){}
+    const char* getBuiltinCss() const { return nullptr; }
+    size_t getBuiltinCssLen() const { return 0; }
+    bool hasBuiltinCss() const { return false; }
+#endif
 
         static RuntimeFieldStyle defaultNumericStyle(bool hasUnit = true){
             RuntimeFieldStyle style;
-            style.rule("label").set("fontWeight", "600");
-
-            RuntimeFieldStyleRule &valueRule = style.rule("values");
-            valueRule.set("fontWeight", "600");
-            valueRule.set("textAlign", "right");
-            valueRule.set("fontVariantNumeric", "tabular-nums");
-
-            RuntimeFieldStyleRule &unitRule = style.rule("unit");
-            if(hasUnit){
-            } else {
-                unitRule.setVisible(false);
+            if(!hasUnit){
+                style.rule("unit").setVisible(false);
             }
             return style;
         }
 
         static RuntimeFieldStyle defaultBoolStyle(bool alarmWhenTrue = false){
             RuntimeFieldStyle style;
-            style.rule("label").set("fontWeight", "600");
-
-            RuntimeFieldStyleRule &stateRule = style.rule("state");
-            stateRule.set("fontWeight", "600");
-            stateRule.set("textAlign", "right");
-
-            RuntimeFieldStyleRule &unitRule = style.rule("unit");
-            unitRule.setVisible(false);
-
+            style.rule("unit").setVisible(false);
             RuntimeFieldStyleRule &dotTrue = style.rule("stateDotOnTrue");
             dotTrue.setVisible(true);
-            dotTrue.set("background", "#2ecc71");
-            dotTrue.set("border", "none");
-            dotTrue.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
-
             RuntimeFieldStyleRule &dotFalse = style.rule("stateDotOnFalse");
             dotFalse.setVisible(true);
-            dotFalse.set("background", "#888");
-            dotFalse.set("border", "1px solid #000");
-            dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
-
             if(alarmWhenTrue){
-                dotFalse.set("background", "#2ecc71");
-                dotFalse.set("border", "none");
                 RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm");
                 dotAlarm.setVisible(true);
-                dotAlarm.set("background", "#d00000");
-                dotAlarm.set("animation", "blink 1.6s linear infinite");
-                dotAlarm.set("boxShadow", "0 0 4px rgba(208,0,0,0.7)");
+                dotFalse.set("background", "#2ecc71");
+                dotFalse.set("border", "none");
+                dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
             }
             return style;
         }
 
         static RuntimeFieldStyle defaultStringStyle(){
             RuntimeFieldStyle style;
-            style.rule("label").set("fontWeight", "600");
-
-            RuntimeFieldStyleRule &valueRule = style.rule("values");
-            valueRule.set("fontWeight", "500");
-            valueRule.set("textAlign", "left");
-
-            RuntimeFieldStyleRule &unitRule = style.rule("unit");
-            unitRule.setVisible(false);
+            style.rule("unit").setVisible(false);
             return style;
         }
 
@@ -1449,6 +1623,7 @@ public:
                                 int precision = 1,
                                 int order = 100,
                                 const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m;
             m.group = group;
             m.key = key;
@@ -1461,6 +1636,9 @@ public:
                 m.style.merge(styleOverride);
             }
             _runtimeMeta.push_back(m);
+#else
+            (void)group; (void)key; (void)label; (void)unit; (void)precision; (void)order; (void)styleOverride;
+#endif
         }
         // Extended with thresholds (pass NAN or omit to skip)
         void defineRuntimeFieldThresholds(
@@ -1473,6 +1651,7 @@ public:
             int order = 100,
             const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()
         ){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.unit=unit; m.precision=precision; m.order=order;
             if(enableWarnMin){ m.hasWarnMin = true; m.warnMin = warnMin; }
             if(enableWarnMax){ m.hasWarnMax = true; m.warnMax = warnMax; }
@@ -1483,6 +1662,11 @@ public:
                 m.style.merge(styleOverride);
             }
             _runtimeMeta.push_back(m);
+#else
+            (void)group; (void)key; (void)label; (void)unit; (void)precision; (void)warnMin; (void)warnMax;
+            (void)alarmMin; (void)alarmMax; (void)enableWarnMin; (void)enableWarnMax; (void)enableAlarmMin;
+            (void)enableAlarmMax; (void)order; (void)styleOverride;
+#endif
         }
     // Define a boolean runtime value. Set alarmWhenTrue to enable alarm semantics (true state treated as alarm).
         void defineRuntimeBool(const String &group,
@@ -1491,6 +1675,7 @@ public:
                                bool alarmWhenTrue=false,
                                int order = 100,
                                const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m;
             m.group = group;
             m.key = key;
@@ -1503,6 +1688,9 @@ public:
                 m.style.merge(styleOverride);
             }
             _runtimeMeta.push_back(m);
+#else
+            (void)group; (void)key; (void)label; (void)alarmWhenTrue; (void)order; (void)styleOverride;
+#endif
         }
 
         // New: string (non-numeric, non-boolean) runtime label & value. If key is empty, acts as standalone display entry.
@@ -1512,6 +1700,7 @@ public:
                                  const String &staticValue = String(),
                                  int order = 100,
                                  const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m;
             m.group = group;
             m.key = key;
@@ -1524,14 +1713,22 @@ public:
                 m.style.merge(styleOverride);
             }
             _runtimeMeta.push_back(m);
+#else
+            (void)group; (void)key; (void)label; (void)staticValue; (void)order; (void)styleOverride;
+#endif
         }
         // New: divider/separator inside a group. Key becomes unique synthetic id (e.g., "_div_<n>").
         void defineRuntimeDivider(const String &group, const String &label, int order = 100){
+#if CM_ENABLE_RUNTIME_META
             static int dividerCounter = 0; // local static counter
             RuntimeFieldMeta m; m.group=group; m.key = String("_div_") + String(++dividerCounter); m.label=label; m.isDivider=true; m.order=order; _runtimeMeta.push_back(m);
+#else
+            (void)group; (void)label; (void)order;
+#endif
         }
 
         // Interactive stateless button
+        #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_BUTTONS
         void defineRuntimeButton(const String &group,
                                  const String &key,
                                  const String &label,
@@ -1539,13 +1736,21 @@ public:
                                  int order = 100,
                                  const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
                                  const String &card = String()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isButton=true; m.order=order; m.precision=0; m.style = defaultStringStyle(); m.card = card;
             if(!styleOverride.empty()) m.style.merge(styleOverride);
             _runtimeMeta.push_back(m);
+#else
+            (void)styleOverride; (void)card; (void)order;
+#endif
             _runtimeButtons.push_back({group,key,onPress});
         }
+        #else
+        void defineRuntimeButton(const String&, const String&, const String&, std::function<void()>, int = 100, const RuntimeFieldStyle& = RuntimeFieldStyle(), const String& = String()){}
+        #endif
 
         // Interactive checkbox (toggle)
+        #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
         void defineRuntimeCheckbox(const String &group,
                                    const String &key,
                                    const String &label,
@@ -1554,14 +1759,22 @@ public:
                                    int order = 100,
                                    const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
                                    const String &card = String()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isCheckbox=true; m.order=order; m.precision=0; m.style = defaultBoolStyle(false); m.card = card;
             m.style.rule("unit").setVisible(false);
             if(!styleOverride.empty()) m.style.merge(styleOverride);
             _runtimeMeta.push_back(m);
+#else
+            (void)order; (void)styleOverride; (void)card;
+#endif
             _runtimeCheckboxes.push_back({group,key,getter,setter});
         }
+        #else
+        void defineRuntimeCheckbox(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, int = 100, const RuntimeFieldStyle& = RuntimeFieldStyle(), const String& = String()){}
+        #endif
 
         // Stateful runtime button (has on/off state; toggles and invokes callback)
+        #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
         struct _StateButtonDef { String group; String key; std::function<bool()> getter; std::function<void(bool)> setter; };
         std::vector<_StateButtonDef> _runtimeStateButtons;
         void defineRuntimeStateButton(const String &group,
@@ -1573,13 +1786,23 @@ public:
                                       int order = 100,
                                       const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
                                       const String &card = String()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isStateButton = true; m.order=order; m.initialState = initState; m.style = defaultBoolStyle(false); m.card = card; m.style.rule("unit").setVisible(false);
             if(!styleOverride.empty()) m.style.merge(styleOverride);
             _runtimeMeta.push_back(m);
+#else
+            (void)initState; (void)order; (void)styleOverride; (void)card;
+#endif
             _runtimeStateButtons.push_back({group,key,getter,setter});
         }
+        #else
+        struct _StateButtonDef { String group; String key; };
+        void defineRuntimeStateButton(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, bool = false, int = 100, const RuntimeFieldStyle& = RuntimeFieldStyle(), const String& = String()){}
+        std::vector<_StateButtonDef> _runtimeStateButtons;
+        #endif
 
         // Int slider (transient; not persisted)
+        #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
         struct _IntSliderDef { String group; String key; std::function<int()> getter; std::function<void(int)> setter; int minV; int maxV; };
         std::vector<_IntSliderDef> _runtimeIntSliders;
         void defineRuntimeIntSlider(const String &group,
@@ -1591,13 +1814,23 @@ public:
                                     int order = 100,
                                     const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
                                     const String &card = String()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isIntSlider=true; m.order=order; m.intMin=minValue; m.intMax=maxValue; m.intInit=initValue; m.card = card; m.style = defaultNumericStyle();
             if(!styleOverride.empty()) m.style.merge(styleOverride);
             _runtimeMeta.push_back(m);
+#else
+            (void)order; (void)styleOverride; (void)card; (void)initValue;
+#endif
             _runtimeIntSliders.push_back({group,key,getter,setter,minValue,maxValue});
         }
+        #else
+        struct _IntSliderDef { String group; String key; };
+        std::vector<_IntSliderDef> _runtimeIntSliders;
+        void defineRuntimeIntSlider(const String&, const String&, const String&, int, int, int, std::function<int()>, std::function<void(int)>, int = 100, const RuntimeFieldStyle& = RuntimeFieldStyle(), const String& = String()){}
+        #endif
 
         // Float slider (transient; not persisted)
+        #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
         struct _FloatSliderDef { String group; String key; std::function<float()> getter; std::function<void(float)> setter; float minV; float maxV; };
         std::vector<_FloatSliderDef> _runtimeFloatSliders;
         void defineRuntimeFloatSlider(const String &group,
@@ -1609,11 +1842,20 @@ public:
                                       int order = 100,
                                       const RuntimeFieldStyle& styleOverride = RuntimeFieldStyle(),
                                       const String &card = String()){
+#if CM_ENABLE_RUNTIME_META
             RuntimeFieldMeta m; m.group=group; m.key=key; m.label=label; m.isFloatSlider=true; m.order=order; m.floatMin=minValue; m.floatMax=maxValue; m.floatInit=initValue; m.precision = precision; m.floatPrecision = precision; m.card = card; m.style = defaultNumericStyle();
             if(!styleOverride.empty()) m.style.merge(styleOverride);
             _runtimeMeta.push_back(m);
+#else
+            (void)order; (void)styleOverride; (void)card; (void)initValue; (void)precision;
+#endif
             _runtimeFloatSliders.push_back({group,key,getter,setter,minValue,maxValue});
         }
+        #else
+        struct _FloatSliderDef { String group; String key; };
+        std::vector<_FloatSliderDef> _runtimeFloatSliders;
+        void defineRuntimeFloatSlider(const String&, const String&, const String&, float, float, float, int, std::function<float()>, std::function<void(float)>, int = 100, const RuntimeFieldStyle& = RuntimeFieldStyle(), const String& = String()){}
+        #endif
 
         // Set / override provider order
         void setRuntimeProviderOrder(const String &provider, int order){
@@ -1633,21 +1875,31 @@ public:
                 JsonObject slot = root.createNestedObject(prov.name);
                 if (prov.fill) prov.fill(slot);
                 // Inject checkbox states
+                #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
                 for(const auto &cbx : _runtimeCheckboxes){ if(cbx.group == prov.name && !slot.containsKey(cbx.key.c_str()) && cbx.getter){ slot[cbx.key] = cbx.getter(); } }
-                // Inject state buttons
+                #endif
+                #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
                 for(const auto &sb : _runtimeStateButtons){ if(sb.group == prov.name && !slot.containsKey(sb.key.c_str()) && sb.getter){ slot[sb.key] = sb.getter(); } }
-                // Inject int sliders
+                #endif
+                #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
                 for(const auto &is : _runtimeIntSliders){ if(is.group == prov.name && !slot.containsKey(is.key.c_str()) && is.getter){ slot[is.key] = is.getter(); } }
-                // Inject float sliders
+                #endif
+                #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
                 for(const auto &fs : _runtimeFloatSliders){ if(fs.group == prov.name && !slot.containsKey(fs.key.c_str()) && fs.getter){ slot[fs.key] = fs.getter(); } }
+                #endif
             }
+            #if CM_ENABLE_RUNTIME_ALARMS
             if(!_runtimeAlarms.empty()){
                 JsonObject alarms = root.createNestedObject("alarms");
                 for(auto &a : _runtimeAlarms){ alarms[a.name] = a.active; }
             }
+            #endif
             String out; serializeJson(d, out); return out;
         }
         String runtimeMetaToJSON(){
+#if !CM_ENABLE_RUNTIME_META
+            return "[]";
+#else
             DynamicJsonDocument d(4096);
             JsonArray arr = d.to<JsonArray>();
             // Sort by group, then order, then label
@@ -1691,6 +1943,7 @@ public:
                 if(m.boolAlarmValue != -1){
                     o["boolAlarmValue"] = (m.boolAlarmValue == 1);
                 }
+#if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
                 if(!_disableRuntimeStyleMeta && !m.style.empty()){
                     JsonObject styleObj = o.createNestedObject("style");
                     for(const auto &rule : m.style.rules){
@@ -1702,8 +1955,10 @@ public:
                         }
                     }
                 }
+#endif
             }
             String out; serializeJson(d, out); return out;
+#endif
         }
     private:
         std::vector<RuntimeValueProvider> runtimeProviders;
@@ -1712,11 +1967,23 @@ public:
     std::vector<RuntimeFieldMeta> _runtimeMetaOverride; // injected via /runtime_meta/override
     bool _runtimeMetaOverrideActive = false;
 #endif
-        struct RuntimeButton { String group; String key; std::function<void()> onPress; };
-        struct RuntimeCheckbox { String group; String key; std::function<bool()> getter; std::function<void(bool)> setter; };
-        std::vector<RuntimeButton> _runtimeButtons;
-        std::vector<RuntimeCheckbox> _runtimeCheckboxes;
+    #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_BUTTONS
+    struct RuntimeButton { String group; String key; std::function<void()> onPress; };
+    std::vector<RuntimeButton> _runtimeButtons;
+    #else
+    struct RuntimeButton { String group; String key; };
+    std::vector<RuntimeButton> _runtimeButtons;
+    #endif
+
+    #if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
+    struct RuntimeCheckbox { String group; String key; std::function<bool()> getter; std::function<void(bool)> setter; };
+    std::vector<RuntimeCheckbox> _runtimeCheckboxes;
+    #else
+    struct RuntimeCheckbox { String group; String key; };
+    std::vector<RuntimeCheckbox> _runtimeCheckboxes;
+    #endif
         // Cross-field runtime alarms
+        #if CM_ENABLE_RUNTIME_ALARMS
         struct RuntimeAlarm {
             String name; // identifier
             std::function<bool(const JsonObject&)> condition; // receives merged runtime JSON root
@@ -1754,7 +2021,14 @@ public:
                 }
             }
         }
+        #else
+        struct RuntimeAlarm { String name; };
+        std::vector<RuntimeAlarm> _runtimeAlarms;
+        void defineRuntimeAlarm(const String&, std::function<bool(const JsonObject&)> , std::function<void()> = nullptr, std::function<void()> = nullptr){}
+        void handleRuntimeAlarms(){}
+        #endif
     private:
+#if CM_ENABLE_WS_PUSH
         AsyncWebSocket* _ws = nullptr;
         bool _wsInitialized = false;
         bool _wsEnabled = false;
@@ -1762,16 +2036,20 @@ public:
         uint32_t _wsInterval = 2000;
         unsigned long _wsLastPush = 0;
         std::function<String()> _customPayloadBuilder;
+#endif
     public:
         WebHTML webhtml;
         static LogCallback logger;
 
-        bool _otaEnabled = false;
-        bool _otaInitialized = false;
-        String _otaPassword;
-        String _otaHostname;
+    #if CM_ENABLE_OTA
+    bool _otaEnabled = false;
+    bool _otaInitialized = false;
+    String _otaPassword;
+    String _otaHostname;
+    #endif
     String _appName;
     // Built-in system provider support
+#if CM_ENABLE_SYSTEM_PROVIDER
     bool _builtinSystemProviderEnabled = false;
     bool _builtinSystemProviderRegistered = false;
     // cached loop average (if user wants to push their own they still can redefine) - user code can update via updateLoopAvg
@@ -1779,8 +2057,10 @@ public:
     unsigned long _loopWindowStart = 0;
     uint32_t _loopSamples = 0;
     double _loopAccumMs = 0.0;
+#endif
 
 public:
+#if CM_ENABLE_SYSTEM_PROVIDER
     // Call from loop() to update rolling average (3s window) if builtin system provider is enabled.
     void updateLoopTiming(){
         if(!_builtinSystemProviderEnabled) return;
@@ -1841,6 +2121,12 @@ public:
     }
 
     bool isBuiltinSystemProviderEnabled() const { return _builtinSystemProviderEnabled; }
+#else
+    void updateLoopTiming(){}
+    static const char* rssiEmoji(int){ return ""; }
+    void enableBuiltinSystemProvider(bool = true){}
+    bool isBuiltinSystemProviderEnabled() const { return false; }
+#endif
 
 };
 

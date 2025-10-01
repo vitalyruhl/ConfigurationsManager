@@ -1,4 +1,52 @@
 #include <Arduino.h>
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ConfigManager compile-time feature toggles
+//
+// All switches default to 1 (enabled) inside ConfigManagerConfig.h.  Define them here to 0 when a subsystem
+// is not needed to shave off flash & RAM without touching the library sources.  Leave a flag commented out to
+// inherit the upstream default.  This example keeps every feature on to showcase the full demo surface.
+// ---------------------------------------------------------------------------------------------------------------------
+#ifndef CM_ENABLE_RUNTIME_CONTROLS
+#define CM_ENABLE_RUNTIME_CONTROLS 1
+#endif
+#ifndef CM_ENABLE_RUNTIME_BUTTONS
+#define CM_ENABLE_RUNTIME_BUTTONS 1
+#endif
+#ifndef CM_ENABLE_RUNTIME_CHECKBOXES
+#define CM_ENABLE_RUNTIME_CHECKBOXES 1
+#endif
+#ifndef CM_ENABLE_RUNTIME_STATE_BUTTONS
+#define CM_ENABLE_RUNTIME_STATE_BUTTONS 1
+#endif
+#ifndef CM_ENABLE_RUNTIME_INT_SLIDERS
+#define CM_ENABLE_RUNTIME_INT_SLIDERS 1
+#endif
+#ifndef CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1
+#endif
+#ifndef CM_ENABLE_RUNTIME_ALARMS
+#define CM_ENABLE_RUNTIME_ALARMS 1
+#endif
+#ifndef CM_ENABLE_WS_PUSH
+#define CM_ENABLE_WS_PUSH 1
+#endif
+#ifndef CM_ENABLE_THEMING
+#define CM_ENABLE_THEMING 1
+#endif
+#ifndef CM_ENABLE_STYLE_RULES
+#define CM_ENABLE_STYLE_RULES 1
+#endif
+#ifndef CM_ENABLE_USER_CSS
+#define CM_ENABLE_USER_CSS 1
+#endif
+#ifndef CM_ENABLE_DYNAMIC_VISIBILITY
+#define CM_ENABLE_DYNAMIC_VISIBILITY 1
+#endif
+#ifndef CM_ENABLE_OTA
+#define CM_ENABLE_OTA 1
+#endif
+
 #include "ConfigManager.h"
 #include <Ticker.h>     // for read temperature periodically
 #include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
@@ -52,11 +100,7 @@ void cbTestButton();
 // Served via /user_theme.css and auto-injected by the frontend if present.
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-/* Global test theme override */
 h3 { color: orange; text-decoration: underline; }
-
-/* Temperature field styling */
-/* Targets: provider group 'sensors', key 'temp' */
 .rt-row[data-group="sensors"][data-key="temp"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }
 .rt-row[data-group="sensors"][data-key="temp"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }
 .rt-row[data-group="sensors"][data-key="temp"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }
@@ -406,14 +450,13 @@ void setup()
     // Local state for heater override
     static bool heaterState = false;
     // Optional divider (order 89) before controls
-    cfg.defineRuntimeDivider("Hand overrides", "Manual Controls", 81);
-    // Action button (order 90)
-    cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test Button", [](){ cbTestButton(); }, 82);
-    // Heater toggle (order 91)
-    cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 83);
+    // cfg.defineRuntimeDivider("Hand overrides", "Manual Controls", 81);
+    // // Action button (order 90)
+    // cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test Button", [](){ cbTestButton(); }, 82);
+    // // Heater toggle (order 91)
+    // cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 83);
 
     // cfg.defineRuntimeDivider("Hand overrides", "More Controls", 88); // another divider (order 91)
-    
     // Stateful button (acts like on/off toggle with dynamic label states handled client-side) order 92
     static bool stateBtnState = false;
     cfg.defineRuntimeStateButton("Hand overrides", "sb_mode", "Mode Button", [](){ return stateBtnState; }, [](bool v){ stateBtnState = v; Serial.printf("[STATE_BUTTON] sb_mode -> %s\n", v?"ON":"OFF"); }, /*init*/ false, 91);
