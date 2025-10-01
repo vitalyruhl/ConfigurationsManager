@@ -42,7 +42,11 @@
 
     <section v-if="activeTab === 'live'" class="live-view">
       <div class="live-cards">
-        <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
+        <div
+          class="card"
+          v-for="group in displayRuntimeGroups"
+          :key="group.name"
+        >
           <h3>{{ group.title }}</h3>
 
           <div class="tbl">
@@ -50,65 +54,168 @@
               <!-- Divider rendering -->
               <hr v-if="f.isDivider" class="dv" :data-label="f.label" />
               <!-- Interactive Button -->
-              <div v-else-if="f.isButton" class="rw act" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isButton"
+                class="rw act"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val">
-                  <button class="btn" @click="triggerRuntimeButton(group.name, f.key)">{{ f.label }}</button>
+                  <button
+                    class="btn"
+                    @click="triggerRuntimeButton(group.name, f.key)"
+                  >
+                    {{ f.label }}
+                  </button>
                 </span>
                 <span class="un"></span>
               </div>
               <!-- Stateful Button -->
-              <div v-else-if="f.isStateButton" class="rw act" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isStateButton"
+                class="rw act"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val">
-                  <button class="btn" :class="{'on': runtime[group.name] && runtime[group.name][f.key]}" @click="onStateButton(group.name,f)">{{ f.label }}: {{ runtime[group.name] && runtime[group.name][f.key] ? 'ON' : 'OFF' }}</button>
+                  <button
+                    class="btn"
+                    :class="{
+                      on: runtime[group.name] && runtime[group.name][f.key],
+                    }"
+                    @click="onStateButton(group.name, f)"
+                  >
+                    {{ f.label }}:
+                    {{
+                      runtime[group.name] && runtime[group.name][f.key]
+                        ? "ON"
+                        : "OFF"
+                    }}
+                  </button>
                 </span>
                 <span class="un"></span>
               </div>
               <!-- Int Slider (explicit set) -->
-              <div v-else-if="f.isIntSlider" class="rw sl" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isIntSlider"
+                class="rw sl"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val sw">
-                  <input type="range" :min="f.min" :max="f.max" step="1" :value="tempSliderValue(group.name,f)" @input="onIntSliderLocal(group.name,f,$event)" />
-                  <span class="sv">{{ tempSliderValue(group.name,f) }}</span>
-                  <button class="sb" @click="commitIntSlider(group.name,f)">Set</button>
+                  <input
+                    type="range"
+                    :min="f.min"
+                    :max="f.max"
+                    step="1"
+                    :value="tempSliderValue(group.name, f)"
+                    @input="onIntSliderLocal(group.name, f, $event)"
+                  />
+                  <span class="sv">{{ tempSliderValue(group.name, f) }}</span>
+                  <button class="sb" @click="commitIntSlider(group.name, f)">
+                    Set
+                  </button>
                 </span>
                 <span class="un"></span>
               </div>
               <!-- Float Slider (explicit set) -->
-              <div v-else-if="f.isFloatSlider" class="rw sl" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isFloatSlider"
+                class="rw sl"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val sw">
-                  <input type="range" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="tempSliderValue(group.name,f)" @input="onFloatSliderLocal(group.name,f,$event)" />
-                  <span class="sv">{{ formatTempFloat(group.name,f) }}</span>
-                  <button class="sb" @click="commitFloatSlider(group.name,f)">Set</button>
+                  <input
+                    type="range"
+                    :min="f.min"
+                    :max="f.max"
+                    :step="floatSliderStep(f)"
+                    :value="tempSliderValue(group.name, f)"
+                    @input="onFloatSliderLocal(group.name, f, $event)"
+                  />
+                  <span class="sv">{{ formatTempFloat(group.name, f) }}</span>
+                  <button class="sb" @click="commitFloatSlider(group.name, f)">
+                    Set
+                  </button>
                 </span>
                 <span class="un"></span>
               </div>
               <!-- Int Input -->
-              <div v-else-if="f.isIntInput" class="rw sl" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isIntInput"
+                class="rw sl"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val sw">
-                  <input type="number" :min="f.min" :max="f.max" step="1" :value="tempInputValue(group.name,f)" @input="onIntInputLocal(group.name,f,$event)" class="num-input" />
-                  <button class="sb" @click="commitIntInput(group.name,f)">Set</button>
+                  <input
+                    type="number"
+                    :min="f.min"
+                    :max="f.max"
+                    step="1"
+                    :value="tempInputValue(group.name, f)"
+                    @input="onIntInputLocal(group.name, f, $event)"
+                    class="num-input"
+                  />
+                  <button class="sb" @click="commitIntInput(group.name, f)">
+                    Set
+                  </button>
                 </span>
                 <span class="un"></span>
               </div>
               <!-- Float Input -->
-              <div v-else-if="f.isFloatInput" class="rw sl" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isFloatInput"
+                class="rw sl"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val sw">
-                  <input type="number" :min="f.min" :max="f.max" :step="floatSliderStep(f)" :value="tempInputValue(group.name,f)" @input="onFloatInputLocal(group.name,f,$event)" class="num-input" />
-                  <button class="sb" @click="commitFloatInput(group.name,f)">Set</button>
+                  <input
+                    type="number"
+                    :min="f.min"
+                    :max="f.max"
+                    :step="floatSliderStep(f)"
+                    :value="tempInputValue(group.name, f)"
+                    @input="onFloatInputLocal(group.name, f, $event)"
+                    class="num-input"
+                  />
+                  <button class="sb" @click="commitFloatInput(group.name, f)">
+                    Set
+                  </button>
                 </span>
                 <span class="un"></span>
               </div>
               <!-- Interactive Checkbox (toggle) -->
-              <div v-else-if="f.isCheckbox" class="rw tg" :data-group="group.name" :data-key="f.key">
+              <div
+                v-else-if="f.isCheckbox"
+                class="rw tg"
+                :data-group="group.name"
+                :data-key="f.key"
+              >
                 <span class="lab">{{ f.label }}</span>
                 <span class="val">
                   <label class="switch">
-                    <input type="checkbox" :checked="runtime[group.name] && runtime[group.name][f.key]" @change="onRuntimeCheckbox(group.name, f.key, $event.target.checked)" />
+                    <input
+                      type="checkbox"
+                      :checked="
+                        runtime[group.name] && runtime[group.name][f.key]
+                      "
+                      @change="
+                        onRuntimeCheckbox(
+                          group.name,
+                          f.key,
+                          $event.target.checked
+                        )
+                      "
+                    />
                     <span class="slider round"></span>
                   </label>
                 </span>
@@ -128,7 +235,7 @@
                   >
                   <template v-else>—</template>
                 </span>
-                  <span class="un"></span>
+                <span class="un"></span>
               </div>
               <!-- Boolean / Numeric -->
               <div
@@ -136,71 +243,73 @@
                   runtime[group.name] &&
                   runtime[group.name][f.key] !== undefined
                 "
-                  :class='["rw", valueClasses(runtime[group.name][f.key], f)]'
+                :class="['rw', valueClasses(runtime[group.name][f.key], f)]"
                 :data-group="group.name"
                 :data-key="f.key"
-                  :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
+                :data-type="
+                  f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'
+                "
                 :data-state="
                   f.isBool ? boolState(runtime[group.name][f.key], f) : null
                 "
               >
                 <template v-if="f.isBool">
                   <span
-                      class="lab bl"
+                    class="lab bl"
                     v-if="fieldVisible(f, 'label')"
                     :style="fieldCss(f, 'label')"
                   >
                     <span
-                        class="bd"
+                      class="bd"
                       v-if="boolDotVisible(runtime[group.name][f.key], f)"
                       :style="boolDotStyle(runtime[group.name][f.key], f)"
                     ></span>
                     {{ f.label }}
                   </span>
-                    <span class="lab bl" v-else></span>
+                  <span class="lab bl" v-else></span>
                   <span
-                      class="val"
+                    class="val"
                     v-if="showBoolStateText && fieldVisible(f, 'state')"
                     :style="fieldCss(f, 'state')"
                     >{{ formatBool(runtime[group.name][f.key], f) }}</span
                   >
-                    <span class="val" v-else></span>
+                  <span class="val" v-else></span>
                   <span
-                      class="un"
+                    class="un"
                     v-if="fieldVisible(f, 'unit', false)"
                     :style="fieldCss(f, 'unit')"
                   ></span>
-                    <span class="un" v-else></span>
+                  <span class="un" v-else></span>
                 </template>
                 <template v-else>
                   <span
-                      class="lab"
+                    class="lab"
                     v-if="fieldVisible(f, 'label')"
                     :style="fieldCss(f, 'label')"
                     >{{ f.label }}</span
                   >
-                    <span class="lab" v-else></span>
+                  <span class="lab" v-else></span>
                   <span
-                      class="val"
+                    class="val"
                     v-if="fieldVisible(f, 'values')"
                     :style="fieldCss(f, 'values')"
                     >{{ formatValue(runtime[group.name][f.key], f) }}</span
                   >
-                    <span class="val" v-else></span>
+                  <span class="val" v-else></span>
                   <span
-                      class="un"
+                    class="un"
                     v-if="fieldVisible(f, 'unit', !!f.unit)"
                     :style="fieldCss(f, 'unit')"
                     >{{ f.unit }}</span
                   >
-                    <span class="un" v-else></span>
+                  <span class="un" v-else></span>
                 </template>
               </div>
             </template>
           </div>
           <hr
-              v-if="group.name === 'system' && runtime.uptime !== undefined"
-              class="dv"
+            v-if="group.name === 'system' && runtime.uptime !== undefined"
+            class="dv"
           />
           <p
             v-if="group.name === 'system' && runtime.uptime !== undefined"
@@ -209,16 +318,33 @@
             Uptime: {{ Math.floor((runtime.uptime || 0) / 1000) }} s
           </p>
           <p
-            v-if="group.name === 'system' && runtime.system && runtime.system.loopAvg !== undefined"
+            v-if="
+              group.name === 'system' &&
+              runtime.system &&
+              runtime.system.loopAvg !== undefined
+            "
             class="uptime"
           >
-            Loop Avg: {{ typeof runtime.system.loopAvg === 'number' ? runtime.system.loopAvg.toFixed(2) : runtime.system.loopAvg }} ms
+            Loop Avg:
+            {{
+              typeof runtime.system.loopAvg === "number"
+                ? runtime.system.loopAvg.toFixed(2)
+                : runtime.system.loopAvg
+            }}
+            ms
           </p>
-          <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
+          <div
+            v-if="group.name === 'system' && runtime.uptime !== undefined"
+            class="tbl"
+          >
             <div class="rw cr">
               <span class="lab">Show state text</span>
               <label class="switch val">
-                <input type="checkbox" v-model="showBoolStateText" class="switch" />
+                <input
+                  type="checkbox"
+                  v-model="showBoolStateText"
+                  class="switch"
+                />
                 <span class="slider round"></span>
               </label>
             </div>
@@ -415,9 +541,7 @@ async function applySingle(category, key, value) {
   const toastId = notify(`Applying: ${opKey} ...`, "info", 7000, true);
   try {
     const response = await fetch(
-      `/config/apply?category=${rURIComp(
-        category
-      )}&key=${rURIComp(key)}`,
+      `/config/apply?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -442,9 +566,7 @@ async function saveSingle(category, key, value) {
   const toastId = notify(`Saving: ${opKey} ...`, "info", 7000, true);
   try {
     const response = await fetch(
-      `/config/save?category=${rURIComp(
-        category
-      )}&key=${rURIComp(key)}`,
+      `/config/save?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -677,25 +799,47 @@ function initLive() {
   startWebSocket(url);
 }
 let wsRetry = 0;
-function startWebSocket(url){
+function startWebSocket(url) {
   try {
-    if(ws){ try { ws.close(); } catch(e){} }
+    if (ws) {
+      try {
+        ws.close();
+      } catch (e) {}
+    }
     ws = new WebSocket(url);
     ws.onopen = () => {
       wsConnected.value = true;
       wsRetry = 0;
-      setTimeout(()=>{ if(!runtime.value.uptime) fetchRuntime(); }, 300);
+      setTimeout(() => {
+        if (!runtime.value.uptime) fetchRuntime();
+      }, 300);
     };
-    ws.onclose = () => { wsConnected.value = false; scheduleWsReconnect(url); };
-    ws.onerror = () => { wsConnected.value = false; scheduleWsReconnect(url); };
-    ws.onmessage = (ev) => { try { runtime.value = JSON.parse(ev.data); } catch(e){} };
-  } catch(e){ scheduleWsReconnect(url); }
+    ws.onclose = () => {
+      wsConnected.value = false;
+      scheduleWsReconnect(url);
+    };
+    ws.onerror = () => {
+      wsConnected.value = false;
+      scheduleWsReconnect(url);
+    };
+    ws.onmessage = (ev) => {
+      try {
+        runtime.value = JSON.parse(ev.data);
+      } catch (e) {}
+    };
+  } catch (e) {
+    scheduleWsReconnect(url);
+  }
 }
-function scheduleWsReconnect(url){
+function scheduleWsReconnect(url) {
   const delay = Math.min(5000, 300 + wsRetry * wsRetry * 200);
   wsRetry++;
-  setTimeout(()=>{ startWebSocket(url); }, delay);
-  if(!pollTimer){ fallbackPolling(); }
+  setTimeout(() => {
+    startWebSocket(url);
+  }, delay);
+  if (!pollTimer) {
+    fallbackPolling();
+  }
 }
 
 async function fetchRuntime() {
@@ -740,17 +884,17 @@ function buildRuntimeGroups() {
         alarmMin: m.alarmMin,
         alarmMax: m.alarmMax,
         isBool: m.isBool,
-    isButton: m.isButton || false,
-    isStateButton: m.isStateButton || false,
-    isIntSlider: m.isIntSlider || false,
-    isFloatSlider: m.isFloatSlider || false,
-    isCheckbox: m.isCheckbox || false,
-    card: m.card || null,
-    min: m.min,
-    max: m.max,
-    init: m.init,
-  isIntInput: m.isIntInput || false,
-  isFloatInput: m.isFloatInput || false,
+        isButton: m.isButton || false,
+        isStateButton: m.isStateButton || false,
+        isIntSlider: m.isIntSlider || false,
+        isFloatSlider: m.isFloatSlider || false,
+        isCheckbox: m.isCheckbox || false,
+        card: m.card || null,
+        min: m.min,
+        max: m.max,
+        init: m.init,
+        isIntInput: m.isIntInput || false,
+        isFloatInput: m.isFloatInput || false,
         boolAlarmValue:
           typeof m.boolAlarmValue === "boolean"
             ? !!m.boolAlarmValue
@@ -768,44 +912,50 @@ function buildRuntimeGroups() {
     try {
       const sys = runtime.value.system || {};
       if (grouped.system) {
-        const existingKeys = new Set(grouped.system.fields.map(f => f.key));
-        Object.keys(sys).forEach(k => {
+        const existingKeys = new Set(grouped.system.fields.map((f) => f.key));
+        Object.keys(sys).forEach((k) => {
           if (!existingKeys.has(k)) {
             grouped.system.fields.push({
               key: k,
               label: capitalize(k),
-              unit: k === 'freeHeap' ? 'KB' : (k === 'loopAvg' ? 'ms' : ''),
-              precision: (k === 'loopAvg') ? 2 : 0,
+              unit: k === "freeHeap" ? "KB" : k === "loopAvg" ? "ms" : "",
+              precision: k === "loopAvg" ? 2 : 0,
               order: 999, // appended at end when no meta info
-              isBool: typeof sys[k] === 'boolean',
-              isString: typeof sys[k] === 'string',
-              isButton:false,
-              isCheckbox:false,
+              isBool: typeof sys[k] === "boolean",
+              isString: typeof sys[k] === "string",
+              isButton: false,
+              isCheckbox: false,
               isDivider: false,
-              staticValue: '',
+              staticValue: "",
               style: null,
-              styleRules: null
+              styleRules: null,
             });
           }
         });
       } else if (Object.keys(sys).length) {
-        grouped.system = { name:'system', title:'System', fields: Object.keys(sys).map(k=>({
-          key:k,
-          label:capitalize(k),
-          unit: k === 'freeHeap' ? 'KB' : (k === 'loopAvg' ? 'ms' : ''),
-          precision: (k === 'loopAvg') ? 2 : 0,
-          order: 999,
-          isBool: typeof sys[k] === 'boolean',
-          isString: typeof sys[k] === 'string',
-          isButton:false,
-          isCheckbox:false,
-          isDivider: false,
-          staticValue: '',
-          style:null,
-          styleRules:null
-        })) };
+        grouped.system = {
+          name: "system",
+          title: "System",
+          fields: Object.keys(sys).map((k) => ({
+            key: k,
+            label: capitalize(k),
+            unit: k === "freeHeap" ? "KB" : k === "loopAvg" ? "ms" : "",
+            precision: k === "loopAvg" ? 2 : 0,
+            order: 999,
+            isBool: typeof sys[k] === "boolean",
+            isString: typeof sys[k] === "string",
+            isButton: false,
+            isCheckbox: false,
+            isDivider: false,
+            staticValue: "",
+            style: null,
+            styleRules: null,
+          })),
+        };
       }
-    } catch(e) { /* ignore augmentation errors */ }
+    } catch (e) {
+      /* ignore augmentation errors */
+    }
 
     runtimeGroups.value = Object.values(grouped).map((g) => {
       g.fields.sort((a, b) => {
@@ -819,9 +969,14 @@ function buildRuntimeGroups() {
     // Extract custom control cards (fields with card property) into standalone groups
     const extraCards = {};
     for (const g of runtimeGroups.value) {
-      g.fields = g.fields.filter(f => {
+      g.fields = g.fields.filter((f) => {
         if (f.card) {
-          if(!extraCards[f.card]) extraCards[f.card] = { name: f.card, title: capitalize(f.card), fields: [] };
+          if (!extraCards[f.card])
+            extraCards[f.card] = {
+              name: f.card,
+              title: capitalize(f.card),
+              fields: [],
+            };
           extraCards[f.card].fields.push(f);
           return false; // remove from original group
         }
@@ -830,7 +985,10 @@ function buildRuntimeGroups() {
     }
     for (const cardName in extraCards) {
       // sort inside card
-      extraCards[cardName].fields.sort((a,b)=>{ if(a.order===b.order) return a.label.localeCompare(b.label); return a.order-b.order; });
+      extraCards[cardName].fields.sort((a, b) => {
+        if (a.order === b.order) return a.label.localeCompare(b.label);
+        return a.order - b.order;
+      });
       runtimeGroups.value.push(extraCards[cardName]);
     }
     return;
@@ -870,7 +1028,9 @@ function groupHasVisibleContent(group) {
   if (!group || !Array.isArray(group.fields) || group.fields.length === 0) {
     return false;
   }
-  return group.fields.some((field) => fieldHasVisibleContent(group.name, field));
+  return group.fields.some((field) =>
+    fieldHasVisibleContent(group.name, field)
+  );
 }
 
 function fieldHasVisibleContent(groupName, field) {
@@ -909,102 +1069,205 @@ function runtimeHasValue(groupName, key) {
   return false;
 }
 
-async function triggerRuntimeButton(group, key){
+async function triggerRuntimeButton(group, key) {
   try {
-  const res = await fetch(`/runtime_action/button?group=${rURIComp(group)}&key=${rURIComp(key)}`, { method:'POST'});
-    if(!res.ok){ notify(`Button failed: ${group}/${key}`,'error'); return; }
-    notify(`Button: ${key}`,'success',1500);
+    const res = await fetch(
+      `/runtime_action/button?group=${rURIComp(group)}&key=${rURIComp(key)}`,
+      { method: "POST" }
+    );
+    if (!res.ok) {
+      notify(`Button failed: ${group}/${key}`, "error");
+      return;
+    }
+    notify(`Button: ${key}`, "success", 1500);
     // refresh runtime quickly to reflect any side effects
     fetchRuntime();
-  } catch(e){ notify(`Button error: ${e.message}`,'error'); }
+  } catch (e) {
+    notify(`Button error: ${e.message}`, "error");
+  }
 }
-async function onStateButton(group,f){
+async function onStateButton(group, f) {
   const cur = runtime.value[group] && runtime.value[group][f.key];
   const next = !cur;
   try {
-  const res = await fetch(`/runtime_action/state_button?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${next?'true':'false'}`, {method:'POST'});
-    if(!res.ok){ notify(`State btn failed: ${f.key}`,'error'); return; }
-    if(!runtime.value[group]) runtime.value[group] = {};
+    const res = await fetch(
+      `/runtime_action/state_button?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${next ? "true" : "false"}`,
+      { method: "POST" }
+    );
+    if (!res.ok) {
+      notify(`State btn failed: ${f.key}`, "error");
+      return;
+    }
+    if (!runtime.value[group]) runtime.value[group] = {};
     runtime.value[group][f.key] = next;
-    notify(`${f.key}: ${next?'ON':'OFF'}`,'info',1200);
-  } catch(e){ notify(`State btn error: ${e.message}`,'error'); }
+    notify(`${f.key}: ${next ? "ON" : "OFF"}`, "info", 1200);
+  } catch (e) {
+    notify(`State btn error: ${e.message}`, "error");
+  }
 }
 let intSliderDebounce = {};
-function onIntSlider(group,f,ev){
-  const val = parseInt(ev.target.value,10);
-  if(!runtime.value[group]) runtime.value[group] = {};
+function onIntSlider(group, f, ev) {
+  const val = parseInt(ev.target.value, 10);
+  if (!runtime.value[group]) runtime.value[group] = {};
   runtime.value[group][f.key] = val;
-  if(intSliderDebounce[f.key]) clearTimeout(intSliderDebounce[f.key]);
-  intSliderDebounce[f.key] = setTimeout(async ()=>{
-  try { await fetch(`/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); }
-    catch(e){ notify(`Int slider error: ${e.message}`,'error'); }
-  },150);
+  if (intSliderDebounce[f.key]) clearTimeout(intSliderDebounce[f.key]);
+  intSliderDebounce[f.key] = setTimeout(async () => {
+    try {
+      await fetch(
+        `/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(
+          f.key
+        )}&value=${val}`,
+        { method: "POST" }
+      );
+    } catch (e) {
+      notify(`Int slider error: ${e.message}`, "error");
+    }
+  }, 150);
 }
 let floatSliderDebounce = {};
-function onFloatSlider(group,f,ev){
+function onFloatSlider(group, f, ev) {
   const val = parseFloat(ev.target.value);
-  if(!runtime.value[group]) runtime.value[group] = {};
+  if (!runtime.value[group]) runtime.value[group] = {};
   runtime.value[group][f.key] = val;
-  if(floatSliderDebounce[f.key]) clearTimeout(floatSliderDebounce[f.key]);
-  floatSliderDebounce[f.key] = setTimeout(async ()=>{
-  try { await fetch(`/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); }
-    catch(e){ notify(`Float slider error: ${e.message}`,'error'); }
-  },180);
+  if (floatSliderDebounce[f.key]) clearTimeout(floatSliderDebounce[f.key]);
+  floatSliderDebounce[f.key] = setTimeout(async () => {
+    try {
+      await fetch(
+        `/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(
+          f.key
+        )}&value=${val}`,
+        { method: "POST" }
+      );
+    } catch (e) {
+      notify(`Float slider error: ${e.message}`, "error");
+    }
+  }, 180);
 }
 // --- New explicit-control helper state ---
 const tempControlCache = {}; // keyed by group.key -> value
-function keyFor(group,f){ return group+"::"+f.key; }
-function currentRuntimeValue(group,f){
-  if(runtime.value[group] && runtime.value[group][f.key] !== undefined) return runtime.value[group][f.key];
+function keyFor(group, f) {
+  return group + "::" + f.key;
+}
+function currentRuntimeValue(group, f) {
+  if (runtime.value[group] && runtime.value[group][f.key] !== undefined)
+    return runtime.value[group][f.key];
   return f.init !== undefined ? f.init : 0;
 }
-function tempSliderValue(group,f){
-  const k = keyFor(group,f);
-  if(tempControlCache[k] !== undefined) return tempControlCache[k];
-  return currentRuntimeValue(group,f);
+function tempSliderValue(group, f) {
+  const k = keyFor(group, f);
+  if (tempControlCache[k] !== undefined) return tempControlCache[k];
+  return currentRuntimeValue(group, f);
 }
-function onIntSliderLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseInt(ev.target.value,10); }
-function onFloatSliderLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseFloat(ev.target.value); }
-function formatTempFloat(group,f){ const v = parseFloat(tempSliderValue(group,f)); const p = f.precision!==undefined?f.precision:2; return isNaN(v)?'-':v.toFixed(p); }
-async function commitIntSlider(group,f){ const val = tempSliderValue(group,f); await sendInt(group,f,val); }
-async function commitFloatSlider(group,f){ const val = tempSliderValue(group,f); await sendFloat(group,f,val); }
+function onIntSliderLocal(group, f, ev) {
+  tempControlCache[keyFor(group, f)] = parseInt(ev.target.value, 10);
+}
+function onFloatSliderLocal(group, f, ev) {
+  tempControlCache[keyFor(group, f)] = parseFloat(ev.target.value);
+}
+function formatTempFloat(group, f) {
+  const v = parseFloat(tempSliderValue(group, f));
+  const p = f.precision !== undefined ? f.precision : 2;
+  return isNaN(v) ? "-" : v.toFixed(p);
+}
+async function commitIntSlider(group, f) {
+  const val = tempSliderValue(group, f);
+  await sendInt(group, f, val);
+}
+async function commitFloatSlider(group, f) {
+  const val = tempSliderValue(group, f);
+  await sendFloat(group, f, val);
+}
 
 // Inputs
-function tempInputValue(group,f){ return tempSliderValue(group,f); }
-function onIntInputLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseInt(ev.target.value,10); }
-function onFloatInputLocal(group,f,ev){ tempControlCache[keyFor(group,f)] = parseFloat(ev.target.value); }
-async function commitIntInput(group,f){ const val = tempInputValue(group,f); await sendInt(group,f,val); }
-async function commitFloatInput(group,f){ const val = tempInputValue(group,f); await sendFloat(group,f,val); }
+function tempInputValue(group, f) {
+  return tempSliderValue(group, f);
+}
+function onIntInputLocal(group, f, ev) {
+  tempControlCache[keyFor(group, f)] = parseInt(ev.target.value, 10);
+}
+function onFloatInputLocal(group, f, ev) {
+  tempControlCache[keyFor(group, f)] = parseFloat(ev.target.value);
+}
+async function commitIntInput(group, f) {
+  const val = tempInputValue(group, f);
+  await sendInt(group, f, val);
+}
+async function commitFloatInput(group, f) {
+  const val = tempInputValue(group, f);
+  await sendFloat(group, f, val);
+}
 
-async function sendInt(group,f,val){
-  try { const r = await fetch(`/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
-  catch(e){ notify(`Set error ${f.key}: ${e.message}`,'error'); }
+async function sendInt(group, f, val) {
+  try {
+    const r = await fetch(
+      `/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${val}`,
+      { method: "POST" }
+    );
+    if (!r.ok) notify(`Set failed: ${f.key}`, "error");
+    else {
+      if (!runtime.value[group]) runtime.value[group] = {};
+      runtime.value[group][f.key] = val;
+      notify(`${f.key}=${val}`, "success", 1200);
+    }
+  } catch (e) {
+    notify(`Set error ${f.key}: ${e.message}`, "error");
+  }
 }
-async function sendFloat(group,f,val){
-  try { const r = await fetch(`/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {method:'POST'}); if(!r.ok) notify(`Set failed: ${f.key}`,'error'); else { if(!runtime.value[group]) runtime.value[group]={}; runtime.value[group][f.key]=val; notify(`${f.key}=${val}`,'success',1200); } }
-  catch(e){ notify(`Set error ${f.key}: ${e.message}`,'error'); }
+async function sendFloat(group, f, val) {
+  try {
+    const r = await fetch(
+      `/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${val}`,
+      { method: "POST" }
+    );
+    if (!r.ok) notify(`Set failed: ${f.key}`, "error");
+    else {
+      if (!runtime.value[group]) runtime.value[group] = {};
+      runtime.value[group][f.key] = val;
+      notify(`${f.key}=${val}`, "success", 1200);
+    }
+  } catch (e) {
+    notify(`Set error ${f.key}: ${e.message}`, "error");
+  }
 }
-function floatSliderStep(f){
-  if(f.precision && f.precision>0){ return 1/Math.pow(10,f.precision); }
+function floatSliderStep(f) {
+  if (f.precision && f.precision > 0) {
+    return 1 / Math.pow(10, f.precision);
+  }
   return 0.1;
 }
-function formatFloatDisplay(group,f){
+function formatFloatDisplay(group, f) {
   const v = runtime.value[group] && runtime.value[group][f.key];
-  if(v===undefined || v===null) return f.init !== undefined ? f.init : 0;
-  const p = f.precision!==undefined? f.precision:2;
-  return typeof v === 'number' ? v.toFixed(p) : v;
+  if (v === undefined || v === null) return f.init !== undefined ? f.init : 0;
+  const p = f.precision !== undefined ? f.precision : 2;
+  return typeof v === "number" ? v.toFixed(p) : v;
 }
 
 let checkboxDebounceTimer = null;
-async function onRuntimeCheckbox(group, key, value){
-  if(checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
-  checkboxDebounceTimer = setTimeout(async ()=>{
+async function onRuntimeCheckbox(group, key, value) {
+  if (checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
+  checkboxDebounceTimer = setTimeout(async () => {
     try {
-  const res = await fetch(`/runtime_action/checkbox?group=${rURIComp(group)}&key=${rURIComp(key)}&value=${value?'true':'false'}`, { method:'POST'});
-      if(!res.ok){ notify(`Toggle failed: ${group}/${key}`,'error'); return; }
-      notify(`${key}: ${value?'ON':'OFF'}`,'info',1200);
+      const res = await fetch(
+        `/runtime_action/checkbox?group=${rURIComp(group)}&key=${rURIComp(
+          key
+        )}&value=${value ? "true" : "false"}`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        notify(`Toggle failed: ${group}/${key}`, "error");
+        return;
+      }
+      notify(`${key}: ${value ? "ON" : "OFF"}`, "info", 1200);
       fetchRuntime();
-    } catch(e){ notify(`Toggle error ${key}: ${e.message}`,'error'); }
+    } catch (e) {
+      notify(`Toggle error ${key}: ${e.message}`, "error");
+    }
   }, 160); // small debounce
 }
 
@@ -1152,7 +1415,7 @@ body {
 h3 {
   color: orange;
   text-decoration: underline;
-  margin: .5rem auto;
+  margin: 0.5rem auto;
 }
 .tabs {
   display: flex;
@@ -1264,7 +1527,7 @@ h3 {
   padding: 0.35rem 0.5rem;
   border-radius: 6px;
   background: #fafafa;
-  box-shadow: inset 0 0 0 1px #ffffff, 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: inset 0 0 0 1px #ffffff, 0 1px 2px rgba(0, 0, 0, 0.05);
   position: relative;
 }
 .rw.sl:hover {
@@ -1274,10 +1537,10 @@ h3 {
 .rw.sl .sw {
   display: flex;
   align-items: center;
-  gap: .5rem;
+  gap: 0.5rem;
   min-width: 10rem;
 }
-.rw.sl input[type=range] {
+.rw.sl input[type="range"] {
   width: 8rem;
   accent-color: #ff9800;
   cursor: pointer;
@@ -1289,27 +1552,31 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 .rw.sl .sb {
-  background:#1976d2;
-  color:#fff;
-  border:none;
-  padding:0.25rem 0.6rem;
-  border-radius:4px;
-  cursor:pointer;
-  font-size:0.72rem;
-  font-weight:600;
-  letter-spacing:.5px;
-  text-transform:uppercase;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
-.rw.sl .sb:hover { background:#125a9f; }
+.rw.sl .sb:hover {
+  background: #125a9f;
+}
 .rw.sl .num-input {
-  width:5.5rem;
-  padding:0.2rem 0.3rem;
-  border:1px solid #bbb;
-  border-radius:4px;
-  font-size:0.75rem;
-  background:#fff;
+  width: 5.5rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  background: #fff;
 }
-.rw.sl .num-input:focus { outline:1px solid #1976d2; }
+.rw.sl .num-input:focus {
+  outline: 1px solid #1976d2;
+}
 .rw.act .btn.on {
   background: #2e7d32;
   color: #fff;
@@ -1327,8 +1594,12 @@ h3 {
   align-items: center;
   gap: 0.4rem;
 }
-.rw.cr { grid-template-columns: minmax(0,1fr) auto !important; }
-.rw.cr .val { justify-self: end; }
+.rw.cr {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+.rw.cr .val {
+  justify-self: end;
+}
 .bd {
   width: 0.85rem;
   height: 0.85rem;

@@ -16,111 +16,46 @@
           <template v-for="f in group.fields" :key="f.key">
             <hr v-if="f.isDivider" class="dv" :data-label="f.label" />
 
-            <div v-else-if="f.isButton" class="rw act" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val">
-                <button class="btn" type="button" @click="triggerRuntimeButton(group.name, f.key)">{{ f.label }}</button>
-              </span>
-              <span class="un"></span>
-            </div>
+            <RuntimeActionButton
+              v-else-if="f.isButton"
+              :group="group.name"
+              :field="f"
+              @action="handleRuntimeButton"
+            />
 
-            <div v-else-if="f.isStateButton" class="rw act" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val">
-                <button
-                  class="btn"
-                  type="button"
-                  :class="{ on: runtime[group.name] && runtime[group.name][f.key] }"
-                  @click="onStateButton(group.name, f)"
-                >
-                  {{ f.label }}: {{ runtime[group.name] && runtime[group.name][f.key] ? "ON" : "OFF" }}
-                </button>
-              </span>
-              <span class="un"></span>
-            </div>
+            <RuntimeStateButton
+              v-else-if="f.isStateButton"
+              :group="group.name"
+              :field="f"
+              :value="runtime[group.name] && runtime[group.name][f.key]"
+              @toggle="handleStateToggle"
+            />
 
-            <div v-else-if="f.isIntSlider" class="rw sl" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val sw">
-                <input
-                  type="range"
-                  :min="f.min"
-                  :max="f.max"
-                  step="1"
-                  :value="tempSliderValue(group.name, f)"
-                  @input="onIntSliderLocal(group.name, f, $event)"
-                />
-                <span class="sv">{{ tempSliderValue(group.name, f) }}</span>
-                <button class="sb" type="button" @click="commitIntSlider(group.name, f)">Set</button>
-              </span>
-              <span class="un"></span>
-            </div>
+            <RuntimeSlider
+              v-else-if="f.isIntSlider || f.isFloatSlider"
+              :group="group.name"
+              :field="f"
+              :value="runtime[group.name] && runtime[group.name][f.key]"
+              :mode="f.isFloatSlider ? 'float' : 'int'"
+              @commit="handleSliderCommit"
+            />
 
-            <div v-else-if="f.isFloatSlider" class="rw sl" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val sw">
-                <input
-                  type="range"
-                  :min="f.min"
-                  :max="f.max"
-                  :step="floatSliderStep(f)"
-                  :value="tempSliderValue(group.name, f)"
-                  @input="onFloatSliderLocal(group.name, f, $event)"
-                />
-                <span class="sv">{{ formatTempFloat(group.name, f) }}</span>
-                <button class="sb" type="button" @click="commitFloatSlider(group.name, f)">Set</button>
-              </span>
-              <span class="un"></span>
-            </div>
+            <RuntimeNumberInput
+              v-else-if="f.isIntInput || f.isFloatInput"
+              :group="group.name"
+              :field="f"
+              :value="runtime[group.name] && runtime[group.name][f.key]"
+              :mode="f.isFloatInput ? 'float' : 'int'"
+              @commit="handleInputCommit"
+            />
 
-            <div v-else-if="f.isIntInput" class="rw sl" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val sw">
-                <input
-                  class="num-input"
-                  type="number"
-                  :min="f.min"
-                  :max="f.max"
-                  step="1"
-                  :value="tempInputValue(group.name, f)"
-                  @input="onIntInputLocal(group.name, f, $event)"
-                />
-                <button class="sb" type="button" @click="commitIntInput(group.name, f)">Set</button>
-              </span>
-              <span class="un"></span>
-            </div>
-
-            <div v-else-if="f.isFloatInput" class="rw sl" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val sw">
-                <input
-                  class="num-input"
-                  type="number"
-                  :min="f.min"
-                  :max="f.max"
-                  :step="floatSliderStep(f)"
-                  :value="tempInputValue(group.name, f)"
-                  @input="onFloatInputLocal(group.name, f, $event)"
-                />
-                <button class="sb" type="button" @click="commitFloatInput(group.name, f)">Set</button>
-              </span>
-              <span class="un"></span>
-            </div>
-
-            <div v-else-if="f.isCheckbox" class="rw tg" :data-group="group.name" :data-key="f.key">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val">
-                <label class="switch">
-                  <input
-                    type="checkbox"
-                    :checked="runtime[group.name] && runtime[group.name][f.key]"
-                    @change="onRuntimeCheckbox(group.name, f.key, $event.target.checked)"
-                  />
-                  <span class="slider round"></span>
-                </label>
-              </span>
-              <span class="un"></span>
-            </div>
+            <RuntimeCheckbox
+              v-else-if="f.isCheckbox"
+              :group="group.name"
+              :field="f"
+              :value="runtime[group.name] && runtime[group.name][f.key]"
+              @change="handleCheckboxChange"
+            />
 
             <div v-else-if="f.isString" class="rw str">
               <span class="lab">{{ f.label }}</span>
@@ -236,7 +171,13 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch, defineExpose } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+
+import RuntimeActionButton from './runtime/RuntimeActionButton.vue';
+import RuntimeCheckbox from './runtime/RuntimeCheckbox.vue';
+import RuntimeNumberInput from './runtime/RuntimeNumberInput.vue';
+import RuntimeSlider from './runtime/RuntimeSlider.vue';
+import RuntimeStateButton from './runtime/RuntimeStateButton.vue';
 
 const props = defineProps({
   config: {
@@ -263,9 +204,6 @@ let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
 
-const tempControlCache = {};
-const intSliderDebounce = {};
-const floatSliderDebounce = {};
 let checkboxDebounceTimer = null;
 
 const rURIComp = encodeURIComponent;
@@ -669,9 +607,13 @@ async function triggerRuntimeButton(group, key) {
   }
 }
 
-async function onStateButton(group, f) {
+function handleRuntimeButton(payload) {
+  triggerRuntimeButton(payload.group, payload.key);
+}
+
+async function onStateButton(group, f, nextOverride = null) {
   const cur = runtime.value[group] && runtime.value[group][f.key];
-  const next = !cur;
+  const next = nextOverride === null ? !cur : !!nextOverride;
   try {
     const res = await fetch(
       `/runtime_action/state_button?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${next ? 'true' : 'false'}`,
@@ -691,72 +633,8 @@ async function onStateButton(group, f) {
   }
 }
 
-function keyFor(group, f) {
-  return group + '::' + f.key;
-}
-
-function currentRuntimeValue(group, f) {
-  if (runtime.value[group] && runtime.value[group][f.key] !== undefined) {
-    return runtime.value[group][f.key];
-  }
-  return f.init !== undefined ? f.init : 0;
-}
-
-function tempSliderValue(group, f) {
-  const k = keyFor(group, f);
-  if (tempControlCache[k] !== undefined) return tempControlCache[k];
-  return currentRuntimeValue(group, f);
-}
-
-function onIntSliderLocal(group, f, ev) {
-  tempControlCache[keyFor(group, f)] = parseInt(ev.target.value, 10);
-}
-
-function onFloatSliderLocal(group, f, ev) {
-  tempControlCache[keyFor(group, f)] = parseFloat(ev.target.value);
-}
-
-function formatTempFloat(group, f) {
-  const v = parseFloat(tempSliderValue(group, f));
-  const p = f.precision !== undefined ? f.precision : 2;
-  return isNaN(v) ? '-' : v.toFixed(p);
-}
-
-async function commitIntSlider(group, f) {
-  const val = tempSliderValue(group, f);
-  await sendInt(group, f, val);
-}
-
-async function commitFloatSlider(group, f) {
-  const val = tempSliderValue(group, f);
-  await sendFloat(group, f, val);
-}
-
-function tempInputValue(group, f) {
-  return tempSliderValue(group, f);
-}
-
-function onIntInputLocal(group, f, ev) {
-  tempControlCache[keyFor(group, f)] = parseInt(ev.target.value, 10);
-}
-
-function onFloatInputLocal(group, f, ev) {
-  tempControlCache[keyFor(group, f)] = parseFloat(ev.target.value);
-}
-
-async function commitIntInput(group, f) {
-  const val = tempInputValue(group, f);
-  await sendInt(group, f, val);
-}
-
-async function commitFloatInput(group, f) {
-  const val = tempInputValue(group, f);
-  await sendFloat(group, f, val);
-}
-
-function debounceSend(debounceMap, key, fn, delay) {
-  if (debounceMap[key]) clearTimeout(debounceMap[key]);
-  debounceMap[key] = setTimeout(fn, delay);
+function handleStateToggle({ group, field, nextValue }) {
+  onStateButton(group, field, nextValue);
 }
 
 async function sendInt(group, f, val) {
@@ -773,6 +651,14 @@ async function sendInt(group, f, val) {
     }
   } catch (e) {
     notifySafe(`Set error ${f.key}: ${e.message}`, 'error');
+  }
+}
+
+async function handleSliderCommit({ group, field, value }) {
+  if (field.isFloatSlider) {
+    await sendFloat(group, field, value);
+  } else {
+    await sendInt(group, field, value);
   }
 }
 
@@ -793,11 +679,12 @@ async function sendFloat(group, f, val) {
   }
 }
 
-function floatSliderStep(f) {
-  if (f.precision && f.precision > 0) {
-    return 1 / Math.pow(10, f.precision);
+async function handleInputCommit({ group, field, value }) {
+  if (field.isFloatInput) {
+    await sendFloat(group, field, value);
+  } else {
+    await sendInt(group, field, value);
   }
-  return 0.1;
 }
 
 async function onRuntimeCheckbox(group, key, value) {
@@ -817,6 +704,10 @@ async function onRuntimeCheckbox(group, key, value) {
       notifySafe(`Toggle error ${key}: ${e.message}`, 'error');
     }
   }, 160);
+}
+
+function handleCheckboxChange({ group, field, checked }) {
+  onRuntimeCheckbox(group, field.key, checked);
 }
 
 function capitalize(s) {
@@ -1052,8 +943,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer);
   if (ws) ws.close();
-  Object.values(intSliderDebounce).forEach((t) => clearTimeout(t));
-  Object.values(floatSliderDebounce).forEach((t) => clearTimeout(t));
   if (checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
 });
 
