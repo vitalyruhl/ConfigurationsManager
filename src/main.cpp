@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------------------------------------------------
 #ifndef CM_ENABLE_RUNTIME_CONTROLS
 #define CM_ENABLE_RUNTIME_CONTROLS 1
-#endif // CM_ENABLE_RUNTIME_ALARMS
+#endif
 #ifndef CM_ENABLE_RUNTIME_BUTTONS
 #define CM_ENABLE_RUNTIME_BUTTONS 1
 #endif
@@ -26,7 +26,7 @@
 #define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1
 #endif
 #ifndef CM_ENABLE_RUNTIME_ALARMS
-#define CM_ENABLE_RUNTIME_ALARMS 0
+#define CM_ENABLE_RUNTIME_ALARMS 1
 #endif
 #ifndef CM_ENABLE_WS_PUSH
 #define CM_ENABLE_WS_PUSH 1
@@ -35,7 +35,7 @@
 #define CM_ENABLE_THEMING 1
 #endif
 #ifndef CM_ENABLE_STYLE_RULES
-#define CM_ENABLE_STYLE_RULES 0
+#define CM_ENABLE_STYLE_RULES 1
 #endif
 #ifndef CM_ENABLE_USER_CSS
 #define CM_ENABLE_USER_CSS 1
@@ -194,8 +194,7 @@ struct General_Settings
 {
     Config<bool> enableController;
     Config<bool> enableMQTT;
-    Config<bool> saveDisplay;
-    Config<int> displayShowTime;
+
     Config<bool> allowOTA;
     Config<String> otaPassword;
 
@@ -206,9 +205,6 @@ struct General_Settings
                          enableController(ConfigOptions<bool>{.keyName = "enCtrl", .category = "Limiter", .defaultValue = true, .prettyName = "Enable Limitation"}),
                          enableMQTT(ConfigOptions<bool>{.keyName = "enMQTT", .category = "Limiter", .defaultValue = true, .prettyName = "Enable MQTT Propagation"}),
 
-                         saveDisplay(ConfigOptions<bool>{.keyName = "Save", .category = "Display", .defaultValue = true, .prettyName = "Turn Display Off"}),
-                         displayShowTime(ConfigOptions<int>{.keyName = "Time", .category = "Display", .defaultValue = 60, .prettyName = "Display On-Time in Sec"}),
-
                          allowOTA(ConfigOptions<bool>{.keyName = "OTAEn", .category = "System", .defaultValue = true, .prettyName = "Allow OTA Updates"}),
                          otaPassword(ConfigOptions<String>{.keyName = "OTAPass", .category = "System", .defaultValue = "ota1234", .prettyName = "OTA Password", .showInWeb = true, .isPassword = true}),
                          Version(ConfigOptions<String>{.keyName = "Version", .category = "System", .defaultValue = String(VERSION), .prettyName = "Program Version"})
@@ -217,9 +213,6 @@ struct General_Settings
         // Register settings with ConfigManager
         cfg.addSetting(&enableController);
         cfg.addSetting(&enableMQTT);
-
-        cfg.addSetting(&saveDisplay);
-        cfg.addSetting(&displayShowTime);
 
         cfg.addSetting(&allowOTA);
         cfg.addSetting(&otaPassword);
@@ -281,12 +274,12 @@ struct MQTT_Settings
     String mqtt_publish_Dewpoint_topic;
 
     // Now show extra pretty category name since V2.2.0: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
-    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.keyName = "Port", .category = "MQTT", .defaultValue = 1883, .prettyName = "Port", .prettyCat = "MQTT-Section"}),
-                      mqtt_server(ConfigOptions<String>{.keyName = "Server", .category = "MQTT", .defaultValue = String("192.168.2.3"), .prettyName = "Server-IP", .prettyCat = "MQTT-Section"}),
-                      mqtt_username(ConfigOptions<String>{.keyName = "User", .category = "MQTT", .defaultValue = String("housebattery"), .prettyName = "User", .prettyCat = "MQTT-Section"}),
-                      mqtt_password(ConfigOptions<String>{.keyName = "Pass", .category = "MQTT", .defaultValue = String("mqttsecret"), .prettyName = "Password", .prettyCat = "MQTT-Section", .showInWeb = true, .isPassword = true}),
-                      mqtt_sensor_powerusage_topic(ConfigOptions<String>{.keyName = "PUT", .category = "MQTT", .defaultValue = String("emon/emonpi/power1"), .prettyName = "Powerusage Topic", .prettyCat = "MQTT-Section"}),
-                      Publish_Topic(ConfigOptions<String>{.keyName = "MQTTT", .category = "MQTT", .defaultValue = String("SolarLimiter"), .prettyName = "Publish-Topic", .prettyCat = "MQTT-Section"})
+    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.keyName = "Port", .category = "MQTT", .defaultValue = 1883, .prettyName = "Port", }),
+                      mqtt_server(ConfigOptions<String>{.keyName = "Server", .category = "MQTT", .defaultValue = String("192.168.2.3"), .prettyName = "Server-IP", }),
+                      mqtt_username(ConfigOptions<String>{.keyName = "User", .category = "MQTT", .defaultValue = String("housebattery"), .prettyName = "User", }),
+                      mqtt_password(ConfigOptions<String>{.keyName = "Pass", .category = "MQTT", .defaultValue = String("mqttsecret"), .prettyName = "Password", .showInWeb = true, .isPassword = true}),
+                      mqtt_sensor_powerusage_topic(ConfigOptions<String>{.keyName = "PUT", .category = "MQTT", .defaultValue = String("emon/emonpi/power1"), .prettyName = "Powerusage Topic", }),
+                      Publish_Topic(ConfigOptions<String>{.keyName = "MQTTT", .category = "MQTT", .defaultValue = String("SolarLimiter"), .prettyName = "Publish-Topic", })
 
     {
         cfg.addSetting(&mqtt_port);
@@ -373,9 +366,6 @@ void setup()
 
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
-    if (BUTTON_PIN_AP_MODE == LED_BUILTIN) {
-        Serial.println("⚠️  WARNING: BUTTON_PIN_AP_MODE uses same pin as LED_BUILTIN – this will cause flicker/conflicts. Choose a different GPIO.");
-    }
 
     //-----------------------------------------------------------------
     // Set logger callback to log in your own way, but do this before using the cfg object!
@@ -449,29 +439,21 @@ void setup()
     });
     // Local state for heater override
     static bool heaterState = false;
-    // Optional divider (order 89) before controls
-    // cfg.defineRuntimeDivider("Hand overrides", "Manual Controls", 81);
-    // // Action button (order 90)
-    // cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test Button", [](){ cbTestButton(); }, 82);
-    // // Heater toggle (order 91)
-    // cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 83);
+    // Action button
+    cfg.defineRuntimeButton("Hand overrides", "testBtn", "Test 1", [](){ cbTestButton(); }, 82);
+    // Action toggle
+    cfg.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 83);
 
     // cfg.defineRuntimeDivider("Hand overrides", "More Controls", 88); // another divider (order 91)
     // Stateful button (acts like on/off toggle with dynamic label states handled client-side) order 92
     static bool stateBtnState = false;
-    cfg.defineRuntimeStateButton("Hand overrides", "sb_mode", "Mode Button", [](){ return stateBtnState; }, [](bool v){ stateBtnState = v; Serial.printf("[STATE_BUTTON] sb_mode -> %s\n", v?"ON":"OFF"); }, /*init*/ false, 91);
+    cfg.defineRuntimeStateButton("Hand overrides", "sb_mode", "Mode Button", [](){ return stateBtnState; }, [](bool v){ stateBtnState = v; Serial.printf("[STATE_BUTTON] -> %s\n", v?"ON":"OFF"); }, /*init*/ false, 91);
     // Int slider (-10..10) order 93
     static int transientIntVal = 0;
-    cfg.defineRuntimeIntSlider("Hand overrides", "i_adj", "Int Adjust", -10, 10, 0, [](){ return transientIntVal; }, [](int v){ transientIntVal = v; Serial.printf("[INT_SLIDER] i_adj -> %d\n", v); }, 92);
+    cfg.defineRuntimeIntSlider("Hand overrides", "i_adj", "Int", -10, 10, 0, [](){ return transientIntVal; }, [](int v){ transientIntVal = v; Serial.printf("[INT_SLIDER] -> %d\n", v); }, 92);
     // Float slider (-10..10) with precision 2 order 94
     static float transientFloatVal = 0.0f;
-    cfg.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Float Adjust", -10.0f, 10.0f, 0.0f, 2, [](){ return transientFloatVal; }, [](float v){ transientFloatVal = v; Serial.printf("[FLOAT_SLIDER] f_adj -> %.2f\n", v); }, 93);
-
-
-    // cfg.defineRuntimeButton("Hand overrides","testBtn","Test Button", [](){ cbTestButton(); }, 90, ConfigManagerClass::RuntimeFieldStyle(), "controls");
-    // static bool heaterState = false; // track last commanded state
-    // cfg.defineRuntimeCheckbox("Hand overrides","heater","Heater", [](){ return heaterState; }, [](bool v){ heaterState = v; setHeaterState(v); }, 91, ConfigManagerClass::RuntimeFieldStyle(), "controls");
-
+    cfg.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Float", -10.0f, 10.0f, 0.0f, 2, [](){ return transientFloatVal; }, [](float v){ transientFloatVal = v; Serial.printf("[FLOAT_SLIDER] -> %.2f\n", v); }, 93);
 
     // Example for runtime alarms based on multiple fields, of course you can also use global variables too.
     // Cross-field alarm: temperature within 1.0°C above dewpoint (risk of condensation)
@@ -490,9 +472,9 @@ void setup()
                 return (t - d) <= dewpointRiskWindow; // risk window
             },
             []()
-            { Serial.println("[ALARM] Dewpoint proximity risk ENTER"); }, // here you could also trigger a relay or similar
+            { Serial.println("[ALARM] Dewpoint ENTER"); }, // here you could also trigger a relay or similar
             []()
-            { Serial.println("[ALARM] Dewpoint proximity risk EXIT"); });
+            { Serial.println("[ALARM] Dewpoint EXIT"); });
 
         // Temperature MIN alarm -> Heater relay ON when temperature below alarmMin (0.5°C) and OFF when recovered.
         // Uses a little hysteresis (enter < 0.0, exit > 0.5) to avoid fast toggling.
@@ -514,16 +496,16 @@ void setup()
             },
             []()
             {
-                Serial.println("[ALARM] Temperature below 0.0°C -> HEATER ON");
+                Serial.println("[ALARM] -> HEATER ON");
                 // digitalWrite(RELAY_HEATER_PIN, HIGH);
             },
             []()
             {
-                Serial.println("[ALARM] Temperature recovered -> HEATER OFF");
+                Serial.println("[ALARM] -> HEATER OFF");
                 // digitalWrite(RELAY_HEATER_PIN, LOW);
             });
 
-        cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100);
+        cfg.defineRuntimeBool("alarms", "dp_risk", "Dewpoint Risk", true, /*order*/ 100);
 
         {
             // Custom styling for the too-low-temperature alarm (yellow, no blink, instead of red standard)
@@ -623,7 +605,7 @@ void setup()
     // if you want to use OTA, set it up here
     if (WiFi.status() == WL_CONNECTED && generalSettings.allowOTA.get())
     {
-        cfg.setupOTA("Ota-esp32-device", generalSettings.otaPassword.get().c_str());
+        cfg.setupOTA("esp32", generalSettings.otaPassword.get().c_str());
     }
     Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
 }

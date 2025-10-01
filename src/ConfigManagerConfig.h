@@ -18,7 +18,7 @@
 #endif
 
 #ifndef CM_ENABLE_STYLE_RULES
-#define CM_ENABLE_STYLE_RULES 0
+#define CM_ENABLE_STYLE_RULES 1
 #endif
 
 #ifndef CM_ENABLE_RUNTIME_META
