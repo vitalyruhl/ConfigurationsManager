@@ -1413,8 +1413,7 @@ body {
   background-color: #f0f0f0;
 }
 h3 {
-  color: orange;
-  text-decoration: underline;
+  color: #000;
   margin: 0.5rem auto;
 }
 .tabs {
@@ -1593,6 +1592,22 @@ h3 {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+.rw.br[data-state="on"] .bd {
+    background: #2ecc71;
+    border: none;
+    box-shadow: 0 0 2px rgba(0,0,0,0.4);
+}
+.rw.br[data-state="off"] .bd {
+    background: #888;
+    border: 1px solid #000;
+    box-shadow: 0 0 2px rgba(0,0,0,0.4);
+}
+.rw.br[data-state="alarm"] .bd {
+    background: #d00000;
+    border: none;
+    box-shadow: 0 0 4px rgba(208,0,0,0.7);
+    animation: blink 1.6s linear infinite;
 }
 .rw.cr {
   grid-template-columns: minmax(0, 1fr) auto !important;

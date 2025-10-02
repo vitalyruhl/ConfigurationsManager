@@ -38,25 +38,7 @@ public:
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
-/* Built-in ConfigManager runtime bool indicator palette */
-.rw.br[data-state="on"] .bd {
-    background: #2ecc71;
-    border: none;
-    box-shadow: 0 0 2px rgba(0,0,0,0.4);
-}
 
-.rw.br[data-state="off"] .bd {
-    background: #888;
-    border: 1px solid #000;
-    box-shadow: 0 0 2px rgba(0,0,0,0.4);
-}
-
-.rw.br[data-state="alarm"] .bd {
-    background: #d00000;
-    border: none;
-    box-shadow: 0 0 4px rgba(208,0,0,0.7);
-    animation: blink 1.6s linear infinite;
-}
 )CSS";
 #endif
 
@@ -1228,7 +1210,7 @@ public:
         server.on("/config/reboot", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
         request->send(200, "application/json", "{\"status\":\"rebooting\"}");
-    CM_LOG_VERBOSE("[R] Device rebooting...");
+        CM_LOG_VERBOSE("[R] Device rebooting...");
         // Schedule reboot after short delay (simple blocking delay acceptable here)
         delay(100);
         reboot(); });
@@ -1300,68 +1282,8 @@ public:
             for(auto &fs : _runtimeFloatSliders){ if(fs.group==g && fs.key==k){ if(fs.setter) fs.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#ifdef development
-        server.on("/export/mock_bundle", HTTP_GET, [this](AsyncWebServerRequest *request)
-                  {
-            String cfgJson = toJSON();
-            String rtJson = runtimeValuesToJSON();
-            String metaJson = runtimeMetaToJSON();
-            DynamicJsonDocument doc(8192);
-            if(deserializeJson(doc["config"], cfgJson) || deserializeJson(doc["runtime"], rtJson) || deserializeJson(doc["runtime_meta"], metaJson)){
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"bundle_build_failed\"}");
-                return;
-            }
-            doc["exportVersion"] = CONFIGMANAGER_VERSION;
-            String out; serializeJson(doc, out);
-            request->send(200, "application/json", out); });
-        server.on("/runtime_meta/override", HTTP_POST, [this](AsyncWebServerRequest *request) {}, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
-                  {
-                if(index==0){ request->_tempObject = new String(); static_cast<String*>(request->_tempObject)->reserve(total); }
-                String *body = static_cast<String*>(request->_tempObject);
-                body->concat(String((const char*)data).substring(0,len));
-                if(index+len==total){
-                    DynamicJsonDocument doc(8192);
-                    DeserializationError err = deserializeJson(doc, *body);
-                    if(err || !doc.is<JsonArray>()){
-                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json_array\"}");
-                        delete body; request->_tempObject=nullptr; return;
-                    }
-                    _runtimeMetaOverride.clear();
-                    for(JsonVariant v : doc.as<JsonArray>()){
-                        if(!v.is<JsonObject>()) continue;
-                        RuntimeFieldMeta m; JsonObject o = v.as<JsonObject>();
-                        m.group = String(o["group"].as<const char*>()?o["group"].as<const char*>():"");
-                        m.key = String(o["key"].as<const char*>()?o["key"].as<const char*>():"");
-                        m.label = String(o["label"].as<const char*>()?o["label"].as<const char*>():m.key.c_str());
-                        m.unit = String(o["unit"].as<const char*>()?o["unit"].as<const char*>():"");
-                        m.precision = o.containsKey("precision") ? o["precision"].as<int>() : 1;
-                        if(o["isBool"].as<bool>()) m.isBool = true;
-                        if(o["isString"].as<bool>()) m.isString = true;
-                        if(o["isDivider"].as<bool>()) m.isDivider = true;
-                        if(o.containsKey("order")) m.order = o["order"].as<int>();
-                        if(o.containsKey("warnMin")){ m.hasWarnMin = true; m.warnMin = o["warnMin"].as<float>(); }
-                        if(o.containsKey("warnMax")){ m.hasWarnMax = true; m.warnMax = o["warnMax"].as<float>(); }
-                        if(o.containsKey("alarmMin")){ m.hasAlarmMin = true; m.alarmMin = o["alarmMin"].as<float>(); }
-                        if(o.containsKey("alarmMax")){ m.hasAlarmMax = true; m.alarmMax = o["alarmMax"].as<float>(); }
-                        if(o.containsKey("boolAlarmValue")) m.boolAlarmValue = o["boolAlarmValue"].as<bool>()?1:-1;
-#if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
-                        if(o.containsKey("style") && !_disableRuntimeStyleMeta){
-                            JsonObject st = o["style"].as<JsonObject>();
-                            for(auto kv : st){ RuntimeFieldStyleRule &r = m.style.rule(String(kv.key().c_str())); JsonObject ruleObj = kv.value().as<JsonObject>(); if(ruleObj.containsKey("visible")) r.setVisible(ruleObj["visible"].as<bool>()); for(auto prop : ruleObj){ String pk = prop.key().c_str(); if(pk=="visible") continue; r.set(pk, String(prop.value().as<const char*>()?prop.value().as<const char*>():"")); } }
-                        }
-#endif
-                        if(m.group.length() && m.key.length()) _runtimeMetaOverride.push_back(m);
-                    }
-                    _runtimeMetaOverrideActive = true;
-                    request->send(200, "application/json", "{\"status\":\"ok\",\"count\":" + String(_runtimeMetaOverride.size()) + "}" );
-                    delete body; request->_tempObject=nullptr;
-                } });
-        server.on("/runtime_meta/override", HTTP_DELETE, [this](AsyncWebServerRequest *request)
-                  { _runtimeMetaOverride.clear(); _runtimeMetaOverrideActive=false; request->send(200, "application/json", "{\"status\":\"cleared\"}"); });
-        server.on("/runtime_meta/override", HTTP_GET, [this](AsyncWebServerRequest *request)
-                  { String payload = String("{\"active\":") + (_runtimeMetaOverrideActive?"true":"false") + ",\"count\":" + String(_runtimeMetaOverride.size()) + "}"; request->send(200, "application/json", payload); });
-#endif
-        // Optional user supplied global CSS override (served if configured)
+
+// Optional user supplied global CSS override (served if configured)
 #if CM_ENABLE_THEMING && CM_ENABLE_USER_CSS
         server.on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest *request)
                   {
@@ -1820,11 +1742,13 @@ public:
         dotFalse.setVisible(true);
         if (alarmWhenTrue)
         {
-            RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm");
-            dotAlarm.setVisible(true);
-            dotFalse.set("background", "#2ecc71");
-            dotFalse.set("border", "none");
-            dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
+            RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm"); //show Alarm green on false (override)
+            #ifdef CM_ALARM_GREEN_ON_FALSE
+                dotAlarm.setVisible(true);
+                dotFalse.set("background", "#2ecc71");
+                dotFalse.set("border", "none");
+                dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
+            #endif //CM_ALARM_GRREN_ON_FALSE
         }
         return style;
     }
@@ -2588,7 +2512,7 @@ public:
 
 public:
 #if CM_ENABLE_SYSTEM_PROVIDER
-    // Call from loop() to update rolling average (3s window) if builtin system provider is enabled.
+    // Call from loop() to update rolling average (2s window) if builtin system provider is enabled.
     void updateLoopTiming()
     {
         if (!_builtinSystemProviderEnabled)
@@ -2603,7 +2527,7 @@ public:
         unsigned long nowMs = millis();
         if (_loopWindowStart == 0)
             _loopWindowStart = nowMs;
-        if (nowMs - _loopWindowStart >= 3000)
+        if (nowMs - _loopWindowStart >= 2000)
         {
             if (_loopSamples > 0)
             {
@@ -2654,7 +2578,7 @@ public:
                 defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0, 1);
                 defineRuntimeString("system", "rssiBars", "Signal", "", 2); // will show string bars
                 defineRuntimeField("system", "freeHeap", "Free Heap", "KB", 0, 3);
-                defineRuntimeField("system", "loopAvg", "Loop Avg", "ms", 2, 4);
+                // defineRuntimeField("system", "loopAvg", "Loop Avg", "ms", 2, 4);
             }
             _builtinSystemProviderRegistered = true;
         }

@@ -86,6 +86,7 @@
                   <span
                     v-if="boolDotVisible(runtime[group.name][f.key], f)"
                     class="bd"
+                    :class="boolDotClasses(runtime[group.name][f.key], f)"
                     :style="boolDotStyle(runtime[group.name][f.key], f)"
                   ></span>
                   {{ f.label }}
@@ -812,10 +813,47 @@ function fieldCss(meta, key) {
   return rule.css || {};
 }
 
+function boolAlarmMatch(val, meta) {
+  if (!meta) return false;
+  if (typeof meta.boolAlarmValue !== 'boolean') return false;
+  return !!val === meta.boolAlarmValue;
+}
+
+function fallbackBoolDotRule(val, meta) {
+  const boolVal = !!val;
+  const hasAlarmValue = meta && typeof meta.boolAlarmValue === 'boolean';
+  const isAlarm = boolAlarmMatch(val, meta);
+
+  const classes = ['bd--fallback'];
+
+  if (isAlarm) {
+    classes.push('bd--alarm');
+  } else if (hasAlarmValue) {
+    classes.push('bd--safe');
+  } else if (boolVal) {
+    classes.push('bd--on');
+  } else {
+    classes.push('bd--off');
+  }
+
+  if (hasAlarmValue) {
+    classes.push('bd--has-alarm-value');
+  }
+
+  classes.push(boolVal ? 'bd--value-true' : 'bd--value-false');
+
+  return {
+    visible: true,
+    css: null,
+    classes,
+  };
+}
+
 function selectBoolDotRule(val, meta) {
   const rules = ensureStyleRules(meta);
-  if (!rules) return null;
+  if (!rules) return fallbackBoolDotRule(val, meta);
   const boolVal = !!val;
+  const isAlarm = boolAlarmMatch(val, meta);
   if (
     typeof meta.boolAlarmValue === 'boolean' &&
     boolVal === meta.boolAlarmValue
@@ -824,10 +862,12 @@ function selectBoolDotRule(val, meta) {
   }
   if (boolVal && rules.stateDotOnTrue) return rules.stateDotOnTrue;
   if (!boolVal && rules.stateDotOnFalse) return rules.stateDotOnFalse;
+  if (isAlarm && rules.stateDotOnTrue) return rules.stateDotOnTrue;
+  if (isAlarm && rules.stateDotOnFalse) return rules.stateDotOnFalse;
   if (boolVal && rules.stateDotOnFalse) return rules.stateDotOnFalse;
   if (!boolVal && rules.stateDotOnTrue) return rules.stateDotOnTrue;
   if (rules.stateDotOnAlarm) return rules.stateDotOnAlarm;
-  return null;
+  return fallbackBoolDotRule(val, meta);
 }
 
 function boolDotVisible(val, meta) {
@@ -837,10 +877,26 @@ function boolDotVisible(val, meta) {
   return !!rule.visible;
 }
 
+function boolDotClasses(val, meta) {
+  const rule = selectBoolDotRule(val, meta);
+  if (!rule) return [];
+  if (Array.isArray(rule.classes)) return rule.classes;
+  if (typeof rule.classes === 'string') {
+    return rule.classes
+      .split(/\s+/)
+      .map((c) => c.trim())
+      .filter(Boolean);
+  }
+  if (typeof rule.className === 'string' && rule.className.trim().length) {
+    return [rule.className.trim()];
+  }
+  return [];
+}
+
 function boolDotStyle(val, meta) {
   const rule = selectBoolDotRule(val, meta);
-  if (!rule) return {};
-  return rule.css || {};
+  if (!rule || !rule.css || typeof rule.css !== 'object') return {};
+  return rule.css;
 }
 
 function fallbackPolling() {
@@ -1125,6 +1181,26 @@ defineExpose({
   height: 0.85rem;
   border-radius: 50%;
   display: inline-block;
+}
+
+.bd.bd--fallback {
+  border: none;
+}
+
+.bd.bd--alarm {
+  background: #d00000;
+  box-shadow: 0 0 4px rgba(208, 0, 0, 0.65);
+}
+
+.bd.bd--safe,
+.bd.bd--on {
+  background: #2ecc71;
+  box-shadow: 0 0 4px rgba(46, 204, 113, 0.45);
+}
+
+.bd.bd--off {
+  background: #90a4ae;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
 }
 
 .dv {
