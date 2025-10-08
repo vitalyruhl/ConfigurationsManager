@@ -225,31 +225,19 @@ const canFlash = computed(() => {
     typeof systemConfig.OTAEn.value !== 'undefined'
   ) {
     allow = !!systemConfig.OTAEn.value;
-  } else if (
-    runtime.value.system &&
-    typeof runtime.value.system.allowOTA !== 'undefined'
-  ) {
-    allow = !!runtime.value.system.allowOTA;
   }
-  return allow && !flashing.value;
-});
 
-watch(
-  canFlash,
-  (val) => {
-    emit('can-flash-change', val);
-  },
-  { immediate: true }
-);
-
-watch(showBoolStateText, (val) => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem('cm_showBoolStateText', val ? '1' : '0');
+  if (runtimeMeta.value.length) {
+    const systemMeta = runtimeMeta.value.find((group) => group.name === 'system');
+    if (systemMeta) {
+      const field = systemMeta.fields.find((f) => f.key === 'OTAEn');
+      if (field && field.enabled !== undefined) {
+        allow = !!field.enabled;
+      }
     }
-  } catch (e) {
-    /* ignore */
   }
+
+  return allow && !flashing.value;
 });
 
 function normalizeStyle(style) {
@@ -1090,25 +1078,36 @@ defineExpose({
 .rw.sl .sw {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  min-width: 10rem;
+  gap: 1.1rem;
+  min-width: 14rem;
+  flex-wrap: wrap;
+}
+
+.rw.sl .sw > * {
+  flex-shrink: 0;
 }
 
 .rw.sl input[type='range'] {
-  width: 8rem;
+  flex: 1 1 8rem;
+  min-width: 8rem;
   accent-color: #ff9800;
   cursor: pointer;
 }
 
 .rw.sl .sv {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
   font-weight: 600;
-  min-width: 3.2ch;
+  min-width: 3.6ch;
+  padding: 0 0.35rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .rw.sl .sb {
-  padding: 0.25rem 0.6rem;
+  margin-left: 0.35rem;
+  padding: 0.25rem 0.75rem;
   font-size: 0.72rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;

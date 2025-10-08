@@ -16,15 +16,15 @@
 #define CM_ENABLE_RUNTIME_CONTROLS 1 // Enable runtime controls (sensors and alarms only) //default: enabled
 #define CM_ENABLE_RUNTIME_BUTTONS 1 // Enable runtime buttons //default: disabled
 #define CM_ENABLE_RUNTIME_CHECKBOXES 1 // Enable runtime checkboxes (two-state toggles styled as android switches) //default: disabled
-#define CM_ENABLE_RUNTIME_STATE_BUTTONS 0 // Enable runtime state buttons (ON/OFF with 2 states) //default: disabled
-#define CM_ENABLE_RUNTIME_INT_SLIDERS 0  // Enable runtime integer sliders //default: disabled
-#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0 // Enable runtime float sliders //default: disabled
-#define CM_ENABLE_RUNTIME_ALARMS 0 // Enable runtime alarms (thresholds, color coding) //default: disabled
+#define CM_ENABLE_RUNTIME_STATE_BUTTONS 1 // Enable runtime state buttons (ON/OFF with 2 states) //default: disabled
+#define CM_ENABLE_RUNTIME_INT_SLIDERS 1  // Enable runtime integer sliders //default: disabled
+#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1 // Enable runtime float sliders //default: disabled
+#define CM_ENABLE_RUNTIME_ALARMS 1 // Enable runtime alarms (thresholds, color coding) //default: disabled
 #define CM_ENABLE_SYSTEM_PROVIDER 1  // Enable system info runtime provider card (heap, uptime, etc.) //default: disabled
 #define CM_ENABLE_WS_PUSH 1 // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled) //default: disabled
-#define CM_ENABLE_THEMING 0 //disable both theming and user CSS for simplicity //default: disabled
-#define CM_ENABLE_STYLE_RULES 0//only style rules over .set("background", "#000") etc. //default: disabled
-#define CM_ENABLE_USER_CSS 0 // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);) //default: disabled
+#define CM_ENABLE_THEMING 1 //disable both theming and user CSS for simplicity //default: disabled
+#define CM_ENABLE_STYLE_RULES 1//only style rules over .set("background", "#000") etc. //default: disabled
+#define CM_ENABLE_USER_CSS 1 // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);) //default: disabled
 #define CM_ENABLE_DYNAMIC_VISIBILITY 0 // Enable dynamic visibility of settings based on other settings (showIf callbacks) //default: disabled
 #define CM_ENABLE_OTA 0 // Enable OTA update functionality //default: disabled
 #define CM_ENABLE_LOGGING 0 // Enable logging via callback function (setLogger) //default: disabled
