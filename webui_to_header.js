@@ -4,6 +4,15 @@ const path = require('path');
 const distDir = path.join(__dirname, 'webui', 'dist');
 const outFile = path.join(__dirname, 'src', 'html_content.h');
 
+/**
+ * @param {string} content
+ * @returns {string}
+ */
+function stripBlockComments(content) {
+  if (!content) return content;
+  return content.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
 async function buildHeader() {
   let indexHtml = fs.readFileSync(path.join(distDir, 'index.html'), 'utf8');
 
@@ -14,7 +23,9 @@ async function buildHeader() {
   if (!cssFile) {
     throw new Error('cannot find CSS file in assets directory!');
   }
-  const cssContent = fs.readFileSync(path.join(assetsDir, cssFile), 'utf8');
+  const cssContent = stripBlockComments(
+    fs.readFileSync(path.join(assetsDir, cssFile), 'utf8')
+  );
   // Inline CSS (only first stylesheet link). Use a replacer function to avoid accidental $-group substitutions.
   indexHtml = indexHtml.replace(
     /<link rel="stylesheet"[^>]*href="[^"]+"[^>]*>/,
@@ -26,7 +37,9 @@ async function buildHeader() {
   if (!jsFile) {
     throw new Error('cannot find JS file in assets directory!');
   }
-  const jsContent = fs.readFileSync(path.join(assetsDir, jsFile), 'utf8');
+  const jsContent = stripBlockComments(
+    fs.readFileSync(path.join(assetsDir, jsFile), 'utf8')
+  );
   // Inline JS (only first module script tag). Using function form prevents special replacement patterns.
   indexHtml = indexHtml.replace(
     /<script[^>]*src="[^"]+"[^>]*><\/script>/,

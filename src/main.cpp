@@ -41,7 +41,7 @@
 AsyncWebServer server(80);
 // #include <WiFiClientSecure.h>
 
-#define VERSION "V2.6.0"
+#define VERSION "V2.6.1" //2025.10.08
 #define APP_NAME "CM-BME280-Demo"
 #define BUTTON_PIN_AP_MODE 13
 

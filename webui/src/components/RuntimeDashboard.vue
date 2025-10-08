@@ -146,14 +146,14 @@
         <p v-if="group.name === 'system' && runtime.uptime !== undefined" class="uptime">
           Uptime: {{ Math.floor((runtime.uptime || 0) / 1000) }} s
         </p>
-        <p
+        <!-- <p
           v-if="group.name === 'system' && runtime.system && runtime.system.loopAvg !== undefined"
           class="uptime"
         >
           Loop Avg: {{ typeof runtime.system.loopAvg === 'number' ? runtime.system.loopAvg.toFixed(2) : runtime.system.loopAvg }} ms
-        </p>
+        </p> -->
 
-        <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
+        <!-- <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
           <div class="rw cr">
             <span class="lab">Show state text</span>
             <label class="switch val">
@@ -161,7 +161,7 @@
               <span class="slider round"></span>
             </label>
           </div>
-        </div>
+        </div> -->
       </div>
     </div>
 
@@ -396,6 +396,9 @@ function buildRuntimeGroups() {
   if (runtimeMeta.value.length) {
     const grouped = {};
     for (const m of runtimeMeta.value) {
+      if (m.group === 'system' && builtinSystemHiddenFields.has(m.key)) {
+        continue;
+      }
       if (!grouped[m.group]) {
         grouped[m.group] = {
           name: m.group,
@@ -438,6 +441,7 @@ function buildRuntimeGroups() {
     try {
       const sys = runtime.value.system || {};
       if (grouped.system) {
+        grouped.system.fields = grouped.system.fields.filter((f) => !builtinSystemHiddenFields.has(f.key));
         const existingKeys = new Set(grouped.system.fields.map((f) => f.key));
         Object.keys(sys).forEach((k) => {
           if (builtinSystemHiddenFields.has(k)) return;
@@ -459,28 +463,6 @@ function buildRuntimeGroups() {
             });
           }
         });
-      } else if (Object.keys(sys).length) {
-        grouped.system = {
-          name: 'system',
-          title: 'System',
-          fields: Object.keys(sys)
-            .filter((k) => !builtinSystemHiddenFields.has(k))
-            .map((k) => ({
-              key: k,
-              label: capitalize(k),
-              unit: k === 'freeHeap' ? 'KB' : k === 'loopAvg' ? 'ms' : '',
-              precision: k === 'loopAvg' ? 2 : 0,
-              order: 999,
-              isBool: typeof sys[k] === 'boolean',
-              isString: typeof sys[k] === 'string',
-              isButton: false,
-              isCheckbox: false,
-              isDivider: false,
-              staticValue: '',
-              style: null,
-              styleRules: null,
-            })),
-        };
       }
     } catch (e) {
       /* ignore */
@@ -543,12 +525,14 @@ function buildRuntimeGroups() {
     fallback.push({
       name: 'system',
       title: 'System',
-      fields: Object.keys(runtime.value.system).map((k) => ({
-        key: k,
-        label: capitalize(k),
-        unit: '',
-        precision: 0,
-      })),
+      fields: Object.keys(runtime.value.system)
+        .filter((k) => !builtinSystemHiddenFields.has(k))
+        .map((k) => ({
+          key: k,
+          label: capitalize(k),
+          unit: '',
+          precision: 0,
+        })),
     });
   }
   runtimeGroups.value = fallback;
