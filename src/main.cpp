@@ -3,55 +3,33 @@
 // ---------------------------------------------------------------------------------------------------------------------
 // ConfigManager compile-time feature toggles
 //
-// All switches inside ConfigManagerConfig.h.  Define them here to 0 when a subsystem
+// All switches inside ConfigManagerConfig.h.  Define them here before including the header to turn them on/off.
+// Example:
+//   #define CM_ENABLE_RUNTIME_CONTROLS 0
+//   #include "ConfigManager.h"
 // is not needed to shave off flash & RAM without touching the library sources.  Leave a flag commented out to
 // inherit the upstream default.  This example keeps every feature on to showcase the full demo surface.
 // ---------------------------------------------------------------------------------------------------------------------
-#ifndef CM_ALARM_GREEN_ON_FALSE // Enable showing alarm state green on false for boolean runtime fields
-#define CM_ALARM_GREEN_ON_FALSE 1 //default: enabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_CONTROLS // Enable runtime controls (sliders, buttons, checkboxes - leave sensors and alarms only)
-#define CM_ENABLE_RUNTIME_CONTROLS 1 //default: enabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_BUTTONS // Enable runtime buttons
-#define CM_ENABLE_RUNTIME_BUTTONS 1 //default: disabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_CHECKBOXES // Enable runtime checkboxes (two-state toggles styled as android switches)
-#define CM_ENABLE_RUNTIME_CHECKBOXES 1 //default: disabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_STATE_BUTTONS // Enable runtime state buttons (ON/OFF with 2 states)
-#define CM_ENABLE_RUNTIME_STATE_BUTTONS 0 //default: disabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_INT_SLIDERS // Enable runtime integer sliders
-#define CM_ENABLE_RUNTIME_INT_SLIDERS 0 //default: disabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_FLOAT_SLIDERS // Enable runtime float sliders
-#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0 //default: disabled
-#endif
-#ifndef CM_ENABLE_RUNTIME_ALARMS // Enable runtime alarms (thresholds, color coding)
-#define CM_ENABLE_RUNTIME_ALARMS 1  //default: disabled
-#endif
-#ifndef CM_ENABLE_SYSTEM_PROVIDER // Enable system info runtime provider card (heap, uptime, etc.)
-#define CM_ENABLE_SYSTEM_PROVIDER 1 //default: disabled
-#endif
-#ifndef CM_ENABLE_WS_PUSH // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled)
-#define CM_ENABLE_WS_PUSH 1 //default: disabled
-#endif
-#ifndef CM_ENABLE_THEMING //disable both theming and user CSS for simplicity
-#define CM_ENABLE_THEMING 1 //default: disabled
-#endif
-#ifndef CM_ENABLE_STYLE_RULES //only style rules over .set("background", "#000") etc.
-#define CM_ENABLE_STYLE_RULES 0
-#endif
-#ifndef CM_ENABLE_USER_CSS // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);)
-#define CM_ENABLE_USER_CSS 0
-#endif
-#ifndef CM_ENABLE_DYNAMIC_VISIBILITY
-#define CM_ENABLE_DYNAMIC_VISIBILITY 1
-#endif
-#ifndef CM_ENABLE_OTA
-#define CM_ENABLE_OTA 1
-#endif
+
+#define CM_EMBED_WEBUI 1 // Enable embedded web UI (HTML/CSS/JS) in binary //default: enabled
+#define CM_ALARM_GREEN_ON_FALSE 1 // Enable showing alarm state green on false for boolean runtime fields //default: enabled
+#define CM_ENABLE_RUNTIME_CONTROLS 1 // Enable runtime controls (sensors and alarms only) //default: enabled
+#define CM_ENABLE_RUNTIME_BUTTONS 1 // Enable runtime buttons //default: disabled
+#define CM_ENABLE_RUNTIME_CHECKBOXES 1 // Enable runtime checkboxes (two-state toggles styled as android switches) //default: disabled
+#define CM_ENABLE_RUNTIME_STATE_BUTTONS 0 // Enable runtime state buttons (ON/OFF with 2 states) //default: disabled
+#define CM_ENABLE_RUNTIME_INT_SLIDERS 0  // Enable runtime integer sliders //default: disabled
+#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0 // Enable runtime float sliders //default: disabled
+#define CM_ENABLE_RUNTIME_ALARMS 0 // Enable runtime alarms (thresholds, color coding) //default: disabled
+#define CM_ENABLE_SYSTEM_PROVIDER 1  // Enable system info runtime provider card (heap, uptime, etc.) //default: disabled
+#define CM_ENABLE_WS_PUSH 1 // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled) //default: disabled
+#define CM_ENABLE_THEMING 0 //disable both theming and user CSS for simplicity //default: disabled
+#define CM_ENABLE_STYLE_RULES 0//only style rules over .set("background", "#000") etc. //default: disabled
+#define CM_ENABLE_USER_CSS 0 // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);) //default: disabled
+#define CM_ENABLE_DYNAMIC_VISIBILITY 0 // Enable dynamic visibility of settings based on other settings (showIf callbacks) //default: disabled
+#define CM_ENABLE_OTA 0 // Enable OTA update functionality //default: disabled
+#define CM_ENABLE_LOGGING 0 // Enable logging via callback function (setLogger) //default: disabled
+#define CM_ENABLE_VERBOSE_LOGGING 0 // Enable verbose logging (more detailed messages) //default: disabled
+
 
 #include "ConfigManager.h"
 #include <Ticker.h>     // for read temperature periodically

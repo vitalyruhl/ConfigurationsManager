@@ -201,6 +201,8 @@ const flashing = ref(false);
 const otaFileInput = ref(null);
 const wsConnected = ref(false);
 
+const builtinSystemHiddenFields = new Set(['loopAvg']);
+
 let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
@@ -438,6 +440,7 @@ function buildRuntimeGroups() {
       if (grouped.system) {
         const existingKeys = new Set(grouped.system.fields.map((f) => f.key));
         Object.keys(sys).forEach((k) => {
+          if (builtinSystemHiddenFields.has(k)) return;
           if (!existingKeys.has(k)) {
             grouped.system.fields.push({
               key: k,
@@ -460,21 +463,23 @@ function buildRuntimeGroups() {
         grouped.system = {
           name: 'system',
           title: 'System',
-          fields: Object.keys(sys).map((k) => ({
-            key: k,
-            label: capitalize(k),
-            unit: k === 'freeHeap' ? 'KB' : k === 'loopAvg' ? 'ms' : '',
-            precision: k === 'loopAvg' ? 2 : 0,
-            order: 999,
-            isBool: typeof sys[k] === 'boolean',
-            isString: typeof sys[k] === 'string',
-            isButton: false,
-            isCheckbox: false,
-            isDivider: false,
-            staticValue: '',
-            style: null,
-            styleRules: null,
-          })),
+          fields: Object.keys(sys)
+            .filter((k) => !builtinSystemHiddenFields.has(k))
+            .map((k) => ({
+              key: k,
+              label: capitalize(k),
+              unit: k === 'freeHeap' ? 'KB' : k === 'loopAvg' ? 'ms' : '',
+              precision: k === 'loopAvg' ? 2 : 0,
+              order: 999,
+              isBool: typeof sys[k] === 'boolean',
+              isString: typeof sys[k] === 'string',
+              isButton: false,
+              isCheckbox: false,
+              isDivider: false,
+              staticValue: '',
+              style: null,
+              styleRules: null,
+            })),
         };
       }
     } catch (e) {

@@ -999,6 +999,7 @@ public:
             if(payload.length()) payload += " ";
             payload += CONFIGMANAGER_VERSION;
             request->send(200, "text/plain", payload); });
+#if CM_ENABLE_OTA
         struct OtaUploadContext
         {
             bool authorized = false;
@@ -1141,6 +1142,12 @@ public:
                         Update.printError(Serial);
                     }
                 } });
+#else
+        server.on("/ota_update", HTTP_ANY, [this](AsyncWebServerRequest *request)
+                  {
+            request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+        });
+#endif
 
         // Reset to Defaults
         server.on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest *request)
@@ -1245,7 +1252,7 @@ public:
             for(auto &c : _runtimeCheckboxes){ if(c.group==g && c.key==k){ if(c.setter) c.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
         // Stateful button toggle
         server.on("/runtime_action/state_button", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1258,7 +1265,7 @@ public:
             for(auto &sb : _runtimeStateButtons){ if(sb.group==g && sb.key==k){ if(sb.setter) sb.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
         // Int slider update
         server.on("/runtime_action/int_slider", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1270,7 +1277,7 @@ public:
             for(auto &is : _runtimeIntSliders){ if(is.group==g && is.key==k){ if(is.setter) is.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
         // Float slider update
         server.on("/runtime_action/float_slider", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -2012,7 +2019,7 @@ public:
 #endif
 
 // Stateful runtime button (has on/off state; toggles and invokes callback)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
     struct _StateButtonDef
     {
         String group;
@@ -2064,7 +2071,7 @@ public:
 #endif
 
 // Int slider (transient; not persisted)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
     struct _IntSliderDef
     {
         String group;
@@ -2119,7 +2126,7 @@ public:
 #endif
 
 // Float slider (transient; not persisted)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
     struct _FloatSliderDef
     {
         String group;
@@ -2215,7 +2222,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
             for (const auto &sb : _runtimeStateButtons)
             {
                 if (sb.group == prov.name && !slot.containsKey(sb.key.c_str()) && sb.getter)
@@ -2224,7 +2231,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
             for (const auto &is : _runtimeIntSliders)
             {
                 if (is.group == prov.name && !slot.containsKey(is.key.c_str()) && is.getter)
@@ -2233,7 +2240,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_ADV_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
             for (const auto &fs : _runtimeFloatSliders)
             {
                 if (fs.group == prov.name && !slot.containsKey(fs.key.c_str()) && fs.getter)
@@ -2567,7 +2574,7 @@ public:
                                 .fill = [this](JsonObject &o)
                                 {
                                     o["rssi"] = WiFi.isConnected() ? WiFi.RSSI() : 0;
-                                    o["rssiBars"] = rssiEmoji(WiFi.isConnected() ? WiFi.RSSI() : -100);
+                                    o["rssiTxt"] = rssiEmoji(WiFi.isConnected() ? WiFi.RSSI() : -100);
                                     o["freeHeap"] = (uint32_t)(ESP.getFreeHeap() / 1024); // KB
                                     o["loopAvg"] = _loopAvgMs;                            // ms avg over last window
                                 },
@@ -2576,7 +2583,7 @@ public:
             {
                 // Order values chosen to interleave nicely; user can override later.
                 defineRuntimeField("system", "rssi", "WiFi RSSI", "dBm", 0, 1);
-                defineRuntimeString("system", "rssiBars", "Signal", "", 2); // will show string bars
+                defineRuntimeString("system", "rssiTxt", "Signal", "", 2); // will show string bars
                 defineRuntimeField("system", "freeHeap", "Free Heap", "KB", 0, 3);
                 // defineRuntimeField("system", "loopAvg", "Loop Avg", "ms", 2, 4);
             }
