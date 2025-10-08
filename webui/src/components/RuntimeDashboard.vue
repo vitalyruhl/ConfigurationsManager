@@ -1229,10 +1229,10 @@ defineExpose({
 }
 
 .switch {
-  display: inline-block;
-  height: 34px;
   position: relative;
-  width: 30px;
+  display: inline-block;
+  width: 52px;
+  height: 28px;
 }
 
 .switch input {
@@ -1240,26 +1240,28 @@ defineExpose({
 }
 
 .slider {
-  background-color: #ccc;
-  bottom: 0;
-  cursor: pointer;
-  left: 1.2rem;
   position: absolute;
-  right: 0;
+  cursor: pointer;
   top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
   transition: 0.4s;
-  max-width: 4em;
+  border-radius: 34px;
 }
 
 .slider:before {
-  background-color: #fff;
-  bottom: 4px;
-  content: '';
-  height: 26px;
-  left: 4px;
   position: absolute;
+  content: '';
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #fff;
   transition: 0.4s;
-  width: 26px;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 input:checked + .slider {
@@ -1267,15 +1269,7 @@ input:checked + .slider {
 }
 
 input:checked + .slider:before {
-  transform: translateX(26px);
-}
-
-.slider.round {
-  border-radius: 34px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
+  transform: translateX(24px);
 }
 
 .btn {
