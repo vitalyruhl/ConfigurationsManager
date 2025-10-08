@@ -146,14 +146,14 @@
         <p v-if="group.name === 'system' && runtime.uptime !== undefined" class="uptime">
           Uptime: {{ Math.floor((runtime.uptime || 0) / 1000) }} s
         </p>
-        <!-- <p
+        <p
           v-if="group.name === 'system' && runtime.system && runtime.system.loopAvg !== undefined"
           class="uptime"
         >
           Loop Avg: {{ typeof runtime.system.loopAvg === 'number' ? runtime.system.loopAvg.toFixed(2) : runtime.system.loopAvg }} ms
-        </p> -->
+        </p>
 
-        <!-- <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
+        <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
           <div class="rw cr">
             <span class="lab">Show state text</span>
             <label class="switch val">
@@ -161,7 +161,7 @@
               <span class="slider round"></span>
             </label>
           </div>
-        </div> -->
+        </div>
       </div>
     </div>
 
