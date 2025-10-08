@@ -11,7 +11,7 @@
         @input="onInput"
       />
       <span class="sv">{{ formattedValue }}</span>
-      <button class="sb" type="button" @click="commit">Set</button>
+  <button class="btn sb" type="button" @click="commit">Set</button>
     </span>
     <span class="un"></span>
   </div>

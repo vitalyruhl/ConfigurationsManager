@@ -1034,7 +1034,7 @@ defineExpose({
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.5rem;
   margin: 0.2rem 0;
   font-size: 0.9rem;
 }
@@ -1059,6 +1059,7 @@ defineExpose({
   min-width: 2.5ch;
   white-space: nowrap;
   font-weight: 600;
+  padding-left: .1rem;
 }
 
 .rw.sev-warn {
@@ -1107,20 +1108,10 @@ defineExpose({
 }
 
 .rw.sl .sb {
-  background: #1976d2;
-  color: #fff;
-  border: none;
   padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  cursor: pointer;
   font-size: 0.72rem;
-  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-}
-
-.rw.sl .sb:hover {
-  background: #125a9f;
 }
 
 .rw.sl .num-input {
@@ -1134,15 +1125,6 @@ defineExpose({
 
 .rw.sl .num-input:focus {
   outline: 1px solid #1976d2;
-}
-
-.rw.act .btn.on {
-  background: #2e7d32;
-  color: #fff;
-}
-
-.rw.act .btn.on:hover {
-  background: #256628;
 }
 
 @keyframes blink {
@@ -1210,15 +1192,16 @@ defineExpose({
   color: #999;
   letter-spacing: 0.05em;
 }
-
+/* 
 .str {
   color: #333;
-}
+} */
 
 .str .val {
-  text-align: left;
+  text-align: right;
   font-weight: 400;
 }
+
 
 .uptime {
   font-size: 0.85rem;
@@ -1228,68 +1211,4 @@ defineExpose({
   text-align: center;
 }
 
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 52px;
-  height: 28px;
-}
-
-.switch input {
-  display: none;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  transition: 0.4s;
-  border-radius: 34px;
-}
-
-.slider:before {
-  position: absolute;
-  content: '';
-  height: 22px;
-  width: 22px;
-  left: 3px;
-  bottom: 3px;
-  background-color: #fff;
-  transition: 0.4s;
-  border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-input:checked + .slider {
-  background-color: #66bb6a;
-}
-
-input:checked + .slider:before {
-  transform: translateX(24px);
-}
-
-.btn {
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.btn:hover {
-  background: #125a9f;
-}
-
-.live-view h3 {
-  color: orange;
-  text-decoration: underline;
-  margin: 0.5rem auto;
-}
 </style>

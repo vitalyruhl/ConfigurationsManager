@@ -50,34 +50,3 @@ function emitToggle() {
   });
 }
 </script>
-
-<style scoped>
-.btn {
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  padding: 0.3rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  transition: background 0.2s ease;
-}
-
-.btn:hover {
-  background: #125a9f;
-}
-
-.btn.on {
-  background: #2e7d32;
-}
-
-.btn.on:hover {
-  background: #256628;
-}
-
-.btn:active {
-  filter: brightness(0.9);
-}
-</style>

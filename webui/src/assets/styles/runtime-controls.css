@@ -1,0 +1,99 @@
+:root {
+  --btn-primary-bg: #1976d2;
+  --btn-primary-hover: #125a9f;
+  --btn-primary-active: #0d4674;
+  --btn-success-bg: #2e7d32;
+  --btn-success-hover: #256628;
+  --switch-track-off: #ccc;
+  --switch-track-on: #66bb6a;
+  --switch-thumb-bg: #fff;
+}
+
+.btn {
+  background: var(--btn-primary-bg);
+  color: #fff;
+  border: none;
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  transition: background 0.2s ease;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.12);
+}
+
+.btn:hover {
+  background: var(--btn-primary-hover);
+}
+
+.btn:active {
+  background: var(--btn-primary-active);
+}
+
+.btn.on,
+.btn--success {
+  background: var(--btn-success-bg);
+}
+
+.btn.on:hover,
+.btn--success:hover {
+  background: var(--btn-success-hover);
+}
+
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 28px;
+}
+
+.switch input {
+  display: none;
+}
+
+.switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--switch-track-off);
+  transition: 0.4s;
+  border-radius: 34px;
+}
+
+.switch .slider:before {
+  position: absolute;
+  content: '';
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--switch-thumb-bg);
+  transition: 0.4s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.switch input:checked + .slider {
+  background-color: var(--switch-track-on);
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
