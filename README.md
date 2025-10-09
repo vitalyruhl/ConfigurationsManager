@@ -314,6 +314,7 @@ Older frontends ignore these keys gracefully.
 | Runtime Providers & Alarms | `docs/RUNTIME.md` |
 | Styling (per-field metadata) | `docs/STYLING.md` |
 | Theming (global CSS + disabling metadata) | `docs/THEMING.md` |
+| Feature Flags (compile-time switches) | `docs/FEATURE_FLAGS.md` |
 | OTA Flash Workflow | (this README) |
 
 ## Requirements

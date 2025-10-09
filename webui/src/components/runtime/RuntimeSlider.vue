@@ -1,120 +1,87 @@
 <template>
-  <div class="rw sl" :data-group="group" :data-key="field.key">
-    <span class="lab">{{ field.label }}</span>
-    <span class="val sw">
-      <input
-        type="range"
-        :min="min"
-        :max="max"
-        :step="step"
-        :value="displaySliderValue"
-        @input="onInput"
-        class="asl"
-      />
-      <span class="sv">{{ formattedValue }}</span>
-      <span class="un">{{ field.unit || ' ' }}</span>
-      <button class="btn sb" type="button" @click="commit">Set</button>
-    </span>
-  </div>
+	<div class="rw sl">
+		<span class="lab">{{ field.label }}</span>
+		<span class="val">{{ displayValue }}</span>
+		<span class="un">{{ field.unit || '' }}</span>
+	</div>
+	<div class="rw sl-ctrl">
+		<input
+			type="range"
+			:min="min"
+			:max="max"
+			:step="step"
+			v-model.number="local"
+			@change="commit"
+			@mouseup="commit"
+			@touchend="commit"
+		/>
+	</div>
+	<div class="rw sl-num">
+		<input
+			type="number"
+			:min="min"
+			:max="max"
+			:step="step"
+			v-model.number="local"
+			@change="commit"
+		/>
+	</div>
+	<!-- spacer row for compactness -->
+	<div class="rw sl-gap"></div>
+  
 </template>
-<style scoped>
-.sv {margin: 0 .5rem;}
-.un {margin: 0 .5rem;}
-.val .sw {margin: 0 .5rem;}
-.asl {vertical-align: middle;max-width: 8rem;}
-</style>
 
 <script setup>
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
-  group: {
-    type: String,
-    required: true,
-  },
-  field: {
-    type: Object,
-    required: true,
-  },
-  value: {
-    type: [Number, String, null],
-    default: null,
-  },
-  mode: {
-    type: String,
-    default: 'int',
-    validator: (v) => ['int', 'float'].includes(v),
-  },
+	group: { type: String, required: true },
+	field: { type: Object, required: true },
+	value: { type: [Number, String], default: 0 },
+	mode: { type: String, default: 'int' } // 'int' | 'float'
 });
 
 const emit = defineEmits(['commit']);
 
-const currentValue = ref(resolveInitialValue());
+const min = computed(() => typeof props.field.min === 'number' ? props.field.min : 0);
+const max = computed(() => typeof props.field.max === 'number' ? props.field.max : 100);
+const precision = computed(() => typeof props.field.precision === 'number' ? props.field.precision : (props.mode === 'float' ? 2 : 0));
+const step = computed(() => props.mode === 'float' ? (precision.value >= 3 ? 0.001 : precision.value === 2 ? 0.01 : 0.1) : 1);
 
-watch(
-  () => props.value,
-  (val) => {
-    const resolved = resolveIncomingValue(val);
-    if (!Number.isNaN(resolved)) {
-      currentValue.value = resolved;
-    }
-  }
-);
+const local = ref(parseVal(props.value));
 
-function resolveIncomingValue(val) {
-  if (val === null || val === undefined || val === '') {
-    return resolveInitialValue();
-  }
-  const parsed = props.mode === 'float' ? parseFloat(val) : parseInt(val, 10);
-  if (Number.isNaN(parsed)) {
-    return resolveInitialValue();
-  }
-  return parsed;
-}
-
-function resolveInitialValue() {
-  const fallback = props.field?.init ?? props.field?.min ?? 0;
-  return resolveNumeric(fallback);
-}
-
-function resolveNumeric(v) {
-  const parsed = props.mode === 'float' ? parseFloat(v) : parseInt(v, 10);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-const min = computed(() => resolveNumeric(props.field?.min ?? 0));
-const max = computed(() => resolveNumeric(props.field?.max ?? (props.mode === 'float' ? 1 : 100)));
-const step = computed(() => {
-  if (props.mode === 'float') {
-    const precision = typeof props.field?.precision === 'number' ? props.field.precision : 2;
-    return Number((1 / Math.pow(10, precision)).toFixed(precision + 1));
-  }
-  return 1;
+watch(() => props.value, (v) => {
+	local.value = parseVal(v);
 });
 
-const displaySliderValue = computed(() => currentValue.value);
-
-const formattedValue = computed(() => {
-  if (props.mode === 'float') {
-    const precision = typeof props.field?.precision === 'number' ? props.field.precision : 2;
-    return Number.isNaN(currentValue.value)
-      ? '-'
-      : Number(currentValue.value).toFixed(precision);
-  }
-  return Number.isNaN(currentValue.value) ? '-' : currentValue.value;
-});
-
-function onInput(ev) {
-  const val = props.mode === 'float' ? parseFloat(ev.target.value) : parseInt(ev.target.value, 10);
-  currentValue.value = Number.isNaN(val) ? currentValue.value : val;
+function parseVal(v) {
+	const n = typeof v === 'string' ? parseFloat(v) : (typeof v === 'number' ? v : 0);
+	if (Number.isNaN(n)) return 0;
+	return clamp(n, min.value, max.value);
 }
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+const displayValue = computed(() => {
+	const n = Number(local.value);
+	if (props.mode === 'int') return Math.round(n);
+	return n.toFixed(precision.value);
+});
 
 function commit() {
-  if (Number.isNaN(currentValue.value)) return;
-  emit('commit', {
-    group: props.group,
-    field: props.field,
-    value: currentValue.value,
-  });
+	let out = Number(local.value);
+	if (props.mode === 'int') out = Math.round(out);
+	out = clamp(out, min.value, max.value);
+	emit('commit', { group: props.group, field: props.field, value: out });
 }
 </script>
+
+<style scoped>
+.rw { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: .5rem; }
+.lab { font-weight: 600; }
+.sl-ctrl { grid-template-columns: 1fr; }
+.sl-num { grid-template-columns: 1fr; }
+.sl-gap { height: .25rem; }
+input[type="range"] { width: 100%; }
+input[type="number"] { width: 8rem; justify-self: end; }
+</style>

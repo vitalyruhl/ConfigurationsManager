@@ -1,39 +1,20 @@
 #include <Arduino.h>
 
 // ---------------------------------------------------------------------------------------------------------------------
-// ConfigManager compile-time feature toggles
+// ConfigManager compile-time feature toggles (moved to platformio.ini)
 //
-// All switches inside ConfigManagerConfig.h.  Define them here before including the header to turn them on/off.
-// Example:
-//   #define CM_ENABLE_RUNTIME_CONTROLS 0
-//   #include "ConfigManager.h"
-// is needed to save off flash & RAM without touching the library sources.
-// This example keeps every feature on to showcase the full demo surface.
-// ---------------------------------------------------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------------------------------------------------
-// This Feauture are enabled by default - not need to define them again here
-#define CM_EMBED_WEBUI 1 // Enable embedded web UI (HTML/CSS/JS) in binary //default: enabled
-#define CM_ALARM_GREEN_ON_FALSE 1 // Enable showing alarm state green on false for boolean runtime fields //default: enabled
-#define CM_ENABLE_RUNTIME_CONTROLS 1 // Enable runtime controls (sensors and alarms only) //default: enabled
-#define CM_ENABLE_WS_PUSH 1 // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled) //default: disabled
-#define CM_ENABLE_DYNAMIC_VISIBILITY 1 // Enable dynamic visibility of settings based on other settings (showIf callbacks) //default: enabled
-#define CM_ENABLE_SYSTEM_PROVIDER 1  // Enable system info runtime provider card (heap, uptime, etc.) //default: disabled
-#define CM_ENABLE_OTA 0 // Enable OTA update functionality //default: enabled
-// ---------------------------------------------------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------------------------------------------------
-// this are the optional features you can enable here by define them to 1
-#define CM_ENABLE_RUNTIME_BUTTONS 1 // Enable runtime buttons //default: disabled
-#define CM_ENABLE_RUNTIME_CHECKBOXES 1 // Enable runtime checkboxes (two-state toggles styled as android switches) //default: disabled
-#define CM_ENABLE_RUNTIME_STATE_BUTTONS 1 // Enable runtime state buttons (ON/OFF with 2 states) //default: disabled
-#define CM_ENABLE_RUNTIME_INT_SLIDERS 1  // Enable runtime integer sliders //default: disabled
-#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1 // Enable runtime float sliders //default: disabled
-#define CM_ENABLE_RUNTIME_ALARMS 1 // Enable runtime alarms (thresholds, color coding) //default: disabled
-#define CM_ENABLE_STYLE_RULES 1//only style rules over .set("background", "#000") etc. //default: disabled
-#define CM_ENABLE_USER_CSS 1 // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);) //default: disabled
-#define CM_ENABLE_LOGGING 1 // Enable logging via callback function (setLogger) //default: disabled
-#define CM_ENABLE_VERBOSE_LOGGING 1 // Enable verbose logging (more detailed messages) //default: disabled
+// To keep the sketch clean and allow per-environment tuning, all feature switches are now defined via
+// PlatformIO build flags instead of #defines in this file.
+//
+// How to use:
+// - Open platformio.ini and add -D flags under each [env] in the build_flags section, e.g.:
+//     -DCM_ENABLE_OTA=1
+//     -DCM_ENABLE_WS_PUSH=1
+//     -DCM_ENABLE_RUNTIME_INT_SLIDERS=1
+// - You can turn features off by setting =0. The extra build script will also prune the Web UI accordingly.
+//
+// See docs/FEATURE_FLAGS.md for the complete list and examples. For convenience, this project enables
+// most features by default in platformio.ini so you can test and then disable what you don’t need.
 // ---------------------------------------------------------------------------------------------------------------------
 #include "ConfigManager.h"
 // ---------------------------------------------------------------------------------------------------------------------
