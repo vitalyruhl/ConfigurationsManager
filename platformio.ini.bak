@@ -1,0 +1,102 @@
+; PlatformIO Project Configuration File
+;
+;   Build options: build flags, source filter
+;   Upload options: custom upload port, speed and extra flags
+;   Library options: dependencies, extra library storages
+;   Advanced options: extra scripting
+;
+; Please visit documentation for the other options and examples
+; https://docs.platformio.org/page/projectconf.html
+
+[env:usb]
+platform = espressif32
+board = nodemcu-32s
+framework = arduino
+upload_port = COM[5]
+monitor_speed = 115200
+build_unflags = -std=gnu++11
+build_flags =
+	-Wno-deprecated-declarations
+	-std=gnu++17
+	-DUNIT_TEST
+	-DCM_EMBED_WEBUI=1
+	-DCM_ENABLE_WS_PUSH=1
+	-DCM_ENABLE_SYSTEM_PROVIDER=1
+	-DCM_ENABLE_OTA=1
+	-DCM_ENABLE_RUNTIME_BUTTONS=1
+	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
+	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+	-DCM_ENABLE_RUNTIME_ALALOG_SLIDERS=1
+	-DCM_ENABLE_RUNTIME_ALARMS=1
+	-DCM_ENABLE_STYLE_RULES=1
+	-DCM_ENABLE_USER_CSS=1
+	-DCM_ENABLE_LOGGING=1
+	-DCM_ENABLE_VERBOSE_LOGGING=1
+lib_deps =
+	bblanchon/ArduinoJson@^7.4.1
+	esphome/ESPAsyncWebServer-esphome@^3.2.2
+	esphome/AsyncTCP-esphome@^2.0.3
+	ks-tec/BME280_I2C@1.4.1+002
+test_ignore =
+	src/main.cpp
+extra_scripts = pre:extra_script.py
+
+
+
+; [env:ota]
+; platform = espressif32
+; board = nodemcu-32s
+; framework = arduino
+; monitor_speed = 115200
+; build_unflags = -std=gnu++11
+; build_flags =
+; 	-Wno-deprecated-declarations
+; 	-std=gnu++17
+; 	-DUNIT_TEST
+; 	-DCM_EMBED_WEBUI=1
+; 	-DCM_ENABLE_WS_PUSH=1
+; 	-DCM_ENABLE_SYSTEM_PROVIDER=1
+; 	-DCM_ENABLE_OTA=1
+; 	-DCM_ENABLE_RUNTIME_BUTTONS=1
+; 	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
+; 	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+; 	-DCM_ENABLE_RUNTIME_ALALOG_SLIDERS=1
+; 	-DCM_ENABLE_RUNTIME_ALARMS=1
+; 	-DCM_ENABLE_STYLE_RULES=1
+; 	-DCM_ENABLE_USER_CSS=1
+; 	-DCM_ENABLE_LOGGING=1
+; 	-DCM_ENABLE_VERBOSE_LOGGING=1
+; lib_deps =
+; 	bblanchon/ArduinoJson@^7.4.1
+; 	esphome/ESPAsyncWebServer-esphome@^3.2.2
+; 	esphome/AsyncTCP-esphome@^2.0.3
+; 	ks-tec/BME280_I2C@1.4.1+002
+; test_ignore =
+; 	src/main.cpp
+; upload_protocol = espota
+; upload_port = 192.168.2.126
+; upload_flags = --auth=ota1234
+; extra_scripts = pre:extra_script.py
+
+;[env:test]
+;platform = espressif32
+;board = nodemcu-32s
+;test_port = COM[5]
+;test_speed = 115200
+;framework = arduino
+;build_unflags = -std=gnu++11
+;build_flags =
+;	-Wno-deprecated-declarations
+;	-std=gnu++17
+;	-DUNIT_TEST
+;lib_deps =
+;	bblanchon/ArduinoJson@^7.4.1
+;	throwtheswitch/Unity@^2.6.0
+;	esphome/AsyncTCP-esphome@^2.0.3
+;	ks-tec/BME280_I2C@1.4.1+002
+;test_ignore =
+;	src/main.cpp
+;build_src_filter = -<src/html_content.cpp> +<src/*.cpp> +<test/*.cpp>
+
+[platformio]
+description = esp32 c++ V17 Project for manage settings

@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""
+Build a small feature-flag matrix for the WebUI and firmware, report bundle/flash sizes,
+and restore platformio.ini afterwards.
+
+Usage:
+  python tools/build_feature_matrix.py --env usb --quick
+  python tools/build_feature_matrix.py --env usb
+
+Flags covered (per [env:<name>] build_flags):
+  -DCM_ENABLE_RUNTIME_ALALOG_SLIDERS
+  -DCM_ENABLE_RUNTIME_STATE_BUTTONS
+  -DCM_ENABLE_RUNTIME_BUTTONS
+  -DCM_ENABLE_RUNTIME_CHECKBOXES
+"""
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+ROOT = Path(__file__).resolve().parents[1]
+PIO_INI = ROOT / 'platformio.ini'
+
+FLAGS = [
+    'CM_ENABLE_RUNTIME_ALALOG_SLIDERS',
+    'CM_ENABLE_RUNTIME_STATE_BUTTONS',
+    'CM_ENABLE_RUNTIME_BUTTONS',
+    'CM_ENABLE_RUNTIME_CHECKBOXES',
+]
+
+
+def read_lines() -> List[str]:
+    return PIO_INI.read_text(encoding='utf-8', errors='ignore').splitlines(keepends=True)
+
+
+def write_lines(lines: List[str]):
+    PIO_INI.write_text(''.join(lines), encoding='utf-8')
+
+
+def find_env_block(lines: List[str], env_name: str) -> Tuple[int, int]:
+    start = end = -1
+    hdr = f'[env:{env_name}]'
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if s.startswith('[') and s.endswith(']'):
+            if start >= 0:
+                end = i
+                break
+            if s == hdr:
+                start = i
+    if start >= 0 and end < 0:
+        end = len(lines)
+    return start, end
+
+
+def find_build_flags_block(lines: List[str], env_start: int, env_end: int) -> Tuple[int, int]:
+    if env_start < 0:
+        return -1, -1
+    start = end = -1
+    i = env_start
+    while i < env_end:
+        ln = lines[i]
+        if ln.strip().startswith('build_flags') and '=' in ln:
+            start = i
+            i += 1
+            # Collect continuation lines: indented or empty lines until next key (=) at col 0
+            while i < env_end:
+                raw = lines[i]
+                s = raw.strip()
+                is_key_line = (not raw.startswith((' ', '\t', ';', '#'))) and ('=' in raw)
+                if s and is_key_line:
+                    break
+                i += 1
+            end = i
+            break
+        i += 1
+    return start, end
+
+
+def set_flag_in_block(lines: List[str], blk_start: int, blk_end: int, flag: str, val: int) -> None:
+    """Ensure a -D flag exists in build_flags block with given value (0/1). Update if present, else append."""
+    assert blk_start >= 0 and blk_end >= blk_start
+    target = f'-D{flag}='
+    # Search and replace
+    found = False
+    for i in range(blk_start, blk_end):
+        ln = lines[i]
+        s = ln.strip()
+        if s.startswith(target) or s == f'-D{flag}':
+            indent = ln[:len(ln) - len(ln.lstrip())]
+            lines[i] = f"{indent}-D{flag}={val}\n"
+            found = True
+            break
+    if not found:
+        # Insert before blk_end, keep same indentation style as prior indented line or a tab by default
+        indent = '\t'
+        if blk_end - 1 > blk_start:
+            prev = lines[blk_end - 1]
+            indent = prev[:len(prev) - len(prev.lstrip())] or indent
+        lines.insert(blk_end, f"{indent}-D{flag}={val}\n")
+
+
+def apply_config(env_name: str, config: Dict[str, int]):
+    lines = read_lines()
+    env_start, env_end = find_env_block(lines, env_name)
+    if env_start < 0:
+        raise RuntimeError(f"Environment [env:{env_name}] not found in platformio.ini")
+    blk_start, blk_end = find_build_flags_block(lines, env_start, env_end)
+    if blk_start < 0:
+        raise RuntimeError(f"build_flags not found in [env:{env_name}] block")
+    for f, v in config.items():
+        set_flag_in_block(lines, blk_start + 1, blk_end, f, v)
+    write_lines(lines)
+
+
+def run_build(env_name: str) -> str:
+    proc = subprocess.run(['pio', 'run', '-e', env_name], cwd=str(ROOT), capture_output=True, text=True)
+    if proc.returncode != 0:
+        # Show combined output on failure for debugging
+        sys.stdout.write(proc.stdout)
+        sys.stderr.write(proc.stderr)
+        raise RuntimeError(f"Build failed for env {env_name}")
+    return proc.stdout + proc.stderr
+
+
+def parse_metrics(output: str) -> Dict[str, str]:
+    metrics: Dict[str, str] = {}
+    # Vite JS bundle gzip size
+    m = re.search(r"dist/assets/index-\S+\.js\s+(\d+\.\d+)\s*kB\s*\|\s*gzip:\s*(\d+\.\d+)\s*kB", output)
+    if m:
+        metrics['js_kb'] = m.group(1)
+        metrics['js_gzip_kb'] = m.group(2)
+    m = re.search(r"dist/assets/style-\S+\.css\s+(\d+\.\d+)\s*kB\s*\|\s*gzip:\s*(\d+\.\d+)\s*kB", output)
+    if m:
+        metrics['css_kb'] = m.group(1)
+        metrics['css_gzip_kb'] = m.group(2)
+    # Flash usage and percent
+    m = re.search(r"Flash:\s*\[[^\]]+\]\s*(\d+\.\d+)%\s*\(used\s*(\d+)\s*bytes\s*from\s*(\d+)\s*bytes\)", output)
+    if m:
+        metrics['flash_pct'] = m.group(1)
+        metrics['flash_used'] = m.group(2)
+        metrics['flash_total'] = m.group(3)
+    return metrics
+
+
+def format_config_label(cfg: Dict[str, int]) -> str:
+    parts = []
+    for f in FLAGS:
+        short = f.replace('CM_ENABLE_RUNTIME_', '').replace('ALALOG_', 'ANALOG_').lower()
+        parts.append(f"{short}={'on' if cfg.get(f, 0) else 'off'}")
+    return ', '.join(parts)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--env', default='usb', help='PlatformIO environment name (default: usb)')
+    ap.add_argument('--quick', action='store_true', help='Run a reduced matrix (baseline + all-off)')
+    args = ap.parse_args()
+
+    if not PIO_INI.exists():
+        print('platformio.ini not found')
+        return 1
+
+    backup = PIO_INI.with_suffix('.ini.bak')
+    shutil.copy2(PIO_INI, backup)
+    results = []
+    try:
+        baseline = {f: 1 for f in FLAGS}
+        all_off = {f: 0 for f in FLAGS}
+        variants: List[Dict[str, int]]
+        if args.quick:
+            variants = [baseline, all_off]
+        else:
+            variants = [baseline]
+            # Single-flag off variants
+            for f in FLAGS:
+                cfg = baseline.copy()
+                cfg[f] = 0
+                variants.append(cfg)
+            variants.append(all_off)
+
+        for idx, cfg in enumerate(variants, 1):
+            # Restore from backup for a clean slate each iteration
+            shutil.copy2(backup, PIO_INI)
+            apply_config(args.env, cfg)
+            print(f"\n=== Build {idx}/{len(variants)}: {format_config_label(cfg)} ===")
+            out = run_build(args.env)
+            metrics = parse_metrics(out)
+            results.append((cfg, metrics))
+
+        # Restore baseline at end
+        shutil.copy2(backup, PIO_INI)
+    finally:
+        # Ensure original ini is restored even on exceptions
+        if backup.exists():
+            shutil.copy2(backup, PIO_INI)
+            backup.unlink(missing_ok=True)
+
+    # Report summary
+    print("\nSummary:")
+    for cfg, m in results:
+        label = format_config_label(cfg)
+        js = f"JS {m.get('js_kb','?')} kB (gzip {m.get('js_gzip_kb','?')} kB)"
+        css = f"CSS {m.get('css_kb','?')} kB (gzip {m.get('css_gzip_kb','?')} kB)"
+        flash = f"Flash {m.get('flash_pct','?')}% ({m.get('flash_used','?')}/{m.get('flash_total','?')} bytes)"
+        print(f"- {label}: {js}, {css}, {flash}")
+
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
