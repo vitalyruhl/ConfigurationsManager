@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const distDir = path.join(__dirname, 'webui', 'dist');
 const outFile = path.join(__dirname, 'src', 'html_content.h');
@@ -14,7 +15,17 @@ function stripBlockComments(content) {
 }
 
 async function buildHeader() {
-  let indexHtml = fs.readFileSync(path.join(distDir, 'index.html'), 'utf8');
+  const htmlPath = path.join(distDir, 'index.html');
+  const htmlGzPath = path.join(distDir, 'index.html.gz');
+  let indexHtml;
+  if (fs.existsSync(htmlPath)) {
+    indexHtml = fs.readFileSync(htmlPath, 'utf8');
+  } else if (fs.existsSync(htmlGzPath)) {
+    const gz = fs.readFileSync(htmlGzPath);
+    indexHtml = zlib.gunzipSync(gz).toString('utf8');
+  } else {
+    throw new Error('cannot find dist/index.html or dist/index.html.gz');
+  }
 
 
   // add css

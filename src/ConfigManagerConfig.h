@@ -30,6 +30,10 @@
 #ifndef CM_ENABLE_RUNTIME_FLOAT_SLIDERS // Enable runtime float sliders
 #define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0 //default: disabled
 #endif
+// Number inputs (manual commit numeric entry)
+#ifndef CM_ENABLE_RUNTIME_NUMBER_INPUTS
+#define CM_ENABLE_RUNTIME_NUMBER_INPUTS 1 // default: enabled
+#endif
 // New combined flag: analog (numeric) sliders (int or float). Prefer this one in builds.
 #ifndef CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 #define CM_ENABLE_RUNTIME_ANALOG_SLIDERS (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_FLOAT_SLIDERS)

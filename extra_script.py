@@ -156,7 +156,7 @@ sliders_on = sliders_enabled_combined()
 state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
 buttons_on = flag_enabled('CM_ENABLE_RUNTIME_BUTTONS')
 checkboxes_on = flag_enabled('CM_ENABLE_RUNTIME_CHECKBOXES')
-num_inputs_on = True  # optional future flag e.g., CM_ENABLE_RUNTIME_NUMBER_INPUTS
+num_inputs_on = flag_enabled('CM_ENABLE_RUNTIME_NUMBER_INPUTS') or True  # default to True when flag missing
 feature_env = {
 	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
 	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1' if sliders_on else '0',
@@ -164,7 +164,7 @@ feature_env = {
 	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
 }
 
-print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on}")
+print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")
 
 def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabled: bool):
 	"""Copy either the enabled or disabled template to the target component path."""
