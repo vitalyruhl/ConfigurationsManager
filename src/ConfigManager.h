@@ -17,7 +17,7 @@
 #include "ConfigManagerConfig.h"
 
 #if CM_EMBED_WEBUI
-#include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
+#include "html_content.h" // Generated: provides WEB_HTML_GZ and accessors
 #else
 // External UI mode: provide a stub implementation that returns empty content
 class WebHTML {
@@ -1329,7 +1329,12 @@ public:
     // Root route
 #if CM_EMBED_WEBUI
     server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
-          { request->send_P(200, "text/html", webhtml.getWebHTML()); });
+          {
+              // Serve gzipped HTML directly from PROGMEM
+              AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", webhtml.getWebHTMLGz(), webhtml.getWebHTMLGzLen());
+              response->addHeader("Content-Encoding", "gzip");
+              request->send(response);
+          });
 #else
     server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
           { request->send(200, "text/plain", "Embedded WebUI disabled. Use external WebUI."); });

@@ -69,10 +69,37 @@ async function buildHeader() {
     () => `<link rel="icon" type="image/svg+xml" href="${svgDataUrl}" />`
   );
 
-  // make the Header
+  // Compress fully inlined HTML to gzip to save flash when embedding
+  const gz = zlib.gzipSync(Buffer.from(indexHtml, 'utf8'), { level: 9 });
+
+  // Format as C array (hex) for PROGMEM
+  /**
+   * @param {Buffer} buf
+   * @returns {string}
+   */
+  function toCArray(buf) {
+    const parts = [];
+    for (let i = 0; i < buf.length; i++) {
+      const b = buf[i];
+      parts.push('0x' + b.toString(16).padStart(2, '0'));
+    }
+    // Wrap to reasonable line length
+    const lines = [];
+    const perLine = 24;
+    for (let i = 0; i < parts.length; i += perLine) {
+      lines.push(parts.slice(i, i + perLine).join(', '));
+    }
+    return lines.join(',\n    ');
+  }
+
+  const gzArray = toCArray(gz);
+
+  // make the Header (gzipped content)
   let header = `#pragma once\n#include <pgmspace.h>\n\n`;
-  header += `const char WEB_HTML[] PROGMEM = R"rawliteral(\n${indexHtml}\n)rawliteral";\n`;
-  header += `\nclass WebHTML {\npublic:\n    const char* getWebHTML();\n};\n`;
+  header += `// Gzipped embedded Web UI (index.html with inlined CSS/JS)\n`;
+  header += `const uint8_t WEB_HTML_GZ[] PROGMEM = {\n    ${gzArray}\n};\n`;
+  header += `const size_t WEB_HTML_GZ_LEN = ${gz.length};\n`;
+  header += `\nclass WebHTML {\npublic:\n    const uint8_t* getWebHTMLGz();\n    size_t getWebHTMLGzLen();\n};\n`;
 
   fs.writeFileSync(outFile, header);
   console.log('Header generated:', outFile);
