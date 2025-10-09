@@ -154,6 +154,8 @@ def sliders_enabled_combined() -> bool:
 # Map firmware flags to frontend env vars (use combined flag)
 sliders_on = sliders_enabled_combined()
 state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
+buttons_on = flag_enabled('CM_ENABLE_RUNTIME_BUTTONS')
+checkboxes_on = flag_enabled('CM_ENABLE_RUNTIME_CHECKBOXES')
 feature_env = {
 	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
 	'VITE_ENABLE_RUNTIME_ALALOG_SLIDERS': '1' if sliders_on else '0',
@@ -161,7 +163,7 @@ feature_env = {
 	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
 }
 
-print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on}")
+print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on}")
 
 def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabled: bool):
 	"""Copy either the enabled or disabled template to the target component path."""
@@ -186,8 +188,21 @@ select_component(
 	feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '1'
 )
 
-# Note: RuntimeActionButton and RuntimeCheckbox are small; pruning them is optional.
-# To add pruning, create templates and a flag map similar to above, then call select_component here.
+# Action button
+select_component(
+	'src/components/runtime/RuntimeActionButton.vue',
+	'src/components/runtime/templates/RuntimeActionButton.enabled.vue',
+	'src/components/runtime/templates/RuntimeActionButton.disabled.vue',
+	buttons_on
+)
+
+# Checkbox
+select_component(
+	'src/components/runtime/RuntimeCheckbox.vue',
+	'src/components/runtime/templates/RuntimeCheckbox.enabled.vue',
+	'src/components/runtime/templates/RuntimeCheckbox.disabled.vue',
+	checkboxes_on
+)
 
 # Prepare environment
 env_vars = os.environ.copy()
