@@ -16,25 +16,9 @@ except Exception:
 npm_cmd = r'C:\Program Files\nodejs\npm.cmd'
 node_exe = r'C:\Program Files\nodejs\node.exe'
 
-# Note: If "vite" is not found, run "npm install" in the webui folder first!
-# Automatic installation if node_modules is missing:
 webui_path = 'webui'
-subprocess.run([npm_cmd, 'install'], cwd=webui_path, check=True)
 
-def _get_define_value_from_scons(defines, name: str):
-	if not defines:
-		return None
-	for d in defines:
-		if isinstance(d, tuple) and len(d) == 2:
-			k, v = d
-			if k == name:
-				return v
-		elif isinstance(d, str):
-			# bare define like 'NAME' -> treat as truthy
-			if d == name:
-				return 1
-	return None
-
+# Helper: read flag in all contexts
 def flag_enabled(name: str) -> bool:
 	# Prefer PlatformIO's SCons env if available
 	if env is not None:
@@ -65,6 +49,22 @@ def flag_enabled(name: str) -> bool:
 	except Exception:
 		pass
 	return False
+
+def _get_define_value_from_scons(defines, name: str):
+	if not defines:
+		return None
+	for d in defines:
+		if isinstance(d, tuple) and len(d) == 2:
+			k, v = d
+			if k == name:
+				return v
+		elif isinstance(d, str):
+			# bare define like 'NAME' -> treat as truthy
+			if d == name:
+				return 1
+	return None
+
+# (delay EMBED_WEBUI evaluation until after helper parsers are defined)
 
 def _parse_ini_defines_for_env(ini_path: Path, env_name: str):
 	"""Minimal parser to extract -DNAME[=VALUE] tokens from build_flags of [env:env_name]."""
@@ -151,6 +151,9 @@ def sliders_enabled_combined() -> bool:
 	# Backward compatibility: either int or float
 	return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
 
+# Evaluate embed flag now that helpers are loaded
+EMBED_WEBUI = flag_enabled('CM_EMBED_WEBUI')
+
 # Map firmware flags to frontend env vars (use combined flag)
 sliders_on = sliders_enabled_combined()
 state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
@@ -164,7 +167,7 @@ feature_env = {
 	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
 }
 
-print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")
+print(f"[extra_script] Flags: embed_webui={EMBED_WEBUI} sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")
 
 def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabled: bool):
 	"""Copy either the enabled or disabled template to the target component path."""
@@ -174,61 +177,94 @@ def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabl
 		raise FileNotFoundError(f"Missing template: {src}")
 	target.write_text(src.read_text(encoding='utf-8'), encoding='utf-8')
 
-# Select appropriate component variants based on flags
-select_component(
-	'src/components/runtime/RuntimeSlider.vue',
-	'src/components/runtime/templates/RuntimeSlider.enabled.vue',
-	'src/components/runtime/templates/RuntimeSlider.disabled.vue',
-	feature_env['VITE_ENABLE_RUNTIME_ANALOG_SLIDERS'] == '1'
-)
+if EMBED_WEBUI:
+	# Select appropriate component variants based on flags
+	select_component(
+		'src/components/runtime/RuntimeSlider.vue',
+		'src/components/runtime/templates/RuntimeSlider.enabled.vue',
+		'src/components/runtime/templates/RuntimeSlider.disabled.vue',
+		feature_env['VITE_ENABLE_RUNTIME_ANALOG_SLIDERS'] == '1'
+	)
 
-select_component(
-	'src/components/runtime/RuntimeStateButton.vue',
-	'src/components/runtime/templates/RuntimeStateButton.enabled.vue',
-	'src/components/runtime/templates/RuntimeStateButton.disabled.vue',
-	feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '1'
-)
+	select_component(
+		'src/components/runtime/RuntimeStateButton.vue',
+		'src/components/runtime/templates/RuntimeStateButton.enabled.vue',
+		'src/components/runtime/templates/RuntimeStateButton.disabled.vue',
+		feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '1'
+	)
 
-# Action button
-select_component(
-	'src/components/runtime/RuntimeActionButton.vue',
-	'src/components/runtime/templates/RuntimeActionButton.enabled.vue',
-	'src/components/runtime/templates/RuntimeActionButton.disabled.vue',
-	buttons_on
-)
+	# Action button
+	select_component(
+		'src/components/runtime/RuntimeActionButton.vue',
+		'src/components/runtime/templates/RuntimeActionButton.enabled.vue',
+		'src/components/runtime/templates/RuntimeActionButton.disabled.vue',
+		buttons_on
+	)
 
-# Checkbox
-select_component(
-	'src/components/runtime/RuntimeCheckbox.vue',
-	'src/components/runtime/templates/RuntimeCheckbox.enabled.vue',
-	'src/components/runtime/templates/RuntimeCheckbox.disabled.vue',
-	checkboxes_on
-)
+	# Checkbox
+	select_component(
+		'src/components/runtime/RuntimeCheckbox.vue',
+		'src/components/runtime/templates/RuntimeCheckbox.enabled.vue',
+		'src/components/runtime/templates/RuntimeCheckbox.disabled.vue',
+		checkboxes_on
+	)
 
-# Number input (optional pruning, currently always on)
-select_component(
-	'src/components/runtime/RuntimeNumberInput.vue',
-	'src/components/runtime/templates/RuntimeNumberInput.enabled.vue',
-	'src/components/runtime/templates/RuntimeNumberInput.disabled.vue',
-	num_inputs_on
-)
+	# Number input (optional pruning, enabled by flag default)
+	select_component(
+		'src/components/runtime/RuntimeNumberInput.vue',
+		'src/components/runtime/templates/RuntimeNumberInput.enabled.vue',
+		'src/components/runtime/templates/RuntimeNumberInput.disabled.vue',
+		num_inputs_on
+	)
 
-# Prepare environment
-env_vars = os.environ.copy()
-env_vars.update(feature_env)
+if EMBED_WEBUI:
+	# Ensure node modules present only when embedding
+	subprocess.run([npm_cmd, 'install'], cwd=webui_path, check=True)
 
-# 1. Build Vue app with feature env
-subprocess.run([npm_cmd, 'run', 'build'], cwd='webui', check=True, env=env_vars)
+	# Prepare environment
+	env_vars = os.environ.copy()
+	env_vars.update(feature_env)
 
-# 1b. Gzip compress dist/index.html to reduce flash footprint before header conversion
-dist_index = Path(webui_path) / 'dist' / 'index.html'
-if dist_index.exists():
-	raw = dist_index.read_bytes()
-	gz_path = dist_index.with_suffix('.html.gz')
-	with gzip.open(gz_path, 'wb', compresslevel=9) as gz:
-		gz.write(raw)
-	# Optionally replace original with compressed if header generator expects index.html
-	# Here we keep both; webui_to_header.js could be adapted to pick .gz
+	# 1. Build Vue app with feature env
+	subprocess.run([npm_cmd, 'run', 'build'], cwd='webui', check=True, env=env_vars)
 
-# 2. Run Node.js script to convert (consider adapting to use .gz later)
-subprocess.run([node_exe, 'webui_to_header.js'], cwd='.', check=True)
+	# 1b. Gzip compress dist/index.html to reduce flash footprint before header conversion
+	dist_index = Path(webui_path) / 'dist' / 'index.html'
+	if dist_index.exists():
+		raw = dist_index.read_bytes()
+		gz_path = dist_index.with_suffix('.html.gz')
+		with gzip.open(gz_path, 'wb', compresslevel=9) as gz:
+			gz.write(raw)
+
+	# 2. Generate header from built assets
+	subprocess.run([node_exe, 'webui_to_header.js'], cwd='.', check=True)
+else:
+	# Skipping WebUI build and header generation (external UI mode)
+	print("[extra_script] CM_EMBED_WEBUI=0 -> Skipping webui build and header generation.")
+	# Overwrite header with a tiny stub to avoid accidentally keeping old embedded content
+	header_path = Path('src') / 'html_content.h'
+	stub = (
+		"#pragma once\n"
+		"#include <pgmspace.h>\n\n"
+		"// Minimal stub when embedded WebUI is disabled\n"
+		"const char WEB_HTML[] PROGMEM =\n"
+		'R"HTML(<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WebUI disabled</title><style>body{font-family:sans-serif;background:#111;color:#ddd;margin:2rem} .note{padding:1rem;border:1px solid #333;border-radius:8px;background:#1a1a1a}</style></head><body><h3>Embedded WebUI disabled</h3><div class="note">Use external WebUI. APIs are still available on this device.</div></body></html>)HTML";\n'
+	)
+	try:
+		header_path.write_text(stub, encoding='utf-8')
+		print(f"[extra_script] Wrote stub header: {header_path}")
+	except Exception as e:
+		print(f"[extra_script] Warning: failed to write stub header: {e}")
+
+	# Also remove any previously built object to force relink without embedded assets
+	try:
+		env_name = os.environ.get('PIOENV') or os.environ.get('PLATFORMIO_ENV') or ''
+		if env_name:
+			obj_dir = Path('.pio') / 'build' / env_name / 'src'
+			for fname in ['html_content.cpp.o', 'html_content.cpp.o.d']:
+				fpath = obj_dir / fname
+				if fpath.exists():
+					fpath.unlink()
+					print(f"[extra_script] Removed stale object: {fpath}")
+	except Exception as e:
+		print(f"[extra_script] Warning: could not remove old object files: {e}")

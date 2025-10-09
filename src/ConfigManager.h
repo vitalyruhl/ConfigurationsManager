@@ -18,21 +18,14 @@
 
 #if CM_EMBED_WEBUI
 #include "html_content.h" // NOTE: WEB_HTML is now generated from webui (Vue project). Build webui and copy dist/index.html here as a string literal.
-#endif
-// #define development // Uncomment (or add -Ddevelopment to build flags) to enable dev-only export & runtime_meta override routes
-
-#if CM_EMBED_WEBUI
-#ifdef UNIT_TEST
-// Inline fallback to ensure linker finds implementation during unit tests even if html_content.cpp filtered out
-inline const char *WebHTML::getWebHTML() { return WEB_HTML; }
-#endif
 #else
-class WebHTML
-{
+// External UI mode: provide a stub implementation that returns empty content
+class WebHTML {
 public:
     static const char *getWebHTML() { return ""; }
 };
 #endif
+// #define development // Uncomment (or add -Ddevelopment to build flags) to enable dev-only export & runtime_meta override routes
 
 #define CONFIGMANAGER_VERSION "2.6.1" // 08.10.2025
 
