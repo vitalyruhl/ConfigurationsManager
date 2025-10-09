@@ -82,30 +82,39 @@ def find_build_flags_block(lines: List[str], env_start: int, env_end: int) -> Tu
     return start, end
 
 
-def set_flag_in_block(lines: List[str], blk_start: int, blk_end: int, flag: str, val: int) -> None:
-    """Ensure a -D flag exists in build_flags block with given value (0/1). Update if present, else append."""
-    assert blk_start >= 0 and blk_end >= blk_start
-    target = f'-D{flag}='
-    # Search and replace
-    found = False
-    for i in range(blk_start, blk_end):
-        ln = lines[i]
-        s = ln.strip()
-        if s.startswith(target) or s == f'-D{flag}':
-            indent = ln[:len(ln) - len(ln.lstrip())]
-            lines[i] = f"{indent}-D{flag}={val}\n"
-            found = True
-            break
-    if not found:
-        # Insert before blk_end, keep same indentation style as prior indented line or a tab by default
-        indent = '\t'
-        if blk_end - 1 > blk_start:
-            prev = lines[blk_end - 1]
-            indent = prev[:len(prev) - len(prev.lstrip())] or indent
-        lines.insert(blk_end, f"{indent}-D{flag}={val}\n")
+def tokens_from_build_flags(lines: List[str], blk_start: int, blk_end: int) -> List[str]:
+    """Extract tokens from build_flags block (excluding the 'build_flags =' header line)."""
+    tokens: List[str] = []
+    for i in range(blk_start + 1, blk_end):
+        s = lines[i].strip()
+        if s and not s.startswith((';', '#')):
+            tokens.extend(s.split())
+    return tokens
 
 
-def apply_config(env_name: str, config: Dict[str, int]):
+def apply_overrides(tokens: List[str], overrides: Dict[str, int]) -> List[str]:
+    """Return a new tokens list where -D<FLAG>=<0|1> are set/updated per overrides."""
+    out: List[str] = []
+    seen = set()
+    for t in tokens:
+        replaced = False
+        if t.startswith('-D'):
+            kv = t[2:]
+            name = kv.split('=', 1)[0]
+            if name in overrides:
+                out.append(f"-D{name}={overrides[name]}")
+                seen.add(name)
+                replaced = True
+        if not replaced:
+            out.append(t)
+    for name, val in overrides.items():
+        if name not in seen:
+            out.append(f"-D{name}={val}")
+    return out
+
+
+def build_flags_for_env(env_name: str, config: Dict[str, int]) -> str:
+    """Read base build_flags for env_name and apply overrides; return a single-line string suitable for -O."""
     lines = read_lines()
     env_start, env_end = find_env_block(lines, env_name)
     if env_start < 0:
@@ -113,19 +122,34 @@ def apply_config(env_name: str, config: Dict[str, int]):
     blk_start, blk_end = find_build_flags_block(lines, env_start, env_end)
     if blk_start < 0:
         raise RuntimeError(f"build_flags not found in [env:{env_name}] block")
-    for f, v in config.items():
-        set_flag_in_block(lines, blk_start + 1, blk_end, f, v)
-    write_lines(lines)
+    tokens = tokens_from_build_flags(lines, blk_start, blk_end)
+    tokens = apply_overrides(tokens, config)
+    return ' '.join(tokens)
 
 
-def run_build(env_name: str) -> str:
-    proc = subprocess.run(['pio', 'run', '-e', env_name], cwd=str(ROOT), capture_output=True, text=True)
-    if proc.returncode != 0:
-        # Show combined output on failure for debugging
-        sys.stdout.write(proc.stdout)
-        sys.stderr.write(proc.stderr)
+def run_build(env_name: str, build_flags: str, timeout: int = 900) -> str:
+    """Run pio build with overrides; prefer --project-option, fallback to env var for extra_script-only."""
+    # Attempt 1: Use --project-option (non-destructive override)
+    proc = subprocess.run(
+        ['pio', 'run', '-e', env_name, '--project-option', f'build_flags = {build_flags}'],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=timeout
+    )
+    if proc.returncode == 0:
+        return proc.stdout + proc.stderr
+
+    # Fallback: retry by setting env var so extra_script picks up flags for frontend pruning
+    env = os.environ.copy()
+    env['PLATFORMIO_BUILD_FLAGS'] = build_flags
+    proc2 = subprocess.run(
+        ['pio', 'run', '-e', env_name],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=timeout, env=env
+    )
+    if proc2.returncode != 0:
+        sys.stdout.write(proc.stdout + proc2.stdout)
+        sys.stderr.write(proc.stderr + proc2.stderr)
         raise RuntimeError(f"Build failed for env {env_name}")
-    return proc.stdout + proc.stderr
+    # Note: In fallback, C++ flags may not change; frontend pruning still applies via extra_script
+    return proc2.stdout + proc2.stderr
 
 
 def parse_metrics(output: str) -> Dict[str, str]:
@@ -165,41 +189,27 @@ def main():
     if not PIO_INI.exists():
         print('platformio.ini not found')
         return 1
-
-    backup = PIO_INI.with_suffix('.ini.bak')
-    shutil.copy2(PIO_INI, backup)
     results = []
-    try:
-        baseline = {f: 1 for f in FLAGS}
-        all_off = {f: 0 for f in FLAGS}
-        variants: List[Dict[str, int]]
-        if args.quick:
-            variants = [baseline, all_off]
-        else:
-            variants = [baseline]
-            # Single-flag off variants
-            for f in FLAGS:
-                cfg = baseline.copy()
-                cfg[f] = 0
-                variants.append(cfg)
-            variants.append(all_off)
+    baseline = {f: 1 for f in FLAGS}
+    all_off = {f: 0 for f in FLAGS}
+    variants: List[Dict[str, int]]
+    if args.quick:
+        variants = [baseline, all_off]
+    else:
+        variants = [baseline]
+        # Single-flag off variants
+        for f in FLAGS:
+            cfg = baseline.copy()
+            cfg[f] = 0
+            variants.append(cfg)
+        variants.append(all_off)
 
-        for idx, cfg in enumerate(variants, 1):
-            # Restore from backup for a clean slate each iteration
-            shutil.copy2(backup, PIO_INI)
-            apply_config(args.env, cfg)
-            print(f"\n=== Build {idx}/{len(variants)}: {format_config_label(cfg)} ===")
-            out = run_build(args.env)
-            metrics = parse_metrics(out)
-            results.append((cfg, metrics))
-
-        # Restore baseline at end
-        shutil.copy2(backup, PIO_INI)
-    finally:
-        # Ensure original ini is restored even on exceptions
-        if backup.exists():
-            shutil.copy2(backup, PIO_INI)
-            backup.unlink(missing_ok=True)
+    for idx, cfg in enumerate(variants, 1):
+        bf = build_flags_for_env(args.env, cfg)
+        print(f"\n=== Build {idx}/{len(variants)}: {format_config_label(cfg)} ===")
+        out = run_build(args.env, bf)
+        metrics = parse_metrics(out)
+        results.append((cfg, metrics))
 
     # Report summary
     print("\nSummary:")
