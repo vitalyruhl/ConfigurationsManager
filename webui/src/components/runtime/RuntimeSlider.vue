@@ -11,9 +11,6 @@
 			:max="max"
 			:step="step"
 			v-model.number="local"
-			@change="commit"
-			@mouseup="commit"
-			@touchend="commit"
 		/>
 	</div>
 	<div class="rw sl-num">
@@ -23,8 +20,16 @@
 			:max="max"
 			:step="step"
 			v-model.number="local"
-			@change="commit"
+			@keyup.enter="commit"
 		/>
+	</div>
+	<div class="rw sl-actions">
+		<span></span>
+		<div class="btns">
+			<button class="btn apply" :disabled="!dirty" @click="commit">Set</button>
+			<button class="btn reset" :disabled="!dirty" @click="reset">Reset</button>
+		</div>
+		<span></span>
 	</div>
 	<!-- spacer row for compactness -->
 	<div class="rw sl-gap"></div>
@@ -49,6 +54,7 @@ const precision = computed(() => typeof props.field.precision === 'number' ? pro
 const step = computed(() => props.mode === 'float' ? (precision.value >= 3 ? 0.001 : precision.value === 2 ? 0.01 : 0.1) : 1);
 
 const local = ref(parseVal(props.value));
+const original = computed(() => parseVal(props.value));
 
 watch(() => props.value, (v) => {
 	local.value = parseVal(v);
@@ -68,11 +74,22 @@ const displayValue = computed(() => {
 	return n.toFixed(precision.value);
 });
 
+const dirty = computed(() => {
+	const cur = Number(local.value);
+	const orig = Number(original.value);
+	if (props.mode === 'int') return Math.round(cur) !== Math.round(orig);
+	return Number(cur.toFixed(precision.value)) !== Number(orig.toFixed(precision.value));
+});
+
 function commit() {
 	let out = Number(local.value);
 	if (props.mode === 'int') out = Math.round(out);
 	out = clamp(out, min.value, max.value);
 	emit('commit', { group: props.group, field: props.field, value: out });
+}
+
+function reset() {
+	local.value = original.value;
 }
 </script>
 
@@ -81,7 +98,13 @@ function commit() {
 .lab { font-weight: 600; }
 .sl-ctrl { grid-template-columns: 1fr; }
 .sl-num { grid-template-columns: 1fr; }
+.sl-actions { grid-template-columns: 1fr auto 1fr; }
 .sl-gap { height: .25rem; }
 input[type="range"] { width: 100%; }
 input[type="number"] { width: 8rem; justify-self: end; }
+.btns { display: flex; gap: .5rem; }
+.btn { padding: .25rem .6rem; border-radius: .4rem; border: 1px solid #888; cursor: pointer; }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+.btn.apply { background: #0b5; color: #fff; border-color: #0a4; }
+.btn.reset { background: #777; color: #fff; border-color: #666; }
 </style>
