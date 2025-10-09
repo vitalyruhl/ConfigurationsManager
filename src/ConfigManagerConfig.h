@@ -42,14 +42,14 @@
 #ifndef CM_ENABLE_WS_PUSH // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled)
 #define CM_ENABLE_WS_PUSH 1 //default: disabled
 #endif
-#ifndef CM_ENABLE_THEMING //disable both theming and user CSS for simplicity
-#define CM_ENABLE_THEMING 1 //default: disabled
-#endif
 #ifndef CM_ENABLE_STYLE_RULES //only style rules over .set("background", "#000") etc.
 #define CM_ENABLE_STYLE_RULES 0
 #endif
 #ifndef CM_ENABLE_USER_CSS // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);)
 #define CM_ENABLE_USER_CSS 0
+#endif
+#ifndef CM_ENABLE_THEMING //disable both theming and user CSS for simplicity
+#define CM_ENABLE_THEMING (CM_ENABLE_STYLE_RULES || CM_ENABLE_USER_CSS)
 #endif
 #ifndef CM_ENABLE_DYNAMIC_VISIBILITY // Enable dynamic visibility of settings based on other settings (showIf callbacks)
 #define CM_ENABLE_DYNAMIC_VISIBILITY 1 //default: enabled

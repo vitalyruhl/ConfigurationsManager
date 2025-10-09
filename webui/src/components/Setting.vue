@@ -82,7 +82,7 @@
 
 .bool-setting :deep(.lab) {
   font-weight: 600;
-  padding-right: 1rem;
+  padding-right: 2rem;
 }
 
 label {
