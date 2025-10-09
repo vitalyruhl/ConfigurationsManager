@@ -479,7 +479,7 @@ void setup()
                 // digitalWrite(RELAY_HEATER_PIN, LOW);
             });
 
-        cfg.defineRuntimeBool("alarms", "dp_risk", "Dewpoint Risk", true, /*order*/ 100);
+            cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100);
 
         {
             // Custom styling for the too-low-temperature alarm (yellow, no blink, instead of red standard)

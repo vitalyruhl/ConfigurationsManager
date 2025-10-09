@@ -997,22 +997,40 @@ function fallbackBoolDotRule(val, meta) {
 function selectBoolDotRule(val, meta) {
   const rules = ensureStyleRules(meta);
   if (!rules) return fallbackBoolDotRule(val, meta);
+  // Helper to check if a rule actually defines any visuals (classes or css)
+  const ruleHasVisuals = (rule) => {
+    if (!rule) return false;
+    if (Array.isArray(rule.classes) && rule.classes.length) return true;
+    if (typeof rule.classes === "string" && rule.classes.trim().length) return true;
+    if (
+      typeof rule.className === "string" &&
+      rule.className.trim &&
+      rule.className.trim().length
+    )
+      return true;
+    if (rule.css && typeof rule.css === "object" && Object.keys(rule.css).length)
+      return true;
+    return false;
+  };
   const boolVal = !!val;
   const isAlarm = boolAlarmMatch(val, meta);
+  let candidate = null;
   if (
     typeof meta.boolAlarmValue === "boolean" &&
     boolVal === meta.boolAlarmValue
   ) {
-    if (rules.stateDotOnAlarm) return rules.stateDotOnAlarm;
+    candidate = rules.stateDotOnAlarm || candidate;
   }
-  if (boolVal && rules.stateDotOnTrue) return rules.stateDotOnTrue;
-  if (!boolVal && rules.stateDotOnFalse) return rules.stateDotOnFalse;
-  if (isAlarm && rules.stateDotOnTrue) return rules.stateDotOnTrue;
-  if (isAlarm && rules.stateDotOnFalse) return rules.stateDotOnFalse;
-  if (boolVal && rules.stateDotOnFalse) return rules.stateDotOnFalse;
-  if (!boolVal && rules.stateDotOnTrue) return rules.stateDotOnTrue;
-  if (rules.stateDotOnAlarm) return rules.stateDotOnAlarm;
-  return fallbackBoolDotRule(val, meta);
+  if (!candidate && boolVal && rules.stateDotOnTrue) candidate = rules.stateDotOnTrue;
+  if (!candidate && !boolVal && rules.stateDotOnFalse) candidate = rules.stateDotOnFalse;
+  if (!candidate && isAlarm && rules.stateDotOnTrue) candidate = rules.stateDotOnTrue;
+  if (!candidate && isAlarm && rules.stateDotOnFalse) candidate = rules.stateDotOnFalse;
+  if (!candidate && boolVal && rules.stateDotOnFalse) candidate = rules.stateDotOnFalse;
+  if (!candidate && !boolVal && rules.stateDotOnTrue) candidate = rules.stateDotOnTrue;
+  if (!candidate && rules.stateDotOnAlarm) candidate = rules.stateDotOnAlarm;
+  // If selected rule has no visuals, fallback to default dot styles
+  if (!ruleHasVisuals(candidate)) return fallbackBoolDotRule(val, meta);
+  return candidate;
 }
 
 function boolDotVisible(val, meta) {
