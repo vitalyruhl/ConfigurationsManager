@@ -156,6 +156,7 @@ sliders_on = sliders_enabled_combined()
 state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
 buttons_on = flag_enabled('CM_ENABLE_RUNTIME_BUTTONS')
 checkboxes_on = flag_enabled('CM_ENABLE_RUNTIME_CHECKBOXES')
+num_inputs_on = True  # optional future flag e.g., CM_ENABLE_RUNTIME_NUMBER_INPUTS
 feature_env = {
 	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
 	'VITE_ENABLE_RUNTIME_ALALOG_SLIDERS': '1' if sliders_on else '0',
@@ -202,6 +203,14 @@ select_component(
 	'src/components/runtime/templates/RuntimeCheckbox.enabled.vue',
 	'src/components/runtime/templates/RuntimeCheckbox.disabled.vue',
 	checkboxes_on
+)
+
+# Number input (optional pruning, currently always on)
+select_component(
+	'src/components/runtime/RuntimeNumberInput.vue',
+	'src/components/runtime/templates/RuntimeNumberInput.enabled.vue',
+	'src/components/runtime/templates/RuntimeNumberInput.disabled.vue',
+	num_inputs_on
 )
 
 # Prepare environment
