@@ -31,8 +31,8 @@
 #define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0 //default: disabled
 #endif
 // New combined flag: analog (numeric) sliders (int or float). Prefer this one in builds.
-#ifndef CM_ENABLE_RUNTIME_ALALOG_SLIDERS
-#define CM_ENABLE_RUNTIME_ALALOG_SLIDERS (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_FLOAT_SLIDERS)
+#ifndef CM_ENABLE_RUNTIME_ANALOG_SLIDERS
+#define CM_ENABLE_RUNTIME_ANALOG_SLIDERS (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_FLOAT_SLIDERS)
 #endif
 #ifndef CM_ENABLE_RUNTIME_ALARMS // Enable runtime alarms (thresholds, color coding)
 #define CM_ENABLE_RUNTIME_ALARMS 1  //default: disabled

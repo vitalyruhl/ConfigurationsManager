@@ -145,11 +145,11 @@ def _parse_ini_defines_all_envs(ini_path: Path):
 	return defines
 
 def sliders_enabled_combined() -> bool:
-    # New combined flag takes precedence
-    if flag_enabled('CM_ENABLE_RUNTIME_ALALOG_SLIDERS'):
-        return True
-    # Backward compatibility: either int or float
-    return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
+	# New combined flag takes precedence
+	if flag_enabled('CM_ENABLE_RUNTIME_ANALOG_SLIDERS'):
+		return True
+	# Backward compatibility: either int or float
+	return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
 
 # Map firmware flags to frontend env vars (use combined flag)
 sliders_on = sliders_enabled_combined()
@@ -159,7 +159,7 @@ checkboxes_on = flag_enabled('CM_ENABLE_RUNTIME_CHECKBOXES')
 num_inputs_on = True  # optional future flag e.g., CM_ENABLE_RUNTIME_NUMBER_INPUTS
 feature_env = {
 	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
-	'VITE_ENABLE_RUNTIME_ALALOG_SLIDERS': '1' if sliders_on else '0',
+	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1' if sliders_on else '0',
 	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1' if state_btn_on else '0',
 	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
 }
@@ -179,7 +179,7 @@ select_component(
 	'src/components/runtime/RuntimeSlider.vue',
 	'src/components/runtime/templates/RuntimeSlider.enabled.vue',
 	'src/components/runtime/templates/RuntimeSlider.disabled.vue',
-	feature_env['VITE_ENABLE_RUNTIME_ALALOG_SLIDERS'] == '1'
+	feature_env['VITE_ENABLE_RUNTIME_ANALOG_SLIDERS'] == '1'
 )
 
 select_component(

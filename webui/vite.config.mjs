@@ -9,7 +9,7 @@ export default defineConfig({
   define: {
     __ENABLE_WS_PUSH__: bool(process.env.VITE_ENABLE_WS_PUSH ?? '1'),
     // Combined analog sliders flag with back-compat fallbacks
-    __ENABLE_RUNTIME_ANALOG_SLIDERS__: bool(process.env.VITE_ENABLE_RUNTIME_ALALOG_SLIDERS ?? '1'),
+  __ENABLE_RUNTIME_ANALOG_SLIDERS__: bool(process.env.VITE_ENABLE_RUNTIME_ANALOG_SLIDERS ?? '1'),
     __ENABLE_RUNTIME_STATE_BUTTONS__: bool(process.env.VITE_ENABLE_RUNTIME_STATE_BUTTONS ?? '1'),
     __ENABLE_SYSTEM_PROVIDER__: bool(process.env.VITE_ENABLE_SYSTEM_PROVIDER ?? '1'),
   },

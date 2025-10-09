@@ -24,7 +24,7 @@ Core flags
 - CM_ENABLE_WS_PUSH: Enable WebSocket push for live runtime updates
 - CM_ENABLE_SYSTEM_PROVIDER: Show system card (uptime, heap, RSSI)
 - CM_ENABLE_RUNTIME_CONTROLS: Enable base runtime controls support
-- CM_ENABLE_RUNTIME_ALALOG_SLIDERS: Enable analog (numeric) sliders in Runtime view (replaces separate INT/FLOAT flags)
+- CM_ENABLE_RUNTIME_ANALOG_SLIDERS: Enable analog (numeric) sliders in Runtime view (replaces separate INT/FLOAT flags)
 - CM_ENABLE_RUNTIME_BUTTONS / CM_ENABLE_RUNTIME_STATE_BUTTONS / CM_ENABLE_RUNTIME_CHECKBOXES: UI controls
 - CM_ENABLE_RUNTIME_ALARMS: Cross-field and per-field alarm support
 - CM_ENABLE_DYNAMIC_VISIBILITY: `showIf` callbacks to hide/show settings dynamically
