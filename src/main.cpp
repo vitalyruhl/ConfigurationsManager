@@ -419,7 +419,7 @@ void setup()
     // cfg.defineRuntimeDivider("Hand overrides", "More Controls", 88); // another divider (order 91)
     // Stateful button (acts like on/off toggle with dynamic label states handled client-side) order 92
     static bool stateBtnState = false;
-    cfg.defineRuntimeStateButton("Hand overrides", "sb_mode", "Mode Button", [](){ return stateBtnState; }, [](bool v){ stateBtnState = v; Serial.printf("[STATE_BUTTON] -> %s\n", v?"ON":"OFF"); }, /*init*/ false, 91);
+    cfg.defineRuntimeStateButton("Hand overrides", "sb_mode", "Fan", [](){ return stateBtnState; }, [](bool v){ stateBtnState = v; Serial.printf("[STATE_BUTTON] -> %s\n", v?"ON":"OFF"); setHeaterState(v);}, /*init*/ false, 91);
     // Int slider (-10..10) order 93
     static int transientIntVal = 0;
     cfg.defineRuntimeIntSlider("Hand overrides", "i_adj", "Int", -10, 10, 0, [](){ 

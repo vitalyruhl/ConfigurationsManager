@@ -45,18 +45,123 @@ def flag_enabled(name: str) -> bool:
 				return str(val).lower() in ('1', 'true', 'yes', 'on')
 		except Exception:
 			pass
-	# Fallback: inspect OS environment aggregates (may be empty in PIO)
-	build_flags = os.environ.get('PLATFORMIO_BUILD_FLAGS', '') + ' ' + os.environ.get('BUILD_FLAGS', '')
-	return re.search(rf'{re.escape(name)}=1(\s|$)', build_flags) is not None
+	# Fallback 1: inspect OS environment aggregates (may be empty in PIO)
+	build_flags = (os.environ.get('PLATFORMIO_BUILD_FLAGS', '') + ' ' + os.environ.get('BUILD_FLAGS', '')).strip()
+	if build_flags:
+		return re.search(rf'(?:\s|^){re.escape(name)}=1(\s|$)', build_flags) is not None or re.search(rf'(?:\s|^)-D{re.escape(name)}(?:=1)?(\s|$)', build_flags) is not None
 
-# Map firmware flags to frontend env vars
+	# Fallback 2: parse platformio.ini for the active env (PIOENV)
+	try:
+		ini_path = Path('platformio.ini')
+		if ini_path.exists():
+			pioenv = os.environ.get('PIOENV') or os.environ.get('PLATFORMIO_ENV')
+			if pioenv:
+				defines = _parse_ini_defines_for_env(ini_path, pioenv)
+			else:
+				defines = _parse_ini_defines_all_envs(ini_path)
+			if name in defines:
+				v = defines.get(name)
+				return (v is None) or (str(v).lower() in ('1', 'true', 'yes', 'on'))
+	except Exception:
+		pass
+	return False
+
+def _parse_ini_defines_for_env(ini_path: Path, env_name: str):
+	"""Minimal parser to extract -DNAME[=VALUE] tokens from build_flags of [env:env_name]."""
+	content = ini_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+	in_env = False
+	collecting_flags = False
+	tokens = []
+	for line in content:
+		s = line.strip()
+		if s.startswith('[') and s.endswith(']'):
+			in_env = (s == f'[env:{env_name}]')
+			collecting_flags = False
+			continue
+		if not in_env:
+			continue
+		# detect start of build_flags
+		if s.startswith('build_flags'):
+			collecting_flags = True
+			# possible inline after '='
+			parts = line.split('=', 1)
+			if len(parts) == 2:
+				rhs = parts[1]
+				tokens.extend(rhs.strip().split())
+			continue
+		# stop collecting when a new key of the section appears
+		if collecting_flags and s and not line.startswith(('\t', ' ', ';', '#')) and '=' in line:
+			collecting_flags = False
+		if collecting_flags:
+			# continuation lines usually indented or on separate lines
+			if s and not s.startswith((';', '#')):
+				tokens.extend(s.split())
+	defines = {}
+	for t in tokens:
+		if t.startswith('-D'):
+			kv = t[2:]
+			if '=' in kv:
+				k, v = kv.split('=', 1)
+				defines[k.strip()] = v.strip()
+			else:
+				defines[kv.strip()] = None
+	return defines
+
+def _parse_ini_defines_all_envs(ini_path: Path):
+	"""Parse -D defines from build_flags across all [env:*] sections and merge them (last wins)."""
+	content = ini_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+	in_env = False
+	collecting_flags = False
+	tokens = []
+	for line in content:
+		s = line.strip()
+		if s.startswith('[') and s.endswith(']'):
+			in_env = s.startswith('[env:')
+			collecting_flags = False
+			continue
+		if not in_env:
+			continue
+		if s.startswith('build_flags'):
+			collecting_flags = True
+			parts = line.split('=', 1)
+			if len(parts) == 2:
+				rhs = parts[1]
+				tokens.extend(rhs.strip().split())
+			continue
+		if collecting_flags and s and not line.startswith(('\t', ' ', ';', '#')) and '=' in line:
+			collecting_flags = False
+		if collecting_flags:
+			if s and not s.startswith((';', '#')):
+				tokens.extend(s.split())
+	defines = {}
+	for t in tokens:
+		if t.startswith('-D'):
+			kv = t[2:]
+			if '=' in kv:
+				k, v = kv.split('=', 1)
+				defines[k.strip()] = v.strip()
+			else:
+				defines[kv.strip()] = None
+	return defines
+
+def sliders_enabled_combined() -> bool:
+    # New combined flag takes precedence
+    if flag_enabled('CM_ENABLE_RUNTIME_ALALOG_SLIDERS'):
+        return True
+    # Backward compatibility: either int or float
+    return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
+
+# Map firmware flags to frontend env vars (use combined flag)
+sliders_on = sliders_enabled_combined()
+state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
 feature_env = {
 	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
-	'VITE_ENABLE_RUNTIME_INT_SLIDERS': '1' if flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') else '0',
-	'VITE_ENABLE_RUNTIME_FLOAT_SLIDERS': '1' if flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS') else '0',
-	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1' if flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS') else '0',
+	'VITE_ENABLE_RUNTIME_ALALOG_SLIDERS': '1' if sliders_on else '0',
+	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1' if state_btn_on else '0',
 	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
 }
+
+print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on}")
 
 def maybe_stub(rel_path: str):
 	full = Path(webui_path) / rel_path
@@ -70,12 +175,33 @@ def maybe_stub(rel_path: str):
 """
 	full.write_text(stub_code, encoding='utf-8')
 
+def maybe_restore(full_rel: str, from_rel: str):
+	"""If target file exists and contains a stub, restore it from a known good source file."""
+	target = Path(webui_path) / full_rel
+	source = Path(webui_path) / from_rel
+	if not target.exists() or not source.exists():
+		return
+	try:
+		txt = target.read_text(encoding='utf-8')
+		if '<template></template>' in txt and 'stubbed because feature disabled' in txt:
+			target.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
+	except Exception:
+		pass
+
 # If feature disabled -> stub component (pre-build pruning)
-# NOTE: Disabled to avoid overwriting local component edits; uncomment if you want automatic stubbing
-# if feature_env['VITE_ENABLE_RUNTIME_INT_SLIDERS'] == '0' and feature_env['VITE_ENABLE_RUNTIME_FLOAT_SLIDERS'] == '0':
-#     maybe_stub('src/components/runtime/RuntimeSlider.vue')
-# if feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '0':
-#     maybe_stub('src/components/runtime/RuntimeStateButton.vue')
+# This only writes a minimal valid SFC when the feature is OFF, and leaves your files untouched otherwise.
+if feature_env['VITE_ENABLE_RUNTIME_ALALOG_SLIDERS'] == '0':
+	maybe_stub('src/components/runtime/RuntimeSlider.vue')
+else:
+	# If a previous build stubbed the slider, restore it from the full copy
+	maybe_restore('src/components/runtime/RuntimeSlider.vue', 'src/components/runtime/_RuntimeSlider.full.vue')
+
+# If state buttons are disabled, stub the component to allow pruning; else ensure it’s restored
+if feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '0':
+	maybe_stub('src/components/runtime/RuntimeStateButton.vue')
+else:
+	# Restore from full copy if previously stubbed
+	maybe_restore('src/components/runtime/RuntimeStateButton.vue', 'src/components/runtime/_RuntimeStateButton.full.vue')
 
 # Prepare environment
 env_vars = os.environ.copy()

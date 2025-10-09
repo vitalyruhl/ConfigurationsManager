@@ -24,7 +24,7 @@ Core flags
 - CM_ENABLE_WS_PUSH: Enable WebSocket push for live runtime updates
 - CM_ENABLE_SYSTEM_PROVIDER: Show system card (uptime, heap, RSSI)
 - CM_ENABLE_RUNTIME_CONTROLS: Enable base runtime controls support
-- CM_ENABLE_RUNTIME_INT_SLIDERS / CM_ENABLE_RUNTIME_FLOAT_SLIDERS: Numeric sliders
+- CM_ENABLE_RUNTIME_ALALOG_SLIDERS: Enable analog (numeric) sliders in Runtime view (replaces separate INT/FLOAT flags)
 - CM_ENABLE_RUNTIME_BUTTONS / CM_ENABLE_RUNTIME_STATE_BUTTONS / CM_ENABLE_RUNTIME_CHECKBOXES: UI controls
 - CM_ENABLE_RUNTIME_ALARMS: Cross-field and per-field alarm support
 - CM_ENABLE_DYNAMIC_VISIBILITY: `showIf` callbacks to hide/show settings dynamically
@@ -47,6 +47,7 @@ Frontend pruning and compression
 Notes
 
 - Changing flags triggers a full frontend rebuild automatically.
+- Backward compatibility: old flags (CM_ENABLE_RUNTIME_INT_SLIDERS / CM_ENABLE_RUNTIME_FLOAT_SLIDERS) still enable sliders if present, but prefer the new combined flag.
 - If you disable OTA at compile time, the Flash button and endpoint disappear.
 - If WebSocket push is disabled, the UI falls back to polling `/runtime.json`.
 

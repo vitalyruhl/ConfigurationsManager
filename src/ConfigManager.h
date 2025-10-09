@@ -1265,7 +1265,7 @@ public:
             for(auto &sb : _runtimeStateButtons){ if(sb.group==g && sb.key==k){ if(sb.setter) sb.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
         // Int slider update
         server.on("/runtime_action/int_slider", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1277,7 +1277,7 @@ public:
             for(auto &is : _runtimeIntSliders){ if(is.group==g && is.key==k){ if(is.setter) is.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
         // Float slider update
         server.on("/runtime_action/float_slider", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -2071,7 +2071,7 @@ public:
 #endif
 
 // Int slider (transient; not persisted)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
     struct _IntSliderDef
     {
         String group;
@@ -2129,7 +2129,7 @@ public:
 #endif
 
 // Float slider (transient; not persisted)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
     struct _FloatSliderDef
     {
         String group;
@@ -2237,7 +2237,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_INT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
             for (const auto &is : _runtimeIntSliders)
             {
                 if (is.group == prov.name && !slot.containsKey(is.key.c_str()) && is.getter)
@@ -2246,7 +2246,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
             for (const auto &fs : _runtimeFloatSliders)
             {
                 if (fs.group == prov.name && !slot.containsKey(fs.key.c_str()) && fs.getter)

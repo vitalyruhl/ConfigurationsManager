@@ -61,7 +61,12 @@
               <span class="lab">{{ f.label }}</span>
               <span class="val">
                 <template v-if="f.staticValue">{{ f.staticValue }}</template>
-                <template v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined">
+                <template
+                  v-else-if="
+                    runtime[group.name] &&
+                    runtime[group.name][f.key] !== undefined
+                  "
+                >
                   {{ runtime[group.name][f.key] }}
                 </template>
                 <template v-else>—</template>
@@ -70,12 +75,16 @@
             </div>
 
             <div
-              v-else-if="runtime[group.name] && runtime[group.name][f.key] !== undefined"
+              v-else-if="
+                runtime[group.name] && runtime[group.name][f.key] !== undefined
+              "
               :class="['rw', valueClasses(runtime[group.name][f.key], f)]"
               :data-group="group.name"
               :data-key="f.key"
               :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
-              :data-state="f.isBool ? boolState(runtime[group.name][f.key], f) : null"
+              :data-state="
+                f.isBool ? boolState(runtime[group.name][f.key], f) : null
+              "
             >
               <template v-if="f.isBool">
                 <span
@@ -141,33 +150,81 @@
           </template>
         </div>
 
-        <hr v-if="group.name === 'system' && runtime.uptime !== undefined" class="dv" />
+        <hr
+          v-if="group.name === 'system' && runtime.uptime !== undefined"
+          class="dv"
+        />
 
-        <p v-if="group.name === 'system' && runtime.uptime !== undefined" class="uptime">
+        <p
+          v-if="group.name === 'system' && runtime.uptime !== undefined"
+          class="uptime"
+        >
           Uptime: {{ Math.floor((runtime.uptime || 0) / 1000) }} s
         </p>
         <p
-          v-if="group.name === 'system' && runtime.system && runtime.system.loopAvg !== undefined"
+          v-if="
+            group.name === 'system' &&
+            runtime.system &&
+            runtime.system.loopAvg !== undefined
+          "
           class="uptime"
         >
-          Loop Avg: {{ typeof runtime.system.loopAvg === 'number' ? runtime.system.loopAvg.toFixed(2) : runtime.system.loopAvg }} ms
+          Loop Avg:
+          {{
+            typeof runtime.system.loopAvg === "number"
+              ? runtime.system.loopAvg.toFixed(2)
+              : runtime.system.loopAvg
+          }}
+          ms
         </p>
-        <p
-          v-if="group.name === 'system'"
-          class="uptime ota-status"
-        >
+        <p v-if="group.name === 'system'" class="uptime ota-status">
           OTA:
-          <span v-if="otaEndpointAvailable === null" class="badge off" title="probing...">checking...</span>
-          <span v-else :class="['badge', otaEnabled ? (runtime.system?.otaActive ? 'on-active' : 'on') : 'off']" :title="otaEnabled ? (runtime.system?.otaActive ? 'OTA server active' : 'OTA enabled (not active yet)') : 'OTA disabled'">
-            {{ otaEnabled ? (runtime.system?.otaActive ? 'active' : 'enabled') : 'disabled' }}
+          <span
+            v-if="otaEndpointAvailable === null"
+            class="badge off"
+            title="probing..."
+            >checking...</span
+          >
+          <span
+            v-else
+            :class="[
+              'badge',
+              otaEnabled
+                ? runtime.system?.otaActive
+                  ? 'on-active'
+                  : 'on'
+                : 'off',
+            ]"
+            :title="
+              otaEnabled
+                ? runtime.system?.otaActive
+                  ? 'OTA server active'
+                  : 'OTA enabled (not active yet)'
+                : 'OTA disabled'
+            "
+          >
+            {{
+              otaEnabled
+                ? runtime.system?.otaActive
+                  ? "active"
+                  : "enabled"
+                : "disabled"
+            }}
           </span>
         </p>
 
-        <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
+        <div
+          v-if="group.name === 'system' && runtime.uptime !== undefined"
+          class="tbl"
+        >
           <div class="rw cr">
             <span class="lab">Show state text</span>
             <label class="switch val">
-              <input type="checkbox" v-model="showBoolStateText" class="switch" />
+              <input
+                type="checkbox"
+                v-model="showBoolStateText"
+                class="switch"
+              />
               <span class="slider round"></span>
             </label>
           </div>
@@ -176,19 +233,19 @@
     </div>
 
     <div class="live-status">
-      Mode: {{ wsConnected ? 'WebSocket' : 'Polling' }}
+      Mode: {{ wsConnected ? "WebSocket" : "Polling" }}
     </div>
   </section>
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-import RuntimeActionButton from './runtime/RuntimeActionButton.vue';
-import RuntimeCheckbox from './runtime/RuntimeCheckbox.vue';
-import RuntimeNumberInput from './runtime/RuntimeNumberInput.vue';
-import RuntimeSlider from './runtime/RuntimeSlider.vue';
-import RuntimeStateButton from './runtime/RuntimeStateButton.vue';
+import RuntimeActionButton from "./runtime/RuntimeActionButton.vue";
+import RuntimeCheckbox from "./runtime/RuntimeCheckbox.vue";
+import RuntimeNumberInput from "./runtime/RuntimeNumberInput.vue";
+import RuntimeSlider from "./runtime/RuntimeSlider.vue";
+import RuntimeStateButton from "./runtime/RuntimeStateButton.vue";
 
 const props = defineProps({
   config: {
@@ -197,11 +254,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['can-flash-change']);
+const emit = defineEmits(["can-flash-change"]);
 
-const notify = inject('notify', () => {});
-const updateToast = inject('updateToast', () => {});
-const dismissToast = inject('dismissToast', () => {});
+const notify = inject("notify", () => {});
+const updateToast = inject("updateToast", () => {});
+const dismissToast = inject("dismissToast", () => {});
 
 const runtime = ref({});
 const runtimeMeta = ref([]);
@@ -212,7 +269,7 @@ const otaFileInput = ref(null);
 const wsConnected = ref(false);
 const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
 
-const builtinSystemHiddenFields = new Set(['loopAvg']);
+const builtinSystemHiddenFields = new Set(["loopAvg"]);
 
 let pollTimer = null;
 let ws = null;
@@ -231,9 +288,13 @@ const canFlash = computed(() => {
   let enabled = false;
   try {
     if (runtime.value?.system) {
-      if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'otaActive')) {
+      if (
+        Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
+      ) {
         enabled = !!runtime.value.system.otaActive;
-      } else if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'allowOTA')) {
+      } else if (
+        Object.prototype.hasOwnProperty.call(runtime.value.system, "allowOTA")
+      ) {
         enabled = !!runtime.value.system.allowOTA;
       }
     }
@@ -242,17 +303,19 @@ const canFlash = computed(() => {
     const systemConfig = props.config?.System;
     if (
       systemConfig &&
-      Object.prototype.hasOwnProperty.call(systemConfig, 'OTAEn') &&
+      Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
       systemConfig.OTAEn &&
-      typeof systemConfig.OTAEn.value !== 'undefined'
+      typeof systemConfig.OTAEn.value !== "undefined"
     ) {
       enabled = !!systemConfig.OTAEn.value;
     }
   }
   if (runtimeMeta.value.length) {
-    const systemMeta = runtimeMeta.value.find((group) => group.name === 'system');
+    const systemMeta = runtimeMeta.value.find(
+      (group) => group.name === "system"
+    );
     if (systemMeta) {
-      const field = systemMeta.fields.find((f) => f.key === 'OTAEn');
+      const field = systemMeta.fields.find((f) => f.key === "OTAEn");
       if (field && field.enabled !== undefined) {
         enabled = !!field.enabled;
       }
@@ -267,9 +330,13 @@ const otaEnabled = computed(() => {
   let enabled = false;
   try {
     if (runtime.value?.system) {
-      if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'otaActive')) {
+      if (
+        Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
+      ) {
         enabled = !!runtime.value.system.otaActive;
-      } else if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'allowOTA')) {
+      } else if (
+        Object.prototype.hasOwnProperty.call(runtime.value.system, "allowOTA")
+      ) {
         enabled = !!runtime.value.system.allowOTA;
       }
     }
@@ -278,17 +345,19 @@ const otaEnabled = computed(() => {
     const systemConfig = props.config?.System;
     if (
       systemConfig &&
-      Object.prototype.hasOwnProperty.call(systemConfig, 'OTAEn') &&
+      Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
       systemConfig.OTAEn &&
-      typeof systemConfig.OTAEn.value !== 'undefined'
+      typeof systemConfig.OTAEn.value !== "undefined"
     ) {
       enabled = !!systemConfig.OTAEn.value;
     }
   }
   if (runtimeMeta.value.length) {
-    const systemMeta = runtimeMeta.value.find((group) => group.name === 'system');
+    const systemMeta = runtimeMeta.value.find(
+      (group) => group.name === "system"
+    );
     if (systemMeta) {
-      const field = systemMeta.fields.find((f) => f.key === 'OTAEn');
+      const field = systemMeta.fields.find((f) => f.key === "OTAEn");
       if (field && field.enabled !== undefined) {
         enabled = !!field.enabled;
       }
@@ -298,19 +367,21 @@ const otaEnabled = computed(() => {
   return enabled;
 });
 
-watch(canFlash, (val) => { emit('can-flash-change', val); });
-watch(otaEnabled, (v) => emit('can-flash-change', v && !flashing.value));
+watch(canFlash, (val) => {
+  emit("can-flash-change", val);
+});
+watch(otaEnabled, (v) => emit("can-flash-change", v && !flashing.value));
 
 function normalizeStyle(style) {
-  if (!style || typeof style !== 'object') return null;
+  if (!style || typeof style !== "object") return null;
   const normalized = {};
   Object.entries(style).forEach(([ruleKey, ruleValue]) => {
-    if (!ruleValue || typeof ruleValue !== 'object') return;
+    if (!ruleValue || typeof ruleValue !== "object") return;
     const { visible, ...rest } = ruleValue;
     const cssProps = { ...rest };
     normalized[ruleKey] = {
       css: cssProps,
-      visible: Object.prototype.hasOwnProperty.call(ruleValue, 'visible')
+      visible: Object.prototype.hasOwnProperty.call(ruleValue, "visible")
         ? !!visible
         : undefined,
     };
@@ -331,31 +402,37 @@ function ensureStyleRules(meta) {
   return null;
 }
 
-function notifySafe(message, type = 'info', duration = 3000, sticky = false, id = null) {
-  return typeof notify === 'function'
+function notifySafe(
+  message,
+  type = "info",
+  duration = 3000,
+  sticky = false,
+  id = null
+) {
+  return typeof notify === "function"
     ? notify(message, type, duration, sticky, id)
     : null;
 }
 
-function updateToastSafe(id, message, type = 'info', duration = 2500) {
-  if (typeof updateToast === 'function') {
+function updateToastSafe(id, message, type = "info", duration = 2500) {
+  if (typeof updateToast === "function") {
     updateToast(id, message, type, duration);
   }
 }
 
 function dismissToastSafe(id) {
-  if (typeof dismissToast === 'function') {
+  if (typeof dismissToast === "function") {
     dismissToast(id);
   }
 }
 
 async function loadInitialPreferences() {
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const stored = window.localStorage.getItem('cm_showBoolStateText');
-      if (stored === '1') {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const stored = window.localStorage.getItem("cm_showBoolStateText");
+      if (stored === "1") {
         showBoolStateText.value = true;
-      } else if (stored === '0') {
+      } else if (stored === "0") {
         showBoolStateText.value = false;
       }
     }
@@ -365,8 +442,12 @@ async function loadInitialPreferences() {
 }
 
 function initLive() {
-  const proto = typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss://' : 'ws://';
-  const url = proto + (typeof location !== 'undefined' ? location.host : '') + '/ws';
+  const proto =
+    typeof location !== "undefined" && location.protocol === "https:"
+      ? "wss://"
+      : "ws://";
+  const url =
+    proto + (typeof location !== "undefined" ? location.host : "") + "/ws";
   startWebSocket(url);
 }
 
@@ -421,7 +502,7 @@ function scheduleWsReconnect(url) {
 
 async function fetchRuntime() {
   try {
-    const r = await fetch('/runtime.json?ts=' + Date.now());
+    const r = await fetch("/runtime.json?ts=" + Date.now());
     if (!r.ok) return;
     runtime.value = await r.json();
     buildRuntimeGroups();
@@ -432,7 +513,7 @@ async function fetchRuntime() {
 
 async function fetchRuntimeMeta() {
   try {
-    const r = await fetch('/runtime_meta.json?ts=' + Date.now());
+    const r = await fetch("/runtime_meta.json?ts=" + Date.now());
     if (!r.ok) return;
     runtimeMeta.value = await r.json();
     buildRuntimeGroups();
@@ -445,7 +526,7 @@ function buildRuntimeGroups() {
   if (runtimeMeta.value.length) {
     const grouped = {};
     for (const m of runtimeMeta.value) {
-      if (m.group === 'system' && builtinSystemHiddenFields.has(m.key)) {
+      if (m.group === "system" && builtinSystemHiddenFields.has(m.key)) {
         continue;
       }
       if (!grouped[m.group]) {
@@ -477,10 +558,12 @@ function buildRuntimeGroups() {
         isIntInput: m.isIntInput || false,
         isFloatInput: m.isFloatInput || false,
         boolAlarmValue:
-          typeof m.boolAlarmValue === 'boolean' ? !!m.boolAlarmValue : undefined,
+          typeof m.boolAlarmValue === "boolean"
+            ? !!m.boolAlarmValue
+            : undefined,
         isString: m.isString || false,
         isDivider: m.isDivider || false,
-        staticValue: m.staticValue || '',
+        staticValue: m.staticValue || "",
         order: m.order !== undefined ? m.order : 100,
         style: m.style || null,
         styleRules: normalizeStyle(m.style || null),
@@ -490,7 +573,9 @@ function buildRuntimeGroups() {
     try {
       const sys = runtime.value.system || {};
       if (grouped.system) {
-        grouped.system.fields = grouped.system.fields.filter((f) => !builtinSystemHiddenFields.has(f.key));
+        grouped.system.fields = grouped.system.fields.filter(
+          (f) => !builtinSystemHiddenFields.has(f.key)
+        );
         const existingKeys = new Set(grouped.system.fields.map((f) => f.key));
         Object.keys(sys).forEach((k) => {
           if (builtinSystemHiddenFields.has(k)) return;
@@ -498,15 +583,15 @@ function buildRuntimeGroups() {
             grouped.system.fields.push({
               key: k,
               label: capitalize(k),
-              unit: k === 'freeHeap' ? 'KB' : k === 'loopAvg' ? 'ms' : '',
-              precision: k === 'loopAvg' ? 2 : 0,
+              unit: k === "freeHeap" ? "KB" : k === "loopAvg" ? "ms" : "",
+              precision: k === "loopAvg" ? 2 : 0,
               order: 999,
-              isBool: typeof sys[k] === 'boolean',
-              isString: typeof sys[k] === 'string',
+              isBool: typeof sys[k] === "boolean",
+              isString: typeof sys[k] === "string",
               isButton: false,
               isCheckbox: false,
               isDivider: false,
-              staticValue: '',
+              staticValue: "",
               style: null,
               styleRules: null,
             });
@@ -557,14 +642,14 @@ function buildRuntimeGroups() {
   const fallback = [];
   if (runtime.value.sensors) {
     fallback.push({
-      name: 'sensors',
-      title: 'Sensors',
+      name: "sensors",
+      title: "Sensors",
       fields: Object.keys(runtime.value.sensors).map((k) => ({
         key: k,
         label: capitalize(k),
-        unit: '',
+        unit: "",
         precision:
-          k.toLowerCase().includes('temp') || k.toLowerCase().includes('dew')
+          k.toLowerCase().includes("temp") || k.toLowerCase().includes("dew")
             ? 1
             : 0,
       })),
@@ -572,14 +657,14 @@ function buildRuntimeGroups() {
   }
   if (runtime.value.system) {
     fallback.push({
-      name: 'system',
-      title: 'System',
+      name: "system",
+      title: "System",
       fields: Object.keys(runtime.value.system)
         .filter((k) => !builtinSystemHiddenFields.has(k))
         .map((k) => ({
           key: k,
           label: capitalize(k),
-          unit: '',
+          unit: "",
           precision: 0,
         })),
     });
@@ -591,7 +676,9 @@ function groupHasVisibleContent(group) {
   if (!group || !Array.isArray(group.fields) || group.fields.length === 0) {
     return false;
   }
-  return group.fields.some((field) => fieldHasVisibleContent(group.name, field));
+  return group.fields.some((field) =>
+    fieldHasVisibleContent(group.name, field)
+  );
 }
 
 function fieldHasVisibleContent(groupName, field) {
@@ -632,17 +719,20 @@ function runtimeHasValue(groupName, key) {
 
 async function triggerRuntimeButton(group, key) {
   try {
-    const res = await fetch(`/runtime_action/button?group=${rURIComp(group)}&key=${rURIComp(key)}`, {
-      method: 'POST',
-    });
+    const res = await fetch(
+      `/runtime_action/button?group=${rURIComp(group)}&key=${rURIComp(key)}`,
+      {
+        method: "POST",
+      }
+    );
     if (!res.ok) {
-      notifySafe(`Button failed: ${group}/${key}`, 'error');
+      notifySafe(`Button failed: ${group}/${key}`, "error");
       return;
     }
-    notifySafe(`Button: ${key}`, 'success', 1500);
+    notifySafe(`Button: ${key}`, "success", 1500);
     fetchRuntime();
   } catch (e) {
-    notifySafe(`Button error: ${e.message}`, 'error');
+    notifySafe(`Button error: ${e.message}`, "error");
   }
 }
 
@@ -655,20 +745,22 @@ async function onStateButton(group, f, nextOverride = null) {
   const next = nextOverride === null ? !cur : !!nextOverride;
   try {
     const res = await fetch(
-      `/runtime_action/state_button?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${next ? 'true' : 'false'}`,
+      `/runtime_action/state_button?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${next ? "true" : "false"}`,
       {
-        method: 'POST',
+        method: "POST",
       }
     );
     if (!res.ok) {
-      notifySafe(`State btn failed: ${f.key}`, 'error');
+      notifySafe(`State btn failed: ${f.key}`, "error");
       return;
     }
     if (!runtime.value[group]) runtime.value[group] = {};
     runtime.value[group][f.key] = next;
-    notifySafe(`${f.key}: ${next ? 'ON' : 'OFF'}`, 'info', 1200);
+    notifySafe(`${f.key}: ${next ? "ON" : "OFF"}`, "info", 1200);
   } catch (e) {
-    notifySafe(`State btn error: ${e.message}`, 'error');
+    notifySafe(`State btn error: ${e.message}`, "error");
   }
 }
 
@@ -678,18 +770,23 @@ function handleStateToggle({ group, field, nextValue }) {
 
 async function sendInt(group, f, val) {
   try {
-    const r = await fetch(`/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {
-      method: 'POST',
-    });
+    const r = await fetch(
+      `/runtime_action/int_slider?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${val}`,
+      {
+        method: "POST",
+      }
+    );
     if (!r.ok) {
-      notifySafe(`Set failed: ${f.key}`, 'error');
+      notifySafe(`Set failed: ${f.key}`, "error");
     } else {
       if (!runtime.value[group]) runtime.value[group] = {};
       runtime.value[group][f.key] = val;
-      notifySafe(`${f.key}=${val}`, 'success', 1200);
+      notifySafe(`${f.key}=${val}`, "success", 1200);
     }
   } catch (e) {
-    notifySafe(`Set error ${f.key}: ${e.message}`, 'error');
+    notifySafe(`Set error ${f.key}: ${e.message}`, "error");
   }
 }
 
@@ -703,18 +800,23 @@ async function handleSliderCommit({ group, field, value }) {
 
 async function sendFloat(group, f, val) {
   try {
-    const r = await fetch(`/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(f.key)}&value=${val}`, {
-      method: 'POST',
-    });
+    const r = await fetch(
+      `/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${val}`,
+      {
+        method: "POST",
+      }
+    );
     if (!r.ok) {
-      notifySafe(`Set failed: ${f.key}`, 'error');
+      notifySafe(`Set failed: ${f.key}`, "error");
     } else {
       if (!runtime.value[group]) runtime.value[group] = {};
       runtime.value[group][f.key] = val;
-      notifySafe(`${f.key}=${val}`, 'success', 1200);
+      notifySafe(`${f.key}=${val}`, "success", 1200);
     }
   } catch (e) {
-    notifySafe(`Set error ${f.key}: ${e.message}`, 'error');
+    notifySafe(`Set error ${f.key}: ${e.message}`, "error");
   }
 }
 
@@ -730,17 +832,22 @@ async function onRuntimeCheckbox(group, key, value) {
   if (checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
   checkboxDebounceTimer = setTimeout(async () => {
     try {
-      const res = await fetch(`/runtime_action/checkbox?group=${rURIComp(group)}&key=${rURIComp(key)}&value=${value ? 'true' : 'false'}`, {
-        method: 'POST',
-      });
+      const res = await fetch(
+        `/runtime_action/checkbox?group=${rURIComp(group)}&key=${rURIComp(
+          key
+        )}&value=${value ? "true" : "false"}`,
+        {
+          method: "POST",
+        }
+      );
       if (!res.ok) {
-        notifySafe(`Toggle failed: ${group}/${key}`, 'error');
+        notifySafe(`Toggle failed: ${group}/${key}`, "error");
         return;
       }
-      notifySafe(`${key}: ${value ? 'ON' : 'OFF'}`, 'info', 1200);
+      notifySafe(`${key}: ${value ? "ON" : "OFF"}`, "info", 1200);
       fetchRuntime();
     } catch (e) {
-      notifySafe(`Toggle error ${key}: ${e.message}`, 'error');
+      notifySafe(`Toggle error ${key}: ${e.message}`, "error");
     }
   }, 160);
 }
@@ -750,14 +857,14 @@ function handleCheckboxChange({ group, field, checked }) {
 }
 
 function capitalize(s) {
-  if (!s) return '';
+  if (!s) return "";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function formatValue(val, meta) {
-  if (val == null) return '';
-  if (typeof val === 'number') {
-    if (meta && typeof meta.precision === 'number' && !Number.isInteger(val)) {
+  if (val == null) return "";
+  if (typeof val === "number") {
+    if (meta && typeof meta.precision === "number" && !Number.isInteger(val)) {
       try {
         return val.toFixed(meta.precision);
       } catch (e) {
@@ -770,66 +877,66 @@ function formatValue(val, meta) {
 }
 
 function formatBool(val) {
-  return val ? 'On' : 'Off';
+  return val ? "On" : "Off";
 }
 
 function severityClass(val, meta) {
-  if (typeof val !== 'number' || !meta) return '';
+  if (typeof val !== "number" || !meta) return "";
   if (
     meta.alarmMin !== undefined &&
     meta.alarmMin !== null &&
-    meta.alarmMin !== '' &&
+    meta.alarmMin !== "" &&
     meta.alarmMin !== false &&
     !Number.isNaN(meta.alarmMin) &&
     val < meta.alarmMin
   )
-    return 'sev-alarm';
+    return "sev-alarm";
   if (
     meta.alarmMax !== undefined &&
     meta.alarmMax !== null &&
-    meta.alarmMax !== '' &&
+    meta.alarmMax !== "" &&
     meta.alarmMax !== false &&
     !Number.isNaN(meta.alarmMax) &&
     val > meta.alarmMax
   )
-    return 'sev-alarm';
+    return "sev-alarm";
   if (
     meta.warnMin !== undefined &&
     meta.warnMin !== null &&
     !Number.isNaN(meta.warnMin) &&
     val < meta.warnMin
   )
-    return 'sev-warn';
+    return "sev-warn";
   if (
     meta.warnMax !== undefined &&
     meta.warnMax !== null &&
     !Number.isNaN(meta.warnMax) &&
     val > meta.warnMax
   )
-    return 'sev-warn';
-  return '';
+    return "sev-warn";
+  return "";
 }
 
 function valueClasses(val, meta) {
   if (meta && meta.isBool) {
-    const classes = ['br'];
+    const classes = ["br"];
     if (
-      typeof meta.boolAlarmValue === 'boolean' &&
+      typeof meta.boolAlarmValue === "boolean" &&
       !!val === meta.boolAlarmValue
     ) {
-      classes.push('sev-alarm');
+      classes.push("sev-alarm");
     }
-    return classes.join(' ');
+    return classes.join(" ");
   }
   return severityClass(val, meta);
 }
 
 function boolState(val, meta) {
-  if (!meta || !meta.isBool) return '';
+  if (!meta || !meta.isBool) return "";
   const v = !!val;
-  if (typeof meta.boolAlarmValue === 'boolean' && v === meta.boolAlarmValue)
-    return 'alarm';
-  return v ? 'on' : 'off';
+  if (typeof meta.boolAlarmValue === "boolean" && v === meta.boolAlarmValue)
+    return "alarm";
+  return v ? "on" : "off";
 }
 
 function fieldRule(meta, key) {
@@ -853,32 +960,32 @@ function fieldCss(meta, key) {
 
 function boolAlarmMatch(val, meta) {
   if (!meta) return false;
-  if (typeof meta.boolAlarmValue !== 'boolean') return false;
+  if (typeof meta.boolAlarmValue !== "boolean") return false;
   return !!val === meta.boolAlarmValue;
 }
 
 function fallbackBoolDotRule(val, meta) {
   const boolVal = !!val;
-  const hasAlarmValue = meta && typeof meta.boolAlarmValue === 'boolean';
+  const hasAlarmValue = meta && typeof meta.boolAlarmValue === "boolean";
   const isAlarm = boolAlarmMatch(val, meta);
 
-  const classes = ['bd--fallback'];
+  const classes = ["bd--fallback"];
 
   if (isAlarm) {
-    classes.push('bd--alarm');
+    classes.push("bd--alarm");
   } else if (hasAlarmValue) {
-    classes.push('bd--safe');
+    classes.push("bd--safe");
   } else if (boolVal) {
-    classes.push('bd--on');
+    classes.push("bd--on");
   } else {
-    classes.push('bd--off');
+    classes.push("bd--off");
   }
 
   if (hasAlarmValue) {
-    classes.push('bd--has-alarm-value');
+    classes.push("bd--has-alarm-value");
   }
 
-  classes.push(boolVal ? 'bd--value-true' : 'bd--value-false');
+  classes.push(boolVal ? "bd--value-true" : "bd--value-false");
 
   return {
     visible: true,
@@ -893,7 +1000,7 @@ function selectBoolDotRule(val, meta) {
   const boolVal = !!val;
   const isAlarm = boolAlarmMatch(val, meta);
   if (
-    typeof meta.boolAlarmValue === 'boolean' &&
+    typeof meta.boolAlarmValue === "boolean" &&
     boolVal === meta.boolAlarmValue
   ) {
     if (rules.stateDotOnAlarm) return rules.stateDotOnAlarm;
@@ -919,13 +1026,13 @@ function boolDotClasses(val, meta) {
   const rule = selectBoolDotRule(val, meta);
   if (!rule) return [];
   if (Array.isArray(rule.classes)) return rule.classes;
-  if (typeof rule.classes === 'string') {
+  if (typeof rule.classes === "string") {
     return rule.classes
       .split(/\s+/)
       .map((c) => c.trim())
       .filter(Boolean);
   }
-  if (typeof rule.className === 'string' && rule.className.trim().length) {
+  if (typeof rule.className === "string" && rule.className.trim().length) {
     return [rule.className.trim()];
   }
   return [];
@@ -933,7 +1040,7 @@ function boolDotClasses(val, meta) {
 
 function boolDotStyle(val, meta) {
   const rule = selectBoolDotRule(val, meta);
-  if (!rule || !rule.css || typeof rule.css !== 'object') return {};
+  if (!rule || !rule.css || typeof rule.css !== "object") return {};
   return rule.css;
 }
 
@@ -945,14 +1052,14 @@ function fallbackPolling() {
 
 function startFlash() {
   if (!canFlash.value) {
-    notifySafe('OTA is disabled', 'error');
+    notifySafe("OTA is disabled", "error");
     return;
   }
   if (!otaFileInput.value) {
-    notifySafe('Browser file input not ready.', 'error');
+    notifySafe("Browser file input not ready.", "error");
     return;
   }
-  otaFileInput.value.value = '';
+  otaFileInput.value.value = "";
   otaFileInput.value.click();
 }
 
@@ -966,49 +1073,64 @@ async function onFlashFileSelected(event) {
     return;
   }
   if (!canFlash.value) {
-    notifySafe('OTA is disabled', 'error');
+    notifySafe("OTA is disabled", "error");
     return;
   }
   if (file.size === 0) {
-    notifySafe('Selected file is empty.', 'error');
-    otaFileInput.value.value = '';
+    notifySafe("Selected file is empty.", "error");
+    otaFileInput.value.value = "";
     return;
   }
 
-  let password = window.prompt('Enter OTA password', '');
+  let password = window.prompt("Enter OTA password", "");
   if (password === null) {
-    otaFileInput.value.value = '';
+    otaFileInput.value.value = "";
     return;
   }
   password = password.trim();
 
   const headers = new Headers();
-  if (password.length) headers.append('X-OTA-PASSWORD', password);
+  if (password.length) headers.append("X-OTA-PASSWORD", password);
   const form = new FormData();
-  form.append('firmware', file, file.name);
+  form.append("firmware", file, file.name);
   flashing.value = true;
-  const toastId = notifySafe(`Uploading ${file.name}...`, 'info', 15000, true);
+  const toastId = notifySafe(`Uploading ${file.name}...`, "info", 15000, true);
   try {
-    const response = await fetch('/ota_update', { method: 'POST', headers, body: form });
-    let payload = {}; const text = await response.text();
-    try { payload = text ? JSON.parse(text) : {}; } catch (e) { payload = { status:'error', reason:text||'invalid_response' }; }
+    const response = await fetch("/ota_update", {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    let payload = {};
+    const text = await response.text();
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch (e) {
+      payload = { status: "error", reason: text || "invalid_response" };
+    }
     if (response.status === 401) {
-      updateToastSafe(toastId, 'Unauthorized: wrong OTA password.', 'error', 6000);
-    } else if (response.status === 403 || payload.reason === 'ota_disabled') {
-      updateToastSafe(toastId, 'OTA disabled', 'error', 6000); otaEndpointAvailable.value = false;
-    } else if (!response.ok || payload.status !== 'ok') {
-      const reason = payload.reason || response.statusText || 'Upload failed';
-      updateToastSafe(toastId, `Flash failed: ${reason}`, 'error', 6000);
+      updateToastSafe(
+        toastId,
+        "Unauthorized: wrong OTA password.",
+        "error",
+        6000
+      );
+    } else if (response.status === 403 || payload.reason === "ota_disabled") {
+      updateToastSafe(toastId, "OTA disabled", "error", 6000);
+      otaEndpointAvailable.value = false;
+    } else if (!response.ok || payload.status !== "ok") {
+      const reason = payload.reason || response.statusText || "Upload failed";
+      updateToastSafe(toastId, `Flash failed: ${reason}`, "error", 6000);
     } else {
-      updateToastSafe(toastId, 'Flash done!', 'success', 9000);
-      notifySafe('Flash done!', 'success', 6000);
-      notifySafe('Waiting for reboot...', 'info', 8000);
+      updateToastSafe(toastId, "Flash done!", "success", 9000);
+      notifySafe("Flash done!", "success", 6000);
+      notifySafe("Waiting for reboot...", "info", 8000);
     }
   } catch (error) {
-    updateToastSafe(toastId, `Flash failed: ${error.message}`, 'error', 6000);
+    updateToastSafe(toastId, `Flash failed: ${error.message}`, "error", 6000);
   } finally {
     flashing.value = false;
-    if (otaFileInput.value) otaFileInput.value.value = '';
+    if (otaFileInput.value) otaFileInput.value.value = "";
   }
 }
 
@@ -1016,7 +1138,7 @@ async function onFlashFileSelected(event) {
 let otaProbeTimer = null;
 async function probeOtaEndpoint() {
   try {
-    const r = await fetch('/ota_update', { method: 'GET' });
+    const r = await fetch("/ota_update", { method: "GET" });
     if (r.status === 404) {
       // Not compiled/exposed
       otaEndpointAvailable.value = false;
@@ -1038,10 +1160,12 @@ async function probeOtaEndpoint() {
 // Persist preference for showing bool state text
 watch(showBoolStateText, (v) => {
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem('cm_showBoolStateText', v ? '1' : '0');
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem("cm_showBoolStateText", v ? "1" : "0");
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    /* ignore */
+  }
 });
 
 onMounted(() => {
@@ -1052,7 +1176,7 @@ onMounted(() => {
   probeOtaEndpoint();
   otaProbeTimer = setInterval(probeOtaEndpoint, 20000);
   // Emit initial can-flash state early so parent can render the button correctly
-  emit('can-flash-change', canFlash.value);
+  emit("can-flash-change", canFlash.value);
 });
 
 onBeforeUnmount(() => {
@@ -1064,7 +1188,11 @@ onBeforeUnmount(() => {
     clearInterval(otaProbeTimer);
     otaProbeTimer = null;
   }
-  try { if (ws) ws.close(); } catch (e) { /* ignore */ }
+  try {
+    if (ws) ws.close();
+  } catch (e) {
+    /* ignore */
+  }
 });
 
 // Expose startFlash so parent components can trigger the hidden file input
@@ -1072,5 +1200,240 @@ defineExpose({ startFlash });
 </script>
 
 <style scoped>
-.live-view{padding:.75rem .5rem 2.5rem}.live-cards{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));align-items:start}.card{background:#f5f6f8;border:1px solid #30363d;border-radius:10px;padding:.65rem .75rem .9rem;position:relative;box-shadow:0 2px 4px rgba(0,0,0,.25)}.card h3{margin:0 0 .4rem;font-size:.95rem;letter-spacing:.5px;font-weight:600}.tbl{display:block;width:100%}.rw{display:grid;grid-template-columns:1fr auto auto;align-items:center;font-size:.78rem;line-height:1.25rem;padding:2px 0 1px}.rw.sl{--slider-control-gap:0 .3rem}.rw.cr{margin-top:.35rem}.rw .lab{font-weight:500;padding-right:.4rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rw .lab.bl{display:flex;align-items:center;gap:.4rem}.rw .val{text-align:right;min-width:2.2rem;font-variant-numeric:tabular-nums}.rw .un{padding-left:.35rem;min-width:1.6rem;text-align:left;opacity:.65;font-size:.7rem}.rw.sev-warn .val{color:#d29922}.rw.sev-alarm .val{color:#f85149;font-weight:600}.bd{width:.65rem;height:.65rem;border-radius:50%;display:inline-block;box-shadow:0 0 0 1px rgba(255,255,255,.15) inset,0 0 2px rgba(0,0,0,.6)}.bd--fallback.bd--on{background:#238636}.bd--fallback.bd--off{background:#6e7681}.bd--fallback.bd--alarm{background:#f85149;animation:alarmPulse 1.1s ease-in-out infinite}@keyframes alarmPulse{0%,100%{box-shadow:0 0 0 1px rgba(248,81,73,.9),0 0 4px 2px rgba(248,81,73,.4)}50%{box-shadow:0 0 0 1px rgba(248,81,73,.5),0 0 6px 3px rgba(248,81,73,.6)}}.dv{position:relative;border:none;border-top:1px solid #30363d;margin:.55rem 0 .4rem}.dv::before{content:attr(data-label);position:absolute;left:0;top:50%;transform:translateY(-50%);background:#161b22;padding:0 .25rem;font-size:.62rem;letter-spacing:.5px;text-transform:uppercase;color:#8b949e}.uptime{font-size:.64rem;letter-spacing:.5px;opacity:.9;margin:.25rem 0 0;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem}.ota-status{margin-top:.25rem}.badge{display:inline-block;line-height:1.05rem;padding:0 .55em;font-size:.62rem;font-weight:600;letter-spacing:.6px;border-radius:.8rem;background:#444c56;color:#fff;text-transform:uppercase;position:relative;top:0}.badge.on{background:#1f6feb}.badge.on-active{background:#238636;animation:badgePulse 1.4s ease-in-out infinite}.badge.off{background:#6e7681;opacity:.75}@keyframes badgePulse{0%,100%{filter:brightness(1);box-shadow:0 0 0 0 rgba(35,134,54,.5)}50%{filter:brightness(1.15);box-shadow:0 0 0 4px rgba(35,134,54,0)}}label.switch{width:32px;height:16px;position:relative;display:inline-block}label.switch input{opacity:0;width:0;height:0}label.switch .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#394049;transition:.3s;border-radius:16px}label.switch .slider:before{position:absolute;content:"";height:12px;width:12px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.3s}label.switch input:checked+.slider{background:#1f6feb}label.switch input:checked+.slider:before{transform:translateX(16px)}.hidden-file-input{display:none}.live-status{position:fixed;bottom:0;right:0;background:#161b22;border-top:1px solid #30363d;border-left:1px solid #30363d;padding:.35rem .65rem;font-size:.6rem;letter-spacing:.5px;opacity:.85;border-top-left-radius:6px}.tbl::-webkit-scrollbar{width:8px;height:8px}.tbl::-webkit-scrollbar-track{background:transparent}.tbl::-webkit-scrollbar-thumb{background:#30363d;border-radius:4px}
+.live-view {
+  padding: 0.75rem 0.5rem 2.5rem;
+}
+.live-cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: start;
+}
+.card {
+  background: #f5f6f8;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem 0.9rem;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+.card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+.tbl {
+  display: block;
+  width: 100%;
+}
+.rw {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  font-size: 0.78rem;
+  line-height: 1.25rem;
+  padding: 2px 0 1px;
+}
+.rw.sl {
+  --slider-control-gap: 0 0.3rem;
+}
+.rw.cr {
+  margin-top: 0.35rem;
+}
+.rw .lab {
+  font-weight: 500;
+  padding-right: 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rw .lab.bl {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.rw .val {
+  text-align: right;
+  min-width: 2.2rem;
+  font-variant-numeric: tabular-nums;
+}
+.rw .un {
+  padding-left: 0.35rem;
+  min-width: 1.6rem;
+  text-align: left;
+  opacity: 0.65;
+  font-size: 0.7rem;
+}
+.rw.sev-warn .val {
+  color: #d29922;
+}
+.rw.sev-alarm .val {
+  color: #f85149;
+  font-weight: 600;
+}
+.bd {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+    0 0 2px rgba(0, 0, 0, 0.6);
+}
+.bd--fallback.bd--on {
+  background: #238636;
+}
+.bd--fallback.bd--off {
+  background: #6e7681;
+}
+.bd--fallback.bd--alarm {
+  background: #f85149;
+  animation: alarmPulse 1.1s ease-in-out infinite;
+}
+@keyframes alarmPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(248, 81, 73, 0.9),
+      0 0 4px 2px rgba(248, 81, 73, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(248, 81, 73, 0.5),
+      0 0 6px 3px rgba(248, 81, 73, 0.6);
+  }
+}
+.dv {
+  position: relative;
+  border: none;
+  border-top: 1px solid #30363d;
+  margin: 0.55rem 0 0.4rem;
+}
+.dv::before {
+  content: attr(data-label);
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #161b22;
+  padding: 0 0.25rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+.uptime {
+  font-size: 0.64rem;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+  margin: 0.25rem 0 0;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.ota-status {
+  margin-top: 0.25rem;
+}
+.badge {
+  display: inline-block;
+  line-height: 1.05rem;
+  padding: 0 0.55em;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  border-radius: 0.8rem;
+  background: #444c56;
+  color: #fff;
+  text-transform: uppercase;
+  position: relative;
+  top: 0;
+}
+.badge.on {
+  background: #1f6feb;
+}
+.badge.on-active {
+  background: #238636;
+  animation: badgePulse 1.4s ease-in-out infinite;
+}
+.badge.off {
+  background: #6e7681;
+  opacity: 0.75;
+}
+@keyframes badgePulse {
+  0%,
+  100% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgba(35, 134, 54, 0.5);
+  }
+  50% {
+    filter: brightness(1.15);
+    box-shadow: 0 0 0 4px rgba(35, 134, 54, 0);
+  }
+}
+label.switch {
+  width: 32px;
+  height: 16px;
+  position: relative;
+  display: inline-block;
+}
+label.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+label.switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #394049;
+  transition: 0.3s;
+  border-radius: 16px;
+}
+label.switch .slider:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+label.switch input:checked + .slider {
+  background: #1f6feb;
+}
+label.switch input:checked + .slider:before {
+  transform: translateX(16px);
+}
+.hidden-file-input {
+  display: none;
+}
+.live-status {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  background: #d3d4d6;
+  border-top: 1px solid #30363d;
+  border-left: 1px solid #30363d;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  border-top-left-radius: 6px;
+}
+.tbl::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.tbl::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tbl::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 4px;
+}
 </style>
