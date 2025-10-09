@@ -17,9 +17,9 @@
 #define CM_ALARM_GREEN_ON_FALSE 1 // Enable showing alarm state green on false for boolean runtime fields //default: enabled
 #define CM_ENABLE_RUNTIME_CONTROLS 1 // Enable runtime controls (sensors and alarms only) //default: enabled
 #define CM_ENABLE_WS_PUSH 1 // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled) //default: disabled
-#define CM_ENABLE_DYNAMIC_VISIBILITY 0 // Enable dynamic visibility of settings based on other settings (showIf callbacks) //default: enabled
+#define CM_ENABLE_DYNAMIC_VISIBILITY 1 // Enable dynamic visibility of settings based on other settings (showIf callbacks) //default: enabled
 #define CM_ENABLE_SYSTEM_PROVIDER 1  // Enable system info runtime provider card (heap, uptime, etc.) //default: disabled
-#define CM_ENABLE_OTA 1 // Enable OTA update functionality //default: enabled
+#define CM_ENABLE_OTA 0 // Enable OTA update functionality //default: enabled
 // ---------------------------------------------------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -30,7 +30,7 @@
 #define CM_ENABLE_RUNTIME_INT_SLIDERS 1  // Enable runtime integer sliders //default: disabled
 #define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1 // Enable runtime float sliders //default: disabled
 #define CM_ENABLE_RUNTIME_ALARMS 1 // Enable runtime alarms (thresholds, color coding) //default: disabled
-// #define CM_ENABLE_STYLE_RULES 1//only style rules over .set("background", "#000") etc. //default: disabled
+#define CM_ENABLE_STYLE_RULES 1//only style rules over .set("background", "#000") etc. //default: disabled
 #define CM_ENABLE_USER_CSS 1 // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);) //default: disabled
 #define CM_ENABLE_LOGGING 1 // Enable logging via callback function (setLogger) //default: disabled
 #define CM_ENABLE_VERBOSE_LOGGING 1 // Enable verbose logging (more detailed messages) //default: disabled

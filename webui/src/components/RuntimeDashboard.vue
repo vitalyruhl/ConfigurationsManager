@@ -152,6 +152,16 @@
         >
           Loop Avg: {{ typeof runtime.system.loopAvg === 'number' ? runtime.system.loopAvg.toFixed(2) : runtime.system.loopAvg }} ms
         </p>
+        <p
+          v-if="group.name === 'system'"
+          class="uptime ota-status"
+        >
+          OTA:
+          <span v-if="otaEndpointAvailable === null" class="badge off" title="probing...">checking...</span>
+          <span v-else :class="['badge', otaEnabled ? (runtime.system?.otaActive ? 'on-active' : 'on') : 'off']" :title="otaEnabled ? (runtime.system?.otaActive ? 'OTA server active' : 'OTA enabled (not active yet)') : 'OTA disabled'">
+            {{ otaEnabled ? (runtime.system?.otaActive ? 'active' : 'enabled') : 'disabled' }}
+          </span>
+        </p>
 
         <div v-if="group.name === 'system' && runtime.uptime !== undefined" class="tbl">
           <div class="rw cr">
@@ -200,6 +210,7 @@ const showBoolStateText = ref(false);
 const flashing = ref(false);
 const otaFileInput = ref(null);
 const wsConnected = ref(false);
+const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
 
 const builtinSystemHiddenFields = new Set(['loopAvg']);
 
@@ -215,16 +226,18 @@ const displayRuntimeGroups = computed(() =>
   runtimeGroups.value.filter((group) => groupHasVisibleContent(group))
 );
 
+// Replace previous canFlash and otaEnabled definitions to include otaEndpointAvailable gating
 const canFlash = computed(() => {
-  // Prefer live runtime flag if present
   let enabled = false;
   try {
-    if (runtime.value?.system && Object.prototype.hasOwnProperty.call(runtime.value.system, 'allowOTA')) {
-      enabled = !!runtime.value.system.allowOTA;
+    if (runtime.value?.system) {
+      if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'otaActive')) {
+        enabled = !!runtime.value.system.otaActive;
+      } else if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'allowOTA')) {
+        enabled = !!runtime.value.system.allowOTA;
+      }
     }
-  } catch (e) { /* ignore */ }
-
-  // Fallback to configuration (settings JSON) if runtime system flag not yet available
+  } catch (e) {}
   if (!enabled) {
     const systemConfig = props.config?.System;
     if (
@@ -236,8 +249,6 @@ const canFlash = computed(() => {
       enabled = !!systemConfig.OTAEn.value;
     }
   }
-
-  // Optional meta override: if meta explicitly defines OTAEn with an enabled property, honor it
   if (runtimeMeta.value.length) {
     const systemMeta = runtimeMeta.value.find((group) => group.name === 'system');
     if (systemMeta) {
@@ -247,14 +258,48 @@ const canFlash = computed(() => {
       }
     }
   }
-
+  // Gate by endpoint availability if probed
+  if (otaEndpointAvailable.value === false) enabled = false;
   return enabled && !flashing.value;
 });
 
-// Emit changes so parent components can reactively enable/disable a Flash control
-watch(canFlash, (val) => {
-  emit('can-flash-change', val);
+const otaEnabled = computed(() => {
+  let enabled = false;
+  try {
+    if (runtime.value?.system) {
+      if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'otaActive')) {
+        enabled = !!runtime.value.system.otaActive;
+      } else if (Object.prototype.hasOwnProperty.call(runtime.value.system, 'allowOTA')) {
+        enabled = !!runtime.value.system.allowOTA;
+      }
+    }
+  } catch (e) {}
+  if (!enabled) {
+    const systemConfig = props.config?.System;
+    if (
+      systemConfig &&
+      Object.prototype.hasOwnProperty.call(systemConfig, 'OTAEn') &&
+      systemConfig.OTAEn &&
+      typeof systemConfig.OTAEn.value !== 'undefined'
+    ) {
+      enabled = !!systemConfig.OTAEn.value;
+    }
+  }
+  if (runtimeMeta.value.length) {
+    const systemMeta = runtimeMeta.value.find((group) => group.name === 'system');
+    if (systemMeta) {
+      const field = systemMeta.fields.find((f) => f.key === 'OTAEn');
+      if (field && field.enabled !== undefined) {
+        enabled = !!field.enabled;
+      }
+    }
+  }
+  if (otaEndpointAvailable.value === false) enabled = false;
+  return enabled;
 });
+
+watch(canFlash, (val) => { emit('can-flash-change', val); });
+watch(otaEnabled, (v) => emit('can-flash-change', v && !flashing.value));
 
 function normalizeStyle(style) {
   if (!style || typeof style !== 'object') return null;
@@ -938,34 +983,19 @@ async function onFlashFileSelected(event) {
   password = password.trim();
 
   const headers = new Headers();
-  if (password.length) {
-    headers.append('X-OTA-PASSWORD', password);
-  }
-
+  if (password.length) headers.append('X-OTA-PASSWORD', password);
   const form = new FormData();
   form.append('firmware', file, file.name);
-
   flashing.value = true;
   const toastId = notifySafe(`Uploading ${file.name}...`, 'info', 15000, true);
   try {
-    const response = await fetch('/ota_update', {
-      method: 'POST',
-      headers,
-      body: form,
-    });
-
-    let payload = {};
-    const text = await response.text();
-    try {
-      payload = text ? JSON.parse(text) : {};
-    } catch (e) {
-      payload = { status: 'error', reason: text || 'invalid_response' };
-    }
-
+    const response = await fetch('/ota_update', { method: 'POST', headers, body: form });
+    let payload = {}; const text = await response.text();
+    try { payload = text ? JSON.parse(text) : {}; } catch (e) { payload = { status:'error', reason:text||'invalid_response' }; }
     if (response.status === 401) {
       updateToastSafe(toastId, 'Unauthorized: wrong OTA password.', 'error', 6000);
     } else if (response.status === 403 || payload.reason === 'ota_disabled') {
-      updateToastSafe(toastId, 'OTA disabled', 'error', 6000);
+      updateToastSafe(toastId, 'OTA disabled', 'error', 6000); otaEndpointAvailable.value = false;
     } else if (!response.ok || payload.status !== 'ok') {
       const reason = payload.reason || response.statusText || 'Upload failed';
       updateToastSafe(toastId, `Flash failed: ${reason}`, 'error', 6000);
@@ -982,256 +1012,123 @@ async function onFlashFileSelected(event) {
   }
 }
 
-onMounted(() => {
-  loadInitialPreferences();
-  initLive();
-  fetchRuntime();
-  fetchRuntimeMeta();
-});
-
-onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer);
-  if (ws) ws.close();
-  if (checkboxDebounceTimer) clearTimeout(checkboxDebounceTimer);
-});
-
-defineExpose({
-  startFlash,
-  canFlash,
-});
-</script>
-
-<style scoped>
-.hidden-file-input {
-  display: none;
-}
-
-.live-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: center;
-}
-
-.live-status {
-  text-align: center;
-  margin-top: 1rem;
-  font-size: 0.85rem;
-  color: #555;
-}
-
-.card {
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  padding: 0 1rem 1rem 1rem;
-  border-radius: 8px;
-  min-width: 15rem;
-}
-
-.tbl {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.live-cards .card .rw {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.2rem 0;
-  font-size: 0.9rem;
-}
-
-.val .sw {
-   margin: 0 .3rem;
-}
-
-.sv {margin: 0 .3rem;}
-
-.lab {
-  font-weight: 600;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.val {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.un {
-  text-align: left;
-  font-size: 0.8rem;
-  color: #000;
-  min-width: 2.5ch;
-  white-space: nowrap;
-  font-weight: 600;
-  padding-left: .1rem;
-}
-
-.rw.sev-warn {
-  color: #b58900;
-  font-weight: 600;
-}
-
-.rw.sev-alarm {
-  color: #d00000;
-  font-weight: 700;
-  animation: blink 1.6s linear infinite;
-}
-
-.rw.sl {
-  border: 1px solid #e0e0e0;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  background: #fafafa;
-  box-shadow: inset 0 0 0 1px #ffffff, 0 1px 2px rgba(0, 0, 0, 0.05);
-  position: relative;
-}
-
-.rw.sl:hover {
-  border-color: #d0d0d0;
-  background: #f5f5f5;
-}
-
-.rw.sl .sw {
-  display: flex;
-  align-items: center;
-  gap: var(--slider-control-gap, 0.6rem);
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-}
-
-.rw.sl .sw > * {
-  flex-shrink: 0;
-}
-
-.rw.sl input[type='range'] {
-  flex: 1 1 9rem;
-  min-width: 7rem;
-  max-width: 15rem;
-  width: 100%;
-  accent-color: #ff9800;
-  cursor: pointer;
-}
-
-.rw.sl .sw > input[type='range'] {
-  flex-shrink: 1;
-}
-
-.rw.sl .sv {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  font-weight: 600;
-  min-width: 3.6ch;
-  padding: 0 0.25rem;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.rw.sl .sb {
-  margin: 0;
-  padding: 0.28rem 0.8rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.rw.sl .num-input {
-  width: 5.5rem;
-  padding: 0.2rem 0.3rem;
-  border: 1px solid #bbb;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  background: #fff;
-}
-
-.rw.sl .num-input:focus {
-  outline: 1px solid #1976d2;
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0.3;
+// --- OTA endpoint probing (restored) ---
+let otaProbeTimer = null;
+async function probeOtaEndpoint() {
+  try {
+    const r = await fetch('/ota_update', { method: 'GET' });
+    if (r.status === 404) {
+      // Not compiled/exposed
+      otaEndpointAvailable.value = false;
+    } else if (r.status === 403) {
+      // Explicitly disabled at runtime
+      otaEndpointAvailable.value = false;
+    } else {
+      // Any other response (200/401 etc.) means endpoint exists
+      otaEndpointAvailable.value = true;
+    }
+  } catch (e) {
+    // Network error -> keep as null (unknown) so we retry
+    if (otaEndpointAvailable.value === null) {
+      // leave it
+    }
   }
 }
 
-.rw.br .lab {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
+// Persist preference for showing bool state text
+watch(showBoolStateText, (v) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('cm_showBoolStateText', v ? '1' : '0');
+    }
+  } catch (e) { /* ignore */ }
+});
 
-.rw.cr {
-  grid-template-columns: minmax(0, 1fr) auto !important;
-}
+onMounted(() => {
+  loadInitialPreferences();
+  fetchRuntimeMeta();
+  fetchRuntime();
+  initLive();
+  probeOtaEndpoint();
+  otaProbeTimer = setInterval(probeOtaEndpoint, 20000);
+  // Emit initial can-flash state early so parent can render the button correctly
+  emit('can-flash-change', canFlash.value);
+});
 
-.rw.cr .val {
-  justify-self: end;
-}
+onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  if (otaProbeTimer) {
+    clearInterval(otaProbeTimer);
+    otaProbeTimer = null;
+  }
+  try { if (ws) ws.close(); } catch (e) { /* ignore */ }
+});
 
-.bd {
-  width: 0.85rem;
-  height: 0.85rem;
-  border-radius: 50%;
-  display: inline-block;
-}
+// Expose startFlash so parent components can trigger the hidden file input
+defineExpose({ startFlash });
+</script>
 
-.bd.bd--fallback {
-  border: none;
-}
+<style scoped>
+/* Layout */
+.live-view { padding: 0.75rem 0.5rem 2.5rem; }
+.live-cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); align-items: start; }
+.card { background:#f5f6f8; border:1px solid #30363d; border-radius:10px; padding:0.65rem 0.75rem 0.9rem; position:relative; box-shadow:0 2px 4px rgba(0,0,0,0.25); }
+.card h3 { margin:0 0 0.4rem; font-size:0.95rem; letter-spacing:.5px; font-weight:600; }
 
-.bd.bd--alarm {
-  background: #d00000;
-  box-shadow: 0 0 4px rgba(208, 0, 0, 0.65);
-}
+/* Table / rows */
+.tbl { display:block; width:100%; }
+.rw { display:grid; grid-template-columns: 1fr auto auto; align-items:center; font-size:0.78rem; line-height:1.25rem; padding:2px 0 1px; }
+.rw.sl { --slider-control-gap: 0 .3rem; }
+.rw.cr { margin-top:0.35rem; }
+.rw .lab { font-weight:500; padding-right:.4rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rw .lab.bl { display:flex; align-items:center; gap:.4rem; }
+.rw .val { text-align:right; min-width:2.2rem; font-variant-numeric:tabular-nums; }
+.rw .un { padding-left:.35rem; min-width:1.6rem; text-align:left; opacity:0.65; font-size:0.7rem; }
+.rw.sev-warn .val { color:#d29922; }
+.rw.sev-alarm .val { color:#f85149; font-weight:600; }
 
-.bd.bd--safe,
-.bd.bd--on {
-  background: #2ecc71;
-  box-shadow: 0 0 4px rgba(46, 204, 113, 0.45);
-}
+/* Bool dots */
+.bd { width:0.65rem; height:0.65rem; border-radius:50%; display:inline-block; box-shadow:0 0 0 1px rgba(255,255,255,0.15) inset, 0 0 2px rgba(0,0,0,.6); }
+.bd--fallback.bd--on { background:#238636; }
+.bd--fallback.bd--off { background:#6e7681; }
+.bd--fallback.bd--alarm { background:#f85149; animation:alarmPulse 1.1s ease-in-out infinite; }
+@keyframes alarmPulse { 0%,100% { box-shadow:0 0 0 1px rgba(248,81,73,0.9),0 0 4px 2px rgba(248,81,73,0.4); } 50% { box-shadow:0 0 0 1px rgba(248,81,73,0.5),0 0 6px 3px rgba(248,81,73,0.6);} }
 
-.bd.bd--off {
-  background: #90a4ae;
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
-}
+/* Dividers */
+.dv { position:relative; border:none; border-top:1px solid #30363d; margin:0.55rem 0 0.4rem; }
+.dv::before { content:attr(data-label); position:absolute; left:0; top:50%; transform:translateY(-50%); background:#161b22; padding:0 0.25rem; font-size:0.62rem; letter-spacing:.5px; text-transform:uppercase; color:#8b949e; }
 
-.dv {
-  border: 0;
-  border-top: 1px solid #ccc;
-  margin: 0.6rem 0 0.4rem;
-  position: relative;
-}
+/* Uptime / status lines */
+.uptime { font-size:0.64rem; letter-spacing:.5px; opacity:0.9; margin:0.25rem 0 0; font-weight:500; display:flex; align-items:center; flex-wrap:wrap; gap:.3rem; }
+.ota-status { margin-top:0.25rem; }
 
-.dv:before {
-  content: attr(data-label);
-  position: absolute;
-  top: -0.7rem;
-  left: 0.4rem;
-  background: #fff;
-  padding: 0 0.3rem;
-  font-size: 0.65rem;
-  color: #999;
-  letter-spacing: 0.05em;
-}
+/* Badges */
+.badge { display:inline-block; line-height:1.05rem; padding:0 0.55em; font-size:0.62rem; font-weight:600; letter-spacing:.6px; border-radius:0.8rem; background:#444c56; color:#fff; text-transform:uppercase; position:relative; top:0; }
+.badge.on { background:#1f6feb; }
+.badge.on-active { background:#238636; animation:badgePulse 1.4s ease-in-out infinite; }
+.badge.off { background:#6e7681; opacity:.75; }
+@keyframes badgePulse { 0%,100% { filter:brightness(1); box-shadow:0 0 0 0 rgba(35,134,54,0.5);} 50% { filter:brightness(1.15); box-shadow:0 0 0 4px rgba(35,134,54,0);} }
 
-.str .val {
-  text-align: right;
-  font-weight: 400;
-}
+/* Flash switch control */
+label.switch { position:relative; display:inline-block; width:32px; height:16px; }
+label.switch input { opacity:0; width:0; height:0; }
+label.switch .slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#394049; transition:.3s; border-radius:16px; }
+label.switch .slider:before { position:absolute; content:""; height:12px; width:12px; left:2px; top:2px; background:white; border-radius:50%; transition:.3s; }
+label.switch input:checked + .slider { background:#1f6feb; }
+label.switch input:checked + .slider:before { transform:translateX(16px); }
+label.switch .slider.round { border-radius:16px; }
 
-.uptime {
-  font-size: 0.85rem;
-  color: #555;
-  margin: 0.3rem 0 0.15rem;
-  padding: 0.25rem 0.4rem 0.15rem;
-  text-align: center;
-}
+.hidden-file-input { display:none; }
+
+/* Live status footer */
+.live-status { position:fixed; bottom:0; right:0; background:#161b22; border-top:1px solid #30363d; border-left:1px solid #30363d; padding:0.35rem 0.65rem; font-size:0.6rem; letter-spacing:.5px; opacity:.85; border-top-left-radius:6px; }
+
+/* Scrollbars (subtle) */
+.tbl::-webkit-scrollbar { width:8px; height:8px; }
+.tbl::-webkit-scrollbar-track { background:transparent; }
+.tbl::-webkit-scrollbar-thumb { background:#30363d; border-radius:4px; }
 
 </style>
