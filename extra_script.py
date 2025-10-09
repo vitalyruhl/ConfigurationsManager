@@ -163,45 +163,31 @@ feature_env = {
 
 print(f"[extra_script] Flags: sliders_on={sliders_on} state_btn_on={state_btn_on}")
 
-def maybe_stub(rel_path: str):
-	full = Path(webui_path) / rel_path
-	if not full.exists():
-		return
-	# Minimal valid Vue 3 SFC stub without exports (script setup must not export default)
-	stub_code = """<template></template>
-<script setup>
-// stubbed because feature disabled at build time
-</script>
-"""
-	full.write_text(stub_code, encoding='utf-8')
+def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabled: bool):
+	"""Copy either the enabled or disabled template to the target component path."""
+	target = Path(webui_path) / target_rel
+	src = Path(webui_path) / (enabled_rel if enabled else disabled_rel)
+	if not src.exists():
+		raise FileNotFoundError(f"Missing template: {src}")
+	target.write_text(src.read_text(encoding='utf-8'), encoding='utf-8')
 
-def maybe_restore(full_rel: str, from_rel: str):
-	"""If target file exists and contains a stub, restore it from a known good source file."""
-	target = Path(webui_path) / full_rel
-	source = Path(webui_path) / from_rel
-	if not target.exists() or not source.exists():
-		return
-	try:
-		txt = target.read_text(encoding='utf-8')
-		if '<template></template>' in txt and 'stubbed because feature disabled' in txt:
-			target.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
-	except Exception:
-		pass
+# Select appropriate component variants based on flags
+select_component(
+	'src/components/runtime/RuntimeSlider.vue',
+	'src/components/runtime/templates/RuntimeSlider.enabled.vue',
+	'src/components/runtime/templates/RuntimeSlider.disabled.vue',
+	feature_env['VITE_ENABLE_RUNTIME_ALALOG_SLIDERS'] == '1'
+)
 
-# If feature disabled -> stub component (pre-build pruning)
-# This only writes a minimal valid SFC when the feature is OFF, and leaves your files untouched otherwise.
-if feature_env['VITE_ENABLE_RUNTIME_ALALOG_SLIDERS'] == '0':
-	maybe_stub('src/components/runtime/RuntimeSlider.vue')
-else:
-	# If a previous build stubbed the slider, restore it from the full copy
-	maybe_restore('src/components/runtime/RuntimeSlider.vue', 'src/components/runtime/_RuntimeSlider.full.vue')
+select_component(
+	'src/components/runtime/RuntimeStateButton.vue',
+	'src/components/runtime/templates/RuntimeStateButton.enabled.vue',
+	'src/components/runtime/templates/RuntimeStateButton.disabled.vue',
+	feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '1'
+)
 
-# If state buttons are disabled, stub the component to allow pruning; else ensure it’s restored
-if feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '0':
-	maybe_stub('src/components/runtime/RuntimeStateButton.vue')
-else:
-	# Restore from full copy if previously stubbed
-	maybe_restore('src/components/runtime/RuntimeStateButton.vue', 'src/components/runtime/_RuntimeStateButton.full.vue')
+# Note: RuntimeActionButton and RuntimeCheckbox are small; pruning them is optional.
+# To add pruning, create templates and a flag map similar to above, then call select_component here.
 
 # Prepare environment
 env_vars = os.environ.copy()

@@ -9,11 +9,11 @@
 #ifndef CM_EMBED_WEBUI // Enable embedded web UI (HTML/CSS/JS) in binary
 #define CM_EMBED_WEBUI 1 //default: enabled
 #endif
-#ifndef CM_ALARM_GREEN_ON_FALSE // Enable showing alarm state green on false for boolean runtime fields
-#define CM_ALARM_GREEN_ON_FALSE 1 //default: enabled
+#if defined(CM_ALARM_GREEN_ON_FALSE)
+#undef CM_ALARM_GREEN_ON_FALSE
 #endif
-#ifndef CM_ENABLE_RUNTIME_CONTROLS // Enable runtime controls (sensors and alarms only)
-#define CM_ENABLE_RUNTIME_CONTROLS 1 //default: enabled
+#if defined(CM_ENABLE_RUNTIME_CONTROLS)
+#undef CM_ENABLE_RUNTIME_CONTROLS
 #endif
 #ifndef CM_ENABLE_RUNTIME_BUTTONS // Enable runtime buttons
 #define CM_ENABLE_RUNTIME_BUTTONS 1 //default: disabled
@@ -38,7 +38,7 @@
 #define CM_ENABLE_RUNTIME_ALARMS 1  //default: disabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_META // Enable generation of runtime metadata consumed by the web UI (/runtime_meta.json)
-#define CM_ENABLE_RUNTIME_META (CM_ENABLE_RUNTIME_CONTROLS || CM_ENABLE_RUNTIME_ALARMS || CM_ENABLE_SYSTEM_PROVIDER)
+#define CM_ENABLE_RUNTIME_META (CM_ENABLE_RUNTIME_ALARMS || CM_ENABLE_SYSTEM_PROVIDER)
 #endif
 #ifndef CM_ENABLE_SYSTEM_PROVIDER // Enable system info runtime provider card (heap, uptime, etc.)
 #define CM_ENABLE_SYSTEM_PROVIDER 1 //default: enabled
@@ -55,9 +55,9 @@
 #ifndef CM_ENABLE_THEMING //disable both theming and user CSS for simplicity
 #define CM_ENABLE_THEMING (CM_ENABLE_STYLE_RULES || CM_ENABLE_USER_CSS)
 #endif
-#ifndef CM_ENABLE_DYNAMIC_VISIBILITY // Enable dynamic visibility of settings based on other settings (showIf callbacks)
-#define CM_ENABLE_DYNAMIC_VISIBILITY 1 //default: enabled
-#endif
+// Dynamic visibility is always enabled now
+#undef CM_ENABLE_DYNAMIC_VISIBILITY
+#define CM_ENABLE_DYNAMIC_VISIBILITY 1
 #ifndef CM_ENABLE_OTA // Enable OTA update functionality
 #define CM_ENABLE_OTA 1 //default: enabled
 #endif

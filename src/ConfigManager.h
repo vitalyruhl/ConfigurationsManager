@@ -1229,7 +1229,7 @@ public:
                   { request->send(200, "application/json", runtimeValuesToJSON()); });
         server.on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest *request)
                   { request->send(200, "application/json", runtimeMetaToJSON()); });
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_BUTTONS
+#if CM_ENABLE_RUNTIME_BUTTONS
         // Interactive runtime control endpoints
         server.on("/runtime_action/button", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1240,7 +1240,7 @@ public:
             for(auto &b : _runtimeButtons){ if(b.group==g && b.key==k){ if(b.onPress) b.onPress(); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
+#if CM_ENABLE_RUNTIME_CHECKBOXES
         server.on("/runtime_action/checkbox", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
             AsyncWebParameter *pg = request->getParam("group"); if(!pg) pg = request->getParam("group", true);
@@ -1252,7 +1252,7 @@ public:
             for(auto &c : _runtimeCheckboxes){ if(c.group==g && c.key==k){ if(c.setter) c.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
         // Stateful button toggle
         server.on("/runtime_action/state_button", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1265,7 +1265,7 @@ public:
             for(auto &sb : _runtimeStateButtons){ if(sb.group==g && sb.key==k){ if(sb.setter) sb.setter(v); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
+#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
         // Int slider update
         server.on("/runtime_action/int_slider", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1277,7 +1277,7 @@ public:
             for(auto &is : _runtimeIntSliders){ if(is.group==g && is.key==k){ if(is.setter) is.setter(val); request->send(200, "application/json", "{\"status\":\"ok\"}"); return; } }
             request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}"); });
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
+#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
         // Float slider update
         server.on("/runtime_action/float_slider", HTTP_POST, [this](AsyncWebServerRequest *request)
                   {
@@ -1333,9 +1333,14 @@ public:
                     delete body; request->_tempObject=nullptr;
                 } });
 
-        // Root (serves embedded SPA)
-        server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
-                  { request->send_P(200, "text/html", webhtml.getWebHTML()); });
+    // Root route
+#if CM_EMBED_WEBUI
+    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
+          { request->send_P(200, "text/html", webhtml.getWebHTML()); });
+#else
+    server.on("/", HTTP_GET, [this](AsyncWebServerRequest *request)
+          { request->send(200, "text/plain", "Embedded WebUI disabled. Use external WebUI."); });
+#endif
 
         server.on("/", HTTP_POST, [this](AsyncWebServerRequest *request) { /* response sent after body parsed */ }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
                   {
@@ -1749,13 +1754,11 @@ public:
         dotFalse.setVisible(true);
         if (alarmWhenTrue)
         {
-            RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm"); //show Alarm green on false (override)
-            #ifdef CM_ALARM_GREEN_ON_FALSE
-                dotAlarm.setVisible(true);
-                dotFalse.set("background", "#2ecc71");
-                dotFalse.set("border", "none");
-                dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
-            #endif //CM_ALARM_GRREN_ON_FALSE
+            RuntimeFieldStyleRule &dotAlarm = style.rule("stateDotOnAlarm"); // show Alarm green on false (override)
+            dotAlarm.setVisible(true);
+            dotFalse.set("background", "#2ecc71");
+            dotFalse.set("border", "none");
+            dotFalse.set("boxShadow", "0 0 2px rgba(0,0,0,0.4)");
         }
         return style;
     }
@@ -1949,7 +1952,7 @@ public:
     }
 
 // Interactive stateless button
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_BUTTONS
+#if CM_ENABLE_RUNTIME_BUTTONS
     void defineRuntimeButton(const String &group,
                              const String &key,
                              const String &label,
@@ -1983,7 +1986,7 @@ public:
 #endif
 
 // Interactive checkbox (toggle)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
+#if CM_ENABLE_RUNTIME_CHECKBOXES
     void defineRuntimeCheckbox(const String &group,
                                const String &key,
                                const String &label,
@@ -2019,7 +2022,7 @@ public:
 #endif
 
 // Stateful runtime button (has on/off state; toggles and invokes callback)
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
     struct _StateButtonDef
     {
         String group;
@@ -2071,7 +2074,7 @@ public:
 #endif
 
 // Int slider (transient; not persisted)
-#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
+#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
     struct _IntSliderDef
     {
         String group;
@@ -2129,7 +2132,7 @@ public:
 #endif
 
 // Float slider (transient; not persisted)
-#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
+#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
     struct _FloatSliderDef
     {
         String group;
@@ -2219,7 +2222,7 @@ public:
             if (prov.fill)
                 prov.fill(slot);
 // Inject checkbox states
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
+#if CM_ENABLE_RUNTIME_CHECKBOXES
             for (const auto &cbx : _runtimeCheckboxes)
             {
                 if (cbx.group == prov.name && !slot.containsKey(cbx.key.c_str()) && cbx.getter)
@@ -2228,7 +2231,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_STATE_BUTTONS
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
             for (const auto &sb : _runtimeStateButtons)
             {
                 if (sb.group == prov.name && !slot.containsKey(sb.key.c_str()) && sb.getter)
@@ -2237,7 +2240,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
+#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
             for (const auto &is : _runtimeIntSliders)
             {
                 if (is.group == prov.name && !slot.containsKey(is.key.c_str()) && is.getter)
@@ -2246,7 +2249,7 @@ public:
                 }
             }
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
+#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ALALOG_SLIDERS)
             for (const auto &fs : _runtimeFloatSliders)
             {
                 if (fs.group == prov.name && !slot.containsKey(fs.key.c_str()) && fs.getter)
@@ -2384,7 +2387,7 @@ private:
     std::vector<RuntimeFieldMeta> _runtimeMetaOverride; // injected via /runtime_meta/override
     bool _runtimeMetaOverrideActive = false;
 #endif
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_BUTTONS
+#if CM_ENABLE_RUNTIME_BUTTONS
     struct RuntimeButton
     {
         String group;
@@ -2401,7 +2404,7 @@ private:
     std::vector<RuntimeButton> _runtimeButtons;
 #endif
 
-#if CM_ENABLE_RUNTIME_CONTROLS && CM_ENABLE_RUNTIME_CHECKBOXES
+#if CM_ENABLE_RUNTIME_CHECKBOXES
     struct RuntimeCheckbox
     {
         String group;
