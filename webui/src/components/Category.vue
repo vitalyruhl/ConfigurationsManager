@@ -15,20 +15,7 @@
   </div>
 </template>
 <style scoped>
-/* .category {
-  margin: 10px 0;
-  padding: 15px;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-h2 {
-  color: #3498db;
-  margin-top: 0;
-  border-bottom: 2px solid #3498db;
-  padding-bottom: 10px;
-  font-size: 1.2rem;
-} */
+/* Intentionally minimized: styles provided globally or in parent. */
 </style>
 <script setup>
 import { computed } from 'vue';
