@@ -1027,6 +1027,12 @@ defineExpose({
   font-size: 0.9rem;
 }
 
+.val .sw {
+   margin: 0 .3rem;
+}
+
+.sv {margin: 0 .3rem;}
+
 .lab {
   font-weight: 600;
   text-align: left;
@@ -1078,8 +1084,9 @@ defineExpose({
 .rw.sl .sw {
   display: flex;
   align-items: center;
-  gap: 1.1rem;
-  min-width: 14rem;
+  gap: var(--slider-control-gap, 0.6rem);
+  min-width: 0;
+  flex: 1 1 auto;
   flex-wrap: wrap;
 }
 
@@ -1088,10 +1095,16 @@ defineExpose({
 }
 
 .rw.sl input[type='range'] {
-  flex: 1 1 8rem;
-  min-width: 8rem;
+  flex: 1 1 9rem;
+  min-width: 7rem;
+  max-width: 15rem;
+  width: 100%;
   accent-color: #ff9800;
   cursor: pointer;
+}
+
+.rw.sl .sw > input[type='range'] {
+  flex-shrink: 1;
 }
 
 .rw.sl .sv {
@@ -1100,14 +1113,14 @@ defineExpose({
   justify-content: flex-end;
   font-weight: 600;
   min-width: 3.6ch;
-  padding: 0 0.35rem;
+  padding: 0 0.25rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .rw.sl .sb {
-  margin-left: 0.35rem;
-  padding: 0.25rem 0.75rem;
+  margin: 0;
+  padding: 0.28rem 0.8rem;
   font-size: 0.72rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -1191,16 +1204,11 @@ defineExpose({
   color: #999;
   letter-spacing: 0.05em;
 }
-/* 
-.str {
-  color: #333;
-} */
 
 .str .val {
   text-align: right;
   font-weight: 400;
 }
-
 
 .uptime {
   font-size: 0.85rem;

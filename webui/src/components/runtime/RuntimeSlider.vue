@@ -9,13 +9,20 @@
         :step="step"
         :value="displaySliderValue"
         @input="onInput"
+        class="asl"
       />
       <span class="sv">{{ formattedValue }}</span>
-  <button class="btn sb" type="button" @click="commit">Set</button>
+      <span class="un">{{ field.unit || ' ' }}</span>
+      <button class="btn sb" type="button" @click="commit">Set</button>
     </span>
-    <span class="un"></span>
   </div>
 </template>
+<style scoped>
+.sv {margin: 0 .5rem;}
+.un {margin: 0 .5rem;}
+.val .sw {margin: 0 .5rem;}
+.asl {vertical-align: middle;max-width: 8rem;}
+</style>
 
 <script setup>
 import { computed, ref, watch } from 'vue';

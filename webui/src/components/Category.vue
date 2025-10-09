@@ -15,7 +15,7 @@
   </div>
 </template>
 <style scoped>
-.category {
+/* .category {
   margin: 10px 0;
   padding: 15px;
   background: white;
@@ -28,7 +28,7 @@ h2 {
   border-bottom: 2px solid #3498db;
   padding-bottom: 10px;
   font-size: 1.2rem;
-}
+} */
 </style>
 <script setup>
 import { computed } from 'vue';

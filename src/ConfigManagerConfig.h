@@ -37,7 +37,7 @@
 #define CM_ENABLE_RUNTIME_META (CM_ENABLE_RUNTIME_CONTROLS || CM_ENABLE_RUNTIME_ALARMS || CM_ENABLE_SYSTEM_PROVIDER)
 #endif
 #ifndef CM_ENABLE_SYSTEM_PROVIDER // Enable system info runtime provider card (heap, uptime, etc.)
-#define CM_ENABLE_SYSTEM_PROVIDER 1 //default: disabled
+#define CM_ENABLE_SYSTEM_PROVIDER 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_WS_PUSH // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled)
 #define CM_ENABLE_WS_PUSH 1 //default: disabled
@@ -52,10 +52,10 @@
 #define CM_ENABLE_USER_CSS 0
 #endif
 #ifndef CM_ENABLE_DYNAMIC_VISIBILITY // Enable dynamic visibility of settings based on other settings (showIf callbacks)
-#define CM_ENABLE_DYNAMIC_VISIBILITY 0 //default: disabled
+#define CM_ENABLE_DYNAMIC_VISIBILITY 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_OTA // Enable OTA update functionality
-#define CM_ENABLE_OTA 0 //default: disabled
+#define CM_ENABLE_OTA 1 //default: enabled
 #endif
 
 #ifndef CM_ENABLE_LOGGING // Enable logging via callback function (setLogger)

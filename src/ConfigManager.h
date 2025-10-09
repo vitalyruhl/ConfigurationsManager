@@ -2089,6 +2089,7 @@ public:
                                 std::function<int()> getter,
                                 std::function<void(int)> setter,
                                 int order = 100,
+                                const String &unit = String(),
                                 const RuntimeFieldStyle &styleOverride = RuntimeFieldStyle(),
                                 const String &card = String())
     {
@@ -2102,6 +2103,7 @@ public:
         m.intMin = minValue;
         m.intMax = maxValue;
         m.intInit = initValue;
+        m.unit = unit;
         m.card = card;
         m.style = defaultNumericStyle();
         if (!styleOverride.empty())
@@ -2109,6 +2111,7 @@ public:
         _runtimeMeta.push_back(m);
 #else
         (void)order;
+        (void)unit;
         (void)styleOverride;
         (void)card;
         (void)initValue;
@@ -2122,7 +2125,7 @@ public:
         String key;
     };
     std::vector<_IntSliderDef> _runtimeIntSliders;
-    void defineRuntimeIntSlider(const String &, const String &, const String &, int, int, int, std::function<int()>, std::function<void(int)>, int = 100, const RuntimeFieldStyle & = RuntimeFieldStyle(), const String & = String()) {}
+    void defineRuntimeIntSlider(const String &, const String &, const String &, int, int, int, std::function<int()>, std::function<void(int)>, int = 100, const String & = String(), const RuntimeFieldStyle & = RuntimeFieldStyle(), const String & = String()) {}
 #endif
 
 // Float slider (transient; not persisted)
@@ -2144,6 +2147,7 @@ public:
                                   std::function<float()> getter,
                                   std::function<void(float)> setter,
                                   int order = 100,
+                                  const String &unit = String(),
                                   const RuntimeFieldStyle &styleOverride = RuntimeFieldStyle(),
                                   const String &card = String())
     {
@@ -2159,6 +2163,7 @@ public:
         m.floatInit = initValue;
         m.precision = precision;
         m.floatPrecision = precision;
+        m.unit = unit;
         m.card = card;
         m.style = defaultNumericStyle();
         if (!styleOverride.empty())
@@ -2166,6 +2171,7 @@ public:
         _runtimeMeta.push_back(m);
 #else
         (void)order;
+        (void)unit;
         (void)styleOverride;
         (void)card;
         (void)initValue;
@@ -2180,7 +2186,7 @@ public:
         String key;
     };
     std::vector<_FloatSliderDef> _runtimeFloatSliders;
-    void defineRuntimeFloatSlider(const String &, const String &, const String &, float, float, float, int, std::function<float()>, std::function<void(float)>, int = 100, const RuntimeFieldStyle & = RuntimeFieldStyle(), const String & = String()) {}
+    void defineRuntimeFloatSlider(const String &, const String &, const String &, float, float, float, int, std::function<float()>, std::function<void(float)>, int = 100, const String & = String(), const RuntimeFieldStyle & = RuntimeFieldStyle(), const String & = String()) {}
 #endif
 
     // Set / override provider order
