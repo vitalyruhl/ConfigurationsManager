@@ -216,28 +216,44 @@ const displayRuntimeGroups = computed(() =>
 );
 
 const canFlash = computed(() => {
-  let allow = false;
-  const systemConfig = props.config?.System;
-  if (
-    systemConfig &&
-    Object.prototype.hasOwnProperty.call(systemConfig, 'OTAEn') &&
-    systemConfig.OTAEn &&
-    typeof systemConfig.OTAEn.value !== 'undefined'
-  ) {
-    allow = !!systemConfig.OTAEn.value;
+  // Prefer live runtime flag if present
+  let enabled = false;
+  try {
+    if (runtime.value?.system && Object.prototype.hasOwnProperty.call(runtime.value.system, 'allowOTA')) {
+      enabled = !!runtime.value.system.allowOTA;
+    }
+  } catch (e) { /* ignore */ }
+
+  // Fallback to configuration (settings JSON) if runtime system flag not yet available
+  if (!enabled) {
+    const systemConfig = props.config?.System;
+    if (
+      systemConfig &&
+      Object.prototype.hasOwnProperty.call(systemConfig, 'OTAEn') &&
+      systemConfig.OTAEn &&
+      typeof systemConfig.OTAEn.value !== 'undefined'
+    ) {
+      enabled = !!systemConfig.OTAEn.value;
+    }
   }
 
+  // Optional meta override: if meta explicitly defines OTAEn with an enabled property, honor it
   if (runtimeMeta.value.length) {
     const systemMeta = runtimeMeta.value.find((group) => group.name === 'system');
     if (systemMeta) {
       const field = systemMeta.fields.find((f) => f.key === 'OTAEn');
       if (field && field.enabled !== undefined) {
-        allow = !!field.enabled;
+        enabled = !!field.enabled;
       }
     }
   }
 
-  return allow && !flashing.value;
+  return enabled && !flashing.value;
+});
+
+// Emit changes so parent components can reactively enable/disable a Flash control
+watch(canFlash, (val) => {
+  emit('can-flash-change', val);
 });
 
 function normalizeStyle(style) {

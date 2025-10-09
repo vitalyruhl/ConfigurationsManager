@@ -33,7 +33,7 @@
 // #define CM_ENABLE_STYLE_RULES 1//only style rules over .set("background", "#000") etc. //default: disabled
 #define CM_ENABLE_USER_CSS 1 // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);) //default: disabled
 #define CM_ENABLE_LOGGING 1 // Enable logging via callback function (setLogger) //default: disabled
-// #define CM_ENABLE_VERBOSE_LOGGING 1 // Enable verbose logging (more detailed messages) //default: disabled
+#define CM_ENABLE_VERBOSE_LOGGING 1 // Enable verbose logging (more detailed messages) //default: disabled
 // ---------------------------------------------------------------------------------------------------------------------
 #include "ConfigManager.h"
 // ---------------------------------------------------------------------------------------------------------------------
@@ -595,9 +595,8 @@ void setup()
     cfg.enableWebSocketPush(2000); // 2s Interval for push updates to clients - if not set, ui will use polling
 
 
-    // if you want to use OTA, set it up here
-    if (WiFi.status() == WL_CONNECTED && generalSettings.allowOTA.get())
-    {
+    // OTA setup (always call if feature compiled in & user enabled; handleOTA will defer until WiFi is up)
+    if (generalSettings.allowOTA.get()) {
         cfg.setupOTA("esp32", generalSettings.otaPassword.get().c_str());
     }
     Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
