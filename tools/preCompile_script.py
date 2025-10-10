@@ -236,8 +236,20 @@ if EMBED_WEBUI:
 		with gzip.open(gz_path, 'wb', compresslevel=9) as gz:
 			gz.write(raw)
 
-	# 2. Generate header from built assets
-	subprocess.run([node_exe, 'webui_to_header.js'], cwd='.', check=True)
+	# 2. Generate header from built assets (invoke the moved generator in tools/)
+	try:
+		# Determine project root: prefer PlatformIO env, else current working directory
+		if env is not None:
+			proj_dir = env.get('PROJECT_DIR') or env.subst('$PROJECT_DIR')
+			root_dir = Path(str(proj_dir))
+		else:
+			root_dir = Path.cwd()
+		generator = root_dir / 'tools' / 'webui_to_header.js'
+		if not generator.exists():
+			raise FileNotFoundError(f"Header generator not found at {generator}")
+		subprocess.run([node_exe, str(generator)], cwd=str(root_dir), check=True)
+	except Exception as e:
+		raise RuntimeError(f"Failed to run webui_to_header.js: {e}")
 else:
 	# Skipping WebUI build and header generation (external UI mode)
 	print("[extra_script] CM_EMBED_WEBUI=0 -> Skipping webui build and header generation.")

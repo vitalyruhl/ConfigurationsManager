@@ -198,7 +198,7 @@ lib_deps =
 	esphome/ESPAsyncWebServer-esphome@^3.2.2
 	esphome/AsyncTCP-esphome@^2.0.3
 test_ignore =	src/main.cpp
-extra_scripts = pre:extra_script.py
+extra_scripts = pre:tools/preCompile_script.py
 
 
 [env:ota]
@@ -225,7 +225,7 @@ test_ignore =
 upload_protocol = espota
 upload_port = 192.168.1.123
 upload_flags = --auth=ota1234
-extra_scripts = pre:extra_script.py
+extra_scripts = pre:tools/preCompile_script.py
 ```
 
 ## Flash Firmware via Web UI

@@ -2,8 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const distDir = path.join(__dirname, 'webui', 'dist');
-const outFile = path.join(__dirname, 'src', 'html_content.h');
+// This script lives in tools/, so derive project root one level up
+const rootDir = path.join(__dirname, '..');
+const distDir = path.join(rootDir, 'webui', 'dist');
+const outFile = path.join(rootDir, 'src', 'html_content.h');
 
 /**
  * @param {string} content
@@ -58,7 +60,7 @@ async function buildHeader() {
   );
 
   // load favicon svg from webui/logo.svg
-  const logoPath = path.join(__dirname, 'webui', 'logo.svg');
+  const logoPath = path.join(rootDir, 'webui', 'logo.svg');
   if (!fs.existsSync(logoPath)) {
     throw new Error('cannot find logo.svg! in webui directory');
   }
