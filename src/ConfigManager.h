@@ -2584,6 +2584,13 @@ public:
                                     o["rssiTxt"] = rssiEmoji(WiFi.isConnected() ? WiFi.RSSI() : -100);
                                     o["freeHeap"] = (uint32_t)(ESP.getFreeHeap() / 1024); // KB
                                     o["loopAvg"] = _loopAvgMs;                            // ms avg over last window
+#if CM_ENABLE_OTA
+                                    // Expose OTA capability flags for WebUI gating
+                                    // allowOTA indicates that HTTP OTA route is enabled on the device
+                                    // otaActive indicates ArduinoOTA service has been initialized (informational)
+                                    o["allowOTA"] = _otaEnabled;
+                                    o["otaActive"] = _otaInitialized;
+#endif
                                 },
                                 .order = 0});
             if (alsoDefineMeta)

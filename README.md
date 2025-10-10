@@ -193,7 +193,7 @@ void setup()
         cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
     }
 
-    delay(500);                    // wait for wifi connection a bit
+    delay(1500);                    // wait for wifi connection a bit
     cfg.enableWebSocketPush(2000); // 2s Interval for push updates to clients - if not set, ui will use polling
 
     if (WiFi.status() == WL_CONNECTED)
@@ -210,10 +210,19 @@ void loop()
     cfg.handleClient();
     cfg.handleWebsocketPush();
     cfg.handleOTA();
-    // Update rolling loop timing window so the system provider can expose avg loop time if desired
-    cfg.updateLoopTiming();
+    cfg.updateLoopTiming();// Update rolling loop timing window so the system provider can expose avg loop time if desired and show the SystemProvider Information
+
+    //reconnect if wifi is lost
+    if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_AP)
+    {
+        Serial.println("⚠️ WiFi lost, reconnecting...");
+        cfg.reconnectWifi();
+        delay(1500); // wait for wifi connection a bit
+        cfg.setupOTA("esp32", "otapassword123");
+    }
 
     delay(updateInterval.get());
+    Serial.print(".");
 }
 ```
 
@@ -296,6 +305,8 @@ The embedded single-page app now exposes a `Flash` action beside the `Settings` 
 4. Watch the toast notifications for progress. On success the device reboots automatically; the UI keeps polling until it comes back online.
 
 The backend remains fully asynchronous (`ESPAsyncWebServer`)—the new `/ota_update` handler streams chunks into the `Update` API while still performing password checks. HTTP uploads are rejected when OTA is disabled, the password is missing/incorrect, or the upload fails integrity checks.
+
+Note: The runtime JSON includes system-level OTA flags used by the WebUI to enable the Flash button and show status. Specifically, `runtime.system.allowOTA` is true when OTA is enabled on the device (HTTP endpoint ready), and `runtime.system.otaActive` is true after `ArduinoOTA.begin()` has run (informational). Both are available only when compiled with `-DCM_ENABLE_OTA=1`.
 
 ### Async Build & Live Values
 

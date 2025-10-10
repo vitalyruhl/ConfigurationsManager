@@ -103,7 +103,7 @@
                 <span v-else class="lab bl"></span>
 
                 <span
-                  v-if="showBoolStateText && fieldVisible(f, 'state')"
+                  v-if="hasVisibleAlarm && showBoolStateText && fieldVisible(f, 'state')"
                   class="val"
                   :style="fieldCss(f, 'state')"
                 >
@@ -214,7 +214,7 @@
         </p>
 
         <div
-          v-if="group.name === 'system' && runtime.uptime !== undefined"
+          v-if="group.name === 'system' && runtime.uptime !== undefined && hasVisibleAlarm"
           class="tbl"
         >
           <div class="rw cr">
@@ -282,6 +282,32 @@ const rURIComp = encodeURIComponent;
 const displayRuntimeGroups = computed(() =>
   runtimeGroups.value.filter((group) => groupHasVisibleContent(group))
 );
+
+// Show the boolean state-text toggle only if at least one alarm-capable field is present and enabled
+const hasVisibleAlarm = computed(() => {
+  try {
+    if (!Array.isArray(runtimeMeta.value)) return false;
+    for (const g of runtimeMeta.value) {
+      const fields = Array.isArray(g?.fields) ? g.fields : [];
+      for (const f of fields) {
+        const enabled = f?.enabled !== false; // undefined -> enabled
+        if (!enabled) continue;
+        // Boolean alarm (either explicit flag or semantics)
+        if (f?.isBool && (f?.hasAlarm || f?.alarmWhenTrue)) return true;
+        // Numeric thresholds (warn/alarm bounds present)
+        if (
+          typeof f?.warnMin !== 'undefined' ||
+          typeof f?.warnMax !== 'undefined' ||
+          typeof f?.alarmMin !== 'undefined' ||
+          typeof f?.alarmMax !== 'undefined'
+        ) {
+          return true;
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+});
 
 // Replace previous canFlash and otaEnabled definitions to include otaEndpointAvailable gating
 const canFlash = computed(() => {
@@ -1224,7 +1250,9 @@ defineExpose({ startFlash });
 .live-cards {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* Limit max column width so single cards don't stretch full width */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 420px));
+  justify-content: center;
   align-items: start;
 }
 .card {
