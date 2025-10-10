@@ -2,6 +2,12 @@
 
 > Version 2.6.1 (2025.10.10)
 
+> Breaking changes in v2.6.x
+>
+> - Introduced compile-time feature flags (see `docs/FEATURE_FLAGS.md`). Some APIs and defaults have moved into guarded blocks.
+> - The embedded Web UI is now built and injected automatically by the prebuild script (`tools/preCompile_script.py`). Manual copying is no longer required.
+> - If you are upgrading from < 2.6, revisit your `platformio.ini` and adjust your `build_flags` accordingly.
+
 
 ## Overview
 
@@ -36,7 +42,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
-### To see how i use it in my projects, check out my GitHub (most features are used in this projects):
+### To see how I use it in my projects
 
 - [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
 
@@ -68,9 +74,10 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 
 > Example files live in the `examples/` directory:
 
+Only v2.6.x examples are kept:
+
 - `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
 - `main.cpp_example_bme280` – Extended sensor + thresholds + cross‑field alarms.
-- `main.cpp_publish` – Auto-generated stub used when building the `publish` environment.
 
 ### minimal pattern (using `ESPAsyncWebServer`)
 
@@ -165,7 +172,7 @@ void loop() {
 
 > -Wno-deprecated-declarations --> required, to deactivate deprecated warnings from ArduinoJson
 
->	-std=gnu++17 --> required, to activate C++17
+> -std=gnu++17 --> required, to activate C++17
 
 ```ini
 [env:usb]
@@ -176,28 +183,28 @@ upload_port = COM[5]
 monitor_speed = 115200
 build_unflags = -std=gnu++11
 build_flags =
-	-DUNIT_TEST
-	-Wno-deprecated-declarations
-	-std=gnu++17
-	-DCM_EMBED_WEBUI=1
-	-DCM_ENABLE_WS_PUSH=0
-	-DCM_ENABLE_SYSTEM_PROVIDER=1
-	-DCM_ENABLE_OTA=1
-	-DCM_ENABLE_RUNTIME_BUTTONS=1
-	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
-	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
-	-DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
-	-DCM_ENABLE_RUNTIME_ALARMS=1
-	-DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
-	-DCM_ENABLE_STYLE_RULES=1
-	-DCM_ENABLE_USER_CSS=1
-	-DCM_ENABLE_LOGGING=1
-	-DCM_ENABLE_VERBOSE_LOGGING=0
+  -DUNIT_TEST
+  -Wno-deprecated-declarations
+  -std=gnu++17
+  -DCM_EMBED_WEBUI=1
+  -DCM_ENABLE_WS_PUSH=0
+  -DCM_ENABLE_SYSTEM_PROVIDER=1
+  -DCM_ENABLE_OTA=1
+  -DCM_ENABLE_RUNTIME_BUTTONS=1
+  -DCM_ENABLE_RUNTIME_CHECKBOXES=1
+  -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+  -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
+  -DCM_ENABLE_RUNTIME_ALARMS=1
+  -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
+  -DCM_ENABLE_STYLE_RULES=1
+  -DCM_ENABLE_USER_CSS=1
+  -DCM_ENABLE_LOGGING=1
+  -DCM_ENABLE_VERBOSE_LOGGING=0
 lib_deps =
-	bblanchon/ArduinoJson@^7.4.1
-	esphome/ESPAsyncWebServer-esphome@^3.2.2
-	esphome/AsyncTCP-esphome@^2.0.3
-test_ignore =	src/main.cpp
+  bblanchon/ArduinoJson@^7.4.1
+  esphome/ESPAsyncWebServer-esphome@^3.2.2
+  esphome/AsyncTCP-esphome@^2.0.3
+test_ignore = src/main.cpp
 extra_scripts = pre:tools/preCompile_script.py
 
 
@@ -208,20 +215,20 @@ framework = arduino
 monitor_speed = 115200
 build_unflags = -std=gnu++11
 build_flags =
-	-Wno-deprecated-declarations
-	-std=gnu++17
-	-DUNIT_TEST
-	-DCM_ENABLE_WS_PUSH=1
-	-DCM_ENABLE_RUNTIME_ALARMS=1
-	-DCM_ENABLE_USER_CSS=1
-	-DCM_ENABLE_LOGGING=1
-	-DCM_ENABLE_VERBOSE_LOGGING=0
+  -Wno-deprecated-declarations
+  -std=gnu++17
+  -DUNIT_TEST
+  -DCM_ENABLE_WS_PUSH=1
+  -DCM_ENABLE_RUNTIME_ALARMS=1
+  -DCM_ENABLE_USER_CSS=1
+  -DCM_ENABLE_LOGGING=1
+  -DCM_ENABLE_VERBOSE_LOGGING=0
 lib_deps =
-	bblanchon/ArduinoJson@^7.4.1
-	esphome/ESPAsyncWebServer-esphome@^3.2.2
-	esphome/AsyncTCP-esphome@^2.0.3
+  bblanchon/ArduinoJson@^7.4.1
+  esphome/ESPAsyncWebServer-esphome@^3.2.2
+  esphome/AsyncTCP-esphome@^2.0.3
 test_ignore =
-	src/main.cpp
+  src/main.cpp
 upload_protocol = espota
 upload_port = 192.168.1.123
 upload_flags = --auth=ota1234

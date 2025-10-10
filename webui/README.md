@@ -5,22 +5,29 @@ This folder contains the Vue 3 project for the ESP32 configuration web interface
 ## Development
 
 1. Install dependencies:
+
    ```sh
    npm install
    ```
 2. Start development server:
+
    ```sh
    npm run dev
    ```
 
 ## Build for ESP32
 
-1. Build the project:
-   ```sh
-   npm run build
-   ```
-2. Copy the output `dist/index.html` into `src/html_content.h` as a C++ string literal (replace the old HTML).
-   - You can use a script or do this manually.
+Normally you don't need to run anything here manually. The PlatformIO prebuild script (`tools/preCompile_script.py`) will:
+
+- Install dependencies if missing
+- Build the Vue app with the right feature flags
+- Gzip the final HTML and generate `src/html_content.h`
+
+If you want to test a build locally:
+
+```sh
+npm run build
+```
 
 ## Project Structure
 - `src/App.vue`: Main application, based on your previous HTML.
