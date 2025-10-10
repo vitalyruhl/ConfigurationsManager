@@ -1,10 +1,10 @@
 # Runtime Values, Providers & Alarms
 
-This document explains how to expose live sensor/metric values, define metadata for rendering & threshold evaluation, and attach cross-field alarms.
+This document explains how to expose live sensor/metric values, define metadata for rendering and threshold evaluation, and attach cross‑field alarms.
 
 ## Building Blocks
 
-- Runtime Provider: named struct with a fill lambda populating a JsonObject each fetch.
+- Runtime Provider: named struct with a fill lambda that populates a JsonObject on each fetch.
 - Runtime Field Meta: describes how to format a numeric/string/bool field (unit, precision, thresholds, ordering, style).
 - Alarms: evaluators combining one or more runtime values with onEnter/onExit callbacks.
 
@@ -21,7 +21,7 @@ cfg.addRuntimeProvider({
 });
 ```
 
-Call fill only when building `/runtime.json`. Keep it fast (no blocking IO).
+The manager calls `fill` only when building `/runtime.json`. Keep it fast (avoid blocking I/O).
 
 ## Defining Fields
 
@@ -51,7 +51,7 @@ cfg.defineRuntimeDivider("sensors", "Environment", 0);
 
 ## Field Ordering
 
-Provide an order (int). Lower numbers appear earlier. Default 100.
+Provide an order (int). Lower numbers appear earlier. Default is 100.
 
 ## Provider Card Ordering
 
@@ -62,7 +62,7 @@ cfg.setRuntimeProviderOrder("sensors", 5);
 
 ## Boolean Semantics & Alarm Booleans
 
-Alarm bools visually distinguish safe vs active (dot colors & optional blink). bool meta includes `isBool`, plus `alarmWhenTrue` when relevant.
+Alarm booleans visually distinguish safe vs active states (dot colors and optional blink). Boolean meta includes `isBool` and, when relevant, `alarmWhenTrue`.
 
 ## Cross-Field Alarms
 
@@ -94,7 +94,7 @@ cfg.handleWebsocketPush();
 
 ## Custom Live Payload
 
-Provide a completely custom JSON string instead of auto-merging providers:
+Provide a completely custom JSON payload instead of auto‑merging providers:
 
 ```cpp
 cfg.setCustomLivePayloadBuilder([](){
@@ -107,7 +107,11 @@ cfg.setCustomLivePayloadBuilder([](){
 
 ## Alarm Evaluation Frequency
 
-Call `cfg.handleRuntimeAlarms()` periodically (e.g. every 1–3s) if you have cross-field alarms.
+Call `cfg.handleRuntimeAlarms()` periodically (e.g. every 1–3s) if you use cross‑field alarms.
+
+## Styling runtime fields
+
+For per‑field style metadata (colors, visibility, boolean dot behavior) see `docs/STYLING.md`. For global CSS theming via `/user_theme.css`, see `docs/THEMING.md`.
 
 
 ### Minimal End‑to‑End Example (Live + Alarm)

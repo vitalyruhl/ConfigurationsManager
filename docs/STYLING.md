@@ -5,7 +5,7 @@ Two complementary styling systems exist:
 1. Dynamic Style Metadata (per-field JSON rules)
 2. Global Override CSS (served as /user_theme.css)
 
-You can combine them or disable metadata and rely purely on your own CSS.
+You can combine them, or disable metadata entirely and rely purely on your own CSS.
 
 ## 1. Dynamic Style Metadata
 
@@ -19,7 +19,7 @@ Targets (examples):
 - state (boolean text label)
 - stateDotOnTrue / stateDotOnFalse / stateDotOnAlarm (boolean indicator dot)
 
-A rule holds arbitrary CSS property/value pairs and optional visibility flag.
+A rule holds arbitrary CSS property/value pairs and an optional visibility flag.
 
 ### Backend API
 
@@ -33,7 +33,7 @@ s.rule("stateDotOnAlarm")
 cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, 100, s);
 ```
 
-If a rule is missing it is created the first time you call rule("target").
+If a rule is missing it is created the first time you call `rule("target")`.
 
 Hide an element:
 
@@ -71,9 +71,9 @@ Runtime metadata now ships optional **style overrides** so you can tweak how ind
 }
 ```
 
-If a rule doesn’t exist yet, `rule("target")` creates it. Use `.setVisible(false)` to hide an element (e.g. boolean state text). Frontend consumes the style object verbatim inside `/runtime_meta.json`.
+If a rule doesn’t exist yet, `rule("target")` creates it. Use `.setVisible(false)` to hide an element (e.g., boolean state text). The frontend consumes the style object verbatim inside `/runtime_meta.json`.
 
-Full documentation moved to: `docs/STYLING.md` and `docs/THEMING.md`.
+See also: global theming in `docs/THEMING.md` and runtime concepts in `docs/RUNTIME.md`.
 
 1. **Boolean Runtime Fields**
 

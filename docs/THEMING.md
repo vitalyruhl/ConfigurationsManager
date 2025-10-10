@@ -27,7 +27,7 @@ Browser loads `/user_theme.css` once on page mount.
 
 ## Mixing Metadata + CSS
 
-Keep semantic per‑field tweaks (e.g. hide just one unit or color one label) in metadata; apply brand colors, layout refinements, fonts via global CSS.
+Keep semantic per‑field tweaks (e.g., hide just one unit or color one label) in metadata; apply brand colors, layout refinements, and fonts via global CSS.
 
 ## Data Attributes Reference
 
@@ -51,7 +51,7 @@ A page reload reflects the change.
 
 ## Providing CSS Dynamically
 
-You may build CSS at runtime (e.g. from user preferences) and call setCustomCss() again before clients fetch `/user_theme.css`. Reassigning updates immediately for new visitors (existing pages won't refetch unless reloaded).
+You may build CSS at runtime (e.g., from user preferences) and call `setCustomCss()` again before clients fetch `/user_theme.css`. Reassigning updates immediately for new visitors (existing pages won't refetch unless reloaded).
 
 ## Size & Performance
 

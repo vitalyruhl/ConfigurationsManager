@@ -83,86 +83,137 @@ Only v2.6.x examples are kept:
 
 ```cpp
 #include <Arduino.h>
-#include "ConfigManager.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include "ConfigManager.h"
 AsyncWebServer server(80);
 
-ConfigManagerClass cfg;
-ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
+#define VERSION "V2.6.1" // 2025.10.08
+#define APP_NAME "CM-Min-Demo"
+
+ConfigManagerClass cfg;                                               // Create an instance of ConfigManager before using it in structures etc.
+ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
 
 // Basic setting using new aggregate initialization (ConfigOptions<T>)
 Config<int> updateInterval(ConfigOptions<int>{
     .keyName = "interval",
     .category = "main",
     .defaultValue = 30,
-    .prettyName = "Update Interval (seconds)"
-});
+    .prettyName = "Update Interval (seconds)"});
 
-// Dynamic visibility example: show static IP fields only if DHCP disabled
-struct WiFi_Settings {
-  Config<String> wifiSsid;
-  Config<String> wifiPassword;
-  Config<bool>   useDhcp;
-  Config<String> staticIp;
-  Config<String> gateway;
-  Config<String> subnet;
+// Example of a structure for WiFi settings
+struct WiFi_Settings // wifiSettings
+{
+    Config<String> wifiSsid;
+    Config<String> wifiPassword;
+    Config<bool> useDhcp;
+    Config<String> staticIp;
+    Config<String> gateway;
+    Config<String> subnet;
 
-  WiFi_Settings() :
-    wifiSsid(ConfigOptions<String>{ .keyName="ssid", .category="wifi", .defaultValue="MyWiFi", .prettyName="WiFi SSID", .prettyCat="Network Settings" }),
-    wifiPassword(ConfigOptions<String>{ .keyName="password", .category="wifi", .defaultValue="secretpass", .prettyName="WiFi Password", .prettyCat="Network Settings", .showInWeb=true, .isPassword=true }),
-    useDhcp(ConfigOptions<bool>{ .keyName="dhcp", .category="network", .defaultValue=false, .prettyName="Use DHCP", .prettyCat="Network Settings" }),
-    staticIp(ConfigOptions<String>{ .keyName="sIP", .category="network", .defaultValue="192.168.2.126", .prettyName="Static IP", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } }),
-    gateway(ConfigOptions<String>{ .keyName="GW", .category="network", .defaultValue="192.168.2.250", .prettyName="Gateway", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } }),
-    subnet(ConfigOptions<String>{ .keyName="subnet", .category="network", .defaultValue="255.255.255.0", .prettyName="Subnet-Mask", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } })
-  {
-    cfg.addSetting(&wifiSsid);
-    cfg.addSetting(&wifiPassword);
-    cfg.addSetting(&useDhcp);
-    cfg.addSetting(&staticIp);
-    cfg.addSetting(&gateway);
-    cfg.addSetting(&subnet);
-  }
+    // Shared OptionGroup constants to avoid repetition
+    static constexpr OptionGroup WIFI_GROUP{.category = "wifi", .prettyCat = "WiFi Settings"};
+
+    WiFi_Settings() : // Use OptionGroup helpers with shared constexpr instances
+                      wifiSsid(WIFI_GROUP.opt<String>("ssid", "MyWiFi", "WiFi SSID")),
+                      wifiPassword(WIFI_GROUP.opt<String>("password", "secretpass", "WiFi Password", true, true)),
+                      useDhcp(WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP")),
+                      staticIp(WIFI_GROUP.opt<String>("sIP", "192.168.2.126", "Static IP", true, false, nullptr, showIfFalse(useDhcp))),
+                      gateway(WIFI_GROUP.opt<String>("GW", "192.168.2.250", "Gateway", true, false, nullptr, showIfFalse(useDhcp))),
+                      subnet(WIFI_GROUP.opt<String>("subnet", "255.255.255.0", "Subnet-Mask", true, false, nullptr, showIfFalse(useDhcp)))
+    {
+        // Register settings with ConfigManager
+        cfg.addSetting(&wifiSsid);
+        cfg.addSetting(&wifiPassword);
+        cfg.addSetting(&useDhcp);
+        cfg.addSetting(&staticIp);
+        cfg.addSetting(&gateway);
+        cfg.addSetting(&subnet);
+    }
 };
 
-WiFi_Settings wifiSettings;
+WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
 
-void setup() {
-  Serial.begin(115200);
-  ConfigManagerClass::setLogger([](const char* msg){ Serial.print("[CFG] "); Serial.println(msg); });
+void setup()
+{
+    Serial.begin(115200);
+    ConfigManagerClass::setLogger([](const char *msg)
+                                  { Serial.print("[CFG] "); Serial.println(msg); });
 
-  cfg.addSetting(&updateInterval);
-  cfg.loadAll();
-  cfg.checkSettingsForErrors();
+    cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
 
-  // Example set a Value from Program
-  updateInterval.set(15);
-  cfg.saveAll();
+    cfg.addSetting(&updateInterval);
+    cfg.checkSettingsForErrors();
 
-  if (wifiSettings.wifiSsid.get().isEmpty()) {
-    cfg.startAccessPoint();//start Access Point if no SSID configured
-  }
-
-  if (WiFi.getMode() != WIFI_AP) {
-    if (wifiSettings.useDhcp.get()) {
-      cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-    } else {
-      // Explicit static (IP, Gateway, Mask)
-      cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+    try
+    {
+        cfg.loadAll(); // Load all settings from preferences, is nessesary before using the settings!
     }
-  }
-  delay(1000);
-  if (WiFi.status() == WL_CONNECTED) {
-    cfg.setupOTA("Ota-esp32-device", "ota1234");
-    cfg.enableWebSocketPush(2000); // periodic push (interval ms)
-  }
+    catch (const std::exception &e)
+    {
+        Serial.println(e.what());
+    }
+
+    Serial.println("Loaded configuration:");
+    delay(300);
+
+    // print loaded settings to Serial (optional)
+    Serial.println("Configuration printout:");
+    Serial.println(cfg.toJSON(false));
+
+    // Example set a Value from Program
+    updateInterval.set(15);
+    cfg.saveAll();
+
+    // nesseasary settings for webserver and wifi
+    if (wifiSettings.wifiSsid.get().length() == 0)
+    {
+        Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
+        cfg.startAccessPoint();
+    }
+
+    if (WiFi.getMode() == WIFI_AP)
+    {
+        Serial.printf("🖥️  AP Mode! \n");
+        return; // Skip webserver setup in AP mode
+    }
+
+        // Enable built-in System provider (RSSI, freeHeap, optional loop avg) before starting the web server
+        // Requires CM_ENABLE_SYSTEM_PROVIDER=1 at compile time
+        cfg.enableBuiltinSystemProvider();
+
+    if (wifiSettings.useDhcp.get())
+    {
+        Serial.println("DHCP enabled");
+        cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+    }
+    else
+    {
+        Serial.println("DHCP disabled");
+        cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+    }
+
+    delay(500);                    // wait for wifi connection a bit
+    cfg.enableWebSocketPush(2000); // 2s Interval for push updates to clients - if not set, ui will use polling
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        // OTA setup (always call if feature compiled in & user enabled; handleOTA will defer until WiFi is up)
+        cfg.setupOTA("esp32", "otapassword123");
+    }
+    Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
 }
 
-void loop() {
-  cfg.handleClient();
-  cfg.handleWebsocketPush();
-  cfg.handleOTA();
-  delay(cfg.updateInterval.get());
+void loop()
+{
+    //nessesary for webserver and wifi to handle clients and websocket
+    cfg.handleClient();
+    cfg.handleWebsocketPush();
+    cfg.handleOTA();
+    // Update rolling loop timing window so the system provider can expose avg loop time if desired
+    cfg.updateLoopTiming();
+
+    delay(updateInterval.get());
 }
 ```
 

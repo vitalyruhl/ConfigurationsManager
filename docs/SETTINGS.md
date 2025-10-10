@@ -33,16 +33,16 @@ cfg.loadAll();
 
 ### Key Length & Truncation Safety
 
-Internal storage key format: `<category>_<keyName>` truncated to 15 chars to satisfy ESP32 NVS limits. Provide human friendly `.prettyName` / `.prettyCat` for UI text. Avoid relying on raw key for user output.
+Internal storage key format: `<category>_<keyName>` truncated to 15 chars to satisfy ESP32 NVS limits. Provide human‑friendly `.prettyName` / `.prettyCat` for UI text. Avoid relying on the raw key for user output.
 
 ### Password / Secret Fields
 
-Set `.isPassword = true` to mask in UI. The backend stores the real value; UI obscures it and only sends new value when field changed.
+Set `.isPassword = true` to mask in the UI. The backend stores the real value; the UI obscures it and only sends a new value when the field changes.
 
 
 ## Reducing Boilerplate with OptionGroup (since 2.4.3)
 
-When many settings share the same category & pretty category, you can use `OptionGroup` to avoid repetition.
+When many settings share the same category and pretty category, you can use `OptionGroup` to avoid repetition.
 
 Before:
 
@@ -128,7 +128,7 @@ Example:
 
 ```cpp
 Config<bool> useDhcp( WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP") );
-Config<String> staticIp( WIFI_GROUP.opt<String>("sIP", String("192.168.2.50"), "Static IP", true, false, nullptr, showIfFalse(useDhcp) );
+Config<String> staticIp( WIFI_GROUP.opt<String>("sIP", String("192.168.2.50"), "Static IP", true, false, nullptr, showIfFalse(useDhcp) ) );
 ```
 
 To replace repeating lambdas like `[this](){ return !this->useDhcp.get(); }`, two helper factories are available:
@@ -186,5 +186,5 @@ Provide `.cb` or call `myConfig.setCallback([](){ ... });` after construction. C
 
 ```cpp
 Config<bool> enableAdv( WIFI_GROUP.opt<bool>("adv", false, "Enable Advanced") );
-Config<int> hiddenNum( WIFI_GROUP.opt<int>("hnum", 42, "Hidden Number", true, false, nullptr, showIfTrue(enableAdv) );
+Config<int> hiddenNum( WIFI_GROUP.opt<int>("hnum", 42, "Hidden Number", true, false, nullptr, showIfTrue(enableAdv) ) );
 ```
