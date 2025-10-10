@@ -45,6 +45,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 ### To see how I use it in my projects
 
 - [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
+- [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)  
 
 
 ## Documentation Index
@@ -69,6 +70,33 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 # PlatformIO
 pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 ```
+
+## Setup Requirements
+
+### PlatformIO Configuration
+
+When setting up your `platformio.ini`, ensure you include these **required** settings:
+
+- `build_unflags = -std=gnu++11` → **Required** to deactivate the old default C++ standard
+- `-Wno-deprecated-declarations` → **Required** to suppress deprecated warnings from ArduinoJson
+- `-std=gnu++17` → **Required** to enable C++17 features
+- `extra_scripts = pre:tools/precompile_wrapper.py` → **Required** to build and inject the web UI automatically
+
+> **Important**: Copy `tools/precompile_wrapper.py` from the `/examples` folder to your project and use it instead of the library's internal script to reduce flash usage!
+
+### Dependencies
+
+Before using the precompile wrapper script, ensure you have the following installed:
+
+**Python Dependencies:**
+1. **Python 3.7+** - Make sure you have Python 3.7 or newer installed
+2. **Required Python packages**: Install with `pip install intelhex`
+
+**Node.js Dependencies:**
+- **Node.js 16+** (includes npm) - The precompile script builds a Vue.js web interface
+
+**Automated Setup:**
+You can use the `setup_dependencies.py` script in the tools folder to install all dependencies automatically.
 
 ## Examples
 
@@ -226,13 +254,7 @@ void loop()
 }
 ```
 
-### PlatformIO environments (usb / ota)
-
-> build_unflags = -std=gnu++11 --> required, to deactivate old default
-
-> -Wno-deprecated-declarations --> required, to deactivate deprecated warnings from ArduinoJson
-
-> -std=gnu++17 --> required, to activate C++17
+### PlatformIO Environment Examples
 
 ```ini
 [env:usb]
@@ -243,29 +265,32 @@ upload_port = COM[5]
 monitor_speed = 115200
 build_unflags = -std=gnu++11
 build_flags =
-  -DUNIT_TEST
-  -Wno-deprecated-declarations
-  -std=gnu++17
-  -DCM_EMBED_WEBUI=1
-  -DCM_ENABLE_WS_PUSH=0
-  -DCM_ENABLE_SYSTEM_PROVIDER=1
-  -DCM_ENABLE_OTA=1
-  -DCM_ENABLE_RUNTIME_BUTTONS=1
-  -DCM_ENABLE_RUNTIME_CHECKBOXES=1
-  -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
-  -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
-  -DCM_ENABLE_RUNTIME_ALARMS=1
-  -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
-  -DCM_ENABLE_STYLE_RULES=1
-  -DCM_ENABLE_USER_CSS=1
-  -DCM_ENABLE_LOGGING=1
-  -DCM_ENABLE_VERBOSE_LOGGING=0
+    -DUNIT_TEST
+    -Wno-deprecated-declarations
+    -std=gnu++17
+    -DCM_EMBED_WEBUI=1
+    -DCM_ENABLE_WS_PUSH=0
+    -DCM_ENABLE_SYSTEM_PROVIDER=1
+    -DCM_ENABLE_OTA=1
+    -DCM_ENABLE_RUNTIME_BUTTONS=0
+    -DCM_ENABLE_RUNTIME_CHECKBOXES=1
+    -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
+    -DCM_ENABLE_RUNTIME_ALARMS=1
+    -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=0
+    -DCM_ENABLE_STYLE_RULES=0
+    -DCM_ENABLE_USER_CSS=0
+    -DCM_ENABLE_LOGGING=1
+    -DCM_ENABLE_VERBOSE_LOGGING=1
 lib_deps =
   bblanchon/ArduinoJson@^7.4.1
   esphome/ESPAsyncWebServer-esphome@^3.2.2
   esphome/AsyncTCP-esphome@^2.0.3
+  vitaly.ruhl/ESP32 Configuration Manager@^2.6.1
 test_ignore = src/main.cpp
-extra_scripts = pre:tools/preCompile_script.py
+; Use this in your own projects with a precompile script
+; Copy tools/precompile_wrapper.py to your project and add the line below
+extra_scripts = pre:tools/precompile_wrapper.py
 
 
 [env:ota]
@@ -275,24 +300,34 @@ framework = arduino
 monitor_speed = 115200
 build_unflags = -std=gnu++11
 build_flags =
-  -Wno-deprecated-declarations
-  -std=gnu++17
-  -DUNIT_TEST
-  -DCM_ENABLE_WS_PUSH=1
-  -DCM_ENABLE_RUNTIME_ALARMS=1
-  -DCM_ENABLE_USER_CSS=1
-  -DCM_ENABLE_LOGGING=1
-  -DCM_ENABLE_VERBOSE_LOGGING=0
+    -DUNIT_TEST
+    -Wno-deprecated-declarations
+    -std=gnu++17
+    -DCM_EMBED_WEBUI=1
+    -DCM_ENABLE_WS_PUSH=0
+    -DCM_ENABLE_SYSTEM_PROVIDER=1
+    -DCM_ENABLE_OTA=1
+    -DCM_ENABLE_RUNTIME_BUTTONS=0
+    -DCM_ENABLE_RUNTIME_CHECKBOXES=1
+    -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
+    -DCM_ENABLE_RUNTIME_ALARMS=1
+    -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=0
+    -DCM_ENABLE_STYLE_RULES=0
+    -DCM_ENABLE_USER_CSS=0
+    -DCM_ENABLE_LOGGING=1
+    -DCM_ENABLE_VERBOSE_LOGGING=1
 lib_deps =
   bblanchon/ArduinoJson@^7.4.1
   esphome/ESPAsyncWebServer-esphome@^3.2.2
   esphome/AsyncTCP-esphome@^2.0.3
+  vitaly.ruhl/ESP32 Configuration Manager@^2.6.1
 test_ignore =
   src/main.cpp
 upload_protocol = espota
 upload_port = 192.168.1.123
 upload_flags = --auth=ota1234
-extra_scripts = pre:tools/preCompile_script.py
+extra_scripts = pre:tools/precompile_wrapper.py
 ```
 
 ## Flash Firmware via Web UI
