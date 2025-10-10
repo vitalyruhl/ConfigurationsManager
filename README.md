@@ -1,15 +1,19 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.5.0 (2025.09.30)
+> Version 2.6.1 (2025.10.10)
 
-[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)]
-[![PlatformIO](https://img.shields.io/badge/PlatformIO-Project%20Status-green.svg)](https://registry.platformio.org/libraries/vitaly.ruhl/ESP32%20Configuration%20Manager)
+> Breaking changes in v2.6.x
+>
+> - Introduced compile-time feature flags (see `docs/FEATURE_FLAGS.md`). Some APIs and defaults have moved into guarded blocks.
+> - The embedded Web UI is now built and injected automatically by the prebuild script (`tools/preCompile_script.py`). Manual copying is no longer required.
+> - If you are upgrading from < 2.6, revisit your `platformio.ini` and adjust your `build_flags` accordingly.
+
 
 ## Overview
 
 ConfigurationsManager is a C++17 helper library + example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI (settings + live runtime dashboard + OTA flashing). It focuses on:
 
--- Type‑safe templated `Config<T>` wrappers
+- Type‑safe templated `Config<T>` wrappers
 - Central registration + bulk load/save functions
 - Optional pretty display names and pretty category names (decouple storage key from UI)
 - Automatic key truncation safety (category + key <= 15 chars total in NVS) with friendly UI name preserved
@@ -20,291 +24,29 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 
 ## Note: This is a C++17 Project
 
-```ini
-[env:nodemcu-32s]
-platform = espressif32
-board = nodemcu-32s
-framework = arduino
-monitor_speed = 115200
-upload_port = COM[3]
-build_unflags = -std=gnu++11
-build_flags =
-    -Wno-deprecated-declarations
-    -std=gnu++17
-lib_deps = bblanchon/ArduinoJson@^7.4.1
-
-[platformio]
-description = ESP32 C++17 Project for managing settings
-```
+> Requires `-std=gnu++17` (or newer) in `platformio.ini` or Arduino IDE settings. The library uses C++17 features like inline variables, structured bindings, lambdas with captures in unevaluated contexts, and `std::function` for callbacks.
 
 ## Features
 
 - 📦 Non-Volatile Storage (NVS) integration (ESP Preferences)
-- 🌐 Vue 3 responsive web configuration interface (embedded in flash)
 - 🎯 Declarative config registration with a `ConfigOptions<T>` aggregate
-- 🪄 Dynamic visibility of settings via `showIf` lambda (e.g. hide static IP fields while DHCP enabled)
-- 🔒 Password masking & selective exposure
-- 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
-- 📡 AP Mode fallback / captive portal style entry
+- 🌐 responsive web configuration interface (embedded in flash)
 - 🚀 OTA firmware upload endpoint
 - ⚡ Flash firmware directly from the web UI (password-protected HTTP OTA)
-- 🔴 Live runtime values (`/runtime.json`)
-- 🎨 Two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
+- 🪄 Dynamic visibility of settings via `showIf` lambda (e.g. hide static IP fields while DHCP enabled)
+- 🔒 Password masking & selective exposure
+- 🎨 Live-Values - two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
+- 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
+- 📡 AP Mode fallback / captive portal style entry
+- 🔴 Live runtime values (`/runtime.json`) (you can make your own Web-Interface by design the Vue 3 embedded Project)
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
->To see how i use it in my project, check out my GitHub (most features are used in this project):
->[https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
+### To see how I use it in my projects
 
-### Live Runtime Values & Alarm System
+- [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
+- [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)  
 
-![Live Runtime Values & Alarm System](examples/live-values.jpg)
-
-The library can expose non‑persistent runtime / sensor values to the web UI and (optionally) over a WebSocket channel for low‑latency updates.
-
-Key building blocks:
-
-1. **Runtime Providers** (`addRuntimeProvider`)
-
-Provide a lambda that fills a nested JSON object under its name each time a payload is built.
-
-```cpp
-cfg.addRuntimeProvider({
-  .name = "sensors",
-  .fill = [](JsonObject &o){
-      o["temp"] = currentTemp;
-      o["hum"]  = currentHumidity;
-      o["dew"]  = dewPoint;
-  }
-});
-```
-
-1. **Runtime Field Metadata**
-
-Define how each field should be rendered (precision, unit) or evaluated (warn/alarm thresholds, boolean semantics) by the frontend.
-
-```cpp
-cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
-    /*warnMin*/ 1.0f, /*warnMax*/ 30.0f,
-    /*alarmMin*/ 0.0f, /*alarmMax*/ 32.0f,
-    true,true,true,true
-);
-cfg.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1); // plain (no thresholds)
-```
-
-Frontend consumes `/runtime_meta.json` → groups, units, precision, thresholds.
-
-#### Styling Runtime Fields (Quick Glimpse)
-
-Runtime metadata now ships optional **style overrides** so you can tweak how individual values appear in the web UI without touching the Vue code. Each field carries a `RuntimeFieldStyle` structure that maps logical targets (`label`, `values`, `unit`, `state`, `stateDotOnTrue`, `stateDotOnFalse`, `stateDotOnAlarm`, …) to CSS property/value pairs plus an optional `visible` flag. The backend merges your overrides with type-specific defaults, ensuring the UI always has sensible fallbacks.
-
-```cpp
-// Boolean alarm rendered with a yellow dot and text when true
-{
-  auto dewpointStyle = ConfigManagerClass::defaultBoolStyle(/*alarmWhenTrue=*/true);
-  dewpointStyle.rule("stateDotOnAlarm")
-    .set("background", "#f1c40f")
-    .set("border", "none")
-    .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
-    .set("animation", "none");
-  dewpointStyle.rule("state").set("color", "#f1c40f").set("fontWeight", "600");
-  cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, 100, dewpointStyle);
-}
-
-// Thresholded numeric field with custom label/value/unit styling
-{
-  auto tempFieldStyle = ConfigManagerClass::defaultNumericStyle(true);
-  tempFieldStyle.rule("label").set("color", "#d00000").set("fontWeight", "700");
-  tempFieldStyle.rule("values").set("color", "#0b3d91").set("fontWeight", "700");
-  tempFieldStyle.rule("unit").set("color", "#000000").set("fontWeight", "700");
-  cfg.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
-                   1.0f, 30.0f,
-                   0.0f, 32.0f,
-                   true, true, true, true,
-                   10,
-                   tempFieldStyle);
-}
-```
-
-If a rule doesn’t exist yet, `rule("target")` creates it. Use `.setVisible(false)` to hide an element (e.g. boolean state text). Frontend consumes the style object verbatim inside `/runtime_meta.json`.
-
-Full documentation moved to: `docs/STYLING.md` and `docs/THEMING.md`.
-
-1. **Boolean Runtime Fields**
-
-```cpp
-// Plain (no alarm styling)
-cfg.defineRuntimeBool("flags", "tempToggle", "Temp Toggle", false);
-// Alarm boolean (blink red when true, green when safe)
-cfg.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true);
-```
-
-Metadata adds: `isBool`, `hasAlarm`, `alarmWhenTrue` (omitted if false). Frontend derives styling:
-
-- Alarm bool safe → solid green dot  
-- Alarm bool active → blinking red  
-- Plain bool true → green, false → white outline
-
-1. **Cross‑Field Alarms** (`defineRuntimeAlarm`)
-
-Allows conditions spanning multiple providers/fields. Each alarm has:
-
-- `name`  
-- `condition(JsonObject &root)` → returns bool  
-- `onEnter()` callback (fires once when condition becomes true)  
-- `onExit()` callback (fires once when condition falls back to false)
-
-```cpp
-cfg.defineRuntimeAlarm(
-  "dewpoint_risk",
-  [](const JsonObject &root){
-      if(!root.containsKey("sensors")) return false;
-      auto sensors = root["sensors"].as<JsonObject>();
-      if(!sensors.containsKey("temp") || !sensors.containsKey("dew")) return false;
-      float t = sensors["temp"].as<float>();
-      float d = sensors["dew"].as<float>();
-      return (t - d) <= 5.0f; // risk window (≤5°C above dew point)
-  },
-  [](){ Serial.println("[ALARM] Dewpoint proximity risk ENTER"); },
-  [](){ Serial.println("[ALARM] Dewpoint proximity risk EXIT"); }
-);
-```
-
-Active alarm states are added to `/runtime.json` under an `alarms` object:
-
-```json
-{
-  "uptime": 123456,
-  "sensors": { "temp": 21.3, "hum": 44.8, "dew": 10.2 },
-  "alarms": { "dewpoint_risk": true }
-}
-```
-
-1. **Relay / Actuator Integration Example**
-
-A temperature minimum alarm driving a heater relay with hysteresis:
-
-```cpp
-#define RELAY_HEATER_PIN 25
-pinMode(RELAY_HEATER_PIN, OUTPUT);
-digitalWrite(RELAY_HEATER_PIN, LOW); // assume LOW = off
-
-cfg.defineRuntimeAlarm(
-  "temp_low",
-  [](const JsonObject &root){
-      static bool active = false; // hysteresis state
-      if(!root.containsKey("sensors")) return false;
-      auto sensors = root["sensors"].as<JsonObject>();
-      if(!sensors.containsKey("temp")) return false;
-      float t = sensors["temp"].as<float>();
-      if(active) active = (t < 0.5f); // release above +0.5°C
-      else       active = (t < 0.0f); // enter below 0.0°C
-      return active;
-  },
-  [](){ Serial.println("[ALARM] temp_low ENTER -> heater ON"); digitalWrite(RELAY_HEATER_PIN, HIGH); },
-  [](){ Serial.println("[ALARM] temp_low EXIT -> heater OFF"); digitalWrite(RELAY_HEATER_PIN, LOW); }
-);
-```
-
-1. **Evaluating Alarms**
-
-Call periodically in `loop()` (a lightweight internal merge of runtime JSON + condition checks):
-
-```cpp
-cfg.handleRuntimeAlarms();
-```
-
-You can adjust frequency (e.g. every 1–3s) depending on responsiveness needed.
-
-1. **WebSocket Push**
-
-No compile-time flags needed; Async server + WebSocket are part of the default build.
-
-```cpp
-cfg.enableWebSocketPush(2000);   // broadcast every 2s
-cfg.handleWebsocketPush();       // call in loop()
-```
-
-Frontend strategy: try WebSocket first → if not available, poll `/runtime.json` (2s default in UI).
-
-1. **Custom Payload (Optional)**
-
-Override the generated payload:
-
-```cpp
-cfg.setCustomLivePayloadBuilder([](){
-    DynamicJsonDocument d(256);
-    d["uptime"] = millis();
-    d["heap"] = ESP.getFreeHeap();
-    String out; serializeJson(d, out); return out;
-});
-```
-
-1. **Frontend Rendering Logic (Summary)**
-
-- Uses `/runtime_meta.json` for grouping, units, thresholds, boolean semantics.  
-- `/runtime.json` supplies live values + `alarms` map.  
-- Alarm booleans blink slower (1.6s) for readability; numeric threshold violations use color + blink.
-
-1. **Memory / Footprint Notes**
-
-- Runtime doc buffers kept modest (1–2 KB per build) – adjust if you add many providers/fields.  
-- Keep provider `fill` lambdas fast; avoid blocking IO inside them.
-
-### Minimal End‑to‑End Example (Live + Alarm)
-
-```cpp
-// Setup (after WiFi):
-cfg.addRuntimeProvider({ .name="sys", .fill = [](JsonObject &o){ o["heap"] = ESP.getFreeHeap(); }});
-cfg.defineRuntimeField("sys", "heap", "Free Heap", "B", 0);
-cfg.addRuntimeProvider({ .name="env", .fill = [](JsonObject &o){ o["temp"] = readTempSensor(); }});
-cfg.defineRuntimeFieldThresholds("env", "temp", "Temperature", "°C", 1,
-   5.0f, 30.0f,   // warn range
-   0.0f, 40.0f,   // alarm range
-   true,true,true,true);
-cfg.defineRuntimeAlarm("too_cold",
-   [](const JsonObject &root){ return root["env"]["temp"].as<float>() < 0.0f; },
-   [](){ Serial.println("cold ENTER"); },
-   [](){ Serial.println("cold EXIT"); }
-);
-cfg.enableWebSocketPush(1500);
-```
-
-#### Runtime String Fields, Dividers & Ordering
-
-You can enrich the Live view with informational text lines and visual separators and control ordering.
-
-```cpp
-// String value (dynamic: taken from provider runtime JSON key "fw")
-cfg.defineRuntimeString("system", "fw", "Firmware", CONFIGMANAGER_VERSION);
-
-// Static string (not looked up in /runtime.json)
-cfg.defineRuntimeString("system", "build", "Build", "2025-09-29", /*order*/ 5);
-
-// Divider at top of sensors group
-cfg.defineRuntimeDivider("sensors", "Environment", 0);
-
-// Ordered numeric fields
-cfg.defineRuntimeField("sensors", "temp", "Temperature", "°C", 1, /*order*/ 10);
-cfg.defineRuntimeField("sensors", "hum", "Humidity", "%", 1, /*order*/ 20);
-
-// Provider (card) ordering
-cfg.setRuntimeProviderOrder("system", 1);
-cfg.setRuntimeProviderOrder("sensors", 5);
-```
-
-Metadata additions in `/runtime_meta.json`:
-
-| Key | Meaning |
-|-----|---------|
-| `isString` | Render as plain text value (no unit/precision formatting) |
-| `isDivider` | Render a horizontal rule with label |
-| `staticValue` | Value to show even if absent from `/runtime.json` |
-| `order` | Sort hint (lower first). Default 100 |
-
-Older frontends ignore these keys gracefully.
-
----
 
 ## Documentation Index
 
@@ -314,27 +56,279 @@ Older frontends ignore these keys gracefully.
 | Runtime Providers & Alarms | `docs/RUNTIME.md` |
 | Styling (per-field metadata) | `docs/STYLING.md` |
 | Theming (global CSS + disabling metadata) | `docs/THEMING.md` |
-| OTA Flash Workflow | (this README) |
+| Feature Flags (compile-time switches) | `docs/FEATURE_FLAGS.md` |
 
 ## Requirements
 
-- ESP32 development board
-- PlatformIO (preferred) or Arduino IDE
+- Compatible development board (ESP32 development board)
+- PlatformIO (preferred) or Arduino IDE (Arduino IDE not tested!)
 - Add `-std=gnu++17` (and remove default gnu++11) in `platformio.ini`
 
-## Screenshots
+## Installation
 
->Example on Monitor HD
+```bash
+# PlatformIO
+pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
+```
 
-![Example on monitor](examples/example-hd.jpg)
+## Setup Requirements
 
->Example on mobile
+### PlatformIO Configuration
 
-![Example on mobile](examples/example-mobile.jpg)
+When setting up your `platformio.ini`, ensure you include these **required** settings:
 
->OTA Update over web-interface
+- `build_unflags = -std=gnu++11` → **Required** to deactivate the old default C++ standard
+- `-Wno-deprecated-declarations` → **Required** to suppress deprecated warnings from ArduinoJson
+- `-std=gnu++17` → **Required** to enable C++17 features
+- `extra_scripts = pre:tools/precompile_wrapper.py` → **Required** to build and inject the web UI automatically
 
-![OTA Update over web-interface](examples/ota-update-over-web.jpg)
+> **Important**: Copy `tools/precompile_wrapper.py` from the `/examples` folder to your project and use it instead of the library's internal script to reduce flash usage!
+
+### Dependencies
+
+Before using the precompile wrapper script, ensure you have the following installed:
+
+**Python Dependencies:**
+1. **Python 3.7+** - Make sure you have Python 3.7 or newer installed
+2. **Required Python packages**: Install with `pip install intelhex`
+
+**Node.js Dependencies:**
+- **Node.js 16+** (includes npm) - The precompile script builds a Vue.js web interface
+
+**Automated Setup:**
+You can use the `setup_dependencies.py` script in the tools folder to install all dependencies automatically.
+
+## Examples
+
+> Example files live in the `examples/` directory:
+
+Only v2.6.x examples are kept:
+
+- `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
+- `main.cpp_example_bme280` – Extended sensor + thresholds + cross‑field alarms.
+
+### minimal pattern (using `ESPAsyncWebServer`)
+
+```cpp
+#include <Arduino.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include "ConfigManager.h"
+AsyncWebServer server(80);
+
+#define VERSION "V2.6.1" // 2025.10.08
+#define APP_NAME "CM-Min-Demo"
+
+ConfigManagerClass cfg;                                               // Create an instance of ConfigManager before using it in structures etc.
+ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
+
+// Basic setting using new aggregate initialization (ConfigOptions<T>)
+Config<int> updateInterval(ConfigOptions<int>{
+    .keyName = "interval",
+    .category = "main",
+    .defaultValue = 30,
+    .prettyName = "Update Interval (seconds)"});
+
+// Example of a structure for WiFi settings
+struct WiFi_Settings // wifiSettings
+{
+    Config<String> wifiSsid;
+    Config<String> wifiPassword;
+    Config<bool> useDhcp;
+    Config<String> staticIp;
+    Config<String> gateway;
+    Config<String> subnet;
+
+    // Shared OptionGroup constants to avoid repetition
+    static constexpr OptionGroup WIFI_GROUP{.category = "wifi", .prettyCat = "WiFi Settings"};
+
+    WiFi_Settings() : // Use OptionGroup helpers with shared constexpr instances
+                      wifiSsid(WIFI_GROUP.opt<String>("ssid", "MyWiFi", "WiFi SSID")),
+                      wifiPassword(WIFI_GROUP.opt<String>("password", "secretpass", "WiFi Password", true, true)),
+                      useDhcp(WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP")),
+                      staticIp(WIFI_GROUP.opt<String>("sIP", "192.168.2.126", "Static IP", true, false, nullptr, showIfFalse(useDhcp))),
+                      gateway(WIFI_GROUP.opt<String>("GW", "192.168.2.250", "Gateway", true, false, nullptr, showIfFalse(useDhcp))),
+                      subnet(WIFI_GROUP.opt<String>("subnet", "255.255.255.0", "Subnet-Mask", true, false, nullptr, showIfFalse(useDhcp)))
+    {
+        // Register settings with ConfigManager
+        cfg.addSetting(&wifiSsid);
+        cfg.addSetting(&wifiPassword);
+        cfg.addSetting(&useDhcp);
+        cfg.addSetting(&staticIp);
+        cfg.addSetting(&gateway);
+        cfg.addSetting(&subnet);
+    }
+};
+
+WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
+
+void setup()
+{
+    Serial.begin(115200);
+    ConfigManagerClass::setLogger([](const char *msg)
+                                  { Serial.print("[CFG] "); Serial.println(msg); });
+
+    cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+
+    cfg.addSetting(&updateInterval);
+    cfg.checkSettingsForErrors();
+
+    try
+    {
+        cfg.loadAll(); // Load all settings from preferences, is nessesary before using the settings!
+    }
+    catch (const std::exception &e)
+    {
+        Serial.println(e.what());
+    }
+
+    Serial.println("Loaded configuration:");
+    delay(300);
+
+    // print loaded settings to Serial (optional)
+    Serial.println("Configuration printout:");
+    Serial.println(cfg.toJSON(false));
+
+    // Example set a Value from Program
+    updateInterval.set(15);
+    cfg.saveAll();
+
+    // nesseasary settings for webserver and wifi
+    if (wifiSettings.wifiSsid.get().length() == 0)
+    {
+        Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
+        cfg.startAccessPoint();
+    }
+
+    if (WiFi.getMode() == WIFI_AP)
+    {
+        Serial.printf("🖥️  AP Mode! \n");
+        return; // Skip webserver setup in AP mode
+    }
+
+        // Enable built-in System provider (RSSI, freeHeap, optional loop avg) before starting the web server
+        // Requires CM_ENABLE_SYSTEM_PROVIDER=1 at compile time
+        cfg.enableBuiltinSystemProvider();
+
+    if (wifiSettings.useDhcp.get())
+    {
+        Serial.println("DHCP enabled");
+        cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+    }
+    else
+    {
+        Serial.println("DHCP disabled");
+        cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+    }
+
+    delay(1500);                    // wait for wifi connection a bit
+    cfg.enableWebSocketPush(2000); // 2s Interval for push updates to clients - if not set, ui will use polling
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        // OTA setup (always call if feature compiled in & user enabled; handleOTA will defer until WiFi is up)
+        cfg.setupOTA("esp32", "otapassword123");
+    }
+    Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+}
+
+void loop()
+{
+    //nessesary for webserver and wifi to handle clients and websocket
+    cfg.handleClient();
+    cfg.handleWebsocketPush();
+    cfg.handleOTA();
+    cfg.updateLoopTiming();// Update rolling loop timing window so the system provider can expose avg loop time if desired and show the SystemProvider Information
+
+    //reconnect if wifi is lost
+    if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_AP)
+    {
+        Serial.println("⚠️ WiFi lost, reconnecting...");
+        cfg.reconnectWifi();
+        delay(1500); // wait for wifi connection a bit
+        cfg.setupOTA("esp32", "otapassword123");
+    }
+
+    delay(updateInterval.get());
+    Serial.print(".");
+}
+```
+
+### PlatformIO Environment Examples
+
+```ini
+[env:usb]
+platform = espressif32
+board = nodemcu-32s
+framework = arduino
+upload_port = COM[5]
+monitor_speed = 115200
+build_unflags = -std=gnu++11
+build_flags =
+    -DUNIT_TEST
+    -Wno-deprecated-declarations
+    -std=gnu++17
+    -DCM_EMBED_WEBUI=1
+    -DCM_ENABLE_WS_PUSH=0
+    -DCM_ENABLE_SYSTEM_PROVIDER=1
+    -DCM_ENABLE_OTA=1
+    -DCM_ENABLE_RUNTIME_BUTTONS=0
+    -DCM_ENABLE_RUNTIME_CHECKBOXES=1
+    -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
+    -DCM_ENABLE_RUNTIME_ALARMS=1
+    -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=0
+    -DCM_ENABLE_STYLE_RULES=0
+    -DCM_ENABLE_USER_CSS=0
+    -DCM_ENABLE_LOGGING=1
+    -DCM_ENABLE_VERBOSE_LOGGING=1
+lib_deps =
+  bblanchon/ArduinoJson@^7.4.1
+  esphome/ESPAsyncWebServer-esphome@^3.2.2
+  esphome/AsyncTCP-esphome@^2.0.3
+  vitaly.ruhl/ESP32 Configuration Manager@^2.6.1
+test_ignore = src/main.cpp
+; Use this in your own projects with a precompile script
+; Copy tools/precompile_wrapper.py to your project and add the line below
+extra_scripts = pre:tools/precompile_wrapper.py
+
+
+[env:ota]
+platform = espressif32
+board = nodemcu-32s
+framework = arduino
+monitor_speed = 115200
+build_unflags = -std=gnu++11
+build_flags =
+    -DUNIT_TEST
+    -Wno-deprecated-declarations
+    -std=gnu++17
+    -DCM_EMBED_WEBUI=1
+    -DCM_ENABLE_WS_PUSH=0
+    -DCM_ENABLE_SYSTEM_PROVIDER=1
+    -DCM_ENABLE_OTA=1
+    -DCM_ENABLE_RUNTIME_BUTTONS=0
+    -DCM_ENABLE_RUNTIME_CHECKBOXES=1
+    -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
+    -DCM_ENABLE_RUNTIME_ALARMS=1
+    -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=0
+    -DCM_ENABLE_STYLE_RULES=0
+    -DCM_ENABLE_USER_CSS=0
+    -DCM_ENABLE_LOGGING=1
+    -DCM_ENABLE_VERBOSE_LOGGING=1
+lib_deps =
+  bblanchon/ArduinoJson@^7.4.1
+  esphome/ESPAsyncWebServer-esphome@^3.2.2
+  esphome/AsyncTCP-esphome@^2.0.3
+  vitaly.ruhl/ESP32 Configuration Manager@^2.6.1
+test_ignore =
+  src/main.cpp
+upload_protocol = espota
+upload_port = 192.168.1.123
+upload_flags = --auth=ota1234
+extra_scripts = pre:tools/precompile_wrapper.py
+```
 
 ## Flash Firmware via Web UI
 
@@ -347,289 +341,13 @@ The embedded single-page app now exposes a `Flash` action beside the `Settings` 
 
 The backend remains fully asynchronous (`ESPAsyncWebServer`)—the new `/ota_update` handler streams chunks into the `Update` API while still performing password checks. HTTP uploads are rejected when OTA is disabled, the password is missing/incorrect, or the upload fails integrity checks.
 
-## Examples
-
-Example files live in the `examples/` directory:
-
-- `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
-- `main.cpp_example_bme280` – Extended sensor + thresholds + cross‑field alarms.
-- `main.cpp_publish` – Auto-generated stub used when building the `publish` environment.
-
-Below is the minimal pattern (using `ESPAsyncWebServer`).
-
-```cpp
-#include <Arduino.h>
-#include "ConfigManager.h"
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-AsyncWebServer server(80);
-
-ConfigManagerClass cfg;
-ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
-
-// Basic setting using new aggregate initialization (ConfigOptions<T>)
-Config<int> updateInterval(ConfigOptions<int>{
-    .keyName = "interval",
-    .category = "main",
-    .defaultValue = 30,
-    .prettyName = "Update Interval (seconds)"
-});
-
-// Dynamic visibility example: show static IP fields only if DHCP disabled
-struct WiFi_Settings {
-  Config<String> wifiSsid;
-  Config<String> wifiPassword;
-  Config<bool>   useDhcp;
-  Config<String> staticIp;
-  Config<String> gateway;
-  Config<String> subnet;
-
-  WiFi_Settings() :
-    wifiSsid(ConfigOptions<String>{ .keyName="ssid", .category="wifi", .defaultValue="MyWiFi", .prettyName="WiFi SSID", .prettyCat="Network Settings" }),
-    wifiPassword(ConfigOptions<String>{ .keyName="password", .category="wifi", .defaultValue="secretpass", .prettyName="WiFi Password", .prettyCat="Network Settings", .showInWeb=true, .isPassword=true }),
-    useDhcp(ConfigOptions<bool>{ .keyName="dhcp", .category="network", .defaultValue=false, .prettyName="Use DHCP", .prettyCat="Network Settings" }),
-    staticIp(ConfigOptions<String>{ .keyName="sIP", .category="network", .defaultValue="192.168.2.126", .prettyName="Static IP", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } }),
-    gateway(ConfigOptions<String>{ .keyName="GW", .category="network", .defaultValue="192.168.2.250", .prettyName="Gateway", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } }),
-    subnet(ConfigOptions<String>{ .keyName="subnet", .category="network", .defaultValue="255.255.255.0", .prettyName="Subnet-Mask", .prettyCat="Network Settings", .showIf=[this](){ return !this->useDhcp.get(); } })
-  {
-    cfg.addSetting(&wifiSsid);
-    cfg.addSetting(&wifiPassword);
-    cfg.addSetting(&useDhcp);
-    cfg.addSetting(&staticIp);
-    cfg.addSetting(&gateway);
-    cfg.addSetting(&subnet);
-  }
-};
-
-WiFi_Settings wifiSettings;
-
-void setup() {
-  Serial.begin(115200);
-  ConfigManagerClass::setLogger([](const char* msg){ Serial.print("[CFG] "); Serial.println(msg); });
-
-  cfg.addSetting(&updateInterval);
-  cfg.loadAll();
-  cfg.checkSettingsForErrors();
-
-  // Optional update
-  updateInterval.set(15);
-  cfg.saveAll();
-
-  if (wifiSettings.wifiSsid.get().isEmpty()) {
-    cfg.startAccessPoint();
-  }
-
-  if (WiFi.getMode() != WIFI_AP) {
-    if (wifiSettings.useDhcp.get()) {
-      cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-    } else {
-      // Explicit static (IP, Gateway, Mask)
-      cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-      // Or full explicit including DNS:
-      // cfg.startWebServer(wifiSettings.staticIp.get(), wifiSettings.gateway.get(), wifiSettings.subnet.get(), String("8.8.8.8"), wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-    }
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    cfg.setupOTA("Ota-esp32-device", "ota1234");
-    cfg.enableWebSocketPush(2000); // periodic push (interval ms)
-  }
-}
-
-void loop() {
-  cfg.handleClient();
-  cfg.handleWebsocketPush();
-  cfg.handleOTA();
-  delay(250);
-}
-```
-
-
-### Dynamic Visibility (showIf) Pattern
-
-The `showIf` member of `ConfigOptions<T>` is a `std::function<bool()>`. It is evaluated on every JSON generation for the web UI (after each apply/save). Keep it lightweight (simple flag checks) to avoid blocking the loop. Example:
-
-```cpp
-Config<bool> enableAdvanced(ConfigOptions<bool>{
-  .keyName = "adv",
-  .category = "sys",
-  .defaultValue = false,
-  .prettyName = "Enable Advanced"
-});
-Config<int> hiddenUnlessEnabled(ConfigOptions<int>{
-  .keyName = "hnum",
-  .category = "sys",
-  .defaultValue = 42,
-  .prettyName = "Hidden Number",
-  .showIf = [](){ return enableAdvanced.get(); }
-});
-```
-
-### Reducing Boilerplate with OptionGroup (since 2.4.3)
-
-When many settings share the same category & pretty category, you can use `OptionGroup` to avoid repetition.
-
-Before:
-
-```cpp
-Config<String> wifiSsid(ConfigOptions<String>{
-  .keyName="ssid", .category="wifi", .defaultValue="MyWiFi",
-  .prettyName="WiFi SSID", .prettyCat="Network Settings"
-});
-Config<String> wifiPassword(ConfigOptions<String>{
-  .keyName="password", .category="wifi", .defaultValue="secretpass",
-  .prettyName="WiFi Password", .prettyCat="Network Settings",
-  .showInWeb = true, .isPassword = true
-});
-```
-
-After (factory pattern):
-
-```cpp
-constexpr OptionGroup WIFI_GROUP{"wifi", "Network Settings"};
-
-Config<String> wifiSsid( WIFI_GROUP.opt<String>(
-  "ssid", String("MyWiFi"), "WiFi SSID") );
-
-Config<String> wifiPassword( WIFI_GROUP.opt<String>(
-  "password", String("secretpass"), "WiFi Password", true, true) );
-```
-
-The template `opt<T>(key, defaultValue, prettyName, showInWeb, isPassword, cb, showIf)` returns a fully populated `ConfigOptions<T>`.
-
-### Visibility Helper Functions
-
-To replace repeating lambdas like `[this](){ return !this->useDhcp.get(); }`, two helper factories are available:
-
-```cpp
-inline std::function<bool()> showIfTrue (const Config<bool>& flag);
-inline std::function<bool()> showIfFalse(const Config<bool>& flag);
-```
-
-Usage inside a settings struct:
-
-```cpp
-struct WiFi_Settings {
-  Config<bool> useDhcp;
-  Config<String> staticIp;
-  Config<String> gateway;
-  Config<String> subnet;
-
-  WiFi_Settings() :
-    useDhcp(    WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP") ),
-    staticIp(   WIFI_GROUP.opt<String>("sIP",    String("192.168.2.126"), "Static IP",    true, false, nullptr, showIfFalse(useDhcp) ) ),
-    gateway(    WIFI_GROUP.opt<String>("GW",     String("192.168.2.250"), "Gateway",      true, false, nullptr, showIfFalse(useDhcp) ) ),
-    subnet(     WIFI_GROUP.opt<String>("subnet", String("255.255.255.0"), "Subnet-Mask",  true, false, nullptr, showIfFalse(useDhcp) ) )
-  { /* addSetting(...) */ }
-};
-```
-
-Benefits:
-
-- Less visual noise → easier to scan core semantics
-- Lower risk of copy/paste mistakes (e.g., forgetting to invert a condition)
-- Consistent semantics across different settings groups
-
-### Migration Tips
-
-1. Introduce one `constexpr OptionGroup` per logical category (e.g. `wifi`, `network`, `MQTT`).
-2. Gradually refactor: old style (`ConfigOptions{...}`) and new factory style can coexist.
-3. For dynamic visibility tied to a boolean `Config<bool>` field, prefer `showIfTrue/False(flag)`.
-4. Keep complex logic (multi-field dependencies) in a dedicated lambda or helper—helpers are intended only for simple flag toggles.
-5. If you need a callback (`cb`) and a C++ lambda, prefer setting `.cb` for plain function pointer or call `setCallback()` after construction.
-
----
-
-### Static IP Helper Overloads
-
-Overloads now available:
-
-1. `startWebServer(ssid, password)` → DHCP
-2. `startWebServer(ip, mask, ssid, password)` → Derives gateway (.1) + DNS 8.8.8.8
-3. `startWebServer(ip, gateway, mask, ssid, password)` → Explicit gateway (DNS 8.8.8.8)
-4. `startWebServer(ip, gateway, mask, dns, ssid, password)` → Fully explicit
-
-### Key Length & Truncation Safety
-
-Internal storage key format: `<category>_<keyName>` truncated to 15 chars to satisfy ESP32 NVS limits. Provide human friendly `.prettyName` / `.prettyCat` for UI text. Avoid relying on raw key for user output.
-
-### Password / Secret Fields
-
-Set `.isPassword = true` to mask in UI. The backend stores the real value; UI obscures it and only sends new value when field changed.
-
-## Installation
-
-```bash
-# PlatformIO
-pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
-```
+Note: The runtime JSON includes system-level OTA flags used by the WebUI to enable the Flash button and show status. Specifically, `runtime.system.allowOTA` is true when OTA is enabled on the device (HTTP endpoint ready), and `runtime.system.otaActive` is true after `ArduinoOTA.begin()` has run (informational). Both are available only when compiled with `-DCM_ENABLE_OTA=1`.
 
 ### Async Build & Live Values
 
 The project now always uses the Async stack; no `env:async` or `-DUSE_ASYNC_WEBSERVER` define is needed.
 
 If the WebSocket isn't connected the frontend transparently polls `/runtime.json`.
-
-### Runtime Providers & WebSocket API
-
-Register a provider:
-
-```cpp
-cfg.addRuntimeProvider({
-  .name = "sensors",
-  .fill = [](JsonObject& o){
-      o["temp"] = readTemp();
-      o["hum"]  = readHum();
-  }
-});
-```
-
-Enable WebSocket push:
-
-```cpp
-cfg.enableWebSocketPush(1500); // push every 1.5s
-```
-
-In your loop (async build):
-
-```cpp
-cfg.handleWebsocketPush(); // handles interval + broadcast
-```
-
-Provide custom payload instead of auto runtime JSON:
-
-```cpp
-cfg.setCustomLivePayloadBuilder([](){
-    DynamicJsonDocument d(256);
-    d["uptime"] = millis();
-    d["heap"] = ESP.getFreeHeap();
-    String out; serializeJson(d, out); return out;
-});
-```
-
-Immediate manual push:
-
-```cpp
-cfg.pushRuntimeNow();
-```
-
-1. Include the ConfigurationsManager library in your project.
-
-```cpp
-#include <ConfigManager.h>
-
-Config<String> wifiSSID("ssid", "network", "MyWiFi");
-Config<String> wifiPass("password", "network", "", true, true);
-
-void setup() {
-  ConfigManager.addSetting(&wifiSSID);
-  ConfigManager.addSetting(&wifiPass);
-  configManager.saveAll();
-  ConfigManager.startWebServer();
-}
-
-// see the main.cpp for more information
-```
 
 ### PlatformIO environments (usb / ota / publish)
 
@@ -645,21 +363,36 @@ pio run -e ota -t upload
 #pio run --target upload --upload-port <ESP32_IP_ADDRESS>
 pio run -e ota -t upload --upload-port 192.168.2.126
 
-# Or over the Web UI: http://<device-ip>/ota_update (after first USB upload)
+# Or over the Web UI by press the "Flash" Button and upload the firmware.bin
 
-# Minimal publish (stub) build (example code excluded):
-pio run -e publish
-
-#sometimes you get an guru-meditation error, if you upload,
-#try this:
+#Troubleshooting:
 pio run -e usb -t erase #this will delete all flash data on your esp32!
-pio run -e usb -t clean
+pio run -e usb -t clean # this will clean the previous project build files
 
 ```
 
-## Custom Theme (Global CSS)
+## Screenshots
 
-Provide one stylesheet at `/user_theme.css` by calling `setCustomCss()` and optionally shrink `/runtime_meta.json` by `disableRuntimeStyleMeta(true)`. See `docs/THEMING.md` for detailed selectors & examples.
+>Example on Monitor HD
+![Example on Monitor HD](examples/screenshots/test-hd.jpg)
+
+
+>Example on mobile
+![Example on mobile](examples/screenshots/test-mobile.jpg)
+
+
+>Settings on HD
+![Settings on HD 1](examples/screenshots/test-settings-HD.jpg)
+![Settings on HD 2](examples/screenshots/test-settings2-HD.jpg)
+
+
+>Settings on mobile
+![Settings on mobile 1](examples/screenshots/test-settings-mobile.jpg)
+![Settings on mobile 2](examples/screenshots/test-settings-mobile2.jpg)
+
+> CSS Theming
+![CSS Theming](examples/screenshots/Info-CSS.jpg)
+
 
 ## Version History
 
@@ -687,18 +420,27 @@ Provide one stylesheet at `/user_theme.css` by calling `setCustomCss()` and opti
 - **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
 - **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
 - **2.5.0**: OptionGroup + visibility helpers, runtime field styling metadata, boolean dot styling refinements, hybrid theming (disable style meta + `/user_theme.css`), OTA flash UI improvements.
+- **2.6.0**: Restyling of web interface, Grouped code in different Blocks, that can be deaktivated by #define derectives. (see docs/FEATURE_FLAGS.md) to reduce code size. Some Bugfixes. Reorder Documentation. (remove some info into extra docs files)
+- **2.6.1**: some Bugfixes, reorganaize Readme, new Screenshots, Installation instructions
 
-## ToDo
+## ToDo / Issues
+
+### Planned
 
 - HTTPS Support (original async lib not support https 😒 )
 - add optional order number for categories to show on webinterface
 - add optional description for settings to show on webinterface as tooltip
 - add optional show-password flag to show password on webinterface, and or console
 - add reset to default for single settings
+
+### maybe in future
 - i18n Support
 - make c++ V11 support
 
-## known Issues
+### known Issues
 
-- prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown.
-- if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty.
+- prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown. (bug!)
+- if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty. (bug!)
+- on "DCM_ENABLE_RUNTIME_CHECKBOXES=0", the slider in settings are gone too. (bug!)
+- on "DCM_ENABLE_STYLE_RULES=0", the style of Alarm is broken - no green on no alarm, alarm itself is red, but not blinking (bug!)
+- Ota flash button: Password field is a text field, not password field (bug!)

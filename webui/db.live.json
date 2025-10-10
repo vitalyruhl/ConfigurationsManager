@@ -42,7 +42,7 @@
         "showIf": true
       },
       "Version": {
-        "value": "V2.5.0",
+        "value": "V2.6.0",
         "displayName": "Program Version",
         "isPassword": false,
         "showIf": true
@@ -173,7 +173,7 @@
         "showIf": true
       },
       "cbt": {
-        "value": 18,
+        "value": 21,
         "displayName": "Test Callback",
         "isPassword": false,
         "showIf": true
@@ -217,18 +217,23 @@
     }
   },
   "runtime": {
-    "uptime": 83739,
+    "uptime": 1674984,
     "system": {
-      "rssi": -39,
+      "rssi": -41,
       "rssiBars": "Excellent",
-      "freeHeap": 196,
-      "loopAvg": 210.8666667
+      "freeHeap": 193,
+      "loopAvg": 1.018332315
     },
     "sensors": {
-      "temp": 19.16,
-      "hum": 29.23438,
-      "dew": 0.793841,
-      "Pressure": 1028.46
+      "temp": 20.9,
+      "hum": 19.25586,
+      "dew": -3.43535,
+      "Pressure": 1027.99
+    },
+    "Hand overrides": {
+      "sb_mode": true,
+      "i_adj": 0,
+      "f_adj": 0
     },
     "alarms": {
       "dewpoint_risk": true,
@@ -236,6 +241,143 @@
     }
   },
   "runtime_meta": [
+    {
+      "group": "Hand overrides",
+      "key": "_div_1",
+      "label": "Manual Controls",
+      "precision": 1,
+      "isDivider": true,
+      "order": 89
+    },
+    {
+      "group": "Hand overrides",
+      "key": "testBtn",
+      "label": "Test Button",
+      "precision": 0,
+      "isButton": true,
+      "order": 90,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "500",
+          "textAlign": "left"
+        },
+        "unit": {
+          "visible": false
+        }
+      }
+    },
+    {
+      "group": "Hand overrides",
+      "key": "heater",
+      "label": "Heater",
+      "precision": 0,
+      "isCheckbox": true,
+      "order": 91,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "state": {
+          "fontWeight": "600",
+          "textAlign": "right"
+        },
+        "unit": {
+          "visible": false
+        },
+        "stateDotOnTrue": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnFalse": {
+          "visible": true,
+          "background": "#888",
+          "border": "1px solid #000",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        }
+      }
+    },
+    {
+      "group": "Hand overrides",
+      "key": "sb_mode",
+      "label": "Mode Button",
+      "precision": 1,
+      "isStateButton": true,
+      "initState": false,
+      "order": 92,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "state": {
+          "fontWeight": "600",
+          "textAlign": "right"
+        },
+        "unit": {
+          "visible": false
+        },
+        "stateDotOnTrue": {
+          "visible": true,
+          "background": "#2ecc71",
+          "border": "none",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        },
+        "stateDotOnFalse": {
+          "visible": true,
+          "background": "#888",
+          "border": "1px solid #000",
+          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
+        }
+      }
+    },
+    {
+      "group": "Hand overrides",
+      "key": "i_adj",
+      "label": "Int Adjust",
+      "precision": 1,
+      "isIntSlider": true,
+      "min": -10,
+      "max": 10,
+      "init": 0,
+      "order": 93,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
+    {
+      "group": "Hand overrides",
+      "key": "f_adj",
+      "label": "Float Adjust",
+      "precision": 2,
+      "isFloatSlider": true,
+      "min": -10,
+      "max": 10,
+      "init": 0,
+      "order": 94,
+      "style": {
+        "label": {
+          "fontWeight": "600"
+        },
+        "values": {
+          "fontWeight": "600",
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
+        },
+        "unit": {}
+      }
+    },
     {
       "group": "alarms",
       "key": "dewpoint_risk",
@@ -418,38 +560,11 @@
     },
     {
       "group": "system",
-      "key": "freeHeap",
-      "label": "Free Heap",
-      "unit": "KB",
-      "precision": 0,
-      "order": 2,
-      "style": {
-        "label": {
-          "fontWeight": "600"
-        },
-        "values": {
-          "fontWeight": "600",
-          "textAlign": "right",
-          "fontVariantNumeric": "tabular-nums"
-        },
-        "unit": {}
-      }
-    },
-    {
-      "group": "system",
-      "key": "_div_1",
-      "label": "Environment",
-      "precision": 1,
-      "isDivider": true,
-      "order": 3
-    },
-    {
-      "group": "system",
-      "key": "i1",
-      "label": "Settings:",
+      "key": "rssiBars",
+      "label": "Signal",
       "precision": 1,
       "isString": true,
-      "order": 4,
+      "order": 2,
       "style": {
         "label": {
           "fontWeight": "600"
@@ -465,66 +580,21 @@
     },
     {
       "group": "system",
-      "key": "allowOTA",
-      "label": "Allow OTA Updates",
-      "precision": 1,
-      "isBool": true,
-      "order": 5,
+      "key": "freeHeap",
+      "label": "Free Heap",
+      "unit": "KB",
+      "precision": 0,
+      "order": 3,
       "style": {
         "label": {
           "fontWeight": "600"
         },
-        "state": {
+        "values": {
           "fontWeight": "600",
-          "textAlign": "right"
+          "textAlign": "right",
+          "fontVariantNumeric": "tabular-nums"
         },
-        "unit": {
-          "visible": false
-        },
-        "stateDotOnTrue": {
-          "visible": true,
-          "background": "#2ecc71",
-          "border": "none",
-          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
-        },
-        "stateDotOnFalse": {
-          "visible": true,
-          "background": "#888",
-          "border": "1px solid #000",
-          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
-        }
-      }
-    },
-    {
-      "group": "system",
-      "key": "tempBoolToggle",
-      "label": "Temporary Bool Toggle",
-      "precision": 1,
-      "isBool": true,
-      "order": 6,
-      "style": {
-        "label": {
-          "fontWeight": "600"
-        },
-        "state": {
-          "fontWeight": "600",
-          "textAlign": "right"
-        },
-        "unit": {
-          "visible": false
-        },
-        "stateDotOnTrue": {
-          "visible": true,
-          "background": "#2ecc71",
-          "border": "none",
-          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
-        },
-        "stateDotOnFalse": {
-          "visible": true,
-          "background": "#888",
-          "border": "1px solid #000",
-          "boxShadow": "0 0 2px rgba(0,0,0,0.4)"
-        }
+        "unit": {}
       }
     },
     {
@@ -533,7 +603,7 @@
       "label": "Loop Avg",
       "unit": "ms",
       "precision": 2,
-      "order": 7,
+      "order": 4,
       "style": {
         "label": {
           "fontWeight": "600"
@@ -547,7 +617,7 @@
       }
     }
   ],
-  "version": "CM-BME280-Demo 2.5.0",
-  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-label { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-value { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rt-row[data-group=\"sensors\"][data-key=\"temp\"] .rt-unit  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
-  "ts": 1759303779459
+  "version": "CM-BME280-Demo 2.6.0",
+  "userCss": "\n/* Global test theme override */\nh3 { color: orange; text-decoration: underline; }\n\n/* Temperature field styling */\n/* Targets: provider group 'sensors', key 'temp' */\n.rw[data-group=\"sensors\"][data-key=\"temp\"] .lab { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rw[data-group=\"sensors\"][data-key=\"temp\"] .val { color:rgba(16, 23, 198, 1); font-weight:900; }\n.rw[data-group=\"sensors\"][data-key=\"temp\"] .un  { color:rgba(16, 23, 198, 1); font-weight:900; }\n",
+  "ts": 1759334840795
 }
