@@ -27,7 +27,7 @@ public:
 #endif
 // #define development // Uncomment (or add -Ddevelopment to build flags) to enable dev-only export & runtime_meta override routes
 
-#define CONFIGMANAGER_VERSION "2.6.1" // 08.10.2025
+#define CONFIGMANAGER_VERSION "2.6.2" // 08.10.2025
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
@@ -1425,7 +1425,7 @@ public:
     {
         if (!_otaEnabled)
         {
-            CM_LOG("[W] OTA: Not enabled");
+            // CM_LOG("[W] OTA: Not enabled");
             return;
         }
 

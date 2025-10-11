@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.6.1 (2025.10.10)
+> Version 2.6.2 (2025.10.11)
 
 > Breaking changes in v2.6.x
 >
@@ -422,6 +422,7 @@ pio run -e usb -t clean # this will clean the previous project build files
 - **2.5.0**: OptionGroup + visibility helpers, runtime field styling metadata, boolean dot styling refinements, hybrid theming (disable style meta + `/user_theme.css`), OTA flash UI improvements.
 - **2.6.0**: Restyling of web interface, Grouped code in different Blocks, that can be deaktivated by #define derectives. (see docs/FEATURE_FLAGS.md) to reduce code size. Some Bugfixes. Reorder Documentation. (remove some info into extra docs files)
 - **2.6.1**: some Bugfixes, reorganaize Readme, new Screenshots, Installation instructions
+- **2.6.2**: some Bugfixes
 
 ## ToDo / Issues
 
@@ -439,8 +440,4 @@ pio run -e usb -t clean # this will clean the previous project build files
 
 ### known Issues
 
-- prettyCat is not working for consolidate categories. On webinterface will be only the category name of the first setting in this category shown. (bug!)
-- if a category has only one setting and this setting is hidden by showIf, the category will be shown as empty. (bug!)
-- on "DCM_ENABLE_RUNTIME_CHECKBOXES=0", the slider in settings are gone too. (bug!)
-- on "DCM_ENABLE_STYLE_RULES=0", the style of Alarm is broken - no green on no alarm, alarm itself is red, but not blinking (bug!)
-- Ota flash button: Password field is a text field, not password field (bug!)
+- please see the todo-errors.md file in docs folder.

@@ -3,13 +3,13 @@
 
 ## errors / bugs
 
-- on "DCM_ENABLE_RUNTIME_CHECKBOXES=0", the slider in settings are gone too. (bug!)
-- on "DCM_ENABLE_STYLE_RULES=0", the style of Alarm is broken - no green on no alarm, alarm itself is red, but not blinking (bug!)
+- [FIXED] ~~on DCM_ENABLE_VERBOSE_LOGGING=1, and ota =0 -> we got spammed with verbose logging of ota deactive (bug!)~~
+- [FIXED] ~~on "CM_ENABLE_RUNTIME_CHECKBOXES=0", the slider in settings are gone too. (bug!)~~
+- on "CM_ENABLE_STYLE_RULES=0", the style of Alarm is broken - no green on no alarm, alarm itself is red, but not blinking (bug!)
 - remove CM_ENABLE_DYNAMIC_VISIBILITY in code
 - remove CM_ALARM_GREEN_ON_FALSE in code
 - remove CM_ENABLE_RUNTIME_CONTROLS in code
 - Ota flash button: Password field is is a text field, not password field (bug!)
-- on DCM_ENABLE_VERBOSE_LOGGING=1, and ota =0 -> we got spammed with verbose logging of ota deactive (bug!)
 
 ## ideas / todo
 
