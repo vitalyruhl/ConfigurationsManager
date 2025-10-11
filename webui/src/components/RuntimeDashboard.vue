@@ -1484,20 +1484,20 @@ label.switch input:checked + .slider:before {
 }
 
 /* Boolean dot alarm styling - fallback when CM_ENABLE_STYLE_RULES=0 */
-.bd--alarm {
+.bd.bd--alarm {
   background-color: #e74c3c !important;
   animation: alarm-pulse 1.5s ease-in-out infinite;
 }
 
-.bd--safe {
+.bd.bd--safe {
   background-color: #2ecc71 !important;
 }
 
-.bd--on {
+.bd.bd--on {
   background-color: #1f6feb !important;
 }
 
-.bd--off {
+.bd.bd--off {
   background-color: #6e7681 !important;
 }
 
