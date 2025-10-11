@@ -33,6 +33,10 @@ public:
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
 
 )CSS";
+#elif CM_ENABLE_THEMING
+inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
+
+)CSS";
 #endif
 
 // ConfigOptions must be defined before any usage in Config<T>

@@ -1482,4 +1482,33 @@ label.switch input:checked + .slider:before {
   background: #30363d;
   border-radius: 4px;
 }
+
+/* Boolean dot alarm styling - fallback when CM_ENABLE_STYLE_RULES=0 */
+.bd--alarm {
+  background-color: #e74c3c !important;
+  animation: alarm-pulse 1.5s ease-in-out infinite;
+}
+
+.bd--safe {
+  background-color: #2ecc71 !important;
+}
+
+.bd--on {
+  background-color: #1f6feb !important;
+}
+
+.bd--off {
+  background-color: #6e7681 !important;
+}
+
+@keyframes alarm-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
 </style>
