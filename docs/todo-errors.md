@@ -9,6 +9,7 @@
 - remove CM_ALARM_GREEN_ON_FALSE in code
 - remove CM_ENABLE_RUNTIME_CONTROLS in code
 - Ota flash button: Password field is is a text field, not password field (bug!)
+- on DCM_ENABLE_VERBOSE_LOGGING=1, and ota =0 -> we got spammed with verbose logging of ota deactive (bug!)
 
 ## ideas / todo
 
