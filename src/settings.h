@@ -29,16 +29,13 @@ struct WiFi_Settings // wifiSettings
     Config<String> gateway;
     Config<String> subnet;
 
-    // Shared OptionGroup constants to avoid repetition
-    static constexpr OptionGroup WIFI_GROUP{.category ="wifi", .prettyCat = "WiFi Settings"};
-
-    WiFi_Settings() : // Use OptionGroup helpers with shared constexpr instances
-                      wifiSsid(WIFI_GROUP.opt<String>("ssid", "MyWiFi", "WiFi SSID")),
-                      wifiPassword(WIFI_GROUP.opt<String>("password", "secretpass", "WiFi Password", true, true)),
-                      useDhcp(WIFI_GROUP.opt<bool>("dhcp", false, "Use DHCP")),
-                      staticIp(WIFI_GROUP.opt<String>("sIP", "192.168.2.126", "Static IP", true, false, nullptr, showIfFalse(useDhcp))),
-                      gateway(WIFI_GROUP.opt<String>("GW", "192.168.2.250", "Gateway", true, false, nullptr, showIfFalse(useDhcp))),
-                      subnet(WIFI_GROUP.opt<String>("subnet", "255.255.255.0", "Subnet-Mask", true, false, nullptr, showIfFalse(useDhcp)))
+    WiFi_Settings() : 
+                      wifiSsid(ConfigOptions<String>{"wifiSsid", "wifi", "MyWiFi", "WiFi SSID", "WiFi Settings"}),
+                      wifiPassword(ConfigOptions<String>{"wifiPassword", "wifi", "secretpass", "WiFi Password", "WiFi Settings", true, true}),
+                      useDhcp(ConfigOptions<bool>{"useDhcp", "wifi", false, "Use DHCP", "WiFi Settings"}),
+                      staticIp(ConfigOptions<String>{"staticIp", "wifi", "192.168.2.126", "Static IP", "WiFi Settings", true, false, nullptr, showIfFalse(useDhcp)}),
+                      gateway(ConfigOptions<String>{"gateway", "wifi", "192.168.2.250", "Gateway", "WiFi Settings", true, false, nullptr, showIfFalse(useDhcp)}),
+                      subnet(ConfigOptions<String>{"subnet", "wifi", "255.255.255.0", "Subnet-Mask", "WiFi Settings", true, false, nullptr, showIfFalse(useDhcp)})
     {
         // Register settings with ConfigManager
         ConfigManager.addSetting(&wifiSsid);

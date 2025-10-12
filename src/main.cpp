@@ -96,7 +96,26 @@ void setup()
     sl->Debug("Load configuration...");
     ConfigManager.loadAll();
 
+    // Debug: Print ALL settings after loading
+    sl->Debug("=== LOADED SETTINGS ===");
+    sl->Printf("WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
+    sl->Printf("WiFi Password: '%s' (length: %d)", wifiSettings.wifiPassword.get().c_str(), wifiSettings.wifiPassword.get().length()).Debug();
+    sl->Printf("WiFi Use DHCP: %s", wifiSettings.useDhcp.get() ? "true" : "false").Debug();
+    sl->Printf("WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
+    sl->Printf("WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
+    sl->Printf("WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
+    sl->Printf("MQTT Server: '%s'", mqttSettings.mqtt_server.get().c_str()).Debug();
+    sl->Printf("MQTT Port: %d", mqttSettings.mqtt_port.get()).Debug();
+    sl->Printf("Boiler Enabled: %s", boilerSettings.enabled.get() ? "true" : "false").Debug();
+    sl->Printf("Boiler On Threshold: %.1f°C", boilerSettings.onThreshold.get()).Debug();
+    sl->Printf("Boiler Off Threshold: %.1f°C", boilerSettings.offThreshold.get()).Debug();
+    sl->Debug("=== END SETTINGS ===");
+
     ConfigManager.checkSettingsForErrors();
+
+    // Print full configuration JSON to console (like the old version)
+    sl->Printf("Configuration printout:").Debug();
+    Serial.println(ConfigManager.toJSON(false)); // Print the configuration to the serial monitor
 
     // Debug: Print boiler threshold settings
     sl->Printf("Boiler Settings Debug:").Debug();
@@ -414,12 +433,12 @@ bool SetupStartWebServer()
     sl->Printf("⚠️ SETUP: Starting Webserver...!").Debug();
     sll->Printf("Starting Webserver...!").Debug();
 
-    if (wifiSettings.wifiSsid.get().length() == 0)
+    if (wifiSettings.wifiSsid.get().length() == 0 || wifiSettings.wifiSsid.get() == "MyWiFi")
     {
-        sl->Printf("No SSID! --> Start AP!").Debug();
-        sll->Printf("No SSID!").Debug();
+        sl->Printf("No valid SSID configured (current: '%s') --> Start AP!", wifiSettings.wifiSsid.get().c_str()).Debug();
+        sll->Printf("No valid SSID!").Debug();
         sll->Printf("Start AP!").Debug();
-        ConfigManager.startAccessPoint("", ""); // Use explicit empty parameters
+        ConfigManager.startAccessPoint("ESP32-Config", ""); // Use a clear AP name
         // Removed blocking delay(1000);
         return true; // Skip webserver setup if no SSID is set
     }
@@ -435,12 +454,12 @@ bool SetupStartWebServer()
     {
         if (wifiSettings.useDhcp.get())
         {
-            sl->Printf("startWebServer: DHCP enabled\n");
+            sl->Printf("startWebServer: DHCP enabled").Debug();
             ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
         }
         else
         {
-            sl->Printf("startWebServer: DHCP disabled\n");
+            sl->Printf("startWebServer: DHCP disabled - using static IP").Debug();
             IPAddress staticIP, gateway, subnet;
             staticIP.fromString(wifiSettings.staticIp.get());
             gateway.fromString(wifiSettings.gateway.get());

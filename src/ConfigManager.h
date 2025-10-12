@@ -34,7 +34,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "2.6.3" // Modular refactor
+#define CONFIGMANAGER_VERSION "2.7.0" // Modular refactor
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
