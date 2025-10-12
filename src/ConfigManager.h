@@ -704,7 +704,32 @@ public:
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
-        doc.set(value);
+        
+        // Convert string value to appropriate JSON type based on setting type
+        if (value == "true") {
+            doc.set(true);
+        } else if (value == "false") {
+            doc.set(false);
+        } else {
+            // Try to parse as number first, then fallback to string
+            char* endPtr;
+            long longVal = strtol(value.c_str(), &endPtr, 10);
+            if (*endPtr == '\0') {
+                // Successfully parsed as integer
+                doc.set((int)longVal);
+            } else {
+                // Try as float
+                float floatVal = strtof(value.c_str(), &endPtr);
+                if (*endPtr == '\0') {
+                    // Successfully parsed as float
+                    doc.set(floatVal);
+                } else {
+                    // Use as string
+                    doc.set(value);
+                }
+            }
+        }
+        
         bool result = setting->fromJSON(doc.as<JsonVariant>());
         
         CM_LOG("[DEBUG] Setting apply result (memory only): %s", result ? "SUCCESS" : "FAILED");
@@ -728,7 +753,38 @@ public:
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
-        doc.set(value);
+        
+        // Convert string value to appropriate JSON type based on setting type
+        if (value == "true") {
+            CM_LOG("[DEBUG] Converting string 'true' to boolean true");
+            doc.set(true);
+        } else if (value == "false") {
+            CM_LOG("[DEBUG] Converting string 'false' to boolean false");
+            doc.set(false);
+        } else {
+            // Try to parse as number first, then fallback to string
+            char* endPtr;
+            long longVal = strtol(value.c_str(), &endPtr, 10);
+            if (*endPtr == '\0') {
+                // Successfully parsed as integer
+                CM_LOG("[DEBUG] Converting string '%s' to integer %ld", value.c_str(), longVal);
+                doc.set((int)longVal);
+            } else {
+                // Try as float
+                float floatVal = strtof(value.c_str(), &endPtr);
+                if (*endPtr == '\0') {
+                    // Successfully parsed as float
+                    CM_LOG("[DEBUG] Converting string '%s' to float %.2f", value.c_str(), floatVal);
+                    doc.set(floatVal);
+                } else {
+                    // Use as string
+                    CM_LOG("[DEBUG] Using value '%s' as string", value.c_str());
+                    doc.set(value);
+                }
+            }
+        }
+        
+        CM_LOG("[DEBUG] JSON document created. Calling fromJSON...");
         bool result = setting->fromJSON(doc.as<JsonVariant>());
         
         if (result) {
