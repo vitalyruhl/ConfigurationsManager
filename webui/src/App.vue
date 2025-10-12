@@ -276,7 +276,7 @@ async function resetDefaults() {
 }
 function rebootDevice() {
   if (!confirm("Reboot device?")) return;
-  fetch("/config/reboot", { method: "POST" })
+  fetch("/reboot", { method: "POST" })
     .then((r) => {
       if (r.ok) notify("Rebooting...", "info");
     })

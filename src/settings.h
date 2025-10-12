@@ -30,12 +30,12 @@ struct WiFi_Settings // wifiSettings
     Config<String> subnet;
 
     WiFi_Settings() : 
-        wifiSsid(ConfigOptions<String>{.name = "WiFi SSID", .category = "WiFi Settings", .defaultValue = "MyWiFi", .sortOrder = 1}),
-        wifiPassword(ConfigOptions<String>{.name = "WiFi Password", .category = "WiFi Settings", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
-        useDhcp(ConfigOptions<bool>{.name = "Use DHCP", .category = "WiFi Settings", .defaultValue = false, .sortOrder = 3}),
-        staticIp(ConfigOptions<String>{.name = "Static IP", .category = "WiFi Settings", .defaultValue = "192.168.2.126", .sortOrder = 4}),
-        gateway(ConfigOptions<String>{.name = "Gateway", .category = "WiFi Settings", .defaultValue = "192.168.2.250", .sortOrder = 5}),
-        subnet(ConfigOptions<String>{.name = "Subnet Mask", .category = "WiFi Settings", .defaultValue = "255.255.255.0", .sortOrder = 6})
+        wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi Settings", .defaultValue = "MyWiFi", .sortOrder = 1}),
+        wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi Settings", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
+        useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi Settings", .defaultValue = false, .sortOrder = 3}),
+        staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi Settings", .defaultValue = "192.168.2.126", .sortOrder = 4, .showIf = [this]() { return !useDhcp.get(); }}),
+        gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi Settings", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this]() { return !useDhcp.get(); }}),
+        subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi Settings", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this]() { return !useDhcp.get(); }})
     {
         // Settings registration moved to initializeAllSettings()
     }
@@ -74,15 +74,15 @@ struct MQTT_Settings
     String mqtt_publish_AktualTimeRemaining_topic;
 
     // Now show extra pretty category name since V2.2.0: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
-    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.key = "Port", .name = "Port", .category = "MQTT", .defaultValue = 1883}),
-                      mqtt_server(ConfigOptions<String>{.key = "Server", .name = "Server-IP", .category = "MQTT", .defaultValue = String("192.168.2.3")}),
-                      mqtt_username(ConfigOptions<String>{.key = "User", .name = "User", .category = "MQTT", .defaultValue = String("housebattery")}),
-                      mqtt_password(ConfigOptions<String>{.key = "Pass", .name = "Password", .category = "MQTT", .defaultValue = String("mqttsecret"), .showInWeb = true, .isPassword = true}),
-                      Publish_Topic(ConfigOptions<String>{.key = "MQTTT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
-                      mqtt_Settings_ShowerTime_topic(ConfigOptions<String>{.key = "ShowerT", .name = "Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/ShowerTime"), .showInWeb = true, .isPassword = false}),
-                      mqtt_Settings_SetState_topic(ConfigOptions<String>{.key = "SetShower", .name = "Set-Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/SetShowerTime"), .showInWeb = true, .isPassword = false}),
-                      MQTTPublischPeriod(ConfigOptions<float>{.key = "PubPrd", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
-                      MQTTListenPeriod(ConfigOptions<float>{.key = "LisPrd", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
+    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.key = "MQTTTPort", .name = "Port", .category = "MQTT", .defaultValue = 1883}),
+                      mqtt_server(ConfigOptions<String>{.key = "MQTTServer", .name = "Server-IP", .category = "MQTT", .defaultValue = String("192.168.2.3")}),
+                      mqtt_username(ConfigOptions<String>{.key = "MQTTUser", .name = "User", .category = "MQTT", .defaultValue = String("housebattery")}),
+                      mqtt_password(ConfigOptions<String>{.key = "MQTTPass", .name = "Password", .category = "MQTT", .defaultValue = String("mqttsecret"), .showInWeb = true, .isPassword = true}),
+                      Publish_Topic(ConfigOptions<String>{.key = "MQTTTPT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
+                      mqtt_Settings_ShowerTime_topic(ConfigOptions<String>{.key = "MQTTSTT", .name = "Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/ShowerTime"), .showInWeb = true, .isPassword = false}),
+                      mqtt_Settings_SetState_topic(ConfigOptions<String>{.key = "MQTTSTS", .name = "Set-Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/SetShowerTime"), .showInWeb = true, .isPassword = false}),
+                      MQTTPublischPeriod(ConfigOptions<float>{.key = "MQTTPP", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
+                      MQTTListenPeriod(ConfigOptions<float>{.key = "MQTTLP", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
                       mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false}),
                       mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = false, .isPassword = false})
 
@@ -147,13 +147,13 @@ struct BoilerSettings {
 
     BoilerSettings():
         enabled(ConfigOptions<bool>{
-            .key = "En",
+            .key = "BoI_En",
             .name = "Enable Boiler Control",
             .category = "Boiler",
             .defaultValue = true
         }),
         onThreshold(ConfigOptions<float>{
-            .key = "OnT",
+            .key = "BoI_OnT",
             .name = "Boiler On Threshold",
             .category = "Boiler",
             .defaultValue = 55.0f,
@@ -161,7 +161,7 @@ struct BoilerSettings {
             .isPassword = false
         }),
         offThreshold(ConfigOptions<float>{
-            .key = "OffT",
+            .key = "BoI_OffT",
             .name = "Boiler Off Threshold",
             .category = "Boiler",
             .defaultValue = 80.0f,
@@ -169,19 +169,19 @@ struct BoilerSettings {
             .isPassword = false
         }),
         relayPin(ConfigOptions<int>{
-            .key = "Pin",
+            .key = "BoI_Pin",
             .name = "Boiler Relay GPIO",
             .category = "Boiler",
             .defaultValue = 23
         }),
         activeLow(ConfigOptions<bool>{
-            .key = "Low",
+            .key = "BoI_Low",
             .name = "Boiler Relay LOW-Active",
             .category = "Boiler",
             .defaultValue = true
         }),
         boilerTimeMin(ConfigOptions<int>{
-            .key = "Time",
+            .key = "BoI_Time",
             .name = "Boiler Max Heating Time (min)",
             .category = "Boiler",
             .defaultValue = 90,
@@ -196,8 +196,8 @@ struct DisplaySettings {
     Config<bool> turnDisplayOff;
     Config<int>  onTimeSec;
     DisplaySettings():
-        turnDisplayOff(ConfigOptions<bool>{.key = "Save", .name = "Turn Display Off", .category = "Display", .defaultValue = true}),
-        onTimeSec(ConfigOptions<int>{.key = "Time", .name = "Display On-Time (s)", .category = "Display", .defaultValue = 60})
+        turnDisplayOff(ConfigOptions<bool>{.name = "Turn Display Off", .category = "Display", .defaultValue = true}),
+        onTimeSec(ConfigOptions<int>{.name = "Display On-Time (s)", .category = "Display", .defaultValue = 60})
     {
         // Settings registration moved to initializeAllSettings()
     }
@@ -218,7 +218,7 @@ struct SystemSettings {
             .defaultValue = 15,
             .showInWeb = true
         }),
-        version(ConfigOptions<String>{.key = "Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
+        version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
     {
         // Settings registration moved to initializeAllSettings()
     }

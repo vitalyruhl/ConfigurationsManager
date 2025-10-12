@@ -81,9 +81,6 @@ void setup()
 
     sl->Debug("System setup start...");
 
-    // Initialize all settings - this must be done before using ConfigManager
-    initializeAllSettings();
-
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
@@ -146,17 +143,20 @@ void setup()
 
     bool isStartedAsAP = SetupStartWebServer();
 
-    //----------------------------------------
-    // -- Setup MQTT connection --
-    sl->Printf("⚠️ SETUP: Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-    sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+    // Skip MQTT and OTA setup in AP mode (for initial configuration only)
+    if (!isStartedAsAP) 
+    {
+        //----------------------------------------
+        // -- Setup MQTT connection --
+        sl->Printf("⚠️ SETUP: Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+        sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
 
-    // Configure MQTT Manager
-    mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
-    mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-    mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
-    mqttManager.setMaxRetries(10);
-    mqttManager.setRetryInterval(5000);
+        // Configure MQTT Manager
+        mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
+        mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
+        mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
+        mqttManager.setMaxRetries(10);
+        mqttManager.setRetryInterval(5000);
 
     // Set MQTT callbacks
     mqttManager.onConnected([]()
@@ -175,6 +175,12 @@ void setup()
                           { cb_MQTT(topic, payload, length); });
 
     mqttManager.begin();
+    }
+    else 
+    {
+        sl->Debug("Skipping MQTT setup in AP mode");
+        sll->Debug("AP mode - MQTT disabled");
+    }
 
     sl->Debug("System setup completed.");
     sll->Debug("Setup completed.");

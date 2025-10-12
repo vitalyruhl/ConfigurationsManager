@@ -460,14 +460,31 @@ public:
 
     void toJSON(JsonObject &obj) const override
     {
+        JsonObject settingObj = obj.createNestedObject(getDisplayName());
+        
         if (isPassword)
         {
-            obj[getDisplayName()] = "***";
+            settingObj["value"] = "***";
+            // Store actual password value for show/hide functionality
+            settingObj["actualValue"] = value;
         }
         else
         {
-            obj[getDisplayName()] = value;
+            settingObj["value"] = value;
         }
+        
+        // Add metadata for web interface
+        settingObj["displayName"] = getDisplayName();
+        settingObj["isPassword"] = isPassword;
+        settingObj["sortOrder"] = sortOrder;
+        
+        // Add showIf result if function is defined
+#if CM_ENABLE_DYNAMIC_VISIBILITY
+        if (showIfFunc != nullptr)
+        {
+            settingObj["showIf"] = showIfFunc();
+        }
+#endif
     }
 
     bool fromJSON(const JsonVariant &jsonValue) override
@@ -580,7 +597,7 @@ public:
     {
         webManager.setCallbacks(
             [this]()
-            { return toJSON(); }, // config JSON
+            { return toJSON(true); }, // config JSON - include secrets for web interface
             [this]()
             { return runtimeManager.runtimeValuesToJSON(); }, // runtime JSON
             [this]()
@@ -591,7 +608,11 @@ public:
             { for (auto *s : settings) s->setDefault(); saveAll(); }, // reset callback
             [this](const String &group, const String &key, const String &value) -> bool
             {
-                return updateSetting(group, key, value);
+                return updateSetting(group, key, value);  // Save to flash
+            },
+            [this](const String &group, const String &key, const String &value) -> bool
+            {
+                return applySetting(group, key, value);   // Memory only
             });
     }
 
@@ -600,7 +621,7 @@ public:
     {
         for (auto *setting : settings)
         {
-            if (String(setting->getCategory()) == category && String(setting->getName()) == key)
+            if (String(setting->getCategory()) == category && String(setting->getDisplayName()) == key)
             {
                 return setting;
             }
@@ -666,15 +687,68 @@ public:
         prefs.end();
     }
 
-    bool updateSetting(const String &category, const String &key, const String &value)
+    // Apply setting to memory only (temporary, lost after reboot)
+    bool applySetting(const String &category, const String &key, const String &value)
     {
+        CM_LOG("[DEBUG] applySetting called (memory only): category='%s', key='%s', value='%s'", 
+               category.c_str(), key.c_str(), value.c_str());
+        
         BaseSetting *setting = findSetting(category, key);
         if (!setting)
+        {
+            CM_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
             return false;
+        }
+
+        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)", 
+               setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
         doc.set(value);
-        return setting->fromJSON(doc.as<JsonVariant>());
+        bool result = setting->fromJSON(doc.as<JsonVariant>());
+        
+        CM_LOG("[DEBUG] Setting apply result (memory only): %s", result ? "SUCCESS" : "FAILED");
+        return result;
+    }
+
+    // Update setting and save to flash (persistent)
+    bool updateSetting(const String &category, const String &key, const String &value)
+    {
+        CM_LOG("[DEBUG] updateSetting called (save to flash): category='%s', key='%s', value='%s'", 
+               category.c_str(), key.c_str(), value.c_str());
+        
+        BaseSetting *setting = findSetting(category, key);
+        if (!setting)
+        {
+            CM_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
+            return false;
+        }
+
+        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)", 
+               setting->getCategory(), setting->getDisplayName(), setting->getName());
+
+        DynamicJsonDocument doc(256);
+        doc.set(value);
+        bool result = setting->fromJSON(doc.as<JsonVariant>());
+        
+        if (result) {
+            // Save the updated setting to flash storage immediately
+            CM_LOG("[DEBUG] Saving setting to flash storage");
+            
+            // Save only this specific setting to flash
+            if (!prefs.begin("ConfigManager", false))
+            {
+                CM_LOG("[ERROR] Failed to open preferences for saving");
+                return false;
+            }
+            setting->save(prefs);
+            prefs.end();
+            
+            CM_LOG("[DEBUG] Setting saved to flash successfully");
+        }
+        
+        CM_LOG("[DEBUG] Setting update result: %s", result ? "SUCCESS" : "FAILED");
+        return result;
     }
 
     void checkSettingsForErrors()
@@ -902,13 +976,24 @@ public:
                 const char *prettyName = s->getCategoryPretty();
                 if (prettyName)
                 {
-                    catObj["_categoryName"] = prettyName;
+                    // catObj["_categoryName"] = prettyName; // Hidden from web GUI
                 }
             }
 
             if (includeSecrets || !s->isSecret())
             {
+                if (s->isSecret()) {
+                    CM_LOG("[DEBUG] Including secret field: %s.%s (includeSecrets=%s)", 
+                           s->getCategory(), s->getDisplayName(), 
+                           includeSecrets ? "true" : "false");
+                }
                 s->toJSON(catObj);
+            }
+            else
+            {
+                CM_LOG("[DEBUG] Skipping secret field: %s.%s (includeSecrets=%s)", 
+                       s->getCategory(), s->getDisplayName(), 
+                       includeSecrets ? "true" : "false");
             }
         }
 

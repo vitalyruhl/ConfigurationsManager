@@ -38,7 +38,8 @@ void ConfigManagerWeb::setCallbacks(
     JsonProvider runtimeMetaJson,
     SimpleCallback reboot,
     SimpleCallback reset,
-    SettingUpdateCallback settingUpdate
+    SettingUpdateCallback settingUpdate,
+    SettingUpdateCallback settingApply
 ) {
     configJsonProvider = configJson;
     runtimeJsonProvider = runtimeJson;
@@ -46,6 +47,7 @@ void ConfigManagerWeb::setCallbacks(
     rebootCallback = reboot;
     resetCallback = reset;
     settingUpdateCallback = settingUpdate;
+    settingApplyCallback = settingApply;
 }
 
 void ConfigManagerWeb::setEmbedWebUI(bool embed) {
@@ -105,6 +107,87 @@ void ConfigManagerWeb::setupStaticRoutes() {
 }
 
 void ConfigManagerWeb::setupAPIRoutes() {
+    // Debug route to catch any config requests with body handling
+    server->on("/config", HTTP_ANY, 
+        [this](AsyncWebServerRequest* request) {
+            // Response sent in body handler for POST requests
+            if (request->method() != HTTP_POST) {
+                request->send(405, "application/json", "{\"error\":\"method_not_allowed\"}");
+            }
+        },
+        NULL,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            // Handle POST body for /config endpoint
+            if (index == 0) {
+                request->_tempObject = new String();
+                static_cast<String*>(request->_tempObject)->reserve(total);
+            }
+            
+            String* body = static_cast<String*>(request->_tempObject);
+            body->concat(String((const char*)data).substring(0, len));
+            
+            if (index + len == total) {
+                WEB_LOG("[Web] POST /config with body");
+                
+                // Debug: List all parameters
+                WEB_LOG("[Web] Total params: %d", request->params());
+                for (int i = 0; i < request->params(); i++) {
+                    AsyncWebParameter* p = request->getParam(i);
+                    WEB_LOG("[Web] Param %d: name='%s', value='%s', isPost=%s, isFile=%s", 
+                            i, p->name().c_str(), p->value().c_str(), 
+                            p->isPost() ? "true" : "false", p->isFile() ? "true" : "false");
+                }
+                
+                WEB_LOG("[Web] Body content: '%s'", body->c_str());
+                
+                // Check for new format: category + key as URL params, value in JSON body
+                bool hasCategory = request->hasParam("category");
+                bool hasKey = request->hasParam("key");
+                
+                if (hasCategory && hasKey) {
+                    String category = request->getParam("category")->value();
+                    String key = request->getParam("key")->value();
+                    
+                    // Parse JSON body to get value
+                    DynamicJsonDocument doc(256);
+                    DeserializationError err = deserializeJson(doc, *body);
+                    
+                    String value;
+                    if (!err && doc.containsKey("value")) {
+                        if (doc["value"].is<String>()) {
+                            value = doc["value"].as<String>();
+                        } else {
+                            // Convert other types to string
+                            serializeJson(doc["value"], value);
+                        }
+                    } else {
+                        // Fallback: use entire body as value
+                        value = *body;
+                        // Remove quotes if it's a JSON string
+                        if (value.startsWith("\"") && value.endsWith("\"")) {
+                            value = value.substring(1, value.length() - 1);
+                        }
+                    }
+                    
+                    WEB_LOG("[Web] Parsed: category='%s', key='%s', value='%s'", 
+                            category.c_str(), key.c_str(), value.c_str());
+                    
+                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                        request->send(200, "application/json", "{\"status\":\"ok\"}");
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"update_failed\"}");
+                    }
+                } else {
+                    WEB_LOG("[Web] Missing URL params: category=%s, key=%s",
+                            hasCategory ? "yes" : "no", hasKey ? "yes" : "no");
+                    request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_url_params\"}");
+                }
+                
+                delete body;
+                request->_tempObject = nullptr;
+            }
+        });
+    
     // Configuration endpoints
     server->on("/config.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (configJsonProvider) {
@@ -117,27 +200,341 @@ void ConfigManagerWeb::setupAPIRoutes() {
         }
     });
     
-    // Settings update endpoint
-    server->on("/config", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        bool hasGroup = request->hasParam("group", true);
-        bool hasKey = request->hasParam("key", true);
-        bool hasValue = request->hasParam("value", true);
+    // Settings update endpoint - /config/apply (matches frontend expectations)
+    server->on("/config/apply", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) { 
+            // Response is sent in body handler 
+        }, 
+        NULL, 
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            // Accumulate body data
+            if (index == 0) {
+                request->_tempObject = new String();
+                static_cast<String*>(request->_tempObject)->reserve(total);
+            }
+            
+            String* body = static_cast<String*>(request->_tempObject);
+            body->concat(String((const char*)data).substring(0, len));
+            
+            // Process when all data received
+            if (index + len == total) {
+                // Get URL parameters
+                AsyncWebParameter* pCategory = request->getParam("category");
+                AsyncWebParameter* pKey = request->getParam("key");
+                
+                if (!pCategory || !pKey) {
+                    WEB_LOG("[Web] Missing URL params for /config/apply");
+                    request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}");
+                    delete body;
+                    request->_tempObject = nullptr;
+                    return;
+                }
+                
+                String category = pCategory->value();
+                String key = pKey->value();
+                
+                WEB_LOG("[Web] Processing /config/apply: category='%s', key='%s'", 
+                        category.c_str(), key.c_str());
+                
+                // Parse JSON body to get value
+                DynamicJsonDocument doc(256);
+                DeserializationError err = deserializeJson(doc, *body);
+                
+                String value;
+                if (!err && doc.containsKey("value")) {
+                    if (doc["value"].is<String>()) {
+                        value = doc["value"].as<String>();
+                    } else {
+                        // Convert other types to string
+                        serializeJson(doc["value"], value);
+                    }
+                } else {
+                    // Fallback: use entire body as value
+                    value = *body;
+                }
+                
+                WEB_LOG("[Web] Extracted value: '%s'", value.c_str());
+                
+                // Call apply callback (memory only, no flash save)
+                if (settingApplyCallback && settingApplyCallback(category, key, value)) {
+                    String response = "{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"" + 
+                                    category + "\",\"key\":\"" + key + "\"}";
+                    request->send(200, "application/json", response);
+                } else {
+                    request->send(400, "application/json", 
+                                "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"update_failed\"}");
+                }
+                
+                delete body;
+                request->_tempObject = nullptr;
+            }
+        });
+    
+    // Settings save endpoint - /config/save (saves individual setting to flash)
+    server->on("/config/save", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            // Setup CORS headers
+            AsyncWebServerResponse* response = nullptr;
+            
+            // Extract category and key from URL parameters
+            String category = request->hasParam("category") ? request->getParam("category")->value() : "";
+            String key = request->hasParam("key") ? request->getParam("key")->value() : "";
+            
+            if (category.isEmpty() || key.isEmpty()) {
+                WEB_LOG("[Web] Missing URL params for /config/save");
+                request->send(400, "application/json", 
+                            "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"missing_params\"}");
+                return;
+            }
+            
+            // Get body content (will be available in body handler)
+            request->_tempObject = new String();
+        },
+        nullptr, // upload handler
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            // Body handler for /config/save
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    // Body complete, process the request
+                    String category = request->hasParam("category") ? request->getParam("category")->value() : "";
+                    String key = request->hasParam("key") ? request->getParam("key")->value() : "";
+                    
+                    WEB_LOG("[Web] Processing /config/save: category='%s', key='%s'", 
+                           category.c_str(), key.c_str());
+                    WEB_LOG("[Web] Body content: '%s'", body->c_str());
+                    
+                    String value;
+                    
+                    // Parse JSON body to extract value
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    if (!error && doc.containsKey("value")) {
+                        if (doc["value"].is<String>()) {
+                            value = doc["value"].as<String>();
+                        } else if (doc["value"].is<bool>()) {
+                            value = doc["value"].as<bool>() ? "true" : "false";
+                        } else if (doc["value"].is<int>()) {
+                            value = String(doc["value"].as<int>());
+                        } else if (doc["value"].is<float>()) {
+                            value = String(doc["value"].as<float>(), 6);
+                        }
+                    } else {
+                        // Fallback: use entire body as value
+                        value = *body;
+                    }
+                    
+                    WEB_LOG("[Web] Extracted value for save: '%s'", value.c_str());
+                    
+                    // Call update callback (this also saves to flash in updateSetting)
+                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                        String response = "{\"status\":\"ok\",\"action\":\"save\",\"category\":\"" + 
+                                        category + "\",\"key\":\"" + key + "\"}";
+                        request->send(200, "application/json", response);
+                    } else {
+                        request->send(400, "application/json", 
+                                    "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"update_failed\"}");
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+    
+    // Password fetch endpoint - /config/password (returns actual password value)
+    server->on("/config/password", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        String category = request->hasParam("category") ? request->getParam("category")->value() : "";
+        String key = request->hasParam("key") ? request->getParam("key")->value() : "";
         
-        if (!hasGroup || !hasKey || !hasValue) {
-            request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}");
+        if (category.isEmpty() || key.isEmpty()) {
+            request->send(400, "application/json", 
+                        "{\"status\":\"error\",\"reason\":\"missing_params\"}");
             return;
         }
         
-        String group = request->getParam("group", true)->value();
-        String key = request->getParam("key", true)->value();
-        String value = request->getParam("value", true)->value();
-        
-        if (settingUpdateCallback && settingUpdateCallback(group, key, value)) {
-            request->send(200, "application/json", "{\"status\":\"ok\"}");
-        } else {
-            request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"update_failed\"}");
+        // Get the actual password value from the config
+        if (configJsonProvider) {
+            String configJson = configJsonProvider();
+            DynamicJsonDocument doc(8192);
+            DeserializationError error = deserializeJson(doc, configJson);
+            
+            if (!error && doc.containsKey(category) && doc[category].containsKey(key)) {
+                JsonObject setting = doc[category][key];
+                if (setting.containsKey("actualValue")) {
+                    // Return the actual password value
+                    String response = "{\"status\":\"ok\",\"value\":\"" + setting["actualValue"].as<String>() + "\"}";
+                    request->send(200, "application/json", response);
+                    return;
+                }
+            }
         }
+        
+        // Fallback - return empty value
+        request->send(200, "application/json", "{\"status\":\"ok\",\"value\":\"\"}");
     });
+    
+    // Bulk apply endpoint - /config/apply_all (applies all settings to memory only)
+    server->on("/config/apply_all", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr, // upload handler
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    WEB_LOG("[Web] Processing /config/apply_all");
+                    
+                    // Parse JSON body containing all settings
+                    DynamicJsonDocument doc(4096);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (error) {
+                        WEB_LOG("[Web] JSON parse error in apply_all: %s", error.c_str());
+                        request->send(400, "application/json", 
+                                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                        delete body;
+                        request->_tempObject = nullptr;
+                        return;
+                    }
+                    
+                    bool allSuccess = true;
+                    int totalApplied = 0;
+                    
+                    // Iterate through categories
+                    for (JsonPair categoryPair : doc.as<JsonObject>()) {
+                        String category = categoryPair.key().c_str();
+                        JsonObject categoryObj = categoryPair.value().as<JsonObject>();
+                        
+                        // Iterate through settings in category
+                        for (JsonPair settingPair : categoryObj) {
+                            String key = settingPair.key().c_str();
+                            String value;
+                            
+                            // Convert value to string
+                            if (settingPair.value().is<String>()) {
+                                value = settingPair.value().as<String>();
+                            } else if (settingPair.value().is<bool>()) {
+                                value = settingPair.value().as<bool>() ? "true" : "false";
+                            } else if (settingPair.value().is<int>()) {
+                                value = String(settingPair.value().as<int>());
+                            } else if (settingPair.value().is<float>()) {
+                                value = String(settingPair.value().as<float>(), 6);
+                            }
+                            
+                            // Apply setting (memory only)
+                            if (settingApplyCallback && settingApplyCallback(category, key, value)) {
+                                totalApplied++;
+                                WEB_LOG("[Web] Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                            } else {
+                                allSuccess = false;
+                                WEB_LOG("[Web] Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                            }
+                        }
+                    }
+                    
+                    // Send response
+                    if (allSuccess && totalApplied > 0) {
+                        String response = "{\"status\":\"ok\",\"action\":\"apply_all\",\"applied\":" + String(totalApplied) + "}";
+                        request->send(200, "application/json", response);
+                    } else {
+                        String response = "{\"status\":\"error\",\"action\":\"apply_all\",\"applied\":" + String(totalApplied) + "}";
+                        request->send(400, "application/json", response);
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+    
+    // Bulk save endpoint - /config/save_all (saves all settings to flash)
+    server->on("/config/save_all", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr, // upload handler
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    WEB_LOG("[Web] Processing /config/save_all");
+                    
+                    // Parse JSON body containing all settings
+                    DynamicJsonDocument doc(4096);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (error) {
+                        WEB_LOG("[Web] JSON parse error in save_all: %s", error.c_str());
+                        request->send(400, "application/json", 
+                                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                        delete body;
+                        request->_tempObject = nullptr;
+                        return;
+                    }
+                    
+                    bool allSuccess = true;
+                    int totalSaved = 0;
+                    
+                    // Iterate through categories
+                    for (JsonPair categoryPair : doc.as<JsonObject>()) {
+                        String category = categoryPair.key().c_str();
+                        JsonObject categoryObj = categoryPair.value().as<JsonObject>();
+                        
+                        // Iterate through settings in category
+                        for (JsonPair settingPair : categoryObj) {
+                            String key = settingPair.key().c_str();
+                            String value;
+                            
+                            // Convert value to string
+                            if (settingPair.value().is<String>()) {
+                                value = settingPair.value().as<String>();
+                            } else if (settingPair.value().is<bool>()) {
+                                value = settingPair.value().as<bool>() ? "true" : "false";
+                            } else if (settingPair.value().is<int>()) {
+                                value = String(settingPair.value().as<int>());
+                            } else if (settingPair.value().is<float>()) {
+                                value = String(settingPair.value().as<float>(), 6);
+                            }
+                            
+                            // Save setting (memory + flash)
+                            if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                                totalSaved++;
+                                WEB_LOG("[Web] Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                            } else {
+                                allSuccess = false;
+                                WEB_LOG("[Web] Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                            }
+                        }
+                    }
+                    
+                    // Send response
+                    if (allSuccess && totalSaved > 0) {
+                        String response = "{\"status\":\"ok\",\"action\":\"save_all\",\"saved\":" + String(totalSaved) + "}";
+                        request->send(200, "application/json", response);
+                    } else {
+                        String response = "{\"status\":\"error\",\"action\":\"save_all\",\"saved\":" + String(totalSaved) + "}";
+                        request->send(400, "application/json", response);
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
     
     // Reset to defaults
     server->on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
@@ -229,7 +626,9 @@ void ConfigManagerWeb::handleJSRequest(AsyncWebServerRequest* request) {
 }
 
 void ConfigManagerWeb::handleNotFound(AsyncWebServerRequest* request) {
-    WEB_LOG("[Web] 404: %s", request->url().c_str());
+    WEB_LOG("[Web] 404: %s %s", 
+            request->methodToString(), 
+            request->url().c_str());
     request->send(404, "text/plain", "Not Found");
 }
 

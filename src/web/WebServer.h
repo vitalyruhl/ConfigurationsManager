@@ -32,6 +32,7 @@ private:
     SimpleCallback rebootCallback;
     SimpleCallback resetCallback;
     SettingUpdateCallback settingUpdateCallback;
+    SettingUpdateCallback settingApplyCallback;  // For apply-only operations
     
     // Web content
     bool embedWebUI;
@@ -66,7 +67,8 @@ public:
         JsonProvider runtimeMetaJson,
         SimpleCallback reboot,
         SimpleCallback reset,
-        SettingUpdateCallback settingUpdate
+        SettingUpdateCallback settingUpdate,
+        SettingUpdateCallback settingApply
     );
     
     // Web content management

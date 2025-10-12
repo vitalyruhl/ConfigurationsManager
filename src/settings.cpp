@@ -13,11 +13,11 @@ BoilerSettings boilerSettings;
 // Function to register all settings with ConfigManager
 // This solves the static initialization order problem
 void initializeAllSettings() {
-    // Register all settings with ConfigManager
+    // Register settings with their dedicated registration methods
     wifiSettings.registerSettings();
     mqttSettings.registerSettings();
     
-    // For the other settings that haven't been converted yet, register them directly
+    // Register the other settings directly
     ConfigManager.addSetting(&i2cSettings.sdaPin);
     ConfigManager.addSetting(&i2cSettings.sclPin);
     ConfigManager.addSetting(&i2cSettings.busFreq);
