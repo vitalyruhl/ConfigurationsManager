@@ -113,6 +113,10 @@ void setup()
     sl->Printf("Configuration printout:").Debug();
     Serial.println(ConfigManager.toJSON(false)); // Print the configuration to the serial monitor
 
+    // Enable WebSocket push for real-time updates
+    ConfigManager.enableWebSocketPush();
+    sl->Debug("WebSocket push enabled");
+
     // Debug: Print boiler threshold settings
     sl->Printf("Boiler Settings Debug:").Debug();
     sl->Printf("  onThreshold: %.1f°C", boilerSettings.onThreshold.get()).Debug();
@@ -131,9 +135,6 @@ void setup()
 
     // helpers.blinkBuidInLEDsetpinMode(); // Initialize the built-in LED pin mode - method not found
 
-    sl->Debug("Configuration printout:");
-    ConfigManager.debugPrintSettings();          // Debug: print all registered settings
-    Serial.println(ConfigManager.toJSON(false)); // Print the configuration to the serial monitor
     //----------------------------------------
 
     bool isStartedAsAP = SetupStartWebServer();
@@ -270,7 +271,10 @@ void setup()
 
     // Temperature slider for testing (initialize with current temperature value)
         // Add interactive controls Set-Boiler
-    ConfigManager.getRuntimeManager().addRuntimeProvider("Hand overrides", [](JsonObject &o) { }, 100);
+    ConfigManager.getRuntimeManager().addRuntimeProvider("Hand overrides", [](JsonObject &o) {
+        // This provider will be populated by the interactive controls themselves
+        // The controls (slider, state button) will automatically add their values
+    }, 100);
 
     static float transientFloatVal = temperature; // Initialize with current temperature
     ConfigManager.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Temperature Test", -10.0f, 100.0f, temperature, 1, []()

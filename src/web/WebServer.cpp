@@ -683,6 +683,22 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     // Runtime button press endpoint
     server->on("/runtime_action/button", HTTP_POST, 
         [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+            
+            // Check for query parameters first (frontend uses this method)
+            if (request->hasParam("group") && request->hasParam("key")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                
+                configManager->getRuntimeManager().handleButtonPress(group, key);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            
+            // Fallback to JSON body parsing
             request->_tempObject = new String();
         },
         nullptr,
@@ -762,6 +778,22 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     // Runtime state button toggle endpoint
     server->on("/runtime_action/state_button", HTTP_POST, 
         [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+            
+            // Check for query parameters first (frontend uses this method)
+            if (request->hasParam("group") && request->hasParam("key")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                
+                configManager->getRuntimeManager().handleStateButtonToggle(group, key);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            
+            // Fallback to JSON body parsing
             request->_tempObject = new String();
         },
         nullptr,
@@ -841,6 +873,24 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     // Runtime float slider change endpoint
     server->on("/runtime_action/float_slider", HTTP_POST, 
         [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+            
+            // Check for query parameters first (frontend uses this method)
+            if (request->hasParam("group") && request->hasParam("key") && request->hasParam("value")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                String valueStr = request->getParam("value")->value();
+                float value = valueStr.toFloat();
+                
+                configManager->getRuntimeManager().handleFloatSliderChange(group, key, value);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            
+            // Fallback to JSON body parsing
             request->_tempObject = new String();
         },
         nullptr,
