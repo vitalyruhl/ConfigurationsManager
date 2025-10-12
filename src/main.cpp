@@ -98,18 +98,13 @@ void setup()
     ConfigManager.loadAll();
 
     // Debug: Print ALL settings after loading
-    sl->Debug("=== LOADED SETTINGS ===");
+    sl->Debug("=== LOADED SETTINGS (Important) ===");
     sl->Printf("WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
-    sl->Printf("WiFi Password: '%s' (length: %d)", wifiSettings.wifiPassword.get().c_str(), wifiSettings.wifiPassword.get().length()).Debug();
+    sl->Printf("WiFi Password:  (length: %d)", wifiSettings.wifiPassword.get().length()).Debug();
     sl->Printf("WiFi Use DHCP: %s", wifiSettings.useDhcp.get() ? "true" : "false").Debug();
     sl->Printf("WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
     sl->Printf("WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
     sl->Printf("WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
-    sl->Printf("MQTT Server: '%s'", mqttSettings.mqtt_server.get().c_str()).Debug();
-    sl->Printf("MQTT Port: %d", mqttSettings.mqtt_port.get()).Debug();
-    sl->Printf("Boiler Enabled: %s", boilerSettings.enabled.get() ? "true" : "false").Debug();
-    sl->Printf("Boiler On Threshold: %.1f°C", boilerSettings.onThreshold.get()).Debug();
-    sl->Printf("Boiler Off Threshold: %.1f°C", boilerSettings.offThreshold.get()).Debug();
     sl->Debug("=== END SETTINGS ===");
 
     ConfigManager.checkSettingsForErrors();
@@ -137,14 +132,14 @@ void setup()
     // helpers.blinkBuidInLEDsetpinMode(); // Initialize the built-in LED pin mode - method not found
 
     sl->Debug("Configuration printout:");
-    ConfigManager.debugPrintSettings(); // Debug: print all registered settings
+    ConfigManager.debugPrintSettings();          // Debug: print all registered settings
     Serial.println(ConfigManager.toJSON(false)); // Print the configuration to the serial monitor
     //----------------------------------------
 
     bool isStartedAsAP = SetupStartWebServer();
 
     // Skip MQTT and OTA setup in AP mode (for initial configuration only)
-    if (!isStartedAsAP) 
+    if (!isStartedAsAP)
     {
         //----------------------------------------
         // -- Setup MQTT connection --
@@ -158,9 +153,9 @@ void setup()
         mqttManager.setMaxRetries(10);
         mqttManager.setRetryInterval(5000);
 
-    // Set MQTT callbacks
-    mqttManager.onConnected([]()
-                            {
+        // Set MQTT callbacks
+        mqttManager.onConnected([]()
+                                {
     sl->Printf("Ready to subscribe to MQTT topics...").Debug();
     sl->Printf("Propagate initial boiler settings to MQTT...").Debug();
     // Subscribe to topics
@@ -168,15 +163,15 @@ void setup()
     // Publish initial values
     publishToMQTT(); });
 
-    mqttManager.onDisconnected([]()
-                               { sl->Printf("MQTT disconnected callback triggered").Debug(); });
+        mqttManager.onDisconnected([]()
+                                   { sl->Printf("MQTT disconnected callback triggered").Debug(); });
 
-    mqttManager.onMessage([](char *topic, byte *payload, unsigned int length)
-                          { cb_MQTT(topic, payload, length); });
+        mqttManager.onMessage([](char *topic, byte *payload, unsigned int length)
+                              { cb_MQTT(topic, payload, length); });
 
-    mqttManager.begin();
+        mqttManager.begin();
     }
-    else 
+    else
     {
         sl->Debug("Skipping MQTT setup in AP mode");
         sll->Debug("AP mode - MQTT disabled");
@@ -186,7 +181,7 @@ void setup()
     sll->Debug("Setup completed.");
 
     //---------------------------------------------------------------------------------------------------
-    // Runtime live values provider for relay outputs
+    // Runtime live values provider
     ConfigManager.getRuntimeManager().addRuntimeProvider({.name = String("Boiler"),
                                                           .fill = [](JsonObject &o)
                                                           {
@@ -195,28 +190,23 @@ void setup()
                                                               o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
                                                               o["Bo_TimeLeft"] = boilerTimeRemaining;
                                                               o["Bo_Temp"] = temperature;
-
-                                                              // Show alarm status (check if temperature is below threshold)
-                                                              static bool alarmActive = false;
-                                                              if (temperature < 60.0f)
-                                                              {
-                                                                  alarmActive = true;
-                                                              }
-                                                              else if (temperature > 65.0f)
-                                                              {
-                                                                  alarmActive = false;
-                                                              }
-                                                              o["Bo_AlarmActive"] = alarmActive;
                                                           }});
 
     // Add metadata for Boiler provider fields
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "temperature", .unit = "°C", .precision = 1, .order = 10});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 1, .order = 60});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_AlarmActive", .label = "alarm active", .unit = "", .precision = 0, .order = 1});
 
-    // Add interactive controls Set-Boiler
-    ConfigManager.getRuntimeManager().addRuntimeProvider({.name = "Hand overrides",
-                                                          .fill = [](JsonObject &o) { /* optionally expose current override states later */ }});
+    // Interactive Controls for Boiler System
+    sl->Debug("Setting up interactive runtime controls...");
+
+    // Boiler Manual Override Button
+    ConfigManager.defineRuntimeButton("Boiler", "manual_start", "Start Boiler", []()
+                                      {
+            sl->Debug("Manual boiler start button pressed!");
+            Relays::setBoiler(true);
+            boilerTimeRemaining = boilerSettings.boilerTimeMin.get(); }, "Boiler");
+
+    sl->Debug("Interactive runtime controls configured!");
 
     // For now, skip complex interactive controls that need more implementation
     // TODO: Implement state button functionality in new RuntimeManager
@@ -258,16 +248,41 @@ void setup()
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
 
     // Define a runtime alarm to control the boiler based on temperature with hysteresis
-    ConfigManager.getRuntimeManager().addRuntimeAlarm(
+    ConfigManager.getRuntimeManager().defineRuntimeAlarm(
         "temp_low",
-        []() -> bool
+        [](const JsonObject &root)
         {
             // Alarm is always enabled - just return the global state
             return globalAlarmState;
+        },
+        []()
+        {
+            Serial.println("[ALARM] -> HEATER ON");
+            sl->Printf("[ALARM] Temperature %.1f°C -> HEATER ON", temperature).Info();
+            handeleBoilerState(true);
+        },
+        []()
+        {
+            Serial.println("[ALARM] -> HEATER OFF");
+            sl->Printf("[ALARM] Temperature %.1f°C -> HEATER OFF", temperature).Info();
+            handeleBoilerState(false);
         });
 
-    // Temperature slider for testing (simplified for now)
-    // TODO: Implement float slider functionality in new RuntimeManager
+    // Temperature slider for testing (initialize with current temperature value)
+        // Add interactive controls Set-Boiler
+    ConfigManager.getRuntimeManager().addRuntimeProvider({.name = "Hand overrides", .fill = [](JsonObject &o) { }});
+
+    static float transientFloatVal = temperature; // Initialize with current temperature
+    ConfigManager.getRuntimeManager().defineRuntimeFloatSlider("Hand overrides", "f_adj", "Temperature Test", -10.0f, 100.0f, temperature, 1, []()
+                                                               { return transientFloatVal; }, [](float v)
+                                                               { transientFloatVal = v;
+                                                                    temperature = v;
+                                                                    sl->Printf("Temperature manually set to %.1f°C via slider", v).Debug(); 
+                                                                }, String("°C"));
+
+    static bool stateBtnState = false;
+    ConfigManager.getRuntimeManager().defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
+                                 { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
 
     //---------------------------------------------------------------------------------------------------
 }
@@ -566,7 +581,7 @@ void PinSetup()
     pinMode(buttonSettings.resetDefaultsPin.get(), INPUT_PULLUP);
     pinMode(buttonSettings.apModePin.get(), INPUT_PULLUP);
     Relays::initPins();
-    Relays::setBoiler(false);// Force known OFF state
+    Relays::setBoiler(false); // Force known OFF state
 }
 
 void CheckButtons()

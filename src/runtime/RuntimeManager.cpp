@@ -89,6 +89,39 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         if (prov.fill) {
             prov.fill(slot);
         }
+        
+        // Add interactive control states for this provider/group
+#if CM_ENABLE_RUNTIME_CHECKBOXES
+        for (auto& checkbox : runtimeCheckboxes) {
+            if (checkbox.group == prov.name && checkbox.getter) {
+                slot[checkbox.key] = checkbox.getter();
+            }
+        }
+#endif
+
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
+        for (auto& button : runtimeStateButtons) {
+            if (button.group == prov.name && button.getter) {
+                slot[button.key] = button.getter();
+            }
+        }
+#endif
+
+#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+        for (auto& slider : runtimeIntSliders) {
+            if (slider.group == prov.name && slider.getter) {
+                slot[slider.key] = slider.getter();
+            }
+        }
+#endif
+
+#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+        for (auto& slider : runtimeFloatSliders) {
+            if (slider.group == prov.name && slider.getter) {
+                slot[slider.key] = slider.getter();
+            }
+        }
+#endif
     }
     
 #if CM_ENABLE_RUNTIME_ALARMS
@@ -299,3 +332,178 @@ void ConfigManagerRuntime::log(const char* format, ...) const {
     }
 #endif
 }
+
+// Interactive runtime control implementations
+
+#if CM_ENABLE_RUNTIME_BUTTONS
+void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label, 
+                                              std::function<void()> onPress, const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isButton = true;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+    
+    runtimeButtons.emplace_back(group, key, onPress);
+    RUNTIME_LOG("[Runtime] Added button: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::handleButtonPress(const String& group, const String& key) {
+    for (auto& button : runtimeButtons) {
+        if (button.group == group && button.key == key) {
+            if (button.onPress) {
+                button.onPress();
+                RUNTIME_LOG("[Runtime] Button pressed: %s.%s", group.c_str(), key.c_str());
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[Runtime] Button not found: %s.%s", group.c_str(), key.c_str());
+}
+#endif
+
+#if CM_ENABLE_RUNTIME_CHECKBOXES
+void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const String& key, const String& label,
+                                                std::function<bool()> getter, std::function<void(bool)> setter,
+                                                const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isCheckbox = true;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+    
+    runtimeCheckboxes.emplace_back(group, key, getter, setter);
+    RUNTIME_LOG("[Runtime] Added checkbox: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::handleCheckboxChange(const String& group, const String& key, bool value) {
+    for (auto& checkbox : runtimeCheckboxes) {
+        if (checkbox.group == group && checkbox.key == key) {
+            if (checkbox.setter) {
+                checkbox.setter(value);
+                RUNTIME_LOG("[Runtime] Checkbox changed: %s.%s = %s", group.c_str(), key.c_str(), value ? "true" : "false");
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[Runtime] Checkbox not found: %s.%s", group.c_str(), key.c_str());
+}
+#endif
+
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
+void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const String& key, const String& label,
+                                                   std::function<bool()> getter, std::function<void(bool)> setter,
+                                                   bool initState, const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isStateButton = true;
+    meta.initialState = initState;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+    
+    runtimeStateButtons.emplace_back(group, key, getter, setter);
+    RUNTIME_LOG("[Runtime] Added state button: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const String& key) {
+    for (auto& button : runtimeStateButtons) {
+        if (button.group == group && button.key == key) {
+            if (button.getter && button.setter) {
+                bool currentState = button.getter();
+                bool newState = !currentState;
+                button.setter(newState);
+                RUNTIME_LOG("[Runtime] State button toggled: %s.%s = %s", group.c_str(), key.c_str(), newState ? "true" : "false");
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[Runtime] State button not found: %s.%s", group.c_str(), key.c_str());
+}
+#endif
+
+#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const String& key, const String& label,
+                                                 int minValue, int maxValue, int initValue,
+                                                 std::function<int()> getter, std::function<void(int)> setter,
+                                                 const String& unit, const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isIntSlider = true;
+    meta.intMin = minValue;
+    meta.intMax = maxValue;
+    meta.intInit = initValue;
+    meta.unit = unit;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+    
+    runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("[Runtime] Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::handleIntSliderChange(const String& group, const String& key, int value) {
+    for (auto& slider : runtimeIntSliders) {
+        if (slider.group == group && slider.key == key) {
+            if (slider.setter) {
+                // Clamp value to range
+                int clampedValue = max(slider.minV, min(slider.maxV, value));
+                slider.setter(clampedValue);
+                RUNTIME_LOG("[Runtime] Int slider changed: %s.%s = %d", group.c_str(), key.c_str(), clampedValue);
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[Runtime] Int slider not found: %s.%s", group.c_str(), key.c_str());
+}
+#endif
+
+#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
+                                                   float minValue, float maxValue, float initValue, int precision,
+                                                   std::function<float()> getter, std::function<void(float)> setter,
+                                                   const String& unit, const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isFloatSlider = true;
+    meta.floatMin = minValue;
+    meta.floatMax = maxValue;
+    meta.floatInit = initValue;
+    meta.precision = precision;
+    meta.floatPrecision = precision;
+    meta.unit = unit;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+    
+    runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("[Runtime] Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const String& key, float value) {
+    for (auto& slider : runtimeFloatSliders) {
+        if (slider.group == group && slider.key == key) {
+            if (slider.setter) {
+                // Clamp value to range
+                float clampedValue = max(slider.minV, min(slider.maxV, value));
+                slider.setter(clampedValue);
+                RUNTIME_LOG("[Runtime] Float slider changed: %s.%s = %.2f", group.c_str(), key.c_str(), clampedValue);
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[Runtime] Float slider not found: %s.%s", group.c_str(), key.c_str());
+}
+#endif

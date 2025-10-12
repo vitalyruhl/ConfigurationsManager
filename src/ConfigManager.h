@@ -464,8 +464,8 @@ public:
         
         if (isPassword)
         {
-            settingObj["value"] = "***";
-            // Store actual password value for show/hide functionality
+            // User requested to remove password safety - always show actual value
+            settingObj["value"] = value;
             settingObj["actualValue"] = value;
         }
         else
@@ -489,17 +489,23 @@ public:
 
     bool fromJSON(const JsonVariant &jsonValue) override
     {
-        if (jsonValue.isNull()) return false;
+        if (jsonValue.isNull()) {
+            return false;
+        }
         
         T newValue;
         if constexpr (std::is_same_v<T, String>)
         {
-            if (!jsonValue.is<const char*>()) return false;
+            if (!jsonValue.is<const char*>()) {
+                return false;
+            }
             newValue = jsonValue.as<String>();
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
-            if (!jsonValue.is<bool>()) return false;
+            if (!jsonValue.is<bool>()) {
+                return false;
+            }
             newValue = jsonValue.as<bool>();
         }
         else if constexpr (std::is_same_v<T, int>)
@@ -955,6 +961,38 @@ public:
     {
         // Note: Use addRuntimeMeta directly instead
         CM_LOG("[W] defineRuntimeField not implemented, use addRuntimeMeta directly");
+    }
+
+    // Interactive runtime controls (delegated to RuntimeManager)
+    void defineRuntimeButton(const String& group, const String& key, const String& label, 
+                           std::function<void()> onPress, const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeButton(group, key, label, onPress, card, order);
+    }
+
+    void defineRuntimeCheckbox(const String& group, const String& key, const String& label,
+                             std::function<bool()> getter, std::function<void(bool)> setter,
+                             const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeCheckbox(group, key, label, getter, setter, card, order);
+    }
+
+    void defineRuntimeStateButton(const String& group, const String& key, const String& label,
+                                std::function<bool()> getter, std::function<void(bool)> setter,
+                                bool initState = false, const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeStateButton(group, key, label, getter, setter, initState, card, order);
+    }
+
+    void defineRuntimeIntSlider(const String& group, const String& key, const String& label,
+                              int minValue, int maxValue, int initValue,
+                              std::function<int()> getter, std::function<void(int)> setter,
+                              const String& unit = String(), const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeIntSlider(group, key, label, minValue, maxValue, initValue, getter, setter, unit, card, order);
+    }
+
+    void defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
+                                float minValue, float maxValue, float initValue, int precision,
+                                std::function<float()> getter, std::function<void(float)> setter,
+                                const String& unit = String(), const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeFloatSlider(group, key, label, minValue, maxValue, initValue, precision, getter, setter, unit, card, order);
     }
 
     void defineRuntimeStateButton(const String &category, const String &key, const String &name, std::function<bool()> getter, std::function<void(bool)> setter)

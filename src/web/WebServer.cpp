@@ -559,31 +559,6 @@ void ConfigManagerWeb::setupAPIRoutes() {
     });
 }
 
-void ConfigManagerWeb::setupRuntimeRoutes() {
-    // Runtime data endpoints
-    server->on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (runtimeJsonProvider) {
-            String json = runtimeJsonProvider();
-            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
-            enableCORS(response);
-            request->send(response);
-        } else {
-            request->send(500, "application/json", "{\"error\":\"no_provider\"}");
-        }
-    });
-    
-    server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (runtimeMetaJsonProvider) {
-            String json = runtimeMetaJsonProvider();
-            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
-            enableCORS(response);
-            request->send(response);
-        } else {
-            request->send(500, "application/json", "{\"error\":\"no_provider\"}");
-        }
-    });
-}
-
 void ConfigManagerWeb::handleRootRequest(AsyncWebServerRequest* request) {
     if (customHTML && customHTMLLen > 0) {
         // Use custom HTML
@@ -676,6 +651,232 @@ void ConfigManagerWeb::addDevelopmentRoutes() {
     });
 }
 #endif
+
+void ConfigManagerWeb::setupRuntimeRoutes() {
+    WEB_LOG("[Web] Setting up runtime routes");
+    
+    // Runtime JSON endpoint
+    server->on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (runtimeJsonProvider) {
+            String json = runtimeJsonProvider();
+            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+            enableCORS(response);
+            request->send(response);
+        } else {
+            request->send(500, "application/json", "{\"error\":\"no_provider\"}");
+        }
+    });
+    
+    // Runtime metadata endpoint
+    server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (runtimeMetaJsonProvider) {
+            String json = runtimeMetaJsonProvider();
+            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+            enableCORS(response);
+            request->send(response);
+        } else {
+            request->send(500, "application/json", "{\"error\":\"no_provider\"}");
+        }
+    });
+
+#if CM_ENABLE_RUNTIME_BUTTONS
+    // Runtime button press endpoint
+    server->on("/runtime_action/button", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (!error && doc.containsKey("group") && doc.containsKey("key")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleButtonPress(group, key);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+#endif
+
+#if CM_ENABLE_RUNTIME_CHECKBOXES
+    // Runtime checkbox change endpoint
+    server->on("/runtime_action/checkbox", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (!error && doc.containsKey("group") && doc.containsKey("key") && doc.containsKey("value")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        bool value = doc["value"].as<bool>();
+                        
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleCheckboxChange(group, key, value);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+#endif
+
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
+    // Runtime state button toggle endpoint
+    server->on("/runtime_action/state_button", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (!error && doc.containsKey("group") && doc.containsKey("key")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleStateButtonToggle(group, key);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+#endif
+
+#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+    // Runtime int slider change endpoint
+    server->on("/runtime_action/int_slider", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (!error && doc.containsKey("group") && doc.containsKey("key") && doc.containsKey("value")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        int value = doc["value"].as<int>();
+                        
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleIntSliderChange(group, key, value);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+#endif
+
+#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+    // Runtime float slider change endpoint
+    server->on("/runtime_action/float_slider", HTTP_POST, 
+        [this](AsyncWebServerRequest* request) {
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+                
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+                    
+                    if (!error && doc.containsKey("group") && doc.containsKey("key") && doc.containsKey("value")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        float value = doc["value"].as<float>();
+                        
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleFloatSliderChange(group, key, value);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+                    
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+#endif
+}
 
 String ConfigManagerWeb::getContentType(const String& path) {
     if (path.endsWith(".html")) return "text/html";
