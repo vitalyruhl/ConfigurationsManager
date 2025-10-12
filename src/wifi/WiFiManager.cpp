@@ -63,6 +63,9 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   WIFI_LOG("[WiFi] Starting DHCP connection to %s", ssid.c_str());
   
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
+  WiFi.setAutoReconnect(true); // Enable automatic reconnection
+  WiFi.persistent(true); // Store WiFi configuration in flash
   WiFi.begin(ssid.c_str(), password.c_str());
   
   transitionToState(WIFI_STATE_CONNECTING);
@@ -80,6 +83,9 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
   WIFI_LOG("[WiFi] Starting static IP connection to %s (IP: %s)", ssid.c_str(), staticIP.toString().c_str());
   
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
+  WiFi.setAutoReconnect(true); // Enable automatic reconnection
+  WiFi.persistent(true); // Store WiFi configuration in flash
   WiFi.config(staticIP, gateway, subnet);
   WiFi.begin(ssid.c_str(), password.c_str());
   
@@ -112,13 +118,19 @@ void ConfigManagerWiFi::update() {
     }
   } else if (WiFi.status() == WL_CONNECTED) {
     if (currentState != WIFI_STATE_CONNECTED) {
+      // Log detailed connection info when first connecting
+      WIFI_LOG("[WiFi] WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s", 
+               WiFi.localIP().toString().c_str(),
+               WiFi.gatewayIP().toString().c_str(),
+               WiFi.dnsIP().toString().c_str());
       transitionToState(WIFI_STATE_CONNECTED);
     }
     // Update last good connection time
     lastGoodConnectionMillis = millis();
   } else {
-    // WiFi is disconnected
+    // WiFi is disconnected - log the actual status
     if (currentState == WIFI_STATE_CONNECTED) {
+      WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d, transitioning to disconnected", WiFi.status());
       transitionToState(WIFI_STATE_DISCONNECTED);
     }
     
@@ -192,7 +204,9 @@ void ConfigManagerWiFi::handleReconnection() {
     }
     
     // Attempt non-blocking reconnection
-    WIFI_LOG("[WiFi] Attempting reconnection...");
+    WIFI_LOG("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
+    WiFi.setSleep(false); // Ensure WiFi sleep is disabled on reconnection attempts
+    WiFi.setAutoReconnect(true); // Enable automatic reconnection
     if (useDHCP) {
       WiFi.begin(ssid.c_str(), password.c_str());
     } else {

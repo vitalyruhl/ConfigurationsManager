@@ -60,6 +60,7 @@ public:
     // Runtime handling
     void handle();
     bool isEnabled() const { return otaEnabled; }
+    bool isInitialized() const { return otaInitialized; }
     bool isActive() const;
     
     // Web routes for HTTP OTA
@@ -81,6 +82,7 @@ public:
     void setHostname(const String&) {}
     void handle() {}
     bool isEnabled() const { return false; }
+    bool isInitialized() const { return false; }
     bool isActive() const { return false; }
     void setupWebRoutes(AsyncWebServer*) {}
     String getStatus() const { return "disabled"; }

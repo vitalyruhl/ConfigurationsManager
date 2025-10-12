@@ -26,9 +26,10 @@
 #include "html_content.h" // Generated: provides WEB_HTML_GZ and accessors
 #else
 // External UI mode: provide a stub implementation that returns empty content
-class WebHTML {
+class WebHTML
+{
 public:
-    const uint8_t* getWebHTMLGz() { return nullptr; }
+    const uint8_t *getWebHTMLGz() { return nullptr; }
     size_t getWebHTMLGzLen() { return 0; }
 };
 #endif
@@ -68,9 +69,9 @@ struct OptionGroup
     const char *prettyCat;
 
     template <typename T>
-    constexpr ConfigOptions<T> opt(const char *keyName, T defaultValue, const char *prettyName = nullptr, 
-                                  bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr,
-                                  std::function<bool()> showIf = nullptr) const
+    constexpr ConfigOptions<T> opt(const char *keyName, T defaultValue, const char *prettyName = nullptr,
+                                   bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr,
+                                   std::function<bool()> showIf = nullptr) const
     {
         return {keyName, category, defaultValue, prettyName, prettyCat, showInWeb, isPassword, cb, showIf};
     }
@@ -87,11 +88,20 @@ class ConfigManagerClass;
 #if CM_ENABLE_VERBOSE_LOGGING
 #define CM_LOG_VERBOSE(...) ConfigManagerClass::log_message(__VA_ARGS__)
 #else
-#define CM_LOG_VERBOSE(...) do { } while (0)
+#define CM_LOG_VERBOSE(...) \
+    do                      \
+    {                       \
+    } while (0)
 #endif
 #else
-#define CM_LOG(...) do { } while (0)
-#define CM_LOG_VERBOSE(...) do { } while (0)
+#define CM_LOG(...) \
+    do              \
+    {               \
+    } while (0)
+#define CM_LOG_VERBOSE(...) \
+    do                      \
+    {                       \
+    } while (0)
 #endif
 
 // Setting types and base classes (keeping existing implementation)
@@ -167,11 +177,12 @@ protected:
     static constexpr size_t MAX_PREFS_TOTAL_LEN = 15;
 
     mutable std::function<void(const char *)> logger;
-    
+
     void log(const char *format, ...) const
     {
 #if CM_ENABLE_LOGGING
-        if (logger) {
+        if (logger)
+        {
             char buffer[256];
             va_list args;
             va_start(args, format);
@@ -184,29 +195,35 @@ protected:
 
     void checkKeyLength()
     {
-        if (hasKeyLengthError) return;
-        
+        if (hasKeyLengthError)
+            return;
+
         const size_t catLen = const_strlen(category);
         const size_t keyLen = const_strlen(keyName);
         const size_t totalLen = catLen + keyLen;
-        
-        if (totalLen > MAX_KEY_COMBINED_LEN) {
+
+        if (totalLen > MAX_KEY_COMBINED_LEN)
+        {
             hasKeyLengthError = true;
-            keyLengthErrorMsg = String("Key too long: ") + category + "." + keyName + 
-                               " (" + String(totalLen) + " > " + String(MAX_KEY_COMBINED_LEN) + ")";
+            keyLengthErrorMsg = String("Key too long: ") + category + "." + keyName +
+                                " (" + String(totalLen) + " > " + String(MAX_KEY_COMBINED_LEN) + ")";
             return;
         }
-        
-        for (size_t i = 0; i < catLen; i++) {
-            if (category[i] == ' ' || category[i] == '\t' || category[i] == '\n') {
+
+        for (size_t i = 0; i < catLen; i++)
+        {
+            if (category[i] == ' ' || category[i] == '\t' || category[i] == '\n')
+            {
                 hasKeyLengthError = true;
                 keyLengthErrorMsg = String("Category contains whitespace: ") + category;
                 return;
             }
         }
-        
-        for (size_t i = 0; i < keyLen; i++) {
-            if (keyName[i] == ' ' || keyName[i] == '\t' || keyName[i] == '\n') {
+
+        for (size_t i = 0; i < keyLen; i++)
+        {
+            if (keyName[i] == ' ' || keyName[i] == '\t' || keyName[i] == '\n')
+            {
                 hasKeyLengthError = true;
                 keyLengthErrorMsg = String("Key contains whitespace: ") + keyName;
                 return;
@@ -217,7 +234,7 @@ protected:
 public:
     bool hasError() const { return hasKeyLengthError; }
     const char *getError() const { return keyLengthErrorMsg.c_str(); }
-    
+
     void setLogger(std::function<void(const char *)> logFunc)
     {
         logger = logFunc;
@@ -265,30 +282,36 @@ public:
         // Implementation of key generation logic (keeping existing)
         const size_t catLen = const_strlen(category);
         const size_t keyLen = const_strlen(keyName);
-        
-        if (catLen + keyLen + 1 > 15) {
+
+        if (catLen + keyLen + 1 > 15)
+        {
             size_t totalAvailable = 14;
             size_t catPart = std::min(catLen, totalAvailable / 2);
             size_t keyPart = totalAvailable - catPart;
-            
-            if (keyLen <= keyPart) {
+
+            if (keyLen <= keyPart)
+            {
                 catPart = totalAvailable - keyLen;
                 keyPart = keyLen;
-            } else if (catLen <= catPart) {
+            }
+            else if (catLen <= catPart)
+            {
                 keyPart = totalAvailable - catLen;
                 catPart = catLen;
             }
-            
+
             strncpy(keyBuffer, category, catPart);
             keyBuffer[catPart] = '_';
             strncpy(keyBuffer + catPart + 1, keyName, keyPart);
             keyBuffer[catPart + 1 + keyPart] = '\0';
-        } else {
+        }
+        else
+        {
             strcpy(keyBuffer, category);
             strcat(keyBuffer, "_");
             strcat(keyBuffer, keyName);
         }
-        
+
         return keyBuffer;
     }
 
@@ -312,7 +335,8 @@ private:
 public:
 #if CM_ENABLE_DYNAMIC_VISIBILITY
     std::function<bool()> showIfFunc = nullptr;
-    bool isVisible() const override {
+    bool isVisible() const override
+    {
         return showIfFunc ? showIfFunc() : BaseSetting::isVisible();
     }
 #else
@@ -327,27 +351,40 @@ public:
 #if CM_ENABLE_DYNAMIC_VISIBILITY
         showIfFunc = opts.showIf;
 #endif
-        if (originalCallback) {
-            callback = [this](T newValue) { originalCallback(newValue); };
+        if (originalCallback)
+        {
+            callback = [this](T newValue)
+            { originalCallback(newValue); };
         }
     }
 
     // Legacy constructors for backward compatibility
+    Config(const char *keyName, const char *category, T defaultValue, const char *displayName = nullptr, const char *prettyCat = nullptr)
+        : BaseSetting(category, keyName, displayName ? displayName : keyName, prettyCat, TypeTraits<T>::type, true, false),
+          value(defaultValue), defaultValue(defaultValue), originalCallback(nullptr)
+    {
+    }
+
     Config(const char *category, const char *keyName, T defaultValue, const char *displayName = nullptr, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
         : BaseSetting(category, keyName, displayName ? displayName : keyName, TypeTraits<T>::type, showInWeb, isPassword),
           value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
     {
-        if (originalCallback) {
-            callback = [this](T newValue) { originalCallback(newValue); };
+        if (originalCallback)
+        {
+            callback = [this](T newValue)
+            { originalCallback(newValue); };
         }
     }
 
     T get() const { return value; }
-    void set(const T &newValue) {
-        if (value != newValue) {
+    void set(const T &newValue)
+    {
+        if (value != newValue)
+        {
             value = newValue;
             modified = true;
-            if (callback) callback(newValue);
+            if (callback)
+                callback(newValue);
         }
     }
 
@@ -355,66 +392,101 @@ public:
 
     SettingType getType() const override { return TypeTraits<T>::type; }
 
-    void load(Preferences &prefs) override {
-        if constexpr (std::is_same_v<T, String>) {
+    void load(Preferences &prefs) override
+    {
+        if constexpr (std::is_same_v<T, String>)
+        {
             value = prefs.getString(getKey(), defaultValue);
-        } else if constexpr (std::is_same_v<T, bool>) {
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
             value = prefs.getBool(getKey(), defaultValue);
-        } else if constexpr (std::is_same_v<T, int>) {
+        }
+        else if constexpr (std::is_same_v<T, int>)
+        {
             value = prefs.getInt(getKey(), defaultValue);
-        } else if constexpr (std::is_same_v<T, float>) {
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
             value = prefs.getFloat(getKey(), defaultValue);
         }
         modified = false;
     }
 
-    void save(Preferences &prefs) override {
-        if (!modified) return;
-        
-        if constexpr (std::is_same_v<T, String>) {
+    void save(Preferences &prefs) override
+    {
+        if (!modified)
+            return;
+
+        if constexpr (std::is_same_v<T, String>)
+        {
             prefs.putString(getKey(), value);
-        } else if constexpr (std::is_same_v<T, bool>) {
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
             prefs.putBool(getKey(), value);
-        } else if constexpr (std::is_same_v<T, int>) {
+        }
+        else if constexpr (std::is_same_v<T, int>)
+        {
             prefs.putInt(getKey(), value);
-        } else if constexpr (std::is_same_v<T, float>) {
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
             prefs.putFloat(getKey(), value);
         }
         modified = false;
     }
 
-    void setDefault() override {
+    void setDefault() override
+    {
         set(defaultValue);
     }
 
-    void toJSON(JsonObject &obj) const override {
-        if (isSecret()) {
+    void toJSON(JsonObject &obj) const override
+    {
+        if (isSecret())
+        {
             obj[getName()] = "***";
-        } else {
+        }
+        else
+        {
             obj[getName()] = value;
         }
     }
 
-    bool fromJSON(const JsonVariant &jsonValue) override {
-        if (jsonValue.isNull()) return false;
-        
-        if constexpr (std::is_same_v<T, String>) {
-            if (jsonValue.is<const char*>()) {
-                set(String(jsonValue.as<const char*>()));
+    bool fromJSON(const JsonVariant &jsonValue) override
+    {
+        if (jsonValue.isNull())
+            return false;
+
+        if constexpr (std::is_same_v<T, String>)
+        {
+            if (jsonValue.is<const char *>())
+            {
+                set(String(jsonValue.as<const char *>()));
                 return true;
             }
-        } else if constexpr (std::is_same_v<T, bool>) {
-            if (jsonValue.is<bool>()) {
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
+            if (jsonValue.is<bool>())
+            {
                 set(jsonValue.as<bool>());
                 return true;
             }
-        } else if constexpr (std::is_same_v<T, int>) {
-            if (jsonValue.is<int>()) {
+        }
+        else if constexpr (std::is_same_v<T, int>)
+        {
+            if (jsonValue.is<int>())
+            {
                 set(jsonValue.as<int>());
                 return true;
             }
-        } else if constexpr (std::is_same_v<T, float>) {
-            if (jsonValue.is<float>()) {
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
+            if (jsonValue.is<float>())
+            {
                 set(jsonValue.as<float>());
                 return true;
             }
@@ -427,15 +499,25 @@ public:
 #if CM_ENABLE_DYNAMIC_VISIBILITY
 inline std::function<bool()> showIfTrue(const Config<bool> &flag)
 {
-    return [&flag]() { return flag.get(); };
+    return [&flag]()
+    { return flag.get(); };
 }
 inline std::function<bool()> showIfFalse(const Config<bool> &flag)
 {
-    return [&flag]() { return !flag.get(); };
+    return [&flag]()
+    { return !flag.get(); };
 }
 #else
-inline std::function<bool()> showIfTrue(const Config<bool> &) { return []() { return true; }; }
-inline std::function<bool()> showIfFalse(const Config<bool> &) { return []() { return true; }; }
+inline std::function<bool()> showIfTrue(const Config<bool> &)
+{
+    return []()
+    { return true; };
+}
+inline std::function<bool()> showIfFalse(const Config<bool> &)
+{
+    return []()
+    { return true; };
+}
 #endif
 
 // Main ConfigManager class - now modular and much smaller!
@@ -448,13 +530,13 @@ private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
     String appName;
-    
+
     // Modular components
     ConfigManagerWiFi wifiManager;
     ConfigManagerWeb webManager;
     ConfigManagerOTA otaManager;
     ConfigManagerRuntime runtimeManager;
-    
+
     // WebSocket support
 #if CM_ENABLE_WS_PUSH
     AsyncWebSocket *ws = nullptr;
@@ -470,22 +552,29 @@ public:
     ConfigManagerClass()
     {
         webManager.setCallbacks(
-            [this]() { return toJSON(); },                    // config JSON
-            [this]() { return runtimeManager.runtimeValuesToJSON(); },    // runtime JSON
-            [this]() { return runtimeManager.runtimeMetaToJSON(); },      // runtime meta JSON
-            [this]() { reboot(); },                           // reboot callback
-            [this]() { for (auto *s : settings) s->setDefault(); saveAll(); }, // reset callback
-            [this](const String& group, const String& key, const String& value) -> bool {
+            [this]()
+            { return toJSON(); }, // config JSON
+            [this]()
+            { return runtimeManager.runtimeValuesToJSON(); }, // runtime JSON
+            [this]()
+            { return runtimeManager.runtimeMetaToJSON(); }, // runtime meta JSON
+            [this]()
+            { reboot(); }, // reboot callback
+            [this]()
+            { for (auto *s : settings) s->setDefault(); saveAll(); }, // reset callback
+            [this](const String &group, const String &key, const String &value) -> bool
+            {
                 return updateSetting(group, key, value);
-            }
-        );
+            });
     }
 
     // Settings management
     BaseSetting *findSetting(const String &category, const String &key)
     {
-        for (auto *setting : settings) {
-            if (String(setting->getCategory()) == category && String(setting->getName()) == key) {
+        for (auto *setting : settings)
+        {
+            if (String(setting->getCategory()) == category && String(setting->getName()) == key)
+            {
                 return setting;
             }
         }
@@ -494,21 +583,25 @@ public:
 
     void addSetting(BaseSetting *setting)
     {
-        if (setting->hasError()) {
+        if (setting->hasError())
+        {
             CM_LOG("[E] Setting error: %s", setting->getError());
             return;
         }
         settings.push_back(setting);
-        setting->setLogger([](const char *msg) { CM_LOG("%s", msg); });
+        setting->setLogger([](const char *msg)
+                           { CM_LOG("%s", msg); });
     }
 
     void loadAll()
     {
-        if (!prefs.begin("ConfigManager", false)) {
+        if (!prefs.begin("ConfigManager", false))
+        {
             throw std::runtime_error("Failed to initialize preferences");
         }
-        
-        for (auto *s : settings) {
+
+        for (auto *s : settings)
+        {
             s->load(prefs);
         }
         prefs.end();
@@ -516,13 +609,16 @@ public:
 
     void saveAll()
     {
-        if (!prefs.begin("ConfigManager", false)) {
+        if (!prefs.begin("ConfigManager", false))
+        {
             CM_LOG("[E] Failed to open preferences for writing");
             return;
         }
-        
-        for (auto *s : settings) {
-            if (s->needsSave()) {
+
+        for (auto *s : settings)
+        {
+            if (s->needsSave())
+            {
                 s->save(prefs);
             }
         }
@@ -532,8 +628,9 @@ public:
     bool updateSetting(const String &category, const String &key, const String &value)
     {
         BaseSetting *setting = findSetting(category, key);
-        if (!setting) return false;
-        
+        if (!setting)
+            return false;
+
         DynamicJsonDocument doc(256);
         doc.set(value);
         return setting->fromJSON(doc.as<JsonVariant>());
@@ -541,8 +638,10 @@ public:
 
     void checkSettingsForErrors()
     {
-        for (auto *s : settings) {
-            if (s->hasError()) {
+        for (auto *s : settings)
+        {
+            if (s->hasError())
+            {
                 CM_LOG("[E] Setting error: %s", s->getError());
             }
         }
@@ -554,51 +653,81 @@ public:
         appName = name;
         CM_LOG("[I] App name set: %s", name.c_str());
     }
-    
+
     const String &getAppName() const { return appName; }
 
     // WiFi management - NON-BLOCKING!
     void startWebServer(const String &ssid, const String &password)
     {
         CM_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
-        
+
         // Start WiFi connection non-blocking
-        wifiManager.begin();
+        wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout
         wifiManager.setCallbacks(
-            [this]() { 
+            [this]()
+            {
                 CM_LOG("[WiFi] Connected! Starting web server...");
                 webManager.defineAllRoutes();
                 otaManager.setupWebRoutes(webManager.getServer());
+                // Call external connected callback if available
+                extern void onWiFiConnected();
+                onWiFiConnected();
             },
-            [this]() { CM_LOG("[WiFi] Disconnected"); },
-            [this]() { CM_LOG("[WiFi] AP Mode active"); }
-        );
+            [this]()
+            { 
+                CM_LOG("[WiFi] Disconnected"); 
+                // Call external disconnected callback if available
+                extern void onWiFiDisconnected();
+                onWiFiDisconnected();
+            },
+            [this]()
+            { 
+                CM_LOG("[WiFi] AP Mode active"); 
+                // Call external AP mode callback if available
+                extern void onWiFiAPMode();
+                onWiFiAPMode();
+            });
         wifiManager.startConnection(ssid, password);
-        
+
         // Initialize modules
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
-        
+
         CM_LOG("[I] ConfigManager modules initialized - WiFi connecting in background");
     }
 
     void startWebServer(const IPAddress &staticIP, const IPAddress &gateway, const IPAddress &subnet, const String &ssid, const String &password)
     {
         CM_LOG("[I] Starting web server with static IP %s", staticIP.toString().c_str());
-        
-        wifiManager.begin();
+
+        wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout
         wifiManager.setCallbacks(
-            [this]() { 
+            [this]()
+            {
                 CM_LOG("[WiFi] Connected! Starting web server...");
                 webManager.defineAllRoutes();
                 otaManager.setupWebRoutes(webManager.getServer());
+                // Call external connected callback if available
+                extern void onWiFiConnected();
+                onWiFiConnected();
             },
-            [this]() { CM_LOG("[WiFi] Disconnected"); },
-            [this]() { CM_LOG("[WiFi] AP Mode active"); }
-        );
+            [this]()
+            { 
+                CM_LOG("[WiFi] Disconnected"); 
+                // Call external disconnected callback if available
+                extern void onWiFiDisconnected();
+                onWiFiDisconnected();
+            },
+            [this]()
+            { 
+                CM_LOG("[WiFi] AP Mode active"); 
+                // Call external AP mode callback if available
+                extern void onWiFiAPMode();
+                onWiFiAPMode();
+            });
         wifiManager.startConnection(staticIP, gateway, subnet, ssid, password);
-        
+
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
@@ -608,10 +737,10 @@ public:
     {
         String ssid = apSSID.isEmpty() ? (appName + "_AP") : apSSID;
         CM_LOG("[I] Starting Access Point: %s", ssid.c_str());
-        
+
         wifiManager.begin();
         wifiManager.startAccessPoint(ssid, apPassword);
-        
+
         webManager.begin(this);
         webManager.defineAllRoutes();
         otaManager.begin(this);
@@ -634,61 +763,134 @@ public:
         ESP.restart();
     }
 
+    // Legacy methods for backward compatibility (simplified)
+    void setCustomCss(const char *css, size_t len)
+    {
+        // Note: setCustomCss not implemented in new WebManager, skip for now
+        CM_LOG("[W] setCustomCss not implemented in modular WebManager");
+    }
+
+    void clearAllFromPrefs()
+    {
+        for (auto *setting : settings)
+        {
+            setting->setDefault(); // Reset to default values
+        }
+        CM_LOG("[I] All settings cleared from preferences");
+    }
+
+    // Runtime methods - simplified for new modular structure
+    void defineRuntimeField(const String &category, const String &key, const String &name, const String &unit, float min, float max)
+    {
+        // Note: Use addRuntimeMeta directly instead
+        CM_LOG("[W] defineRuntimeField not implemented, use addRuntimeMeta directly");
+    }
+
+    void defineRuntimeStateButton(const String &category, const String &key, const String &name, std::function<bool()> getter, std::function<void(bool)> setter)
+    {
+        // Note: State buttons not implemented in new RuntimeManager
+        CM_LOG("[W] defineRuntimeStateButton not implemented in modular RuntimeManager");
+    }
+
+    void defineRuntimeBool(const String &category, const String &key, const String &name, bool defaultValue, int order = 0)
+    {
+        // Note: Use addRuntimeMeta directly instead
+        CM_LOG("[W] defineRuntimeBool not implemented, use addRuntimeMeta directly");
+    }
+
+    void defineRuntimeAlarm(const String &category, const String &key, const String &name, std::function<bool()> condition, std::function<void()> onTrigger = nullptr, std::function<void()> onClear = nullptr)
+    {
+        // Note: Use addRuntimeAlarm directly instead
+        CM_LOG("[W] defineRuntimeAlarm not implemented, use addRuntimeAlarm directly");
+    }
+
+    void defineRuntimeFloatSlider(const String &category, const String &key, const String &name, float min, float max, float &variable, int precision = 1, std::function<void()> onChange = nullptr)
+    {
+        // Note: Float sliders not implemented in new RuntimeManager
+        CM_LOG("[W] defineRuntimeFloatSlider not implemented in modular RuntimeManager");
+    }
+
+    void handleRuntimeAlarms()
+    {
+        runtimeManager.updateAlarms(); // Use updateAlarms() instead of handleRuntimeAlarms()
+    }
+
+    bool isOTAInitialized()
+    {
+        return otaManager.isInitialized(); // Use public method
+    }
+
+    void stopOTA()
+    {
+        // Note: stop() method not implemented in new OTAManager
+        CM_LOG("[W] stopOTA not implemented in modular OTAManager");
+    }
+
     // JSON export
     String toJSON(bool includeSecrets = false)
     {
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
-        
+
         String catNames[20];
         int catCount = 0;
-        for (auto *s : settings) {
-            if (!s->isVisible()) continue;
-            
+        for (auto *s : settings)
+        {
+            if (!s->isVisible())
+                continue;
+
             const char *category = s->getCategory();
             JsonObject catObj;
-            
+
             bool foundCat = false;
-            for (int i = 0; i < catCount; ++i) {
-                if (catNames[i] == category) {
+            for (int i = 0; i < catCount; ++i)
+            {
+                if (catNames[i] == category)
+                {
                     catObj = root[category];
                     foundCat = true;
                     break;
                 }
             }
-            
-            if (!foundCat) {
+
+            if (!foundCat)
+            {
                 catObj = root.createNestedObject(category);
                 catNames[catCount++] = category;
-                
+
                 const char *prettyName = s->getCategoryPretty();
-                if (prettyName) {
+                if (prettyName)
+                {
                     catObj["_categoryName"] = prettyName;
                 }
             }
-            
-            if (includeSecrets || !s->isSecret()) {
+
+            if (includeSecrets || !s->isSecret())
+            {
                 s->toJSON(catObj);
             }
         }
-        
+
         String output;
         serializeJsonPretty(doc, output);
         return output;
     }
 
     // Runtime providers
-    void addRuntimeProvider(const RuntimeValueProvider &provider) { 
-        runtimeManager.addRuntimeProvider(provider); 
+    void addRuntimeProvider(const RuntimeValueProvider &provider)
+    {
+        runtimeManager.addRuntimeProvider(provider);
     }
-    void addRuntimeProvider(const String &name, std::function<void(JsonObject &)> fillFunc, int order = 100) { 
-        runtimeManager.addRuntimeProvider(name, fillFunc, order); 
+    void addRuntimeProvider(const String &name, std::function<void(JsonObject &)> fillFunc, int order = 100)
+    {
+        runtimeManager.addRuntimeProvider(name, fillFunc, order);
     }
 
     // OTA management
 #if CM_ENABLE_OTA
-    void setupOTA(const String &hostname, const String &password = "") { 
-        otaManager.setup(hostname, password); 
+    void setupOTA(const String &hostname, const String &password = "")
+    {
+        otaManager.setup(hostname, password);
     }
     void handleOTA() { otaManager.handle(); }
     void enableOTA(bool enabled = true) { otaManager.enable(enabled); }
@@ -704,36 +906,45 @@ public:
 
     // WebSocket push
 #if CM_ENABLE_WS_PUSH
-    void handleWebsocketPush() {
-        if (!wsEnabled) return;
+    void handleWebsocketPush()
+    {
+        if (!wsEnabled)
+            return;
         unsigned long now = millis();
-        if (now - wsLastPush < wsInterval) return;
+        if (now - wsLastPush < wsInterval)
+            return;
         wsLastPush = now;
-        
+
         String payload;
-        if (customPayloadBuilder) {
+        if (customPayloadBuilder)
+        {
             payload = customPayloadBuilder();
-        } else {
+        }
+        else
+        {
             payload = runtimeManager.runtimeValuesToJSON();
         }
-        
-        if (ws) {
+
+        if (ws)
+        {
             ws->textAll(payload);
         }
     }
-    
-    void enableWebSocketPush(uint32_t intervalMs = 2000) {
-        if (!wsInitialized) {
+
+    void enableWebSocketPush(uint32_t intervalMs = 2000)
+    {
+        if (!wsInitialized)
+        {
             ws = new AsyncWebSocket("/ws");
-            ws->onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-                if (type == WS_EVT_CONNECT) { 
-                    CM_LOG_VERBOSE("[WS] Client connect %u", client->id()); 
-                    if (pushOnConnect) handleWebsocketPush(); 
+            ws->onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+                        {
+                if (type == WS_EVT_CONNECT) {
+                    CM_LOG_VERBOSE("[WS] Client connect %u", client->id());
+                    if (pushOnConnect) handleWebsocketPush();
                 }
-                else if (type == WS_EVT_DISCONNECT) { 
-                    CM_LOG_VERBOSE("[WS] Client disconnect %u", client->id()); 
-                }
-            });
+                else if (type == WS_EVT_DISCONNECT) {
+                    CM_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
+                } });
             webManager.getServer()->addHandler(ws);
             wsInitialized = true;
             CM_LOG_VERBOSE("[WS] Handler registered");
@@ -742,7 +953,7 @@ public:
         wsEnabled = true;
         CM_LOG_VERBOSE("[WS] Push enabled i=%lu ms", (unsigned long)wsInterval);
     }
-    
+
     void disableWebSocketPush() { wsEnabled = false; }
     void setWebSocketInterval(uint32_t intervalMs) { wsInterval = intervalMs; }
     void setPushOnConnect(bool v) { pushOnConnect = v; }
@@ -768,10 +979,10 @@ public:
     void triggerLoggerTest() { CM_LOG("[I] Logger test message"); }
 
     // Access to modules for advanced usage
-    ConfigManagerWiFi& getWiFiManager() { return wifiManager; }
-    ConfigManagerWeb& getWebManager() { return webManager; }
-    ConfigManagerOTA& getOTAManager() { return otaManager; }
-    ConfigManagerRuntime& getRuntimeManager() { return runtimeManager; }
+    ConfigManagerWiFi &getWiFiManager() { return wifiManager; }
+    ConfigManagerWeb &getWebManager() { return webManager; }
+    ConfigManagerOTA &getOTAManager() { return otaManager; }
+    ConfigManagerRuntime &getRuntimeManager() { return runtimeManager; }
 
 public:
     static LogCallback logger;

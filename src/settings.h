@@ -17,7 +17,7 @@
 // Watchdog timeout remains compile-time constant
 #define WDT_TIMEOUT 60
 
-extern ConfigManagerClass cfg;// store it globaly before using it in the settings
+extern ConfigManagerClass ConfigManager;// Use the global ConfigManager instance
 //--------------------------------------------------------------------------------------------------------------
 
 struct WiFi_Settings // wifiSettings
@@ -41,12 +41,12 @@ struct WiFi_Settings // wifiSettings
                       subnet(WIFI_GROUP.opt<String>("subnet", "255.255.255.0", "Subnet-Mask", true, false, nullptr, showIfFalse(useDhcp)))
     {
         // Register settings with ConfigManager
-        cfg.addSetting(&wifiSsid);
-        cfg.addSetting(&wifiPassword);
-        cfg.addSetting(&useDhcp);
-        cfg.addSetting(&staticIp);
-        cfg.addSetting(&gateway);
-        cfg.addSetting(&subnet);
+        ConfigManager.addSetting(&wifiSsid);
+        ConfigManager.addSetting(&wifiPassword);
+        ConfigManager.addSetting(&useDhcp);
+        ConfigManager.addSetting(&staticIp);
+        ConfigManager.addSetting(&gateway);
+        ConfigManager.addSetting(&subnet);
     }
 };
 
@@ -85,17 +85,17 @@ struct MQTT_Settings
                       mqtt_Settings_ShowerTime(ConfigOptions<int>{.keyName = "ShwTm", .category = "MQTT", .defaultValue = 90, .prettyName = "Shower Time (min)", .showInWeb = false, .isPassword = false})
 
     {
-        cfg.addSetting(&mqtt_port);
-        cfg.addSetting(&mqtt_server);
-        cfg.addSetting(&mqtt_username);
-        cfg.addSetting(&mqtt_password);
-        cfg.addSetting(&Publish_Topic);
-        cfg.addSetting(&mqtt_Settings_ShowerTime_topic);
-        cfg.addSetting(&mqtt_Settings_SetState_topic);
-        cfg.addSetting(&MQTTPublischPeriod);
-        cfg.addSetting(&MQTTListenPeriod);
-        cfg.addSetting(&mqtt_Settings_SetState);
-        cfg.addSetting(&mqtt_Settings_ShowerTime);
+        ConfigManager.addSetting(&mqtt_port);
+        ConfigManager.addSetting(&mqtt_server);
+        ConfigManager.addSetting(&mqtt_username);
+        ConfigManager.addSetting(&mqtt_password);
+        ConfigManager.addSetting(&Publish_Topic);
+        ConfigManager.addSetting(&mqtt_Settings_ShowerTime_topic);
+        ConfigManager.addSetting(&mqtt_Settings_SetState_topic);
+        ConfigManager.addSetting(&MQTTPublischPeriod);
+        ConfigManager.addSetting(&MQTTListenPeriod);
+        ConfigManager.addSetting(&mqtt_Settings_SetState);
+        ConfigManager.addSetting(&mqtt_Settings_ShowerTime);
 
         // Callback to update topics when Publish_Topic changes
         Publish_Topic.setCallback([this](String newValue){ this->updateTopics(); });
@@ -121,17 +121,17 @@ struct I2CSettings {
     Config<int> bmeFreq;
     Config<int> displayAddr;
     I2CSettings():
-        sdaPin({"I2CSDA","I2C",21,"I2C SDA Pin","I2C"}),
-        sclPin({"I2CSCL","I2C",22,"I2C SCL Pin","I2C"}),
-        busFreq({"I2CFreq","I2C",400000,"I2C Bus Freq","I2C"}),
-        bmeFreq({"BMEFreq","I2C",400000,"BME280 Bus Freq","I2C"}),
-        displayAddr({"DispAddr","I2C",0x3C,"Display I2C Address","I2C"})
+        sdaPin(ConfigOptions<int>{"I2CSDA","I2C",21,"I2C SDA Pin","I2C"}),
+        sclPin(ConfigOptions<int>{"I2CSCL","I2C",22,"I2C SCL Pin","I2C"}),
+        busFreq(ConfigOptions<int>{"I2CFreq","I2C",400000,"I2C Bus Freq","I2C"}),
+        bmeFreq(ConfigOptions<int>{"BMEFreq","I2C",400000,"BME280 Bus Freq","I2C"}),
+        displayAddr(ConfigOptions<int>{"DispAddr","I2C",0x3C,"Display I2C Address","I2C"})
     {
-        cfg.addSetting(&sdaPin);
-        cfg.addSetting(&sclPin);
-        cfg.addSetting(&busFreq);
-        cfg.addSetting(&bmeFreq);
-        cfg.addSetting(&displayAddr);
+        ConfigManager.addSetting(&sdaPin);
+        ConfigManager.addSetting(&sclPin);
+        ConfigManager.addSetting(&busFreq);
+        ConfigManager.addSetting(&bmeFreq);
+        ConfigManager.addSetting(&displayAddr);
     }
 };
 
@@ -192,12 +192,12 @@ struct BoilerSettings {
             .showInWeb = true
         })
     {
-        cfg.addSetting(&enabled);
-        cfg.addSetting(&onThreshold);
-        cfg.addSetting(&offThreshold);
-        cfg.addSetting(&relayPin);
-        cfg.addSetting(&activeLow);
-        cfg.addSetting(&boilerTimeMin);
+        ConfigManager.addSetting(&enabled);
+        ConfigManager.addSetting(&onThreshold);
+        ConfigManager.addSetting(&offThreshold);
+        ConfigManager.addSetting(&relayPin);
+        ConfigManager.addSetting(&activeLow);
+        ConfigManager.addSetting(&boilerTimeMin);
     }
 };
 
@@ -205,11 +205,11 @@ struct DisplaySettings {
     Config<bool> turnDisplayOff;
     Config<int>  onTimeSec;
     DisplaySettings():
-        turnDisplayOff({"Save","Display",true,"Turn Display Off","Display Settings"}),
-        onTimeSec({"Time","Display",60,"Display On-Time (s)","Display Settings"})
+        turnDisplayOff(ConfigOptions<bool>{"Save","Display",true,"Turn Display Off","Display Settings"}),
+        onTimeSec(ConfigOptions<int>{"Time","Display",60,"Display On-Time (s)","Display Settings"})
     {
-        cfg.addSetting(&turnDisplayOff);
-        cfg.addSetting(&onTimeSec);
+        ConfigManager.addSetting(&turnDisplayOff);
+        ConfigManager.addSetting(&onTimeSec);
     }
 };
 
@@ -219,8 +219,8 @@ struct SystemSettings {
     Config<int> wifiRebootTimeoutMin;
     Config<String> version;
     SystemSettings():
-        allowOTA({"OTAEn","System",true,"Allow OTA Updates"}),
-        otaPassword({"OTAPass","System",String("ota1234"),"OTA Password","System",true,true}),
+        allowOTA(ConfigOptions<bool>{"OTAEn","System",true,"Allow OTA Updates"}),
+        otaPassword(ConfigOptions<String>{"OTAPass","System",String("ota1234"),"OTA Password","System",true,true}),
         wifiRebootTimeoutMin(ConfigOptions<int>{
             .keyName = "WiFiRb",
             .category = "System",
@@ -229,12 +229,12 @@ struct SystemSettings {
             .prettyCat = "System",
             .showInWeb = true
         }),
-        version({"Version","System",String(VERSION),"Program Version"})
+        version(ConfigOptions<String>{"Version","System",String(VERSION),"Program Version"})
     {
-        cfg.addSetting(&allowOTA);
-        cfg.addSetting(&otaPassword);
-        cfg.addSetting(&wifiRebootTimeoutMin);
-        cfg.addSetting(&version);
+        ConfigManager.addSetting(&allowOTA);
+        ConfigManager.addSetting(&otaPassword);
+        ConfigManager.addSetting(&wifiRebootTimeoutMin);
+        ConfigManager.addSetting(&version);
     }
 };
 
@@ -242,11 +242,11 @@ struct ButtonSettings {
     Config<int> apModePin;
     Config<int> resetDefaultsPin;
     ButtonSettings():
-        apModePin({"BtnAP","Buttons",13,"AP Mode Button GPIO","Buttons"}),
-        resetDefaultsPin({"BtnRst","Buttons",15,"Reset Defaults Button GPIO","Buttons"})
+        apModePin(ConfigOptions<int>{"BtnAP","Buttons",13,"AP Mode Button GPIO","Buttons"}),
+        resetDefaultsPin(ConfigOptions<int>{"BtnRst","Buttons",15,"Reset Defaults Button GPIO","Buttons"})
     {
-        cfg.addSetting(&apModePin);
-        cfg.addSetting(&resetDefaultsPin);
+        ConfigManager.addSetting(&apModePin);
+        ConfigManager.addSetting(&resetDefaultsPin);
     }
 };
 
