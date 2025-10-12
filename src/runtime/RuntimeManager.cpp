@@ -273,6 +273,12 @@ void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<boo
     RUNTIME_LOG("[Runtime] Added alarm: %s", name.c_str());
 }
 
+void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction, 
+                                          std::function<void()> onTrigger, std::function<void()> onClear) {
+    runtimeAlarms.emplace_back(name, checkFunction, onTrigger, onClear);
+    RUNTIME_LOG("[Runtime] Added alarm with triggers: %s", name.c_str());
+}
+
 void ConfigManagerRuntime::updateAlarms() {
     for (auto& alarm : runtimeAlarms) {
         if (alarm.checkFunction) {
@@ -280,6 +286,15 @@ void ConfigManagerRuntime::updateAlarms() {
             if (newState != alarm.active) {
                 alarm.active = newState;
                 RUNTIME_LOG("[Runtime] Alarm %s: %s", alarm.name.c_str(), newState ? "ACTIVE" : "cleared");
+                
+                // Call trigger callbacks
+                if (newState && alarm.onTrigger) {
+                    RUNTIME_LOG("[Runtime] Calling onTrigger for alarm: %s", alarm.name.c_str());
+                    alarm.onTrigger();
+                } else if (!newState && alarm.onClear) {
+                    RUNTIME_LOG("[Runtime] Calling onClear for alarm: %s", alarm.name.c_str());
+                    alarm.onClear();
+                }
             }
         }
     }

@@ -248,9 +248,9 @@ void setup()
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
 
     // Define a runtime alarm to control the boiler based on temperature with hysteresis
-    ConfigManager.getRuntimeManager().defineRuntimeAlarm(
+    ConfigManager.getRuntimeManager().addRuntimeAlarm(
         "temp_low",
-        [](const JsonObject &root)
+        []() -> bool
         {
             // Alarm is always enabled - just return the global state
             return globalAlarmState;
@@ -270,10 +270,10 @@ void setup()
 
     // Temperature slider for testing (initialize with current temperature value)
         // Add interactive controls Set-Boiler
-    ConfigManager.getRuntimeManager().addRuntimeProvider({.name = "Hand overrides", .fill = [](JsonObject &o) { }});
+    ConfigManager.getRuntimeManager().addRuntimeProvider("Hand overrides", [](JsonObject &o) { }, 100);
 
     static float transientFloatVal = temperature; // Initialize with current temperature
-    ConfigManager.getRuntimeManager().defineRuntimeFloatSlider("Hand overrides", "f_adj", "Temperature Test", -10.0f, 100.0f, temperature, 1, []()
+    ConfigManager.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Temperature Test", -10.0f, 100.0f, temperature, 1, []()
                                                                { return transientFloatVal; }, [](float v)
                                                                { transientFloatVal = v;
                                                                     temperature = v;
@@ -281,7 +281,7 @@ void setup()
                                                                 }, String("°C"));
 
     static bool stateBtnState = false;
-    ConfigManager.getRuntimeManager().defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
+    ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
                                  { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
 
     //---------------------------------------------------------------------------------------------------

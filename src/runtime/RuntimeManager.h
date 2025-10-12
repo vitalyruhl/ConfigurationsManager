@@ -120,9 +120,15 @@ struct RuntimeAlarm {
     String name;
     bool active = false;
     std::function<bool()> checkFunction;
+    std::function<void()> onTrigger = nullptr;
+    std::function<void()> onClear = nullptr;
     
     RuntimeAlarm(const String& n, std::function<bool()> check)
         : name(n), checkFunction(check) {}
+        
+    RuntimeAlarm(const String& n, std::function<bool()> check, 
+                 std::function<void()> trigger, std::function<void()> clear)
+        : name(n), checkFunction(check), onTrigger(trigger), onClear(clear) {}
 };
 #endif
 
@@ -211,11 +217,14 @@ public:
     // Alarms
 #if CM_ENABLE_RUNTIME_ALARMS
     void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction);
+    void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction, 
+                         std::function<void()> onTrigger, std::function<void()> onClear = nullptr);
     void updateAlarms();
     bool hasActiveAlarms() const;
     std::vector<String> getActiveAlarms() const;
 #else
     void addRuntimeAlarm(const String&, std::function<bool()>) {}
+    void addRuntimeAlarm(const String&, std::function<bool()>, std::function<void()>, std::function<void()> = nullptr) {}
     void updateAlarms() {}
     bool hasActiveAlarms() const { return false; }
     std::vector<String> getActiveAlarms() const { return {}; }

@@ -14,16 +14,16 @@
 #define CM_ENABLE_RUNTIME_CHECKBOXES 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_BUTTONS // Enable runtime buttons
-#define CM_ENABLE_RUNTIME_BUTTONS 0 //default: disabled
+#define CM_ENABLE_RUNTIME_BUTTONS 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_STATE_BUTTONS // Enable runtime state buttons (ON/OFF with 2 states)
-#define CM_ENABLE_RUNTIME_STATE_BUTTONS 0 //default: disabled
+#define CM_ENABLE_RUNTIME_STATE_BUTTONS 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_INT_SLIDERS // Enable runtime integer sliders
-#define CM_ENABLE_RUNTIME_INT_SLIDERS 0 //default: disabled
+#define CM_ENABLE_RUNTIME_INT_SLIDERS 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_FLOAT_SLIDERS // Enable runtime float sliders
-#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0 //default: disabled
+#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1 //default: enabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_NUMBER_INPUTS
 #define CM_ENABLE_RUNTIME_NUMBER_INPUTS 0 // default: disabled
