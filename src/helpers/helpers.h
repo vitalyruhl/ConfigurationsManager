@@ -9,9 +9,6 @@ public:
     // Input 0-1023 to output 0-100
     // Example: mapFloat(512, 0, 1023, 0, 100) = 50.0
     static float mapFloat(float x, float in_min, float in_max, float out_min, float out_max);
-    void blinkBuidInLED(int BlinkCount, int blinkRate);
-    void updateStatusLED();
-    void blinkBuidInLEDsetpinMode();
     void checkVersion(String currentVersion, String currentVersionDate); //todo: add this Feature to the configManager
 };
 

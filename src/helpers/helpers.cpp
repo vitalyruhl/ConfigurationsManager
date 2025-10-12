@@ -17,37 +17,6 @@ float Helpers::mapFloat(float x, float in_min, float in_max, float out_min, floa
 }
 
 
-/** info
- * @param BlinkCount int -> number of blinks
- * @param blinkRate int -> blink rate in ms
- * @brief blinkBuidInLED() blinks the built-in LED a specified number of times at a specified rate. Legacy (blocking) blink – will be phased out
- * @example: blinkBuidInLED(3, 1000) // Blink 3 times with a 1000ms delay
- */
-void  Helpers::blinkBuidInLED(int BlinkCount, int blinkRate)
-{
-  // BlinkCount = 3; // number of blinks
-  // blinkRate = 1000; // blink rate in ms
-
-  for (int i = 0; i < BlinkCount; i++)
-  {
-    digitalWrite(LED_BUILTIN, HIGH); // turn the LED on (HIGH is the voltage level)
-    delay(blinkRate);                // wait for a second
-    digitalWrite(LED_BUILTIN, LOW);  // turn the LED off (LOW is the voltage level)
-    delay(blinkRate);                // wait for a second
-  }
-}
-
-
-
-/** info
- * @brief blinkBuidInLEDsetpinMode() initializes the built-in LED pin mode as an output.
- * @example: blinkBuidInLEDsetpinMode() // Initialize the built-in LED pin mode
- */
-void  Helpers::blinkBuidInLEDsetpinMode() {
-  pinMode(LED_BUILTIN, OUTPUT); // initialize GPIO pin 2 LED_BUILTIN as an output.
-}
-
-
 void Helpers::checkVersion(String currentVersion, String currentVersionDate)
 {
     int currentMajor = 0, currentMinor = 0, currentPatch = 0;

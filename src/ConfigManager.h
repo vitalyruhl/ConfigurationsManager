@@ -50,33 +50,19 @@ inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
 template <typename T>
 struct ConfigOptions
 {
-    const char *keyName;
-    const char *category;
-    T defaultValue;
-    const char *prettyName = nullptr;
-    const char *prettyCat = nullptr;
-    bool showInWeb = true;
-    bool isPassword = false;
-    void (*cb)(T) = nullptr;
-    std::function<bool()> showIf = nullptr;
+    // Required fields
+    const char *key = nullptr;           // Storage key for preferences (if nullptr, auto-generated from name+category)
+    const char *name;                    // Display name in Settings UI
+    const char *category;                // Card name in Settings UI  
+    T defaultValue;                      // Default value
+    
+    // Optional fields
+    bool showInWeb = true;               // Show in web interface
+    bool isPassword = false;             // Hide value (password field)
+    int sortOrder = 100;                 // Sort order in GUI (lower = higher priority)
+    void (*callback)(T) = nullptr;       // Value change callback
+    std::function<bool()> showIf = nullptr; // Conditional visibility
 };
-
-#if __cplusplus >= 201703L
-// OptionGroup Helper for reduced boilerplate
-struct OptionGroup
-{
-    const char *category;
-    const char *prettyCat;
-
-    template <typename T>
-    constexpr ConfigOptions<T> opt(const char *keyName, T defaultValue, const char *prettyName = nullptr,
-                                   bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr,
-                                   std::function<bool()> showIf = nullptr) const
-    {
-        return {keyName, category, defaultValue, prettyName, prettyCat, showInWeb, isPassword, cb, showIf};
-    }
-};
-#endif
 
 // Server abstraction
 extern AsyncWebServer server;
@@ -158,23 +144,69 @@ constexpr size_t const_strlen(const char *s)
     return len;
 }
 
-// BaseSetting class (keeping existing implementation)
+// Helper function to generate a key from name and category
+inline String generateKeyFromNameAndCategory(const char* name, const char* category) {
+    String result;
+    
+    // Convert category to lowercase and remove special chars
+    String catPart = String(category);
+    catPart.toLowerCase();
+    catPart.replace(" ", "");
+    catPart.replace("-", "");
+    catPart.replace("_", "");
+    
+    // Convert name to lowercase and remove special chars
+    String namePart = String(name);
+    namePart.toLowerCase();
+    namePart.replace(" ", "");
+    namePart.replace("-", "");
+    namePart.replace("_", "");
+    
+    // Combine with underscore
+    result = catPart + "_" + namePart;
+    
+    // Truncate to 14 chars max (ESP32 preferences key limit)
+    if (result.length() > 14) {
+        // Try to keep both parts balanced
+        int catLen = catPart.length();
+        int nameLen = namePart.length();
+        
+        if (catLen > 7 && nameLen > 7) {
+            // Both long - truncate both
+            result = catPart.substring(0, 6) + "_" + namePart.substring(0, 7);
+        } else if (catLen > 7) {
+            // Category too long
+            int availableForCat = 14 - 1 - nameLen; // -1 for underscore
+            result = catPart.substring(0, availableForCat) + "_" + namePart;
+        } else {
+            // Name too long
+            int availableForName = 14 - 1 - catLen; // -1 for underscore
+            result = catPart + "_" + namePart.substring(0, availableForName);
+        }
+    }
+    
+    return result;
+}
+
+
+
+// BaseSetting class (updated for new ConfigOptions structure)
 class BaseSetting
 {
 protected:
     bool showInWeb;
     bool isPassword;
     bool modified = false;
+    String generatedKey; // Store generated key if needed
     const char *keyName;
     const char *category;
     const char *displayName;
-    const char *categoryPretty = nullptr;
     SettingType type;
+    int sortOrder = 100;
     bool hasKeyLengthError = false;
     String keyLengthErrorMsg;
 
-    static constexpr size_t MAX_KEY_COMBINED_LEN = 14;
-    static constexpr size_t MAX_PREFS_TOTAL_LEN = 15;
+    static constexpr size_t MAX_PREFS_KEY_LEN = 15;
 
     mutable std::function<void(const char *)> logger;
 
@@ -193,39 +225,44 @@ protected:
 #endif
     }
 
+    void logVerbose(const char *format, ...) const
+    {
+#if CM_ENABLE_VERBOSE_LOGGING
+        if (logger)
+        {
+            char buffer[256];
+            va_list args;
+            va_start(args, format);
+            vsnprintf(buffer, sizeof(buffer), format, args);
+            va_end(args);
+            logger(buffer);
+        }
+#endif
+    }
+
     void checkKeyLength()
     {
         if (hasKeyLengthError)
             return;
 
-        const size_t catLen = const_strlen(category);
-        const size_t keyLen = const_strlen(keyName);
-        const size_t totalLen = catLen + keyLen;
+        const char* actualKey = getKey();
+        size_t keyLen = strlen(actualKey);
 
-        if (totalLen > MAX_KEY_COMBINED_LEN)
-        {
+        if (keyLen > MAX_PREFS_KEY_LEN) {
             hasKeyLengthError = true;
-            keyLengthErrorMsg = String("Key too long: ") + category + "." + keyName +
-                                " (" + String(totalLen) + " > " + String(MAX_KEY_COMBINED_LEN) + ")";
+            keyLengthErrorMsg = String("Generated key too long: ") + actualKey + 
+                               " (" + String(keyLen) + " > " + String(MAX_PREFS_KEY_LEN) + ") - value will not be stored!";
+            log("[ERROR] %s", keyLengthErrorMsg.c_str());
             return;
         }
 
-        for (size_t i = 0; i < catLen; i++)
-        {
-            if (category[i] == ' ' || category[i] == '\t' || category[i] == '\n')
-            {
+        // Check for invalid characters
+        for (size_t i = 0; i < keyLen; i++) {
+            char c = actualKey[i];
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
                 hasKeyLengthError = true;
-                keyLengthErrorMsg = String("Category contains whitespace: ") + category;
-                return;
-            }
-        }
-
-        for (size_t i = 0; i < keyLen; i++)
-        {
-            if (keyName[i] == ' ' || keyName[i] == '\t' || keyName[i] == '\n')
-            {
-                hasKeyLengthError = true;
-                keyLengthErrorMsg = String("Key contains whitespace: ") + keyName;
+                keyLengthErrorMsg = String("Key contains invalid characters: ") + actualKey;
+                log("[ERROR] %s", keyLengthErrorMsg.c_str());
                 return;
             }
         }
@@ -240,27 +277,20 @@ public:
         logger = logFunc;
     }
 
-    BaseSetting(const char *category, const char *keyName, const char *displayName, SettingType type, bool showInWeb = true, bool isPassword = false)
-        : keyName(keyName), category(category), displayName(displayName), type(type), showInWeb(showInWeb), isPassword(isPassword)
+    // New constructor for ConfigOptions-based initialization
+    BaseSetting(const char* key, const char* name, const char* category, SettingType type, 
+                bool showInWeb = true, bool isPassword = false, int sortOrder = 100)
+        : keyName(key), displayName(name), category(category), type(type), 
+          showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
     {
+        // If no key provided, generate one from name and category
+        if (!keyName || strlen(keyName) == 0) {
+            generatedKey = generateKeyFromNameAndCategory(name, category);
+            keyName = generatedKey.c_str();
+            log("[INFO] Auto-generated key '%s' for setting '%s' in category '%s'", keyName, name, category);
+        }
         checkKeyLength();
     }
-
-    BaseSetting(const char *category, const char *keyName, const char *displayName, const char *categoryPretty, SettingType type, bool showInWeb = true, bool isPassword = false)
-        : keyName(keyName), category(category), displayName(displayName), categoryPretty(categoryPretty), type(type), showInWeb(showInWeb), isPassword(isPassword)
-    {
-        checkKeyLength();
-    }
-
-    template <size_t CatLen, size_t KeyLen>
-    BaseSetting(const char (&cat)[CatLen], const char (&key)[KeyLen], const char *displayName, SettingType type, bool showInWeb = true, bool isPassword = false)
-        : BaseSetting(cat, key, displayName, type, showInWeb, isPassword) {}
-
-    template <size_t CatLen, size_t KeyLen>
-    BaseSetting(const char (&cat)[CatLen], const char (&key)[KeyLen], const char *displayName, const char *categoryPretty, SettingType type, bool showInWeb = true, bool isPassword = false)
-        : BaseSetting(cat, key, displayName, categoryPretty, type, showInWeb, isPassword) {}
-
-    const char *getCategoryPretty() const { return categoryPretty; }
 
     virtual ~BaseSetting() = default;
     virtual SettingType getType() const = 0;
@@ -271,65 +301,24 @@ public:
     virtual bool fromJSON(const JsonVariant &value) = 0;
     virtual bool isVisible() const { return showInWeb; }
 
-    const char *getDisplayName() const
-    {
-        return displayName ? displayName : keyName;
-    }
-
-    mutable char keyBuffer[16];
-    const char *getKey() const
-    {
-        // Implementation of key generation logic (keeping existing)
-        const size_t catLen = const_strlen(category);
-        const size_t keyLen = const_strlen(keyName);
-
-        if (catLen + keyLen + 1 > 15)
-        {
-            size_t totalAvailable = 14;
-            size_t catPart = std::min(catLen, totalAvailable / 2);
-            size_t keyPart = totalAvailable - catPart;
-
-            if (keyLen <= keyPart)
-            {
-                catPart = totalAvailable - keyLen;
-                keyPart = keyLen;
-            }
-            else if (catLen <= catPart)
-            {
-                keyPart = totalAvailable - catLen;
-                catPart = catLen;
-            }
-
-            strncpy(keyBuffer, category, catPart);
-            keyBuffer[catPart] = '_';
-            strncpy(keyBuffer + catPart + 1, keyName, keyPart);
-            keyBuffer[catPart + 1 + keyPart] = '\0';
-        }
-        else
-        {
-            strcpy(keyBuffer, category);
-            strcat(keyBuffer, "_");
-            strcat(keyBuffer, keyName);
-        }
-
-        return keyBuffer;
-    }
-
-    bool isSecret() const { return isPassword; }
+    const char *getDisplayName() const { return displayName; }
+    const char *getKey() const { return keyName; }
     const char *getCategory() const { return category; }
+    const char *getCategoryPretty() const { return category; } // Same as category for now
     const char *getName() const { return keyName; }
+    int getSortOrder() const { return sortOrder; }
+    bool isSecret() const { return isPassword; }
     bool shouldShowInWeb() const { return showInWeb; }
     bool needsSave() const { return modified; }
 };
 
-// Config<T> template class (keeping existing implementation)
+// Config<T> template class (updated for new ConfigOptions structure)
 template <typename T>
 class Config : public BaseSetting
 {
 private:
     T value;
     T defaultValue;
-    void (*originalCallback)(T);
     std::function<void(T)> callback = nullptr;
 
 public:
@@ -343,40 +332,23 @@ public:
     bool isVisible() const override { return BaseSetting::isVisible(); }
 #endif
 
-    // Constructor implementations (keeping existing)
+    // New primary constructor for ConfigOptions
     explicit Config(const ConfigOptions<T> &opts)
-        : BaseSetting(opts.category, opts.keyName, opts.prettyName, opts.prettyCat, TypeTraits<T>::type, opts.showInWeb, opts.isPassword),
-          value(opts.defaultValue), defaultValue(opts.defaultValue), originalCallback(opts.cb)
+        : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type, 
+                     opts.showInWeb, opts.isPassword, opts.sortOrder),
+          value(opts.defaultValue), defaultValue(opts.defaultValue)
     {
 #if CM_ENABLE_DYNAMIC_VISIBILITY
         showIfFunc = opts.showIf;
 #endif
-        if (originalCallback)
+        if (opts.callback)
         {
-            callback = [this](T newValue)
-            { originalCallback(newValue); };
-        }
-    }
-
-    // Legacy constructors for backward compatibility
-    Config(const char *keyName, const char *category, T defaultValue, const char *displayName = nullptr, const char *prettyCat = nullptr)
-        : BaseSetting(category, keyName, displayName ? displayName : keyName, prettyCat, TypeTraits<T>::type, true, false),
-          value(defaultValue), defaultValue(defaultValue), originalCallback(nullptr)
-    {
-    }
-
-    Config(const char *category, const char *keyName, T defaultValue, const char *displayName = nullptr, bool showInWeb = true, bool isPassword = false, void (*cb)(T) = nullptr)
-        : BaseSetting(category, keyName, displayName ? displayName : keyName, TypeTraits<T>::type, showInWeb, isPassword),
-          value(defaultValue), defaultValue(defaultValue), originalCallback(cb)
-    {
-        if (originalCallback)
-        {
-            callback = [this](T newValue)
-            { originalCallback(newValue); };
+            callback = [opts](T newValue) { opts.callback(newValue); };
         }
     }
 
     T get() const { return value; }
+    
     void set(const T &newValue)
     {
         if (value != newValue)
@@ -394,104 +366,138 @@ public:
 
     void load(Preferences &prefs) override
     {
+        if (hasError()) {
+            log("[ERROR] Skipping load for setting '%s' due to key error: %s", getDisplayName(), getError());
+            return;
+        }
+
+        T loadedValue;
         if constexpr (std::is_same_v<T, String>)
         {
-            value = prefs.getString(getKey(), defaultValue);
+            loadedValue = prefs.getString(getKey(), defaultValue);
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
-            value = prefs.getBool(getKey(), defaultValue);
+            loadedValue = prefs.getBool(getKey(), defaultValue);
         }
         else if constexpr (std::is_same_v<T, int>)
         {
-            value = prefs.getInt(getKey(), defaultValue);
+            loadedValue = prefs.getInt(getKey(), defaultValue);
         }
         else if constexpr (std::is_same_v<T, float>)
         {
-            value = prefs.getFloat(getKey(), defaultValue);
+            loadedValue = prefs.getFloat(getKey(), defaultValue);
         }
+        
+        value = loadedValue;
         modified = false;
+        
+        // Verbose logging for load operations
+        if constexpr (std::is_same_v<T, String>)
+        {
+            if (isPassword) {
+                logVerbose("[PREFS] Loaded %s.%s = '***' (hidden)", getCategory(), getKey());
+            } else {
+                logVerbose("[PREFS] Loaded %s.%s = '%s'", getCategory(), getKey(), value.c_str());
+            }
+        }
+        else if constexpr (std::is_same_v<T, bool>)
+        {
+            logVerbose("[PREFS] Loaded %s.%s = %s", getCategory(), getKey(), value ? "true" : "false");
+        }
+        else if constexpr (std::is_same_v<T, int>)
+        {
+            logVerbose("[PREFS] Loaded %s.%s = %d", getCategory(), getKey(), value);
+        }
+        else if constexpr (std::is_same_v<T, float>)
+        {
+            logVerbose("[PREFS] Loaded %s.%s = %.2f", getCategory(), getKey(), value);
+        }
     }
 
     void save(Preferences &prefs) override
     {
-        if (!modified)
+        if (hasError()) {
+            log("[ERROR] Skipping save for setting '%s' due to key error: %s", getDisplayName(), getError());
             return;
+        }
+
+        if (!modified) return;
 
         if constexpr (std::is_same_v<T, String>)
         {
             prefs.putString(getKey(), value);
+            if (isPassword) {
+                logVerbose("[PREFS] Saved %s.%s = '***' (hidden)", getCategory(), getKey());
+            } else {
+                logVerbose("[PREFS] Saved %s.%s = '%s'", getCategory(), getKey(), value.c_str());
+            }
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
             prefs.putBool(getKey(), value);
+            logVerbose("[PREFS] Saved %s.%s = %s", getCategory(), getKey(), value ? "true" : "false");
         }
         else if constexpr (std::is_same_v<T, int>)
         {
             prefs.putInt(getKey(), value);
+            logVerbose("[PREFS] Saved %s.%s = %d", getCategory(), getKey(), value);
         }
         else if constexpr (std::is_same_v<T, float>)
         {
             prefs.putFloat(getKey(), value);
+            logVerbose("[PREFS] Saved %s.%s = %.2f", getCategory(), getKey(), value);
         }
+        
         modified = false;
     }
 
     void setDefault() override
     {
-        set(defaultValue);
+        value = defaultValue;
+        modified = true;
     }
 
     void toJSON(JsonObject &obj) const override
     {
-        if (isSecret())
+        if (isPassword)
         {
-            obj[getName()] = "***";
+            obj[getDisplayName()] = "***";
         }
         else
         {
-            obj[getName()] = value;
+            obj[getDisplayName()] = value;
         }
     }
 
     bool fromJSON(const JsonVariant &jsonValue) override
     {
-        if (jsonValue.isNull())
-            return false;
-
+        if (jsonValue.isNull()) return false;
+        
+        T newValue;
         if constexpr (std::is_same_v<T, String>)
         {
-            if (jsonValue.is<const char *>())
-            {
-                set(String(jsonValue.as<const char *>()));
-                return true;
-            }
+            if (!jsonValue.is<const char*>()) return false;
+            newValue = jsonValue.as<String>();
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
-            if (jsonValue.is<bool>())
-            {
-                set(jsonValue.as<bool>());
-                return true;
-            }
+            if (!jsonValue.is<bool>()) return false;
+            newValue = jsonValue.as<bool>();
         }
         else if constexpr (std::is_same_v<T, int>)
         {
-            if (jsonValue.is<int>())
-            {
-                set(jsonValue.as<int>());
-                return true;
-            }
+            if (!jsonValue.is<int>()) return false;
+            newValue = jsonValue.as<int>();
         }
         else if constexpr (std::is_same_v<T, float>)
         {
-            if (jsonValue.is<float>())
-            {
-                set(jsonValue.as<float>());
-                return true;
-            }
+            if (!jsonValue.is<float>()) return false;
+            newValue = jsonValue.as<float>();
         }
-        return false;
+        
+        set(newValue);
+        return true;
     }
 };
 
@@ -519,6 +525,27 @@ inline std::function<bool()> showIfFalse(const Config<bool> &)
     { return true; };
 }
 #endif
+
+// New template-based helper functions for conditional visibility
+template<typename T>
+std::function<bool()> showIfTrue(const Config<T>& setting) {
+    return [&setting]() -> bool {
+        if constexpr (std::is_same_v<T, bool>) {
+            return setting.get();
+        }
+        return true; // For non-bool types, always show
+    };
+}
+
+template<typename T>
+std::function<bool()> showIfFalse(const Config<T>& setting) {
+    return [&setting]() -> bool {
+        if constexpr (std::is_same_v<T, bool>) {
+            return !setting.get();
+        }
+        return true; // For non-bool types, always show
+    };
+}
 
 // Main ConfigManager class - now modular and much smaller!
 class ConfigManagerClass
@@ -591,6 +618,20 @@ public:
         settings.push_back(setting);
         setting->setLogger([](const char *msg)
                            { CM_LOG("%s", msg); });
+    }
+
+    // Debug method to check registered settings count
+    size_t getSettingsCount() const { return settings.size(); }
+    
+    void debugPrintSettings() const
+    {
+        CM_LOG("[DEBUG] Total registered settings: %d", settings.size());
+        for (size_t i = 0; i < settings.size(); i++) {
+            const auto* s = settings[i];
+            CM_LOG("[DEBUG] Setting %d: name='%s', category='%s', key='%s', visible=%s", 
+                   i, s->getDisplayName(), s->getCategory(), s->getKey(), 
+                   s->isVisible() ? "true" : "false");
+        }
     }
 
     void loadAll()

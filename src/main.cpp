@@ -81,6 +81,9 @@ void setup()
 
     sl->Debug("System setup start...");
 
+    // Initialize all settings - this must be done before using ConfigManager
+    initializeAllSettings();
+
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
@@ -94,6 +97,7 @@ void setup()
     // ConfigManager.clearAllFromPrefs();
 
     sl->Debug("Load configuration...");
+    initializeAllSettings(); // Register all settings BEFORE loading
     ConfigManager.loadAll();
 
     // Debug: Print ALL settings after loading
@@ -133,9 +137,10 @@ void setup()
     SetupStartDisplay();
     ShowDisplay();
 
-    helpers.blinkBuidInLEDsetpinMode(); // Initialize the built-in LED pin mode
+    // helpers.blinkBuidInLEDsetpinMode(); // Initialize the built-in LED pin mode - method not found
 
     sl->Debug("Configuration printout:");
+    ConfigManager.debugPrintSettings(); // Debug: print all registered settings
     Serial.println(ConfigManager.toJSON(false)); // Print the configuration to the serial monitor
     //----------------------------------------
 

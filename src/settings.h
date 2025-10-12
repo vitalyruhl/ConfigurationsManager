@@ -30,12 +30,17 @@ struct WiFi_Settings // wifiSettings
     Config<String> subnet;
 
     WiFi_Settings() : 
-                      wifiSsid(ConfigOptions<String>{"wifiSsid", "wifi", "MyWiFi", "WiFi SSID", "WiFi Settings"}),
-                      wifiPassword(ConfigOptions<String>{"wifiPassword", "wifi", "secretpass", "WiFi Password", "WiFi Settings", true, true}),
-                      useDhcp(ConfigOptions<bool>{"useDhcp", "wifi", false, "Use DHCP", "WiFi Settings"}),
-                      staticIp(ConfigOptions<String>{"staticIp", "wifi", "192.168.2.126", "Static IP", "WiFi Settings", true, false, nullptr, showIfFalse(useDhcp)}),
-                      gateway(ConfigOptions<String>{"gateway", "wifi", "192.168.2.250", "Gateway", "WiFi Settings", true, false, nullptr, showIfFalse(useDhcp)}),
-                      subnet(ConfigOptions<String>{"subnet", "wifi", "255.255.255.0", "Subnet-Mask", "WiFi Settings", true, false, nullptr, showIfFalse(useDhcp)})
+        wifiSsid(ConfigOptions<String>{.name = "WiFi SSID", .category = "WiFi Settings", .defaultValue = "MyWiFi", .sortOrder = 1}),
+        wifiPassword(ConfigOptions<String>{.name = "WiFi Password", .category = "WiFi Settings", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
+        useDhcp(ConfigOptions<bool>{.name = "Use DHCP", .category = "WiFi Settings", .defaultValue = false, .sortOrder = 3}),
+        staticIp(ConfigOptions<String>{.name = "Static IP", .category = "WiFi Settings", .defaultValue = "192.168.2.126", .sortOrder = 4}),
+        gateway(ConfigOptions<String>{.name = "Gateway", .category = "WiFi Settings", .defaultValue = "192.168.2.250", .sortOrder = 5}),
+        subnet(ConfigOptions<String>{.name = "Subnet Mask", .category = "WiFi Settings", .defaultValue = "255.255.255.0", .sortOrder = 6})
+    {
+        // Settings registration moved to initializeAllSettings()
+    }
+    
+    void registerSettings()
     {
         // Register settings with ConfigManager
         ConfigManager.addSetting(&wifiSsid);
@@ -69,18 +74,28 @@ struct MQTT_Settings
     String mqtt_publish_AktualTimeRemaining_topic;
 
     // Now show extra pretty category name since V2.2.0: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
-    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.keyName = "Port", .category = "MQTT", .defaultValue = 1883, .prettyName = "Port", }),
-                      mqtt_server(ConfigOptions<String>{.keyName = "Server", .category = "MQTT", .defaultValue = String("192.168.2.3"), .prettyName = "Server-IP", }),
-                      mqtt_username(ConfigOptions<String>{.keyName = "User", .category = "MQTT", .defaultValue = String("housebattery"), .prettyName = "User", }),
-                      mqtt_password(ConfigOptions<String>{.keyName = "Pass", .category = "MQTT", .defaultValue = String("mqttsecret"), .prettyName = "Password", .showInWeb = true, .isPassword = true}),
-                      Publish_Topic(ConfigOptions<String>{.keyName = "MQTTT", .category = "MQTT", .defaultValue = String("BoilerSaver"), .prettyName = "Publish-Topic", }),
-                      mqtt_Settings_ShowerTime_topic(ConfigOptions<String>{.keyName = "ShowerT", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/ShowerTime"), .prettyName = "Shower-Time Topic", .showInWeb = true, .isPassword = false}),
-                      mqtt_Settings_SetState_topic(ConfigOptions<String>{.keyName = "SetShower", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/SetShowerTime"), .prettyName = "Set-Shower-Time Topic", .showInWeb = true, .isPassword = false}),
-                      MQTTPublischPeriod(ConfigOptions<float>{.keyName = "PubPrd", .category = "MQTT", .defaultValue = 2.0f, .prettyName = "Publish-Period (s)", }),
-                      MQTTListenPeriod(ConfigOptions<float>{.keyName = "LisPrd", .category = "MQTT", .defaultValue = 0.5f, .prettyName = "Listen-Period (s)", }),
-                      mqtt_Settings_SetState(ConfigOptions<bool>{.keyName = "SetSt", .category = "MQTT", .defaultValue = false, .prettyName = "Set-State", .showInWeb = false, .isPassword = false}),
-                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.keyName = "ShwTm", .category = "MQTT", .defaultValue = 90, .prettyName = "Shower Time (min)", .showInWeb = false, .isPassword = false})
+    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.key = "Port", .name = "Port", .category = "MQTT", .defaultValue = 1883}),
+                      mqtt_server(ConfigOptions<String>{.key = "Server", .name = "Server-IP", .category = "MQTT", .defaultValue = String("192.168.2.3")}),
+                      mqtt_username(ConfigOptions<String>{.key = "User", .name = "User", .category = "MQTT", .defaultValue = String("housebattery")}),
+                      mqtt_password(ConfigOptions<String>{.key = "Pass", .name = "Password", .category = "MQTT", .defaultValue = String("mqttsecret"), .showInWeb = true, .isPassword = true}),
+                      Publish_Topic(ConfigOptions<String>{.key = "MQTTT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
+                      mqtt_Settings_ShowerTime_topic(ConfigOptions<String>{.key = "ShowerT", .name = "Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/ShowerTime"), .showInWeb = true, .isPassword = false}),
+                      mqtt_Settings_SetState_topic(ConfigOptions<String>{.key = "SetShower", .name = "Set-Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/SetShowerTime"), .showInWeb = true, .isPassword = false}),
+                      MQTTPublischPeriod(ConfigOptions<float>{.key = "PubPrd", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
+                      MQTTListenPeriod(ConfigOptions<float>{.key = "LisPrd", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
+                      mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false}),
+                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = false, .isPassword = false})
 
+    {
+        // Settings registration moved to registerSettings()
+        
+        // Callback to update topics when Publish_Topic changes
+        Publish_Topic.setCallback([this](String newValue){ this->updateTopics(); });
+
+        updateTopics(); // Make sure topics are initialized
+    }
+    
+    void registerSettings()
     {
         ConfigManager.addSetting(&mqtt_port);
         ConfigManager.addSetting(&mqtt_server);
@@ -93,11 +108,6 @@ struct MQTT_Settings
         ConfigManager.addSetting(&MQTTListenPeriod);
         ConfigManager.addSetting(&mqtt_Settings_SetState);
         ConfigManager.addSetting(&mqtt_Settings_ShowerTime);
-
-        // Callback to update topics when Publish_Topic changes
-        Publish_Topic.setCallback([this](String newValue){ this->updateTopics(); });
-
-        updateTopics(); // Make sure topics are initialized
     }
 
     void updateTopics()
@@ -106,7 +116,6 @@ struct MQTT_Settings
         mqtt_publish_AktualState = hostname + "/AktualState"; //show State of Boiler Heating/Save-Mode
         mqtt_publish_AktualBoilerTemperature = hostname + "/TemperatureBoiler"; //show Temperature of Boiler
         mqtt_publish_AktualTimeRemaining_topic = hostname + "/TimeRemaining"; //show Time Remaining if Boiler is Heating
-
     }
 };
 
@@ -118,17 +127,13 @@ struct I2CSettings {
     Config<int> bmeFreq;
     Config<int> displayAddr;
     I2CSettings():
-        sdaPin(ConfigOptions<int>{"I2CSDA","I2C",21,"I2C SDA Pin","I2C"}),
-        sclPin(ConfigOptions<int>{"I2CSCL","I2C",22,"I2C SCL Pin","I2C"}),
-        busFreq(ConfigOptions<int>{"I2CFreq","I2C",400000,"I2C Bus Freq","I2C"}),
-        bmeFreq(ConfigOptions<int>{"BMEFreq","I2C",400000,"BME280 Bus Freq","I2C"}),
-        displayAddr(ConfigOptions<int>{"DispAddr","I2C",0x3C,"Display I2C Address","I2C"})
+        sdaPin(ConfigOptions<int>{.key = "I2CSDA", .name = "I2C SDA Pin", .category = "I2C", .defaultValue = 21}),
+        sclPin(ConfigOptions<int>{.key = "I2CSCL", .name = "I2C SCL Pin", .category = "I2C", .defaultValue = 22}),
+        busFreq(ConfigOptions<int>{.key = "I2CFreq", .name = "I2C Bus Freq", .category = "I2C", .defaultValue = 400000}),
+        bmeFreq(ConfigOptions<int>{.key = "BMEFreq", .name = "BME280 Bus Freq", .category = "I2C", .defaultValue = 400000}),
+        displayAddr(ConfigOptions<int>{.key = "DispAddr", .name = "Display I2C Address", .category = "I2C", .defaultValue = 0x3C})
     {
-        ConfigManager.addSetting(&sdaPin);
-        ConfigManager.addSetting(&sclPin);
-        ConfigManager.addSetting(&busFreq);
-        ConfigManager.addSetting(&bmeFreq);
-        ConfigManager.addSetting(&displayAddr);
+        // Settings registration moved to initializeAllSettings()
     }
 };
 
@@ -142,59 +147,48 @@ struct BoilerSettings {
 
     BoilerSettings():
         enabled(ConfigOptions<bool>{
-            .keyName = "En",
+            .key = "En",
+            .name = "Enable Boiler Control",
             .category = "Boiler",
-            .defaultValue = true,
-            .prettyName = "Enable Boiler Control",
-            .prettyCat = "Boiler Control"
+            .defaultValue = true
         }),
         onThreshold(ConfigOptions<float>{
-            .keyName = "OnT",
+            .key = "OnT",
+            .name = "Boiler On Threshold",
             .category = "Boiler",
             .defaultValue = 55.0f,
-            .prettyName = "Boiler On Threshold",
-            .prettyCat = "Boiler Control",
             .showInWeb = true,
             .isPassword = false
         }),
         offThreshold(ConfigOptions<float>{
-            .keyName = "OffT",
+            .key = "OffT",
+            .name = "Boiler Off Threshold",
             .category = "Boiler",
             .defaultValue = 80.0f,
-            .prettyName = "Boiler Off Threshold",
-            .prettyCat = "Boiler Control",
             .showInWeb = true,
             .isPassword = false
         }),
         relayPin(ConfigOptions<int>{
-            .keyName = "Pin",
+            .key = "Pin",
+            .name = "Boiler Relay GPIO",
             .category = "Boiler",
-            .defaultValue = 23,
-            .prettyName = "Boiler Relay GPIO",
-            .prettyCat = "Boiler Control"
+            .defaultValue = 23
         }),
         activeLow(ConfigOptions<bool>{
-            .keyName = "Low",
+            .key = "Low",
+            .name = "Boiler Relay LOW-Active",
             .category = "Boiler",
-            .defaultValue = true,
-            .prettyName = "Boiler Relay LOW-Active",
-            .prettyCat = "Boiler Control"
+            .defaultValue = true
         }),
         boilerTimeMin(ConfigOptions<int>{
-            .keyName = "Time",
+            .key = "Time",
+            .name = "Boiler Max Heating Time (min)",
             .category = "Boiler",
             .defaultValue = 90,
-            .prettyName = "Boiler Max Heating Time (min)",
-            .prettyCat = "Boiler Control",
             .showInWeb = true
         })
     {
-        ConfigManager.addSetting(&enabled);
-        ConfigManager.addSetting(&onThreshold);
-        ConfigManager.addSetting(&offThreshold);
-        ConfigManager.addSetting(&relayPin);
-        ConfigManager.addSetting(&activeLow);
-        ConfigManager.addSetting(&boilerTimeMin);
+        // Settings registration moved to initializeAllSettings()
     }
 };
 
@@ -202,11 +196,10 @@ struct DisplaySettings {
     Config<bool> turnDisplayOff;
     Config<int>  onTimeSec;
     DisplaySettings():
-        turnDisplayOff(ConfigOptions<bool>{"Save","Display",true,"Turn Display Off","Display Settings"}),
-        onTimeSec(ConfigOptions<int>{"Time","Display",60,"Display On-Time (s)","Display Settings"})
+        turnDisplayOff(ConfigOptions<bool>{.key = "Save", .name = "Turn Display Off", .category = "Display", .defaultValue = true}),
+        onTimeSec(ConfigOptions<int>{.key = "Time", .name = "Display On-Time (s)", .category = "Display", .defaultValue = 60})
     {
-        ConfigManager.addSetting(&turnDisplayOff);
-        ConfigManager.addSetting(&onTimeSec);
+        // Settings registration moved to initializeAllSettings()
     }
 };
 
@@ -216,22 +209,18 @@ struct SystemSettings {
     Config<int> wifiRebootTimeoutMin;
     Config<String> version;
     SystemSettings():
-        allowOTA(ConfigOptions<bool>{"OTAEn","System",true,"Allow OTA Updates"}),
-        otaPassword(ConfigOptions<String>{"OTAPass","System",String("ota1234"),"OTA Password","System",true,true}),
+        allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true}),
+        otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String("ota1234"), .showInWeb = true, .isPassword = true}),
         wifiRebootTimeoutMin(ConfigOptions<int>{
-            .keyName = "WiFiRb",
+            .key = "WiFiRb",
+            .name = "Reboot if WiFi lost (min)",
             .category = "System",
             .defaultValue = 15,
-            .prettyName = "Reboot if WiFi lost (min)",
-            .prettyCat = "System",
             .showInWeb = true
         }),
-        version(ConfigOptions<String>{"Version","System",String(VERSION),"Program Version"})
+        version(ConfigOptions<String>{.key = "Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
     {
-        ConfigManager.addSetting(&allowOTA);
-        ConfigManager.addSetting(&otaPassword);
-        ConfigManager.addSetting(&wifiRebootTimeoutMin);
-        ConfigManager.addSetting(&version);
+        // Settings registration moved to initializeAllSettings()
     }
 };
 
@@ -239,11 +228,10 @@ struct ButtonSettings {
     Config<int> apModePin;
     Config<int> resetDefaultsPin;
     ButtonSettings():
-        apModePin(ConfigOptions<int>{"BtnAP","Buttons",13,"AP Mode Button GPIO","Buttons"}),
-        resetDefaultsPin(ConfigOptions<int>{"BtnRst","Buttons",15,"Reset Defaults Button GPIO","Buttons"})
+        apModePin(ConfigOptions<int>{.key = "BtnAP", .name = "AP Mode Button GPIO", .category = "Buttons", .defaultValue = 13}),
+        resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15})
     {
-        ConfigManager.addSetting(&apModePin);
-        ConfigManager.addSetting(&resetDefaultsPin);
+        // Settings registration moved to initializeAllSettings()
     }
 };
 
@@ -255,5 +243,9 @@ extern ButtonSettings buttonSettings;
 extern SigmaLogLevel logLevel;
 extern WiFi_Settings wifiSettings;
 extern BoilerSettings boilerSettings;
+
+// Function to register all settings with ConfigManager
+// This must be called after ConfigManager is properly initialized
+void initializeAllSettings();
 
 #endif // SETTINGS_H
