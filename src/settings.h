@@ -30,7 +30,7 @@ struct WiFi_Settings // wifiSettings
     Config<String> subnet;
 
     WiFi_Settings() : 
-        wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi Settings", .defaultValue = "MyWiFi", .sortOrder = 1}),
+        wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi Settings", .defaultValue = "", .sortOrder = 1}),
         wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi Settings", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
         useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi Settings", .defaultValue = false, .sortOrder = 3}),
         staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi Settings", .defaultValue = "192.168.2.126", .sortOrder = 4, .showIf = [this]() { return !useDhcp.get(); }}),

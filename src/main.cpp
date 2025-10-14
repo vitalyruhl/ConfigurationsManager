@@ -5,7 +5,6 @@
 
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-// Server is now handled by ConfigManager's WebManager
 
 #include "settings.h"
 #include "logging/logging.h"
@@ -60,12 +59,9 @@ bool boilerState = false;    // current state of the heater (on/off)
 bool tickerActive = false; // flag to indicate if the ticker is active
 bool displayActive = true; // flag to indicate if the display is active
 
-// Global alarm state for temperature monitoring
-static bool globalAlarmState = false;
+static bool globalAlarmState = false;// Global alarm state for temperature monitoring
 
-// Non-blocking MQTT reconnection state management
-// Non-blocking display update management
-static unsigned long lastDisplayUpdate = 0;
+static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
 static const unsigned long displayUpdateInterval = 100; // Update display every 100ms
 
 #pragma endregion configuration variables
@@ -90,14 +86,13 @@ void setup()
     SetupCheckForResetButton();
     SetupCheckForAPModeButton();
 
-    // sl->Printf("Clear Settings...").Debug();
     // ConfigManager.clearAllFromPrefs();
 
     sl->Debug("Load configuration...");
     initializeAllSettings(); // Register all settings BEFORE loading
     ConfigManager.loadAll();
 
-    // Debug: Print ALL settings after loading
+    // Debug: Print some settings after loading
     sl->Debug("=== LOADED SETTINGS (Important) ===");
     sl->Printf("WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
     sl->Printf("WiFi Password:  (length: %d)", wifiSettings.wifiPassword.get().length()).Debug();
@@ -109,31 +104,20 @@ void setup()
 
     ConfigManager.checkSettingsForErrors();
 
-    // Print full configuration JSON to console (like the old version)
-    sl->Printf("Configuration printout:").Debug();
-    Serial.println(ConfigManager.toJSON(false)); // Print the configuration to the serial monitor
+    Serial.println(ConfigManager.toJSON(false)); // Print full configuration JSON to console
 
-    // Enable WebSocket push for real-time updates
-    ConfigManager.enableWebSocketPush();
-    sl->Debug("WebSocket push enabled");
+    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
 
-    // // Debug: Print boiler threshold settings
-    // sl->Debug("Boiler Settings Debug:");
-    // sl->Printf("  onThreshold: %.1f°C", boilerSettings.onThreshold.get()).Debug();
-    // sl->Printf("  offThreshold: %.1f°C", boilerSettings.offThreshold.get()).Debug();
-    // sl->Printf("  enabled: %s", boilerSettings.enabled.get() ? "true" : "false").Debug();
 
-    // Re-apply relay pin modes with loaded settings (pins/polarity may differ from defaults)
-    Relays::initPins();
+    Relays::initPins(); // Re-apply relay pin modes with loaded settings (pins/polarity may differ from defaults)
 
-    mqttSettings.updateTopics();
+
 
     // init modules...
     sl->Debug("init modules...");
     SetupStartDisplay();
     ShowDisplay();
-
-    // helpers.blinkBuidInLEDsetpinMode(); // Initialize the built-in LED pin mode - method not found
+    mqttSettings.updateTopics();
 
     //----------------------------------------
 
@@ -233,13 +217,11 @@ void setup()
         { return globalAlarmState; },
         []()
         {
-            sl->Debug("[ALARM] -> HEATER ON");
             sl->Printf("[ALARM] Temperature %.1f°C -> HEATER ON", temperature).Info();
             handeleBoilerState(true);
         },
         []()
         {
-            sl->Debug("[ALARM] -> HEATER OFF");
             sl->Printf("[ALARM] Temperature %.1f°C -> HEATER OFF", temperature).Info();
             handeleBoilerState(false);
         });
@@ -252,7 +234,7 @@ void setup()
         { return transientFloatVal; }, [](float v)
         { transientFloatVal = v;
             temperature = v;
-            sl->Printf("Temperature manually set to %.1f°C via slider", v).Debug(); 
+            sl->Printf("Temperature manually set to %.1f°C via slider", v).Debug();
         }, String("°C"));
 
     static bool stateBtnState = false;
@@ -265,10 +247,9 @@ void setup()
 void loop()
 {
     CheckButtons();
-    boilerState = Relays::getBoiler();
+    boilerState = Relays::getBoiler(); // get Relay state
 
-    // Update WiFi Manager - handles all WiFi logic
-    ConfigManager.getWiFiManager().update();
+    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
 
     // Non-blocking display updates
     if (millis() - lastDisplayUpdate > displayUpdateInterval)
@@ -285,14 +266,13 @@ void loop()
         ConfigManager.getRuntimeManager().updateAlarms();
     }
 
-    // Handle MQTT Manager loop
-    mqttManager.loop();
+    mqttManager.loop(); // Handle MQTT Manager loop
 
-    updateStatusLED();
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.getOTAManager().handle();
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
+    updateStatusLED();
 }
 
 //----------------------------------------
@@ -304,14 +284,9 @@ void publishToMQTT()
     if (mqttManager.isConnected())
     {
         sl->Debug("publishToMQTT: Publishing to MQTT...");
-        sll->Debug("Publishing to MQTT...");
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
-    }
-    else
-    {
-        sl->Warn("publishToMQTT: MQTT not connected!");
     }
 }
 
@@ -321,7 +296,6 @@ void cb_MQTT(char *topic, byte *message, unsigned int length)
     messageTemp.trim();                          // Remove leading and trailing whitespace
 
     sl->Printf("<-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
-    // ToDO: set new Blinker for: helpers.blinkBuidInLED(1, 100); // blink the LED once to indicate that the loop is running
     if (strcmp(topic, mqttSettings.mqtt_Settings_SetState_topic.get().c_str()) == 0)
     {
         // check if it is a number, if not set it to 0
@@ -331,7 +305,7 @@ void cb_MQTT(char *topic, byte *message, unsigned int length)
             messageTemp.equalsIgnoreCase("Infinity") ||
             messageTemp.equalsIgnoreCase("-Infinity"))
         {
-            sl->Printf("Received invalid value from MQTT: %s", messageTemp.c_str());
+            sl->Printf("Received invalid value from MQTT: %s", messageTemp.c_str()).Debug();
             messageTemp = "0";
         }
     }
@@ -395,13 +369,12 @@ void SetupCheckForResetButton()
     {
         sl->Internal("Reset button pressed -> Reset all settings...");
         sll->Internal("Reset button pressed!");
-        sll->Internal("Reset all settings!");
         ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
         ConfigManager.saveAll();           // Save the default settings to EEPROM
 
         // Show user feedback that reset is happening
         sll->Internal("Settings reset complete - restarting...");
-
+        //ToDo: add non blocking delay to show message on display before restart
         ESP.restart(); // Restart the ESP32
     }
 }
@@ -411,7 +384,6 @@ void SetupCheckForAPModeButton()
     String APName = "ESP32_Config";
     String pwd = "config1234"; // Default AP password
 
-    // if (wifiSettings.wifiSsid.get().length() == 0 || systemSettings.unconfigured.get())
     if (wifiSettings.wifiSsid.get().length() == 0)
     {
         sl->Printf("⚠️ SETUP: WiFi SSID is empty [%s] (fresh/unconfigured)", wifiSettings.wifiSsid.get().c_str()).Error();
@@ -434,20 +406,10 @@ bool SetupStartWebServer()
     sl->Printf("⚠️ SETUP: Starting Webserver...!").Debug();
     sll->Printf("Starting Webserver...!").Debug();
 
-    if (wifiSettings.wifiSsid.get().length() == 0 || wifiSettings.wifiSsid.get() == "MyWiFi")
-    {
-        sl->Printf("No valid SSID configured (current: '%s') --> Start AP!", wifiSettings.wifiSsid.get().c_str()).Debug();
-        sll->Printf("No valid SSID!").Debug();
-        sll->Printf("Start AP!").Debug();
-        ConfigManager.startAccessPoint("ESP32-Config", ""); // Use a clear AP name
-        // Removed blocking delay(1000);
-        return true; // Skip webserver setup if no SSID is set
-    }
-
     if (WiFi.getMode() == WIFI_AP)
     {
-        sl->Printf("🖥️ Run in AP Mode! ");
-        sll->Printf("Run in AP Mode! ");
+        // sl->Printf("Run in AP Mode! ").Info();
+        // sll->Printf("Run in AP Mode! ").Info();
         return false; // Skip webserver setup in AP mode
     }
 
@@ -467,9 +429,6 @@ bool SetupStartWebServer()
             subnet.fromString(wifiSettings.subnet.get());
             ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
         }
-        // ConfigManager.reconnectWifi();
-        // WiFi.setSleep(false); // Now handled by WiFi manager
-        // Removed blocking delay(1000);
     }
     sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str());
     sll->Printf("Web: %s\n\n", WiFi.localIP().toString().c_str());
@@ -544,7 +503,7 @@ void WriteToDisplay()
     }
     else
     {
-        display.printf("Ready");
+        display.printf("");
     }
 
     display.display();
