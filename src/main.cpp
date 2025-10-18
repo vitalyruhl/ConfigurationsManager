@@ -168,14 +168,15 @@ void setup()
                                                           {
                                                               o["Bo_EN_Set"] = boilerSettings.enabled.get();
                                                               o["Bo_EN"] = Relays::getBoiler();
+                                                              o["Bo_Temp"] = temperature;
                                                               o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
                                                               o["Bo_TimeLeft"] = boilerTimeRemaining;
-                                                              o["Bo_Temp"] = temperature;
                                                           }});
 
     // Add metadata for Boiler provider fields
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "temperature", .unit = "°C", .precision = 1, .order = 10});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 1, .order = 60});
+    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 0, .order = 21});
+    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "time setted", .unit = "min", .precision = 0, .order = 22});
 
     // Add alarms provider for min Temperature monitoring with hysteresis
     ConfigManager.getRuntimeManager().addRuntimeProvider(
@@ -237,6 +238,7 @@ void setup()
             sl->Printf("Temperature manually set to %.1f°C via slider", v).Debug();
         }, String("°C"));
 
+    // State button to manually control the boiler relay    
     static bool stateBtnState = false;
     ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
         { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
