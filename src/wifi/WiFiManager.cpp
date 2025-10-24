@@ -59,6 +59,8 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   ssid = wifiSSID;
   password = wifiPassword;
   useDHCP = true;
+  dns1 = IPAddress();
+  dns2 = IPAddress();
   
   WIFI_LOG("[WiFi] Starting DHCP connection to %s", ssid.c_str());
   
@@ -72,25 +74,45 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   lastReconnectAttempt = millis();
 }
 
-void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& gw, const IPAddress& sn, const String& wifiSSID, const String& wifiPassword) {
+void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& gw, const IPAddress& sn, const String& wifiSSID, const String& wifiPassword, const IPAddress& primaryDNS, const IPAddress& secondaryDNS) {
   ssid = wifiSSID;
   password = wifiPassword;
   staticIP = sIP;
   gateway = gw;
   subnet = sn;
+  dns1 = primaryDNS;
+  dns2 = secondaryDNS;
   useDHCP = false;
   
-  WIFI_LOG("[WiFi] Starting static IP connection to %s (IP: %s)", ssid.c_str(), staticIP.toString().c_str());
+  WIFI_LOG("[WiFi] Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
+           ssid.c_str(),
+           staticIP.toString().c_str(),
+           (dns1 == IPAddress()) ? "0.0.0.0" : dns1.toString().c_str(),
+           (dns2 == IPAddress()) ? "0.0.0.0" : dns2.toString().c_str());
   
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
   WiFi.setAutoReconnect(true); // Enable automatic reconnection
   WiFi.persistent(true); // Store WiFi configuration in flash
-  WiFi.config(staticIP, gateway, subnet);
+  applyStaticConfig();
   WiFi.begin(ssid.c_str(), password.c_str());
   
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
+}
+
+void ConfigManagerWiFi::applyStaticConfig() {
+  IPAddress zero;
+  bool hasPrimary = dns1 != zero;
+  bool hasSecondary = dns2 != zero;
+
+  if (hasPrimary && hasSecondary) {
+    WiFi.config(staticIP, gateway, subnet, dns1, dns2);
+  } else if (hasPrimary) {
+    WiFi.config(staticIP, gateway, subnet, dns1);
+  } else {
+    WiFi.config(staticIP, gateway, subnet);
+  }
 }
 
 void ConfigManagerWiFi::startAccessPoint(const String& apSSID, const String& apPassword) {
@@ -210,7 +232,7 @@ void ConfigManagerWiFi::handleReconnection() {
     if (useDHCP) {
       WiFi.begin(ssid.c_str(), password.c_str());
     } else {
-      WiFi.config(staticIP, gateway, subnet);
+      applyStaticConfig();
       WiFi.begin(ssid.c_str(), password.c_str());
     }
   }

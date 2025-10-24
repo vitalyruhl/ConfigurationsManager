@@ -914,7 +914,7 @@ public:
         CM_LOG("[I] ConfigManager modules initialized - WiFi connecting in background");
     }
 
-    void startWebServer(const IPAddress &staticIP, const IPAddress &gateway, const IPAddress &subnet, const String &ssid, const String &password)
+    void startWebServer(const IPAddress &staticIP, const IPAddress &gateway, const IPAddress &subnet, const String &ssid, const String &password, const IPAddress &dns1 = IPAddress(), const IPAddress &dns2 = IPAddress())
     {
         CM_LOG("[I] Starting web server with static IP %s", staticIP.toString().c_str());
 
@@ -943,7 +943,7 @@ public:
                 extern void onWiFiAPMode();
                 onWiFiAPMode();
             });
-        wifiManager.startConnection(staticIP, gateway, subnet, ssid, password);
+        wifiManager.startConnection(staticIP, gateway, subnet, ssid, password, dns1, dns2);
 
         webManager.begin(this);
         otaManager.begin(this);

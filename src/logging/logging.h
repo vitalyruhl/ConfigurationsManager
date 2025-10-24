@@ -17,15 +17,15 @@
 extern Adafruit_SSD1306 display;
 extern SigmaLoger *sl;
 extern SigmaLoger *sll;
-extern SigmaLogLevel level;
+extern SigmaLogLevel currentLogLevel;
 
 // Function declarations
 void LoggerSetupSerial();
 void SetupStartDisplay();
 const char *sl_timestamp();
-void SerialLoggerPublisher(SigmaLogLevel level, const char *message);
-void LCDLoggerPublisher(SigmaLogLevel level, const char *message);
-void LCDLoggerPublisherBuffered(SigmaLogLevel level, const char *message);
+void SerialLoggerPublisher(SigmaLogLevel messageLevel, const char *message);
+void LCDLoggerPublisher(SigmaLogLevel messageLevel, const char *message);
+void LCDLoggerPublisherBuffered(SigmaLogLevel messageLevel, const char *message);
 void LCDUpdate();
 void splitIntoLines(const String& msg, size_t lineLength, std::vector<String>& out);
 

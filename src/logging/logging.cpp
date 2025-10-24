@@ -5,7 +5,21 @@
 Adafruit_SSD1306 display(4);
 SigmaLoger *sl = new SigmaLoger(512, SerialLoggerPublisher, sl_timestamp);
 SigmaLoger *sll = new SigmaLoger(512, LCDLoggerPublisherBuffered, nullptr);
-SigmaLogLevel level = SIGMALOG_WARN;
+SigmaLogLevel currentLogLevel = SIGMALOG_INFO;
+
+
+// typedef enum
+// {
+// 	SIGMALOG_OFF = 0,
+// 	SIGMALOG_INTERNAL,
+// 	SIGMALOG_FATAL,
+// 	SIGMALOG_ERROR,
+// 	SIGMALOG_WARN,
+// 	SIGMALOG_INFO,
+// 	SIGMALOG_DEBUG,
+// 	SIGMALOG_ALL
+// } SigmaLogLevel;
+
 
 #include <Ticker.h>
 
@@ -54,13 +68,38 @@ const char *sl_timestamp()
     return timestamp;
 }
 
-void SerialLoggerPublisher(SigmaLogLevel level, const char *message)
+static bool shouldPublish(SigmaLogLevel messageLevel)
 {
-    Serial.printf("MAIN: [%d] %s\r\n", level, message);
+    if (currentLogLevel == SIGMALOG_OFF)
+    {
+        return false;
+    }
+
+    if (currentLogLevel == SIGMALOG_ALL)
+    {
+        return true;
+    }
+
+    return messageLevel <= currentLogLevel;
 }
 
-void LCDLoggerPublisher(SigmaLogLevel level, const char *message)
+void SerialLoggerPublisher(SigmaLogLevel messageLevel, const char *message)
 {
+    if (!shouldPublish(messageLevel))
+    {
+        return;
+    }
+
+    Serial.printf("[%d] %s\r\n", messageLevel, message);
+}
+
+void LCDLoggerPublisher(SigmaLogLevel messageLevel, const char *message)
+{
+    if (!shouldPublish(messageLevel))
+    {
+        return;
+    }
+
     display.fillRect(0, 25, 128, 8, BLACK);
     display.setCursor(0, 25);
     display.setTextSize(1);
@@ -69,10 +108,12 @@ void LCDLoggerPublisher(SigmaLogLevel level, const char *message)
     display.display();
 }
 
-void LCDLoggerPublisherBuffered(SigmaLogLevel level, const char *message)
+void LCDLoggerPublisherBuffered(SigmaLogLevel messageLevel, const char *message)
 {
-    // lcdLogBuffer = message;
-    // lcdUpdatePending = true;
+    if (!shouldPublish(messageLevel))
+    {
+        return;
+    }
 
     std::vector<String> newMessage;
     splitIntoLines(String(message), 21, newMessage);
@@ -91,7 +132,7 @@ void LCDUpdate()
 {
     if (lcdCurrentLine >= lcdCurrentMessage.size())
     {
-        // aktuelle Nachricht fertig, nächste holen
+        // this message is done, get next from queue
         if (!lcdMessageQueue.empty())
         {
             lcdCurrentMessage = lcdMessageQueue.front();
@@ -100,11 +141,11 @@ void LCDUpdate()
         }
         else
         {
-            return; // nichts zu tun
+            return;
         }
     }
 
-    // aktuelle Zeile anzeigen
+    // display current line
     display.fillRect(0, 25, 128, 8, BLACK);
     display.setCursor(0, 25);
     display.setTextSize(1);

@@ -28,6 +28,8 @@ struct WiFi_Settings // wifiSettings
     Config<String> staticIp;
     Config<String> gateway;
     Config<String> subnet;
+    Config<String> dnsPrimary;
+    Config<String> dnsSecondary;
 
     WiFi_Settings() : 
         wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .sortOrder = 1}),
@@ -35,7 +37,9 @@ struct WiFi_Settings // wifiSettings
         useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = false, .sortOrder = 3}),
         staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.126", .sortOrder = 4, .showIf = [this]() { return !useDhcp.get(); }}),
         gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this]() { return !useDhcp.get(); }}),
-        subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this]() { return !useDhcp.get(); }})
+        subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this]() { return !useDhcp.get(); }}),
+        dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this]() { return !useDhcp.get(); }}),
+        dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this]() { return !useDhcp.get(); }})
     {
         // Settings registration moved to initializeAllSettings()
     }
@@ -49,6 +53,8 @@ struct WiFi_Settings // wifiSettings
         ConfigManager.addSetting(&staticIp);
         ConfigManager.addSetting(&gateway);
         ConfigManager.addSetting(&subnet);
+        ConfigManager.addSetting(&dnsPrimary);
+        ConfigManager.addSetting(&dnsSecondary);
     }
 };
 

@@ -12,6 +12,8 @@
 #include "helpers/relays.h"
 #include "helpers/mqtt_manager.h"
 
+ #include "secret/wifiSecret.h"
+
 // predeclare the functions (prototypes)
 void SetupStartDisplay();
 void setupGUI();
@@ -75,16 +77,30 @@ void setup()
 {
 
     LoggerSetupSerial(); // Initialize the serial logger
-
-    sl->Debug("[SETUP] System setup start...");
+    currentLogLevel = SIGMALOG_DEBUG; //overwrite the default SIGMALOG_INFO level to debug to see all messages
+    sl->Info("[SETUP] System setup start...");
 
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
 
-    sl->Debug("[SETUP] Load configuration...");
+    sl->Info("[SETUP] Load configuration...");
     initializeAllSettings(); // Register all settings BEFORE loading
     ConfigManager.loadAll();
+
+    // set wifi settings if not set yet from my secret folder
+        if (wifiSettings.wifiSsid.get().isEmpty()){
+            sl->Debug ("-------------------------------------------------------------");
+            sl->Debug ("SETUP: *** SSID is empty, setting My values *** ");
+            sl->Debug ("-------------------------------------------------------------");
+            // ConfigManager.clearAllFromPrefs();
+            wifiSettings.wifiSsid.set( MY_WIFI_SSID );
+            wifiSettings.wifiPassword.set( MY_WIFI_PASSWORD );
+            ConfigManager.saveAll();
+            delay(1000); // Small delay
+
+        }
+
 
     // Debug: Print some settings after loading
     sl->Debug ("[SETUP] === LOADED SETTINGS (Important) ===");
@@ -94,6 +110,8 @@ void setup()
     sl->Printf("[SETUP] WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
     sl->Printf("[SETUP] WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
     sl->Printf("[SETUP] WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
+    sl->Printf("[SETUP] WiFi DNS1: '%s'", wifiSettings.dnsPrimary.get().c_str()).Debug();
+    sl->Printf("[SETUP] WiFi DNS2: '%s'", wifiSettings.dnsSecondary.get().c_str()).Debug();
     sl->Debug ("[SETUP] === END SETTINGS ===");
 
     ConfigManager.checkSettingsForErrors(); // Check for any settings errors and report them in console
@@ -106,7 +124,7 @@ void setup()
     SetupCheckForAPModeButton();
 
     // init modules...
-    sl->Debug("[SETUP] init modules...");
+    sl->Info("[SETUP] init modules...");
     SetupStartDisplay();
     ShowDisplay();
 
@@ -129,8 +147,8 @@ void setup()
     setupGUI();
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     //---------------------------------------------------------------------------------------------------
-    sl->Debug("[SETUP] System setup completed.");
-    sll->Debug("[SETUP] Setup completed.");
+    sl->Info("[SETUP] System setup completed.");
+    sll->Info("[SETUP] Setup completed.");
 }
 
 void loop()
@@ -171,8 +189,8 @@ void loop()
 void setupMQTT()
 {
     // -- Setup MQTT connection --
-    sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-    sll->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+    sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
+    sll->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
 
     mqttSettings.updateTopics();
 
@@ -191,7 +209,7 @@ void setupMQTT()
                                 cb_publishToMQTT(); // Publish initial values
                             });
 
-    mqttManager.onDisconnected([]() { sl->Debug("[MAIN] MQTT disconnected"); });
+    mqttManager.onDisconnected([]() { sl->Warn("[MAIN] MQTT disconnected"); });
 
     mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
 
@@ -202,7 +220,7 @@ void cb_publishToMQTT()
 {
     if (mqttManager.isConnected())
     {
-        sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
+        sl->Info("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
@@ -224,7 +242,7 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
             messageTemp.equalsIgnoreCase("Infinity") ||
             messageTemp.equalsIgnoreCase("-Infinity"))
         {
-            sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Debug();
+            sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Warn();
             messageTemp = "0";
         }
     }
@@ -403,8 +421,8 @@ void SetupCheckForAPModeButton()
 
 bool SetupStartWebServer()
 {
-    sl->Debug("[MAIN] Starting Webserver...!");
-    sll->Debug("[MAIN] Starting Webserver...!");
+    sl->Info("[MAIN] Starting Webserver...!");
+    sll->Info("[MAIN] Starting Webserver...!");
 
     if (WiFi.getMode() == WIFI_AP)
     {
@@ -423,11 +441,23 @@ bool SetupStartWebServer()
         else
         {
             sl->Debug("[MAIN] startWebServer: DHCP disabled - using static IP");
-            IPAddress staticIP, gateway, subnet;
+            IPAddress staticIP, gateway, subnet, dns1, dns2;
             staticIP.fromString(wifiSettings.staticIp.get());
             gateway.fromString(wifiSettings.gateway.get());
             subnet.fromString(wifiSettings.subnet.get());
-            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+
+            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
+            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
+            if (!dnsPrimaryStr.isEmpty())
+            {
+                dns1.fromString(dnsPrimaryStr);
+            }
+            if (!dnsSecondaryStr.isEmpty())
+            {
+                dns2.fromString(dnsSecondaryStr);
+            }
+
+            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
         }
     }
 
@@ -695,7 +725,8 @@ void updateStatusLED()
 
 void onWiFiConnected()
 {
-    sl->Debug("[MAIN] WiFi connected! Activating services...");
+    sl->Info("[MAIN] WiFi connected! Activating services...");
+    sll->Info("[MAIN] WiFi connected!");
 
     if (!tickerActive)
     {
@@ -714,18 +745,18 @@ void onWiFiConnected()
 
         tickerActive = true;
     }
-    sl->Printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str());
-    sll->Printf("[MAIN] Web: %s\n\n", WiFi.localIP().toString().c_str());
-    sl->Printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
-    sl->Printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
-    sll->Printf("[MAIN] WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
+    sl->Printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
+    sll->Printf("[MAIN] IP: %s\n\n", WiFi.localIP().toString().c_str()).Info();
+    sl->Printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI()).Info();
+    sl->Printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
+    sll->Printf("[MAIN] WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
 }
 
 void onWiFiDisconnected()
 {
     sl->Debug("[MAIN] WiFi disconnected! Deactivating services...");
-    sll->Debug("[MAIN] WiFi lost connection!");
-    sll->Debug("[MAIN] deactivate mqtt ticker.");
+    sll->Warn("[MAIN] WiFi lost connection!");
+    sll->Warn("[MAIN] deactivate mqtt ticker.");
 
     if (tickerActive)
     {
@@ -748,8 +779,8 @@ void onWiFiDisconnected()
 
 void onWiFiAPMode()
 {
-    sl->Debug("[MAIN] WiFi in AP mode");
-    sll->Debug("[MAIN] Running in AP mode!");
+    sl->Warn("[MAIN] WiFi in AP mode");
+    sll->Warn("[MAIN] Running in AP mode!");
 
     // Ensure services are stopped in AP mode
     if (tickerActive)

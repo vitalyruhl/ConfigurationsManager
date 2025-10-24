@@ -37,6 +37,8 @@ private:
   IPAddress staticIP;
   IPAddress gateway;
   IPAddress subnet;
+  IPAddress dns1;
+  IPAddress dns2;
   bool useDHCP;
   
   // Callback functions
@@ -49,6 +51,7 @@ private:
   void handleReconnection();
   void checkAutoReboot();
   void log(const char* format, ...) const;
+  void applyStaticConfig();
   
 public:
   // Constructor
@@ -60,7 +63,7 @@ public:
   
   // Connection management - NON-BLOCKING
   void startConnection(const String& ssid, const String& password);
-  void startConnection(const IPAddress& staticIP, const IPAddress& gateway, const IPAddress& subnet, const String& ssid, const String& password);
+  void startConnection(const IPAddress& staticIP, const IPAddress& gateway, const IPAddress& subnet, const String& ssid, const String& password, const IPAddress& dns1 = IPAddress(), const IPAddress& dns2 = IPAddress());
   void startAccessPoint(const String& apSSID, const String& apPassword = "");
   
   // Main update function (call in loop) - NON-BLOCKING
