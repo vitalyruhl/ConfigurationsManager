@@ -119,16 +119,10 @@ struct RuntimeFloatSlider {
 struct RuntimeAlarm {
     String name;
     bool active = false;
-    std::function<bool()> checkFunction;
+    bool manual = false;
+    std::function<bool()> checkFunction = nullptr;
     std::function<void()> onTrigger = nullptr;
     std::function<void()> onClear = nullptr;
-
-    RuntimeAlarm(const String& n, std::function<bool()> check)
-        : name(n), checkFunction(check) {}
-
-    RuntimeAlarm(const String& n, std::function<bool()> check,
-                 std::function<void()> trigger, std::function<void()> clear)
-        : name(n), checkFunction(check), onTrigger(trigger), onClear(clear) {}
 };
 #endif
 
@@ -182,6 +176,10 @@ private:
     void log(const char* format, ...) const;
     void sortProviders();
     void sortMeta();
+#if CM_ENABLE_RUNTIME_ALARMS
+    RuntimeAlarm* findAlarm(const String& name);
+    const RuntimeAlarm* findAlarm(const String& name) const;
+#endif
 
 public:
     ConfigManagerRuntime();
@@ -219,12 +217,18 @@ public:
     void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction);
     void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction,
                          std::function<void()> onTrigger, std::function<void()> onClear = nullptr);
+    void registerRuntimeAlarm(const String& name, std::function<void()> onTrigger = nullptr, std::function<void()> onClear = nullptr);
+    void setRuntimeAlarmActive(const String& name, bool active, bool fireCallbacks = true);
+    bool isRuntimeAlarmActive(const String& name) const;
     void updateAlarms();
     bool hasActiveAlarms() const;
     std::vector<String> getActiveAlarms() const;
 #else
     void addRuntimeAlarm(const String&, std::function<bool()>) {}
     void addRuntimeAlarm(const String&, std::function<bool()>, std::function<void()>, std::function<void()> = nullptr) {}
+    void registerRuntimeAlarm(const String&, std::function<void()> = nullptr, std::function<void()> = nullptr) {}
+    void setRuntimeAlarmActive(const String&, bool, bool = true) {}
+    bool isRuntimeAlarmActive(const String&) const { return false; }
     void updateAlarms() {}
     bool hasActiveAlarms() const { return false; }
     std::vector<String> getActiveAlarms() const { return {}; }

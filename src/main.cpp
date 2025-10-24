@@ -31,6 +31,7 @@ void ShowDisplayOff();
 void updateStatusLED();
 void PinSetup();
 void handeleBoilerState(bool forceON = false);
+void UpdateBoilerAlarmState();
 
 // WiFi Manager callback functions
 void onWiFiConnected();
@@ -62,6 +63,7 @@ bool tickerActive = false; // flag to indicate if the ticker is active
 bool displayActive = true; // flag to indicate if the display is active
 
 static bool globalAlarmState = false;// Global alarm state for temperature monitoring
+static constexpr char TEMP_ALARM_ID[] = "temp_low";
 
 static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
 static const unsigned long displayUpdateInterval = 100; // Update display every 100ms
@@ -170,6 +172,7 @@ void loop()
     if (millis() - lastAlarmEval > 1500)
     {
         lastAlarmEval = millis();
+        UpdateBoilerAlarmState();
         ConfigManager.getRuntimeManager().updateAlarms();
     }
 
@@ -276,54 +279,32 @@ void setupGUI()
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "time setted", .unit = "min", .precision = 0, .order = 22});
 
     // Add alarms provider for min Temperature monitoring with hysteresis
+    ConfigManager.getRuntimeManager().registerRuntimeAlarm(TEMP_ALARM_ID);
     ConfigManager.getRuntimeManager().addRuntimeProvider(
         {.name = "Alarms",
-            .fill = [](JsonObject &o)
-            {
-                if (globalAlarmState)
-                {
-                    if (temperature >= boilerSettings.offThreshold.get())
-                    {
-                        globalAlarmState = false;
-                    }
-                }
-                else
-                {
-                    if (temperature <= boilerSettings.onThreshold.get())
-                    {
-                        globalAlarmState = true;
-                    }
-                }
-
-                o["AL_Status"] = globalAlarmState;
-                o["Current_Temp"] = temperature;
-                o["On_Threshold"] = boilerSettings.onThreshold.get();
-                o["Off_Threshold"] = boilerSettings.offThreshold.get();
-            }
-        });
+         .fill = [](JsonObject &o)
+         {
+             o["AL_Status"] = globalAlarmState;
+             o["Current_Temp"] = temperature;
+             o["On_Threshold"] = boilerSettings.onThreshold.get();
+             o["Off_Threshold"] = boilerSettings.offThreshold.get();
+         }});
 
     // Define alarm metadata fields
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "AL_Status", .label = "alarm triggered", .unit = "", .precision = 0, .order = 1});
+    RuntimeFieldMeta alarmMeta{};
+    alarmMeta.group = "Alarms";
+    alarmMeta.key = "AL_Status";
+    alarmMeta.label = "alarm triggered";
+    alarmMeta.precision = 0;
+    alarmMeta.order = 1;
+    alarmMeta.isBool = true;
+    alarmMeta.boolAlarmValue = true;
+    alarmMeta.alarmWhenTrue = true;
+    alarmMeta.hasAlarm = true;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(alarmMeta);
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Current_Temp", .label = "current temp", .unit = "°C", .precision = 1, .order = 100});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "on threshold", .unit = "°C", .precision = 1, .order = 101});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
-
-    // Define a runtime alarm to control the boiler based on temperature with hysteresis
-    //ToDO: remove this from configmanager and handle it directly in main.cpp
-    ConfigManager.getRuntimeManager().addRuntimeAlarm(
-        "temp_low",
-        []() -> bool
-        { return globalAlarmState; },
-        []()
-        {
-            sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> HEATER ON", temperature).Info();
-            handeleBoilerState(true);
-        },
-        []()
-        {
-            sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> HEATER OFF", temperature).Info();
-            handeleBoilerState(false);
-        });
 
     // Temperature slider for testing (initialize with current temperature value)
     ConfigManager.getRuntimeManager().addRuntimeProvider("Hand overrides", [](JsonObject &o) { }, 100);
@@ -341,6 +322,7 @@ void setupGUI()
     ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
         { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
 
+    ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
 }
 
 void handeleBoilerState(bool forceON)
@@ -377,6 +359,33 @@ void handeleBoilerState(bool forceON)
                 Relays::setBoiler(false); // Turn off the boiler if disabled
             }
         }
+    }
+}
+
+void UpdateBoilerAlarmState()
+{
+    bool previousState = globalAlarmState;
+
+    if (globalAlarmState)
+    {
+        if (temperature >= boilerSettings.offThreshold.get())
+        {
+            globalAlarmState = false;
+        }
+    }
+    else
+    {
+        if (temperature <= boilerSettings.onThreshold.get())
+        {
+            globalAlarmState = true;
+        }
+    }
+
+    if (globalAlarmState != previousState)
+    {
+        sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> %s", temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF").Debug();
+        ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
+        handeleBoilerState(globalAlarmState);
     }
 }
 

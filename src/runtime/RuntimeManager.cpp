@@ -1,6 +1,7 @@
 #include "RuntimeManager.h"
 #include "../ConfigManager.h"
 #include <algorithm>
+#include <utility>
 
 // Logging support
 #if CM_ENABLE_LOGGING
@@ -57,6 +58,26 @@ RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, con
     }
     return nullptr;
 }
+
+#if CM_ENABLE_RUNTIME_ALARMS
+RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) {
+    for (auto& alarm : runtimeAlarms) {
+        if (alarm.name == name) {
+            return &alarm;
+        }
+    }
+    return nullptr;
+}
+
+const RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) const {
+    for (const auto& alarm : runtimeAlarms) {
+        if (alarm.name == name) {
+            return &alarm;
+        }
+    }
+    return nullptr;
+}
+#endif
 
 void ConfigManagerRuntime::sortProviders() {
     std::sort(runtimeProviders.begin(), runtimeProviders.end(),
@@ -269,18 +290,101 @@ void ConfigManagerRuntime::updateLoopTiming() {
 #if CM_ENABLE_RUNTIME_ALARMS
 
 void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction) {
-    runtimeAlarms.emplace_back(name, checkFunction);
+    RuntimeAlarm alarm;
+    alarm.name = name;
+    alarm.checkFunction = checkFunction;
+    alarm.manual = false;
+    runtimeAlarms.push_back(std::move(alarm));
     RUNTIME_LOG("[Runtime] Added alarm: %s", name.c_str());
 }
 
 void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction,
                                           std::function<void()> onTrigger, std::function<void()> onClear) {
-    runtimeAlarms.emplace_back(name, checkFunction, onTrigger, onClear);
+    RuntimeAlarm alarm;
+    alarm.name = name;
+    alarm.checkFunction = checkFunction;
+    alarm.onTrigger = onTrigger;
+    alarm.onClear = onClear;
+    alarm.manual = false;
+    runtimeAlarms.push_back(std::move(alarm));
     RUNTIME_LOG("[Runtime] Added alarm with triggers: %s", name.c_str());
+}
+
+void ConfigManagerRuntime::registerRuntimeAlarm(const String& name, std::function<void()> onTrigger, std::function<void()> onClear) {
+    RuntimeAlarm* alarm = findAlarm(name);
+    if (alarm) {
+        alarm->manual = true;
+        alarm->checkFunction = nullptr;
+        if (onTrigger) alarm->onTrigger = onTrigger;
+        if (onClear) alarm->onClear = onClear;
+        RUNTIME_LOG("[Runtime] Updated manual alarm registration: %s", name.c_str());
+        return;
+    }
+
+    RuntimeAlarm newAlarm;
+    newAlarm.name = name;
+    newAlarm.manual = true;
+    newAlarm.onTrigger = onTrigger;
+    newAlarm.onClear = onClear;
+    runtimeAlarms.push_back(std::move(newAlarm));
+    RUNTIME_LOG("[Runtime] Registered manual alarm: %s", name.c_str());
+}
+
+void ConfigManagerRuntime::setRuntimeAlarmActive(const String& name, bool active, bool fireCallbacks) {
+    RuntimeAlarm* alarm = findAlarm(name);
+    if (!alarm) {
+        RuntimeAlarm newAlarm;
+        newAlarm.name = name;
+        newAlarm.manual = true;
+        newAlarm.active = active;
+        runtimeAlarms.push_back(std::move(newAlarm));
+        alarm = &runtimeAlarms.back();
+        RUNTIME_LOG("[Runtime] Lazily created manual alarm entry: %s", name.c_str());
+
+        if (fireCallbacks && alarm->active && alarm->onTrigger) {
+            RUNTIME_LOG("[Runtime] Manual trigger callback for alarm: %s", name.c_str());
+            alarm->onTrigger();
+        }
+        return;
+    }
+
+    alarm->manual = true;
+
+    if (alarm->active == active) {
+        return;
+    }
+
+    alarm->active = active;
+    RUNTIME_LOG("[Runtime] Alarm %s manually set to %s", name.c_str(), active ? "ACTIVE" : "cleared");
+
+    if (!fireCallbacks) {
+        return;
+    }
+
+    if (active) {
+        if (alarm->onTrigger) {
+            RUNTIME_LOG("[Runtime] Manual trigger callback for alarm: %s", name.c_str());
+            alarm->onTrigger();
+        }
+    } else {
+        if (alarm->onClear) {
+            RUNTIME_LOG("[Runtime] Manual clear callback for alarm: %s", name.c_str());
+            alarm->onClear();
+        }
+    }
+}
+
+bool ConfigManagerRuntime::isRuntimeAlarmActive(const String& name) const {
+    const RuntimeAlarm* alarm = findAlarm(name);
+    return alarm ? alarm->active : false;
 }
 
 void ConfigManagerRuntime::updateAlarms() {
     for (auto& alarm : runtimeAlarms) {
+        if (alarm.manual) {
+            continue;
+        }
+
         if (alarm.checkFunction) {
             bool newState = alarm.checkFunction();
             if (newState != alarm.active) {
