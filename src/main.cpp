@@ -63,6 +63,7 @@ static bool globalAlarmState = false;// Global alarm state for temperature monit
 
 static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
 static const unsigned long displayUpdateInterval = 100; // Update display every 100ms
+static const unsigned long resetHoldDurationMs = 3000; // Require 3s hold to factory reset
 
 #pragma endregion configuration variables
 
@@ -75,60 +76,61 @@ void setup()
 
     LoggerSetupSerial(); // Initialize the serial logger
 
-    sl->Debug("SETUP: System setup start...");
+    sl->Debug("[SETUP] System setup start...");
 
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
 
-    sl->Debug("SETUP: Load configuration...");
+    sl->Debug("[SETUP] Load configuration...");
     initializeAllSettings(); // Register all settings BEFORE loading
     ConfigManager.loadAll();
 
     // Debug: Print some settings after loading
-    sl->Debug ("SETUP: === LOADED SETTINGS (Important) ===");
-    sl->Printf("SETUP: WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
-    sl->Printf("SETUP: WiFi Password:  (length: %d)", wifiSettings.wifiPassword.get().length()).Debug();
-    sl->Printf("SETUP: WiFi Use DHCP: %s", wifiSettings.useDhcp.get() ? "true" : "false").Debug();
-    sl->Printf("SETUP: WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
-    sl->Printf("SETUP: WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
-    sl->Printf("SETUP: WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
-    sl->Debug ("SETUP: === END SETTINGS ===");
+    sl->Debug ("[SETUP] === LOADED SETTINGS (Important) ===");
+    sl->Printf("[SETUP] WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
+    sl->Printf("[SETUP] WiFi Password:  (length: %d)", wifiSettings.wifiPassword.get().length()).Debug();
+    sl->Printf("[SETUP] WiFi Use DHCP: %s", wifiSettings.useDhcp.get() ? "true" : "false").Debug();
+    sl->Printf("[SETUP] WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
+    sl->Printf("[SETUP] WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
+    sl->Printf("[SETUP] WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
+    sl->Debug ("[SETUP] === END SETTINGS ===");
 
     ConfigManager.checkSettingsForErrors(); // Check for any settings errors and report them in console
 
-    Serial.println(ConfigManager.toJSON(false)); // Print full configuration JSON to console
+    // Serial.println(ConfigManager.toJSON(false)); // Print full configuration JSON to console
 
     PinSetup(); // Setup GPIO pins for buttons ToDO: move it to Relays and rename it in GPIOSetup()
-    sl->Debug("SETUP: Check for reset/AP button...");
+    sl->Debug("[SETUP] Check for reset/AP button...");
     SetupCheckForResetButton();
     SetupCheckForAPModeButton();
 
     // init modules...
-    sl->Debug("SETUP: init modules...");
+    sl->Debug("[SETUP] init modules...");
     SetupStartDisplay();
     ShowDisplay();
 
     //----------------------------------------
 
-    bool isStartedAsAP = SetupStartWebServer();
-
+    bool startedInStationMode = SetupStartWebServer();
+    sl->Printf("[SETUP] SetupStartWebServer returned: %s", startedInStationMode ? "true" : "false").Debug();
+    sl->Debug("[SETUP] Station mode");
     // Skip MQTT and OTA setup in AP mode (for initial configuration only)
-    if (!isStartedAsAP)
+    if (startedInStationMode)
     {
         setupMQTT();
     }
     else
     {
-        sl->Debug("SETUP: Skipping MQTT setup in AP mode");
-        sll->Debug("AP mode - MQTT disabled");
+    sl->Debug("[SETUP] Skipping MQTT setup in AP mode");
+    sll->Debug("[SETUP] AP mode - MQTT disabled");
     }
 
     setupGUI();
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     //---------------------------------------------------------------------------------------------------
-    sl->Debug("SETUP:System setup completed.");
-    sll->Debug("Setup completed.");
+    sl->Debug("[SETUP] System setup completed.");
+    sll->Debug("[SETUP] Setup completed.");
 }
 
 void loop()
@@ -169,8 +171,8 @@ void loop()
 void setupMQTT()
 {
     // -- Setup MQTT connection --
-    sl->Printf("⚠️ SETUP: Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-    sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+    sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+    sll->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
 
     mqttSettings.updateTopics();
 
@@ -184,12 +186,12 @@ void setupMQTT()
     // Set MQTT callbacks
     mqttManager.onConnected([]()
                             {
-                                sl->Debug("Ready to subscribe to MQTT topics...");
+                                sl->Debug("[MAIN] Ready to subscribe to MQTT topics...");
                                 mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
                                 cb_publishToMQTT(); // Publish initial values
                             });
 
-    mqttManager.onDisconnected([]() { sl->Debug("MQTT disconnected"); });
+    mqttManager.onDisconnected([]() { sl->Debug("[MAIN] MQTT disconnected"); });
 
     mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
 
@@ -200,7 +202,7 @@ void cb_publishToMQTT()
 {
     if (mqttManager.isConnected())
     {
-        sl->Debug("cb_publishToMQTT: Publishing to MQTT...");
+        sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
@@ -212,7 +214,7 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
     String messageTemp((char *)message, length); // Convert byte array to String using constructor
     messageTemp.trim();                          // Remove leading and trailing whitespace
 
-    sl->Printf("<-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
+    sl->Printf("[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
     if (strcmp(topic, mqttSettings.mqtt_Settings_SetState_topic.get().c_str()) == 0)
     {
         // check if it is a number, if not set it to 0
@@ -222,7 +224,7 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
             messageTemp.equalsIgnoreCase("Infinity") ||
             messageTemp.equalsIgnoreCase("-Infinity"))
         {
-            sl->Printf("Received invalid value from MQTT: %s", messageTemp.c_str()).Debug();
+            sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Debug();
             messageTemp = "0";
         }
     }
@@ -296,12 +298,12 @@ void setupGUI()
         { return globalAlarmState; },
         []()
         {
-            sl->Printf("[ALARM] Temperature %.1f°C -> HEATER ON", temperature).Info();
+            sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> HEATER ON", temperature).Info();
             handeleBoilerState(true);
         },
         []()
         {
-            sl->Printf("[ALARM] Temperature %.1f°C -> HEATER OFF", temperature).Info();
+            sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> HEATER OFF", temperature).Info();
             handeleBoilerState(false);
         });
 
@@ -313,7 +315,7 @@ void setupGUI()
         { return transientFloatVal; }, [](float v)
         { transientFloatVal = v;
             temperature = v;
-            sl->Printf("Temperature manually set to %.1f°C via slider", v).Debug();
+            sl->Printf("[MAIN] Temperature manually set to %.1f°C via slider", v).Debug();
         }, String("°C"));
 
     // State button to manually control the boiler relay
@@ -365,13 +367,13 @@ void SetupCheckForResetButton()
     // check for pressed reset button
     if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
     {
-        sl->Internal("Reset button pressed -> Reset all settings...");
-        sll->Internal("Reset button pressed!");
+    sl->Internal("[MAIN] Reset button pressed -> Reset all settings...");
+    sll->Internal("[MAIN] Reset button pressed!");
         ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
         ConfigManager.saveAll();           // Save the default settings to EEPROM
 
         // Show user feedback that reset is happening
-        sll->Internal("Settings reset complete - restarting...");
+    sll->Internal("[MAIN] Settings reset complete - restarting...");
         //ToDo: add non blocking delay to show message on display before restart
         ESP.restart(); // Restart the ESP32
     }
@@ -384,7 +386,7 @@ void SetupCheckForAPModeButton()
 
     if (wifiSettings.wifiSsid.get().length() == 0)
     {
-        sl->Printf("⚠️ SETUP: WiFi SSID is empty [%s] (fresh/unconfigured)", wifiSettings.wifiSsid.get().c_str()).Error();
+    sl->Printf("[MAIN] WiFi SSID is empty [%s] (fresh/unconfigured)", wifiSettings.wifiSsid.get().c_str()).Error();
         ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
     }
 
@@ -392,22 +394,22 @@ void SetupCheckForAPModeButton()
 
     if (digitalRead(buttonSettings.apModePin.get()) == LOW)
     {
-        sl->Internal("AP mode button pressed -> starting AP mode...");
-        sll->Internal("AP mode button!");
-        sll->Internal("-> starting AP mode...");
+    sl->Internal("[MAIN] AP mode button pressed -> starting AP mode...");
+    sll->Internal("[MAIN] AP mode button!");
+    sll->Internal("[MAIN] -> starting AP mode...");
         ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
     }
 }
 
 bool SetupStartWebServer()
 {
-    sl->Debug("⚠️ SETUP: Starting Webserver...!");
-    sll->Debug("Starting Webserver...!");
+    sl->Debug("[MAIN] Starting Webserver...!");
+    sll->Debug("[MAIN] Starting Webserver...!");
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        sl->Info("SetupStartWebServer(): Run in AP Mode! "); // Log AP mode - because callback may be not be called?!
-        sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
+        // sl->Info("SetupStartWebServer(): Run in AP Mode! "); // Log AP mode - because callback may be not be called?!
+        // sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
         return false; // Skip webserver setup in AP mode
     }
 
@@ -415,12 +417,12 @@ bool SetupStartWebServer()
     {
         if (wifiSettings.useDhcp.get())
         {
-            sl->Debug("startWebServer: DHCP enabled");
+            sl->Debug("[MAIN] startWebServer: DHCP enabled");
             ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
         }
         else
         {
-            sl->Debug("startWebServer: DHCP disabled - using static IP");
+            sl->Debug("[MAIN] startWebServer: DHCP disabled - using static IP");
             IPAddress staticIP, gateway, subnet;
             staticIP.fromString(wifiSettings.staticIp.get());
             gateway.fromString(wifiSettings.gateway.get());
@@ -516,6 +518,8 @@ void CheckButtons()
     static bool lastResetButtonState = HIGH;
     static bool lastAPButtonState = HIGH;
     static unsigned long lastButtonCheck = 0;
+    static unsigned long resetPressStart = 0;
+    static bool resetHandled = false;
 
     // Debounce: only check buttons every 50ms
     if (millis() - lastButtonCheck < 50)
@@ -530,18 +534,42 @@ void CheckButtons()
     // Check for button press (transition from HIGH to LOW)
     if (lastResetButtonState == HIGH && currentResetState == LOW)
     {
-        sl->Internal("Reset-Button pressed -> Start Display Ticker...");
+        sl->Internal("[MAIN] Reset-Button pressed -> Start Display Ticker...");
         ShowDisplay();
     }
 
     if (lastAPButtonState == HIGH && currentAPState == LOW)
     {
-        sl->Internal("AP-Mode-Button pressed -> Start Display Ticker...");
+        sl->Internal("[MAIN] AP-Mode-Button pressed -> Start Display Ticker...");
         ShowDisplay();
     }
 
     lastResetButtonState = currentResetState;
     lastAPButtonState = currentAPState;
+
+    // Detect long press on reset button to restore defaults at runtime
+    if (currentResetState == LOW)
+    {
+        if (resetPressStart == 0)
+        {
+            resetPressStart = millis();
+        }
+        else if (!resetHandled && millis() - resetPressStart >= resetHoldDurationMs)
+        {
+            resetHandled = true;
+            sl->Internal("[MAIN] Reset button long-press detected -> restoring defaults");
+            sll->Internal("[MAIN] Reset button -> restoring defaults");
+            ConfigManager.clearAllFromPrefs();
+            ConfigManager.saveAll();
+            delay(3000); // Small delay to allow message to be seen
+            ESP.restart();
+        }
+    }
+    else
+    {
+        resetPressStart = 0;
+        resetHandled = false;
+    }
 }
 
 void ShowDisplay()
@@ -667,7 +695,7 @@ void updateStatusLED()
 
 void onWiFiConnected()
 {
-    sl->Debug("WiFi connected! Activating services...");
+    sl->Debug("[MAIN] WiFi connected! Activating services...");
 
     if (!tickerActive)
     {
@@ -680,24 +708,24 @@ void onWiFiConnected()
         // Start OTA if enabled
         if (systemSettings.allowOTA.get())
         {
-            sll->Debug("Start OTA-Module");
+            sll->Debug("[MAIN] Start OTA-Module");
             ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
         }
 
         tickerActive = true;
     }
-    sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str());
-    sll->Printf("Web: %s\n\n", WiFi.localIP().toString().c_str());
-    sl->Printf("WLAN-Strength: %d dBm\n", WiFi.RSSI());
-    sl->Printf("WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
-    sll->Printf("WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
+    sl->Printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+    sll->Printf("[MAIN] Web: %s\n\n", WiFi.localIP().toString().c_str());
+    sl->Printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
+    sl->Printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
+    sll->Printf("[MAIN] WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
 }
 
 void onWiFiDisconnected()
 {
-    sl->Debug("WiFi disconnected! Deactivating services...");
-    sll->Debug("WiFi lost connection!");
-    sll->Debug("deactivate mqtt ticker.");
+    sl->Debug("[MAIN] WiFi disconnected! Deactivating services...");
+    sll->Debug("[MAIN] WiFi lost connection!");
+    sll->Debug("[MAIN] deactivate mqtt ticker.");
 
     if (tickerActive)
     {
@@ -710,7 +738,7 @@ void onWiFiDisconnected()
         // Stop OTA if it should be disabled
         if (systemSettings.allowOTA.get() == false && ConfigManager.isOTAInitialized())
         {
-            sll->Debug("Stop OTA-Module");
+            sll->Debug("[MAIN] Stop OTA-Module");
             ConfigManager.stopOTA();
         }
 
@@ -720,8 +748,8 @@ void onWiFiDisconnected()
 
 void onWiFiAPMode()
 {
-    sl->Debug("WiFi in AP mode");
-    sll->Debug("Running in AP mode!");
+    sl->Debug("[MAIN] WiFi in AP mode");
+    sll->Debug("[MAIN] Running in AP mode!");
 
     // Ensure services are stopped in AP mode
     if (tickerActive)

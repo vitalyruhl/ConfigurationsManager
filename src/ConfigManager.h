@@ -53,9 +53,9 @@ struct ConfigOptions
     // Required fields
     const char *key = nullptr;           // Storage key for preferences (if nullptr, auto-generated from name+category)
     const char *name;                    // Display name in Settings UI
-    const char *category;                // Card name in Settings UI  
+    const char *category;                // Card name in Settings UI
     T defaultValue;                      // Default value
-    
+
     // Optional fields
     bool showInWeb = true;               // Show in web interface
     bool isPassword = false;             // Hide value (password field)
@@ -147,30 +147,30 @@ constexpr size_t const_strlen(const char *s)
 // Helper function to generate a key from name and category
 inline String generateKeyFromNameAndCategory(const char* name, const char* category) {
     String result;
-    
+
     // Convert category to lowercase and remove special chars
     String catPart = String(category);
     catPart.toLowerCase();
     catPart.replace(" ", "");
     catPart.replace("-", "");
     catPart.replace("_", "");
-    
+
     // Convert name to lowercase and remove special chars
     String namePart = String(name);
     namePart.toLowerCase();
     namePart.replace(" ", "");
     namePart.replace("-", "");
     namePart.replace("_", "");
-    
+
     // Combine with underscore
     result = catPart + "_" + namePart;
-    
+
     // Truncate to 14 chars max (ESP32 preferences key limit)
     if (result.length() > 14) {
         // Try to keep both parts balanced
         int catLen = catPart.length();
         int nameLen = namePart.length();
-        
+
         if (catLen > 7 && nameLen > 7) {
             // Both long - truncate both
             result = catPart.substring(0, 6) + "_" + namePart.substring(0, 7);
@@ -184,7 +184,7 @@ inline String generateKeyFromNameAndCategory(const char* name, const char* categ
             result = catPart + "_" + namePart.substring(0, availableForName);
         }
     }
-    
+
     return result;
 }
 
@@ -250,7 +250,7 @@ protected:
 
         if (keyLen > MAX_PREFS_KEY_LEN) {
             hasKeyLengthError = true;
-            keyLengthErrorMsg = String("Generated key too long: ") + actualKey + 
+            keyLengthErrorMsg = String("Generated key too long: ") + actualKey +
                                " (" + String(keyLen) + " > " + String(MAX_PREFS_KEY_LEN) + ") - value will not be stored!";
             log("[ERROR] %s", keyLengthErrorMsg.c_str());
             return;
@@ -278,9 +278,9 @@ public:
     }
 
     // New constructor for ConfigOptions-based initialization
-    BaseSetting(const char* key, const char* name, const char* category, SettingType type, 
+    BaseSetting(const char* key, const char* name, const char* category, SettingType type,
                 bool showInWeb = true, bool isPassword = false, int sortOrder = 100)
-        : keyName(key), displayName(name), category(category), type(type), 
+        : keyName(key), displayName(name), category(category), type(type),
           showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
     {
         // If no key provided, generate one from name and category
@@ -334,7 +334,7 @@ public:
 
     // New primary constructor for ConfigOptions
     explicit Config(const ConfigOptions<T> &opts)
-        : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type, 
+        : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type,
                      opts.showInWeb, opts.isPassword, opts.sortOrder),
           value(opts.defaultValue), defaultValue(opts.defaultValue)
     {
@@ -347,8 +347,8 @@ public:
         }
     }
 
-    T get() const { return value; }
-    
+    const T& get() const { return value; }
+
     void set(const T &newValue)
     {
         if (value != newValue)
@@ -371,6 +371,46 @@ public:
             return;
         }
 
+        // Automatically persist default values the first time a key is missing
+        bool keyExists = prefs.isKey(getKey());
+        logVerbose("[PREFS] Key %s.%s exists? %s", getCategory(), getKey(), keyExists ? "true" : "false");
+
+        if (!keyExists)
+        {
+            value = defaultValue;
+
+            if constexpr (std::is_same_v<T, String>)
+            {
+                prefs.putString(getKey(), value);
+                if (isPassword)
+                {
+                    log("[PREFS] Initialized %s.%s = '***' (hidden) (default)", getCategory(), getKey());
+                }
+                else
+                {
+                    log("[PREFS] Initialized %s.%s = '%s' (default)", getCategory(), getKey(), value.c_str());
+                }
+            }
+            else if constexpr (std::is_same_v<T, bool>)
+            {
+                prefs.putBool(getKey(), value);
+                log("[PREFS] Initialized %s.%s = %s (default)", getCategory(), getKey(), value ? "true" : "false");
+            }
+            else if constexpr (std::is_same_v<T, int>)
+            {
+                prefs.putInt(getKey(), value);
+                log("[PREFS] Initialized %s.%s = %d (default)", getCategory(), getKey(), value);
+            }
+            else if constexpr (std::is_same_v<T, float>)
+            {
+                prefs.putFloat(getKey(), value);
+                log("[PREFS] Initialized %s.%s = %.2f (default)", getCategory(), getKey(), value);
+            }
+
+            modified = false;
+            return;
+        }
+
         T loadedValue;
         if constexpr (std::is_same_v<T, String>)
         {
@@ -388,10 +428,10 @@ public:
         {
             loadedValue = prefs.getFloat(getKey(), defaultValue);
         }
-        
+
         value = loadedValue;
         modified = false;
-        
+
         // Verbose logging for load operations
         if constexpr (std::is_same_v<T, String>)
         {
@@ -448,7 +488,7 @@ public:
             prefs.putFloat(getKey(), value);
             logVerbose("[PREFS] Saved %s.%s = %.2f", getCategory(), getKey(), value);
         }
-        
+
         modified = false;
     }
 
@@ -461,7 +501,7 @@ public:
     void toJSON(JsonObject &obj) const override
     {
         JsonObject settingObj = obj.createNestedObject(getDisplayName());
-        
+
         if (isPassword)
         {
             // User requested to remove password safety - always show actual value
@@ -472,12 +512,12 @@ public:
         {
             settingObj["value"] = value;
         }
-        
+
         // Add metadata for web interface
         settingObj["displayName"] = getDisplayName();
         settingObj["isPassword"] = isPassword;
         settingObj["sortOrder"] = sortOrder;
-        
+
         // Add showIf result if function is defined
 #if CM_ENABLE_DYNAMIC_VISIBILITY
         if (showIfFunc != nullptr)
@@ -492,7 +532,7 @@ public:
         if (jsonValue.isNull()) {
             return false;
         }
-        
+
         T newValue;
         if constexpr (std::is_same_v<T, String>)
         {
@@ -518,7 +558,7 @@ public:
             if (!jsonValue.is<float>()) return false;
             newValue = jsonValue.as<float>();
         }
-        
+
         set(newValue);
         return true;
     }
@@ -649,14 +689,14 @@ public:
 
     // Debug method to check registered settings count
     size_t getSettingsCount() const { return settings.size(); }
-    
+
     void debugPrintSettings() const
     {
         CM_LOG("[DEBUG] Total registered settings: %d", settings.size());
         for (size_t i = 0; i < settings.size(); i++) {
             const auto* s = settings[i];
-            CM_LOG("[DEBUG] Setting %d: name='%s', category='%s', key='%s', visible=%s", 
-                   i, s->getDisplayName(), s->getCategory(), s->getKey(), 
+            CM_LOG("[DEBUG] Setting %d: name='%s', category='%s', key='%s', visible=%s",
+                   i, s->getDisplayName(), s->getCategory(), s->getKey(),
                    s->isVisible() ? "true" : "false");
         }
     }
@@ -696,9 +736,9 @@ public:
     // Apply setting to memory only (temporary, lost after reboot)
     bool applySetting(const String &category, const String &key, const String &value)
     {
-        CM_LOG("[DEBUG] applySetting called (memory only): category='%s', key='%s', value='%s'", 
+        CM_LOG("[DEBUG] applySetting called (memory only): category='%s', key='%s', value='%s'",
                category.c_str(), key.c_str(), value.c_str());
-        
+
         BaseSetting *setting = findSetting(category, key);
         if (!setting)
         {
@@ -706,11 +746,11 @@ public:
             return false;
         }
 
-        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)", 
+        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
-        
+
         // Convert string value to appropriate JSON type based on setting type
         if (value == "true") {
             doc.set(true);
@@ -735,9 +775,9 @@ public:
                 }
             }
         }
-        
+
         bool result = setting->fromJSON(doc.as<JsonVariant>());
-        
+
         CM_LOG("[DEBUG] Setting apply result (memory only): %s", result ? "SUCCESS" : "FAILED");
         return result;
     }
@@ -745,9 +785,9 @@ public:
     // Update setting and save to flash (persistent)
     bool updateSetting(const String &category, const String &key, const String &value)
     {
-        CM_LOG("[DEBUG] updateSetting called (save to flash): category='%s', key='%s', value='%s'", 
+        CM_LOG("[DEBUG] updateSetting called (save to flash): category='%s', key='%s', value='%s'",
                category.c_str(), key.c_str(), value.c_str());
-        
+
         BaseSetting *setting = findSetting(category, key);
         if (!setting)
         {
@@ -755,11 +795,11 @@ public:
             return false;
         }
 
-        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)", 
+        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
-        
+
         // Convert string value to appropriate JSON type based on setting type
         if (value == "true") {
             CM_LOG("[DEBUG] Converting string 'true' to boolean true");
@@ -789,14 +829,14 @@ public:
                 }
             }
         }
-        
+
         CM_LOG("[DEBUG] JSON document created. Calling fromJSON...");
         bool result = setting->fromJSON(doc.as<JsonVariant>());
-        
+
         if (result) {
             // Save the updated setting to flash storage immediately
             CM_LOG("[DEBUG] Saving setting to flash storage");
-            
+
             // Save only this specific setting to flash
             if (!prefs.begin("ConfigManager", false))
             {
@@ -805,10 +845,10 @@ public:
             }
             setting->save(prefs);
             prefs.end();
-            
+
             CM_LOG("[DEBUG] Setting saved to flash successfully");
         }
-        
+
         CM_LOG("[DEBUG] Setting update result: %s", result ? "SUCCESS" : "FAILED");
         return result;
     }
@@ -851,15 +891,15 @@ public:
                 onWiFiConnected();
             },
             [this]()
-            { 
-                CM_LOG("[WiFi] Disconnected"); 
+            {
+                CM_LOG("[WiFi] Disconnected");
                 // Call external disconnected callback if available
                 extern void onWiFiDisconnected();
                 onWiFiDisconnected();
             },
             [this]()
-            { 
-                CM_LOG("[WiFi] AP Mode active"); 
+            {
+                CM_LOG("[WiFi] AP Mode active");
                 // Call external AP mode callback if available
                 extern void onWiFiAPMode();
                 onWiFiAPMode();
@@ -890,15 +930,15 @@ public:
                 onWiFiConnected();
             },
             [this]()
-            { 
-                CM_LOG("[WiFi] Disconnected"); 
+            {
+                CM_LOG("[WiFi] Disconnected");
                 // Call external disconnected callback if available
                 extern void onWiFiDisconnected();
                 onWiFiDisconnected();
             },
             [this]()
-            { 
-                CM_LOG("[WiFi] AP Mode active"); 
+            {
+                CM_LOG("[WiFi] AP Mode active");
                 // Call external AP mode callback if available
                 extern void onWiFiAPMode();
                 onWiFiAPMode();
@@ -916,6 +956,23 @@ public:
         CM_LOG("[I] Starting Access Point: %s", ssid.c_str());
 
         wifiManager.begin();
+        wifiManager.setCallbacks(
+            []()
+            {
+                // Propagate STA connection events even when AP mode was forced
+                extern void onWiFiConnected();
+                onWiFiConnected();
+            },
+            []()
+            {
+                extern void onWiFiDisconnected();
+                onWiFiDisconnected();
+            },
+            []()
+            {
+                extern void onWiFiAPMode();
+                onWiFiAPMode();
+            });
         wifiManager.startAccessPoint(ssid, apPassword);
 
         webManager.begin(this);
@@ -964,7 +1021,7 @@ public:
     }
 
     // Interactive runtime controls (delegated to RuntimeManager)
-    void defineRuntimeButton(const String& group, const String& key, const String& label, 
+    void defineRuntimeButton(const String& group, const String& key, const String& label,
                            std::function<void()> onPress, const String& card = String(), int order = 100) {
         runtimeManager.defineRuntimeButton(group, key, label, onPress, card, order);
     }
@@ -1077,16 +1134,16 @@ public:
             if (includeSecrets || !s->isSecret())
             {
                 if (s->isSecret()) {
-                    CM_LOG("[DEBUG] Including secret field: %s.%s (includeSecrets=%s)", 
-                           s->getCategory(), s->getDisplayName(), 
+                    CM_LOG("[DEBUG] Including secret field: %s.%s (includeSecrets=%s)",
+                           s->getCategory(), s->getDisplayName(),
                            includeSecrets ? "true" : "false");
                 }
                 s->toJSON(catObj);
             }
             else
             {
-                CM_LOG("[DEBUG] Skipping secret field: %s.%s (includeSecrets=%s)", 
-                       s->getCategory(), s->getDisplayName(), 
+                CM_LOG("[DEBUG] Skipping secret field: %s.%s (includeSecrets=%s)",
+                       s->getCategory(), s->getDisplayName(),
                        includeSecrets ? "true" : "false");
             }
         }
