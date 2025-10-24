@@ -281,22 +281,50 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
 
     // Provide basic meta so UI can display the RSSI and its quality text
     {
-        RuntimeFieldMeta rssiMeta;
-        rssiMeta.group = "system";
-        rssiMeta.key = "rssi";
-        rssiMeta.label = "WiFi RSSI";
-        rssiMeta.unit = "dBm";
-        rssiMeta.precision = 0;
-        rssiMeta.order = 1;
-        addRuntimeMeta(rssiMeta);
+        // Helper to upsert meta with a specific order
+        auto upsertMeta = [this](const String& key, const String& label, const String& unit, int order,
+                                 bool isBool = false, bool isString = false, int precision = 0) {
+            RuntimeFieldMeta* existing = findRuntimeMeta("system", key);
+            if (existing) {
+                existing->order = order;
+                if (label.length()) existing->label = label;
+                if (unit.length() && existing->unit.length() == 0) existing->unit = unit;
+                if (isBool) existing->isBool = true;
+                if (isString) existing->isString = true;
+                if (precision >= 0) existing->precision = precision;
+                return;
+            }
+            RuntimeFieldMeta m;
+            m.group = "system";
+            m.key = key;
+            m.label = label.length() ? label : key;
+            m.unit = unit;
+            m.order = order;
+            m.isBool = isBool;
+            m.isString = isString;
+            m.precision = precision;
+            addRuntimeMeta(m);
+        };
 
-        RuntimeFieldMeta rssiTxtMeta;
-        rssiTxtMeta.group = "system";
-        rssiTxtMeta.key = "rssiTxt";
-        rssiTxtMeta.label = "Signal";
-        rssiTxtMeta.isString = true;
-        rssiTxtMeta.order = 2;
-        addRuntimeMeta(rssiTxtMeta);
+        // Orders 0-2 are used by app_name/app_version/build_date defined in main.cpp
+        upsertMeta("rssi", "WiFi RSSI", "dBm", 3, false, false, 0);
+        upsertMeta("rssiTxt", "Signal", "", 4, false, true, 0);
+
+        // Connectivity and OTA state (booleans)
+        upsertMeta("wifiConnected", "WifiConnected", "", 5, true);
+        upsertMeta("allowOTA", "AllowOTA", "", 6, true);
+        upsertMeta("otaActive", "OtaActive", "", 7, true);
+
+        // System numeric stats
+        upsertMeta("cpuFreqMHz", "CpuFreqMHz", "", 20, false, false, 0);
+        upsertMeta("flashSize", "FlashSize", "", 21, false, false, 0);
+        upsertMeta("sketchSize", "SketchSize", "", 22, false, false, 0);
+        upsertMeta("freeSketchSpace", "FreeSketchSpace", "", 23, false, false, 0);
+        upsertMeta("heapFragmentation", "HeapFragmentation", "", 24, false, false, 0);
+        upsertMeta("totalHeap", "TotalHeap", "", 30, false, false, 0);
+        upsertMeta("usedHeap", "UsedHeap", "", 31, false, false, 0);
+        // Keep unit empty to avoid conflicting with pre-existing meta; value is in bytes currently
+        upsertMeta("freeHeap", "FreeHeap", "", 32, false, false, 0);
     }
 
     builtinSystemProviderRegistered = true;
