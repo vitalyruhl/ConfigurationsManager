@@ -183,7 +183,7 @@ void loop()
     ConfigManager.getOTAManager().handle();
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
     updateStatusLED();
-    delay(100); // Small delay
+    delay(10); // Small delay
 }
 
 //----------------------------------------

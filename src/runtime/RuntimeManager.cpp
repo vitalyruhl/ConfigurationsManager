@@ -231,6 +231,16 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
 
 #if CM_ENABLE_SYSTEM_PROVIDER
 
+// Simple RSSI-to-text quality mapper
+static const char* rssiQualityText(int rssi) {
+    // Typical RSSI range: -30 (excellent) to -90 (very weak)
+    if (rssi >= -50) return "excellent";   // Excellent
+    if (rssi >= -60) return "good";        // Good
+    if (rssi >= -67) return "ok";          // Fair/OK
+    if (rssi >= -75) return "weak";        // Weak
+    return "very weak";                     // Very weak / none
+}
+
 void ConfigManagerRuntime::enableBuiltinSystemProvider() {
     if (builtinSystemProviderRegistered) return;
 
@@ -241,9 +251,14 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         obj["heapFragmentation"] = 100 - (ESP.getMaxAllocHeap() * 100) / ESP.getFreeHeap();
 
         if (WiFi.status() == WL_CONNECTED) {
-            obj["rssi"] = WiFi.RSSI();
+            int rssi = WiFi.RSSI();
+            obj["rssi"] = rssi;
+            obj["rssiTxt"] = rssiQualityText(rssi);
             obj["wifiConnected"] = true;
         } else {
+            // When disconnected, expose neutral values
+            obj["rssi"] = 0;
+            obj["rssiTxt"] = rssiQualityText(-100);
             obj["wifiConnected"] = false;
         }
 
@@ -259,10 +274,30 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         // OTA status exposed to GUI
         if (configManager) {
             auto &ota = configManager->getOTAManager();
-            obj["allowOTA"] = ota.isEnabled();
+            // obj["allowOTA"] = ota.isEnabled();
             obj["otaActive"] = ota.isActive();
         }
     }, 0);
+
+    // Provide basic meta so UI can display the RSSI and its quality text
+    {
+        RuntimeFieldMeta rssiMeta;
+        rssiMeta.group = "system";
+        rssiMeta.key = "rssi";
+        rssiMeta.label = "WiFi RSSI";
+        rssiMeta.unit = "dBm";
+        rssiMeta.precision = 0;
+        rssiMeta.order = 1;
+        addRuntimeMeta(rssiMeta);
+
+        RuntimeFieldMeta rssiTxtMeta;
+        rssiTxtMeta.group = "system";
+        rssiTxtMeta.key = "rssiTxt";
+        rssiTxtMeta.label = "Signal";
+        rssiTxtMeta.isString = true;
+        rssiTxtMeta.order = 2;
+        addRuntimeMeta(rssiTxtMeta);
+    }
 
     builtinSystemProviderRegistered = true;
     builtinSystemProviderEnabled = true;

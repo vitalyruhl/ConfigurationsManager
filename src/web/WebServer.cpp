@@ -1,5 +1,6 @@
 #include "WebServer.h"
 #include "../ConfigManager.h"
+#include "../settings.h"
 
 // Logging support
 #if CM_ENABLE_LOGGING
@@ -107,6 +108,19 @@ void ConfigManagerWeb::setupStaticRoutes() {
 }
 
 void ConfigManagerWeb::setupAPIRoutes() {
+    // Simple version endpoint consumed by the UI header
+    server->on("/version", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        String payload;
+        if (configManager) {
+            payload = configManager->getAppName();
+        }
+        if (payload.length() == 0) {
+            payload = String(APP_NAME);
+        }
+        if (payload.length()) payload += " ";
+        payload += String(VERSION);
+        request->send(200, "text/plain", payload);
+    });
     // Debug route to catch any config requests with body handling
     server->on("/config", HTTP_ANY,
         [this](AsyncWebServerRequest* request) {
