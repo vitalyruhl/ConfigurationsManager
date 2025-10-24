@@ -14,10 +14,10 @@
 
 // predeclare the functions (prototypes)
 void SetupStartDisplay();
-void publishToMQTT();
-void cb_MQTT(char *topic, byte *message, unsigned int length);
-void publishToMQTT();
-void cb_PublishToMQTT();
+void setupGUI();
+void setupMQTT();
+void cb_publishToMQTT();
+void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length);
 void cb_MQTTListener();
 void WriteToDisplay();
 void SetupCheckForResetButton();
@@ -75,49 +75,44 @@ void setup()
 
     LoggerSetupSerial(); // Initialize the serial logger
 
-    sl->Debug("System setup start...");
+    sl->Debug("SETUP: System setup start...");
 
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
 
-    PinSetup();
-    sl->Debug("Check for reset/AP button...");
+    PinSetup(); // Setup GPIO pins for buttons ToDO: move it to Relays and rename it in GPIOSetup()
+    sl->Debug("SETUP: Check for reset/AP button...");
     SetupCheckForResetButton();
     SetupCheckForAPModeButton();
 
     // ConfigManager.clearAllFromPrefs();
 
-    sl->Debug("Load configuration...");
+    sl->Debug("SETUP: Load configuration...");
     initializeAllSettings(); // Register all settings BEFORE loading
     ConfigManager.loadAll();
 
-    // Debug: Print some settings after loading
-    sl->Debug("=== LOADED SETTINGS (Important) ===");
-    sl->Printf("WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
-    sl->Printf("WiFi Password:  (length: %d)", wifiSettings.wifiPassword.get().length()).Debug();
-    sl->Printf("WiFi Use DHCP: %s", wifiSettings.useDhcp.get() ? "true" : "false").Debug();
-    sl->Printf("WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
-    sl->Printf("WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
-    sl->Printf("WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
-    sl->Debug("=== END SETTINGS ===");
 
-    ConfigManager.checkSettingsForErrors();
+    // Debug: Print some settings after loading
+    sl->Debug ("SETUP: === LOADED SETTINGS (Important) ===");
+    sl->Printf("SETUP: WiFi SSID: '%s' (length: %d)", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length()).Debug();
+    sl->Printf("SETUP: WiFi Password:  (length: %d)", wifiSettings.wifiPassword.get().length()).Debug();
+    sl->Printf("SETUP: WiFi Use DHCP: %s", wifiSettings.useDhcp.get() ? "true" : "false").Debug();
+    sl->Printf("SETUP: WiFi Static IP: '%s'", wifiSettings.staticIp.get().c_str()).Debug();
+    sl->Printf("SETUP: WiFi Gateway: '%s'", wifiSettings.gateway.get().c_str()).Debug();
+    sl->Printf("SETUP: WiFi Subnet: '%s'", wifiSettings.subnet.get().c_str()).Debug();
+    sl->Debug ("SETUP: === END SETTINGS ===");
+
+    ConfigManager.checkSettingsForErrors(); // Check for any settings errors and report them in console
 
     Serial.println(ConfigManager.toJSON(false)); // Print full configuration JSON to console
 
-    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-
-
-    Relays::initPins(); // Re-apply relay pin modes with loaded settings (pins/polarity may differ from defaults)
-
-
+    Relays::initPins(); // Re-apply relay pin modes with loaded settings (pins/polarity may differ from defaults) do it after loading settings
 
     // init modules...
-    sl->Debug("init modules...");
+    sl->Debug("SETUP: init modules...");
     SetupStartDisplay();
     ShowDisplay();
-    mqttSettings.updateTopics();
 
     //----------------------------------------
 
@@ -126,42 +121,129 @@ void setup()
     // Skip MQTT and OTA setup in AP mode (for initial configuration only)
     if (!isStartedAsAP)
     {
-        //----------------------------------------
-        // -- Setup MQTT connection --
-        sl->Printf("⚠️ SETUP: Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-        sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-
-        // Configure MQTT Manager
-        mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
-        mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-        mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
-        mqttManager.setMaxRetries(10);
-        mqttManager.setRetryInterval(5000);
-
-        // Set MQTT callbacks
-        mqttManager.onConnected([]()
-                                {
-                                    sl->Printf("Ready to subscribe to MQTT topics...").Debug();
-                                    mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
-                                    publishToMQTT(); // Publish initial values
-                                });
-
-        mqttManager.onDisconnected([]() { sl->Printf("MQTT disconnected").Debug(); });
-
-        mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT(topic, payload, length); });
-
-        mqttManager.begin();
+        setupMQTT();
     }
     else
     {
-        sl->Debug("Skipping MQTT setup in AP mode");
+        sl->Debug("SETUP: Skipping MQTT setup in AP mode");
         sll->Debug("AP mode - MQTT disabled");
     }
 
-    sl->Debug("System setup completed.");
-    sll->Debug("Setup completed.");
-
+    setupGUI();
+    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     //---------------------------------------------------------------------------------------------------
+    sl->Debug("SETUP:System setup completed.");
+    sll->Debug("Setup completed.");
+}
+
+void loop()
+{
+    CheckButtons();
+    boilerState = Relays::getBoiler(); // get Relay state
+
+    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+
+    // Non-blocking display updates
+    if (millis() - lastDisplayUpdate > displayUpdateInterval)
+    {
+        lastDisplayUpdate = millis();
+        WriteToDisplay();
+    }
+
+    // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
+    static unsigned long lastAlarmEval = 0;
+    if (millis() - lastAlarmEval > 1500)
+    {
+        lastAlarmEval = millis();
+        ConfigManager.getRuntimeManager().updateAlarms();
+    }
+
+    mqttManager.loop(); // Handle MQTT Manager loop
+
+    ConfigManager.handleClient();
+    ConfigManager.handleWebsocketPush();
+    ConfigManager.getOTAManager().handle();
+    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
+    updateStatusLED();
+    delay(100); // Small delay
+}
+
+//----------------------------------------
+// MQTT FUNCTIONS
+//----------------------------------------
+void setupMQTT()
+{
+    // -- Setup MQTT connection --
+    sl->Printf("⚠️ SETUP: Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+    sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
+
+    mqttSettings.updateTopics();
+
+    // Configure MQTT Manager
+    mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
+    mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
+    mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
+    mqttManager.setMaxRetries(10);
+    mqttManager.setRetryInterval(5000);
+
+    // Set MQTT callbacks
+    mqttManager.onConnected([]()
+                            {
+                                sl->Debug("Ready to subscribe to MQTT topics...");
+                                mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
+                                cb_publishToMQTT(); // Publish initial values
+                            });
+
+    mqttManager.onDisconnected([]() { sl->Debug("MQTT disconnected"); });
+
+    mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
+
+    mqttManager.begin();
+}
+
+void cb_publishToMQTT()
+{
+    if (mqttManager.isConnected())
+    {
+        sl->Debug("cb_publishToMQTT: Publishing to MQTT...");
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
+    }
+}
+
+void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
+{
+    String messageTemp((char *)message, length); // Convert byte array to String using constructor
+    messageTemp.trim();                          // Remove leading and trailing whitespace
+
+    sl->Printf("<-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
+    if (strcmp(topic, mqttSettings.mqtt_Settings_SetState_topic.get().c_str()) == 0)
+    {
+        // check if it is a number, if not set it to 0
+        if (messageTemp.equalsIgnoreCase("null") ||
+            messageTemp.equalsIgnoreCase("undefined") ||
+            messageTemp.equalsIgnoreCase("NaN") ||
+            messageTemp.equalsIgnoreCase("Infinity") ||
+            messageTemp.equalsIgnoreCase("-Infinity"))
+        {
+            sl->Printf("Received invalid value from MQTT: %s", messageTemp.c_str()).Debug();
+            messageTemp = "0";
+        }
+    }
+}
+
+void cb_MQTTListener()
+{
+    mqttManager.loop(); // process MQTT connection and incoming messages
+}
+
+//----------------------------------------
+// HELPER FUNCTIONS
+//----------------------------------------
+
+void setupGUI()
+{
     // Runtime live values provider
     ConfigManager.getRuntimeManager().addRuntimeProvider({.name = String("Boiler"),
                                                           .fill = [](JsonObject &o)
@@ -212,6 +294,7 @@ void setup()
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
 
     // Define a runtime alarm to control the boiler based on temperature with hysteresis
+    //ToDO: remove this from configmanager and handle it directly in main.cpp
     ConfigManager.getRuntimeManager().addRuntimeAlarm(
         "temp_low",
         []() -> bool
@@ -238,94 +321,12 @@ void setup()
             sl->Printf("Temperature manually set to %.1f°C via slider", v).Debug();
         }, String("°C"));
 
-    // State button to manually control the boiler relay    
+    // State button to manually control the boiler relay
     static bool stateBtnState = false;
     ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
         { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
 
-    //---------------------------------------------------------------------------------------------------
 }
-
-void loop()
-{
-    CheckButtons();
-    boilerState = Relays::getBoiler(); // get Relay state
-
-    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
-
-    // Non-blocking display updates
-    if (millis() - lastDisplayUpdate > displayUpdateInterval)
-    {
-        lastDisplayUpdate = millis();
-        WriteToDisplay();
-    }
-
-    // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
-    static unsigned long lastAlarmEval = 0;
-    if (millis() - lastAlarmEval > 1500)
-    {
-        lastAlarmEval = millis();
-        ConfigManager.getRuntimeManager().updateAlarms();
-    }
-
-    mqttManager.loop(); // Handle MQTT Manager loop
-
-    ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
-    ConfigManager.getOTAManager().handle();
-    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
-    updateStatusLED();
-}
-
-//----------------------------------------
-// MQTT FUNCTIONS
-//----------------------------------------
-
-void publishToMQTT()
-{
-    if (mqttManager.isConnected())
-    {
-        sl->Debug("publishToMQTT: Publishing to MQTT...");
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
-    }
-}
-
-void cb_MQTT(char *topic, byte *message, unsigned int length)
-{
-    String messageTemp((char *)message, length); // Convert byte array to String using constructor
-    messageTemp.trim();                          // Remove leading and trailing whitespace
-
-    sl->Printf("<-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
-    if (strcmp(topic, mqttSettings.mqtt_Settings_SetState_topic.get().c_str()) == 0)
-    {
-        // check if it is a number, if not set it to 0
-        if (messageTemp.equalsIgnoreCase("null") ||
-            messageTemp.equalsIgnoreCase("undefined") ||
-            messageTemp.equalsIgnoreCase("NaN") ||
-            messageTemp.equalsIgnoreCase("Infinity") ||
-            messageTemp.equalsIgnoreCase("-Infinity"))
-        {
-            sl->Printf("Received invalid value from MQTT: %s", messageTemp.c_str()).Debug();
-            messageTemp = "0";
-        }
-    }
-}
-
-void cb_PublishToMQTT()
-{
-    publishToMQTT(); // send to Mqtt
-}
-
-void cb_MQTTListener()
-{
-    mqttManager.loop(); // process MQTT connection and incoming messages
-}
-
-//----------------------------------------
-// HELPER FUNCTIONS
-//----------------------------------------
 
 void handeleBoilerState(bool forceON)
 {
@@ -405,13 +406,13 @@ void SetupCheckForAPModeButton()
 
 bool SetupStartWebServer()
 {
-    sl->Printf("⚠️ SETUP: Starting Webserver...!").Debug();
-    sll->Printf("Starting Webserver...!").Debug();
+    sl->Debug("⚠️ SETUP: Starting Webserver...!");
+    sll->Debug("Starting Webserver...!");
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        // sl->Printf("Run in AP Mode! ").Info();
-        // sll->Printf("Run in AP Mode! ").Info();
+        sl->Info("SetupStartWebServer(): Run in AP Mode! "); // Log AP mode - because callback may be not be called?!
+        sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
         return false; // Skip webserver setup in AP mode
     }
 
@@ -419,12 +420,12 @@ bool SetupStartWebServer()
     {
         if (wifiSettings.useDhcp.get())
         {
-            sl->Printf("startWebServer: DHCP enabled").Debug();
+            sl->Debug("startWebServer: DHCP enabled");
             ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
         }
         else
         {
-            sl->Printf("startWebServer: DHCP disabled - using static IP").Debug();
+            sl->Debug("startWebServer: DHCP disabled - using static IP");
             IPAddress staticIP, gateway, subnet;
             staticIP.fromString(wifiSettings.staticIp.get());
             gateway.fromString(wifiSettings.gateway.get());
@@ -432,11 +433,6 @@ bool SetupStartWebServer()
             ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
         }
     }
-    sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str());
-    sll->Printf("Web: %s\n\n", WiFi.localIP().toString().c_str());
-    sl->Printf("WLAN-Strength: %d dBm\n", WiFi.RSSI());
-    sl->Printf("WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
-    sll->Printf("WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
 
     return true; // Webserver setup completed
 }
@@ -677,15 +673,13 @@ void updateStatusLED()
 void onWiFiConnected()
 {
     sl->Debug("WiFi connected! Activating services...");
-    sll->Debug("WiFi reconnected!");
-    sll->Debug("Reattach ticker.");
 
     if (!tickerActive)
     {
         ShowDisplay(); // Show the display
 
         // Start MQTT tickers
-        PublischMQTTTicker.attach(mqttSettings.MQTTPublischPeriod.get(), cb_PublishToMQTT);
+        PublischMQTTTicker.attach(mqttSettings.MQTTPublischPeriod.get(), cb_publishToMQTT);
         ListenMQTTTicker.attach(mqttSettings.MQTTListenPeriod.get(), cb_MQTTListener);
 
         // Start OTA if enabled
@@ -697,6 +691,11 @@ void onWiFiConnected()
 
         tickerActive = true;
     }
+    sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str());
+    sll->Printf("Web: %s\n\n", WiFi.localIP().toString().c_str());
+    sl->Printf("WLAN-Strength: %d dBm\n", WiFi.RSSI());
+    sl->Printf("WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
+    sll->Printf("WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
 }
 
 void onWiFiDisconnected()

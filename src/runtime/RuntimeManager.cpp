@@ -59,14 +59,14 @@ RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, con
 }
 
 void ConfigManagerRuntime::sortProviders() {
-    std::sort(runtimeProviders.begin(), runtimeProviders.end(), 
+    std::sort(runtimeProviders.begin(), runtimeProviders.end(),
         [](const RuntimeValueProvider& a, const RuntimeValueProvider& b) {
             return a.order < b.order;
         });
 }
 
 void ConfigManagerRuntime::sortMeta() {
-    std::sort(runtimeMeta.begin(), runtimeMeta.end(), 
+    std::sort(runtimeMeta.begin(), runtimeMeta.end(),
         [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
             if (a.group == b.group) {
                 if (a.order == b.order) return a.label < b.label;
@@ -80,16 +80,16 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
     DynamicJsonDocument d(2048);
     JsonObject root = d.to<JsonObject>();
     root["uptime"] = millis();
-    
+
     // Sort providers by order
     sortProviders();
-    
+
     for (auto& prov : runtimeProviders) {
         JsonObject slot = root.createNestedObject(prov.name);
         if (prov.fill) {
             prov.fill(slot);
         }
-        
+
         // Add interactive control states for this provider/group
 #if CM_ENABLE_RUNTIME_CHECKBOXES
         for (auto& checkbox : runtimeCheckboxes) {
@@ -123,7 +123,7 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         }
 #endif
     }
-    
+
 #if CM_ENABLE_RUNTIME_ALARMS
     if (!runtimeAlarms.empty()) {
         JsonObject alarms = root.createNestedObject("alarms");
@@ -132,7 +132,7 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         }
     }
 #endif
-    
+
     String out;
     serializeJson(d, out);
     return out;
@@ -144,7 +144,7 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
 #else
     DynamicJsonDocument d(4096);
     JsonArray arr = d.to<JsonArray>();
-    
+
     // Sort meta by group, then order, then label
     std::vector<RuntimeFieldMeta> metaSorted;
 #ifdef development
@@ -156,8 +156,8 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
 #else
     metaSorted = runtimeMeta;
 #endif
-    
-    std::sort(metaSorted.begin(), metaSorted.end(), 
+
+    std::sort(metaSorted.begin(), metaSorted.end(),
         [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
             if (a.group == b.group) {
                 if (a.order == b.order) return a.label < b.label;
@@ -165,7 +165,7 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             }
             return a.group < b.group;
         });
-    
+
     for (auto& m : metaSorted) {
         JsonObject o = arr.createNestedObject();
         o["group"] = m.group;
@@ -196,7 +196,7 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         }
         o["order"] = m.order;
     }
-    
+
     String out;
     serializeJson(d, out);
     return out;
@@ -207,33 +207,33 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
 
 void ConfigManagerRuntime::enableBuiltinSystemProvider() {
     if (builtinSystemProviderRegistered) return;
-    
+
     addRuntimeProvider("system", [this](JsonObject& obj) {
         obj["freeHeap"] = ESP.getFreeHeap();
         obj["totalHeap"] = ESP.getHeapSize();
         obj["usedHeap"] = ESP.getHeapSize() - ESP.getFreeHeap();
         obj["heapFragmentation"] = 100 - (ESP.getMaxAllocHeap() * 100) / ESP.getFreeHeap();
-        
+
         if (WiFi.status() == WL_CONNECTED) {
             obj["rssi"] = WiFi.RSSI();
             obj["wifiConnected"] = true;
         } else {
             obj["wifiConnected"] = false;
         }
-        
+
         obj["cpuFreqMHz"] = ESP.getCpuFreqMHz();
         obj["flashSize"] = ESP.getFlashChipSize();
         obj["sketchSize"] = ESP.getSketchSize();
         obj["freeSketchSpace"] = ESP.getFreeSketchSpace();
-        
+
         if (loopSamples > 0) {
             obj["loopAvg"] = loopAvgMs;
         }
-        
+
         // OTA status would need to be injected from OTA manager
         // obj["otaActive"] = false; // This should come from OTA manager
     }, 0);
-    
+
     builtinSystemProviderRegistered = true;
     builtinSystemProviderEnabled = true;
     RUNTIME_LOG("[Runtime] Built-in system provider enabled");
@@ -242,12 +242,12 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
 void ConfigManagerRuntime::updateLoopTiming() {
     static unsigned long lastLoopTime = 0;
     unsigned long now = millis();
-    
+
     if (lastLoopTime > 0) {
         double deltaMs = (now - lastLoopTime);
         loopAccumMs += deltaMs;
         loopSamples++;
-        
+
         // Reset window every 10 seconds
         if (loopWindowStart == 0) {
             loopWindowStart = now;
@@ -260,7 +260,7 @@ void ConfigManagerRuntime::updateLoopTiming() {
             loopWindowStart = now;
         }
     }
-    
+
     lastLoopTime = now;
 }
 
@@ -273,7 +273,7 @@ void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<boo
     RUNTIME_LOG("[Runtime] Added alarm: %s", name.c_str());
 }
 
-void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction, 
+void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction,
                                           std::function<void()> onTrigger, std::function<void()> onClear) {
     runtimeAlarms.emplace_back(name, checkFunction, onTrigger, onClear);
     RUNTIME_LOG("[Runtime] Added alarm with triggers: %s", name.c_str());
@@ -286,7 +286,7 @@ void ConfigManagerRuntime::updateAlarms() {
             if (newState != alarm.active) {
                 alarm.active = newState;
                 RUNTIME_LOG("[Runtime] Alarm %s: %s", alarm.name.c_str(), newState ? "ACTIVE" : "cleared");
-                
+
                 // Call trigger callbacks
                 if (newState && alarm.onTrigger) {
                     RUNTIME_LOG("[Runtime] Calling onTrigger for alarm: %s", alarm.name.c_str());
@@ -351,7 +351,7 @@ void ConfigManagerRuntime::log(const char* format, ...) const {
 // Interactive runtime control implementations
 
 #if CM_ENABLE_RUNTIME_BUTTONS
-void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label, 
+void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label,
                                               std::function<void()> onPress, const String& card, int order) {
     RuntimeFieldMeta meta;
     meta.group = group;
@@ -361,7 +361,7 @@ void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String
     meta.order = order;
     meta.card = card;
     addRuntimeMeta(meta);
-    
+
     runtimeButtons.emplace_back(group, key, onPress);
     RUNTIME_LOG("[Runtime] Added button: %s.%s", group.c_str(), key.c_str());
 }
@@ -392,7 +392,7 @@ void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const Stri
     meta.order = order;
     meta.card = card;
     addRuntimeMeta(meta);
-    
+
     runtimeCheckboxes.emplace_back(group, key, getter, setter);
     RUNTIME_LOG("[Runtime] Added checkbox: %s.%s", group.c_str(), key.c_str());
 }
@@ -424,7 +424,7 @@ void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const S
     meta.order = order;
     meta.card = card;
     addRuntimeMeta(meta);
-    
+
     runtimeStateButtons.emplace_back(group, key, getter, setter);
     RUNTIME_LOG("[Runtime] Added state button: %s.%s", group.c_str(), key.c_str());
 }
@@ -462,7 +462,7 @@ void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const Str
     meta.order = order;
     meta.card = card;
     addRuntimeMeta(meta);
-    
+
     runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
     RUNTIME_LOG("[Runtime] Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
@@ -502,7 +502,7 @@ void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const S
     meta.order = order;
     meta.card = card;
     addRuntimeMeta(meta);
-    
+
     runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
     RUNTIME_LOG("[Runtime] Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }

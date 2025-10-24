@@ -13,7 +13,7 @@ struct RuntimeValueProvider {
     String name;
     std::function<void(JsonObject&)> fill;
     int order = 100;
-    
+
     RuntimeValueProvider(const String& n, std::function<void(JsonObject&)> f, int o = 100)
         : name(n), fill(f), order(o) {}
 };
@@ -57,7 +57,7 @@ struct RuntimeButton {
     String group;
     String key;
     std::function<void()> onPress;
-    
+
     RuntimeButton(const String& g, const String& k, std::function<void()> press)
         : group(g), key(k), onPress(press) {}
 };
@@ -69,7 +69,7 @@ struct RuntimeCheckbox {
     String key;
     std::function<bool()> getter;
     std::function<void(bool)> setter;
-    
+
     RuntimeCheckbox(const String& g, const String& k, std::function<bool()> get, std::function<void(bool)> set)
         : group(g), key(k), getter(get), setter(set) {}
 };
@@ -81,7 +81,7 @@ struct RuntimeStateButton {
     String key;
     std::function<bool()> getter;
     std::function<void(bool)> setter;
-    
+
     RuntimeStateButton(const String& g, const String& k, std::function<bool()> get, std::function<void(bool)> set)
         : group(g), key(k), getter(get), setter(set) {}
 };
@@ -95,7 +95,7 @@ struct RuntimeIntSlider {
     std::function<void(int)> setter;
     int minV;
     int maxV;
-    
+
     RuntimeIntSlider(const String& g, const String& k, std::function<int()> get, std::function<void(int)> set, int min, int max)
         : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
 };
@@ -109,7 +109,7 @@ struct RuntimeFloatSlider {
     std::function<void(float)> setter;
     float minV;
     float maxV;
-    
+
     RuntimeFloatSlider(const String& g, const String& k, std::function<float()> get, std::function<void(float)> set, float min, float max)
         : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
 };
@@ -122,11 +122,11 @@ struct RuntimeAlarm {
     std::function<bool()> checkFunction;
     std::function<void()> onTrigger = nullptr;
     std::function<void()> onClear = nullptr;
-    
+
     RuntimeAlarm(const String& n, std::function<bool()> check)
         : name(n), checkFunction(check) {}
-        
-    RuntimeAlarm(const String& n, std::function<bool()> check, 
+
+    RuntimeAlarm(const String& n, std::function<bool()> check,
                  std::function<void()> trigger, std::function<void()> clear)
         : name(n), checkFunction(check), onTrigger(trigger), onClear(clear) {}
 };
@@ -139,11 +139,11 @@ public:
 private:
     ConfigManagerClass* configManager;
     LogCallback logCallback;
-    
+
     // Runtime data
     std::vector<RuntimeValueProvider> runtimeProviders;
     std::vector<RuntimeFieldMeta> runtimeMeta;
-    
+
 #if CM_ENABLE_RUNTIME_BUTTONS
     std::vector<RuntimeButton> runtimeButtons;
 #endif
@@ -163,11 +163,11 @@ private:
 #if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
     std::vector<RuntimeFloatSlider> runtimeFloatSliders;
 #endif
-    
+
 #if CM_ENABLE_RUNTIME_ALARMS
     std::vector<RuntimeAlarm> runtimeAlarms;
 #endif
-    
+
     // System provider data
 #if CM_ENABLE_SYSTEM_PROVIDER
     bool builtinSystemProviderEnabled;
@@ -177,7 +177,7 @@ private:
     double loopAccumMs;
     double loopAvgMs;
 #endif
-    
+
     // Helper methods
     void log(const char* format, ...) const;
     void sortProviders();
@@ -186,23 +186,23 @@ private:
 public:
     ConfigManagerRuntime();
     ~ConfigManagerRuntime();
-    
+
     // Initialization
     void begin(ConfigManagerClass* cm);
     void setLogCallback(LogCallback logger);
-    
+
     // Runtime value providers
     void addRuntimeProvider(const RuntimeValueProvider& provider);
     void addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order = 100);
-    
+
     // Runtime metadata
     void addRuntimeMeta(const RuntimeFieldMeta& meta);
     RuntimeFieldMeta* findRuntimeMeta(const String& group, const String& key);
-    
+
     // JSON generation
     String runtimeValuesToJSON();
     String runtimeMetaToJSON();
-    
+
     // System provider
 #if CM_ENABLE_SYSTEM_PROVIDER
     void enableBuiltinSystemProvider();
@@ -213,11 +213,11 @@ public:
     void updateLoopTiming() {}
     double getLoopAverage() const { return 0.0; }
 #endif
-    
+
     // Alarms
 #if CM_ENABLE_RUNTIME_ALARMS
     void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction);
-    void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction, 
+    void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction,
                          std::function<void()> onTrigger, std::function<void()> onClear = nullptr);
     void updateAlarms();
     bool hasActiveAlarms() const;
@@ -229,7 +229,7 @@ public:
     bool hasActiveAlarms() const { return false; }
     std::vector<String> getActiveAlarms() const { return {}; }
 #endif
-    
+
     // Development support
 #ifdef development
     std::vector<RuntimeFieldMeta> runtimeMetaOverride;
@@ -240,7 +240,7 @@ public:
 
     // Interactive runtime controls
 #if CM_ENABLE_RUNTIME_BUTTONS
-    void defineRuntimeButton(const String& group, const String& key, const String& label, 
+    void defineRuntimeButton(const String& group, const String& key, const String& label,
                            std::function<void()> onPress, const String& card = String(), int order = 100);
     void handleButtonPress(const String& group, const String& key);
 #else
