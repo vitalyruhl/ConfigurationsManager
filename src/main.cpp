@@ -220,7 +220,7 @@ void cb_publishToMQTT()
 {
     if (mqttManager.isConnected())
     {
-        sl->Info("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
+        // sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
@@ -484,10 +484,11 @@ void WriteToDisplay()
         return; // exit the function if the display is not active
     }
 
+    bool wasInactive = !lastDisplayActive;
     lastDisplayActive = true;
 
     // Only update display if values have changed
-    bool needsUpdate = false;
+    bool needsUpdate = wasInactive; // Force refresh on wake
     if (abs(temperature - lastTemperature) > 0.1 ||
         boilerTimeRemaining != lastTimeRemaining ||
         boilerState != lastBoilerState)
@@ -513,7 +514,7 @@ void WriteToDisplay()
     display.setCursor(3, 3);
     if (temperature > 0)
     {
-        display.printf("Boiler: %s | T:%.1f°C", boilerState ? "ON " : "OFF", temperature);
+        display.printf("Boiler: %s | T:%.1f °C", boilerState ? "ON " : "OFF", temperature);
     }
     else
     {
