@@ -81,17 +81,9 @@ void setup()
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
 
-    PinSetup(); // Setup GPIO pins for buttons ToDO: move it to Relays and rename it in GPIOSetup()
-    sl->Debug("SETUP: Check for reset/AP button...");
-    SetupCheckForResetButton();
-    SetupCheckForAPModeButton();
-
-    // ConfigManager.clearAllFromPrefs();
-
     sl->Debug("SETUP: Load configuration...");
     initializeAllSettings(); // Register all settings BEFORE loading
     ConfigManager.loadAll();
-
 
     // Debug: Print some settings after loading
     sl->Debug ("SETUP: === LOADED SETTINGS (Important) ===");
@@ -107,7 +99,10 @@ void setup()
 
     Serial.println(ConfigManager.toJSON(false)); // Print full configuration JSON to console
 
-    Relays::initPins(); // Re-apply relay pin modes with loaded settings (pins/polarity may differ from defaults) do it after loading settings
+    PinSetup(); // Setup GPIO pins for buttons ToDO: move it to Relays and rename it in GPIOSetup()
+    sl->Debug("SETUP: Check for reset/AP button...");
+    SetupCheckForResetButton();
+    SetupCheckForAPModeButton();
 
     // init modules...
     sl->Debug("SETUP: init modules...");
