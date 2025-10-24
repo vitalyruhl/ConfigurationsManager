@@ -15,6 +15,7 @@ struct OtaUploadContext {
     bool authorized = false;
     bool began = false;
     bool success = false;
+    bool probe = false;
     int statusCode = 200;
     String errorReason;
     size_t written = 0;
@@ -39,7 +40,7 @@ private:
     
     // Helper methods
     void log(const char* format, ...) const;
-    void cleanup();
+    void cleanup(AsyncWebServerRequest* request = nullptr);
 
 public:
     ConfigManagerOTA();

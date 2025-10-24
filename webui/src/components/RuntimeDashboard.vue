@@ -1182,15 +1182,18 @@ async function onFlashFileSelected(event) {
 let otaProbeTimer = null;
 async function probeOtaEndpoint() {
   try {
-    const r = await fetch("/ota_update", { method: "GET" });
+    const r = await fetch("/ota_update", {
+      method: "POST",
+      headers: {
+        "X-OTA-PROBE": "1",
+      },
+      body: new Blob(),
+    });
     if (r.status === 404) {
-      // Not compiled/exposed
       otaEndpointAvailable.value = false;
     } else if (r.status === 403) {
-      // Explicitly disabled at runtime
       otaEndpointAvailable.value = false;
     } else {
-      // Any other response (200/401 etc.) means endpoint exists
       otaEndpointAvailable.value = true;
     }
   } catch (e) {

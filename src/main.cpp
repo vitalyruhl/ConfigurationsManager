@@ -262,6 +262,34 @@ void cb_MQTTListener()
 
 void setupGUI()
 {
+    // Ensure the dashboard shows basic firmware identity even before runtime data merges
+    RuntimeFieldMeta systemAppMeta{};
+    systemAppMeta.group = "system";
+    systemAppMeta.key = "app_name";
+    systemAppMeta.label = "application";
+    systemAppMeta.isString = true;
+    systemAppMeta.staticValue = String(APP_NAME);
+    systemAppMeta.order = 0;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(systemAppMeta);
+
+    RuntimeFieldMeta systemVersionMeta{};
+    systemVersionMeta.group = "system";
+    systemVersionMeta.key = "app_version";
+    systemVersionMeta.label = "version";
+    systemVersionMeta.isString = true;
+    systemVersionMeta.staticValue = String(VERSION);
+    systemVersionMeta.order = 1;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(systemVersionMeta);
+
+    RuntimeFieldMeta systemBuildMeta{};
+    systemBuildMeta.group = "system";
+    systemBuildMeta.key = "build_date";
+    systemBuildMeta.label = "build date";
+    systemBuildMeta.isString = true;
+    systemBuildMeta.staticValue = String(VERSION_DATE);
+    systemBuildMeta.order = 2;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(systemBuildMeta);
+
     // Runtime live values provider
     ConfigManager.getRuntimeManager().addRuntimeProvider({.name = String("Boiler"),
                                                           .fill = [](JsonObject &o)
@@ -302,6 +330,8 @@ void setupGUI()
     alarmMeta.alarmWhenTrue = true;
     alarmMeta.hasAlarm = true;
     ConfigManager.getRuntimeManager().addRuntimeMeta(alarmMeta);
+
+    // show some Info
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Current_Temp", .label = "current temp", .unit = "°C", .precision = 1, .order = 100});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "on threshold", .unit = "°C", .precision = 1, .order = 101});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
@@ -325,6 +355,34 @@ void setupGUI()
     ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
 }
 
+
+void UpdateBoilerAlarmState()
+{
+    bool previousState = globalAlarmState;
+
+    if (globalAlarmState)
+    {
+        if (temperature >= boilerSettings.onThreshold.get() + 2.0f)
+        {
+            globalAlarmState = false;
+        }
+    }
+    else
+    {
+        if (temperature <= boilerSettings.onThreshold.get())
+        {
+            globalAlarmState = true;
+        }
+    }
+
+    if (globalAlarmState != previousState)
+    {
+        sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> %s", temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF").Debug();
+        ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
+        handeleBoilerState(true); // Force boiler if the temperature is too low
+    }
+}
+
 void handeleBoilerState(bool forceON)
 {
     static unsigned long lastBoilerCheck = 0;
@@ -333,6 +391,11 @@ void handeleBoilerState(bool forceON)
     if (now - lastBoilerCheck >= 1000) // Check every second
     {
         lastBoilerCheck = now;
+
+
+        //todo: add check estimated time etc to handle Boiler
+        //todo: check on/of temp to activate/deactivate boiler
+
 
         if (boilerSettings.enabled.get() || forceON)
         {
@@ -362,32 +425,7 @@ void handeleBoilerState(bool forceON)
     }
 }
 
-void UpdateBoilerAlarmState()
-{
-    bool previousState = globalAlarmState;
 
-    if (globalAlarmState)
-    {
-        if (temperature >= boilerSettings.offThreshold.get())
-        {
-            globalAlarmState = false;
-        }
-    }
-    else
-    {
-        if (temperature <= boilerSettings.onThreshold.get())
-        {
-            globalAlarmState = true;
-        }
-    }
-
-    if (globalAlarmState != previousState)
-    {
-        sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> %s", temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF").Debug();
-        ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
-        handeleBoilerState(globalAlarmState);
-    }
-}
 
 void SetupCheckForResetButton()
 {

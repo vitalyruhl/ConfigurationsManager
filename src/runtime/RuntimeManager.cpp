@@ -197,6 +197,8 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         }
         o["precision"] = m.precision;
         if (m.isBool) o["isBool"] = true;
+    if (m.isString) o["isString"] = true;
+    if (m.isDivider) o["isDivider"] = true;
         if (m.isButton) o["isButton"] = true;
         if (m.isCheckbox) o["isCheckbox"] = true;
         if (m.isStateButton) o["isStateButton"] = true;
@@ -216,6 +218,9 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             o["warnMax"] = m.warnMax;
         }
         o["order"] = m.order;
+        if (m.staticValue.length()) {
+            o["staticValue"] = m.staticValue;
+        }
     }
 
     String out;
@@ -251,8 +256,12 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             obj["loopAvg"] = loopAvgMs;
         }
 
-        // OTA status would need to be injected from OTA manager
-        // obj["otaActive"] = false; // This should come from OTA manager
+        // OTA status exposed to GUI
+        if (configManager) {
+            auto &ota = configManager->getOTAManager();
+            obj["allowOTA"] = ota.isEnabled();
+            obj["otaActive"] = ota.isActive();
+        }
     }, 0);
 
     builtinSystemProviderRegistered = true;

@@ -128,6 +128,15 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
     if (!server) return;
     
     // OTA upload endpoint
+    server->on("/ota_update", HTTP_GET,
+        [this](AsyncWebServerRequest* request) {
+            if (!otaEnabled) {
+                request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+                return;
+            }
+            request->send(405, "application/json", "{\"status\":\"error\",\"reason\":\"method_not_allowed\"}");
+        });
+
     server->on("/ota_update", HTTP_POST, 
         [this](AsyncWebServerRequest* request) {
             handleOTAUpload(request);
@@ -145,6 +154,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
     
     if (!ctx) {
         request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_context\"}");
+        cleanup(request);
         return;
     }
     
@@ -152,14 +162,21 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
         OTA_LOG("[OTA] Upload failed: %s", ctx->errorReason.c_str());
         request->send(ctx->statusCode, "application/json", 
             String("{\"status\":\"error\",\"reason\":\"") + ctx->errorReason + "\"}");
-        cleanup();
+        cleanup(request);
         return;
     }
     
     if (!ctx->success) {
         OTA_LOG("[OTA] Upload incomplete");
         request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete\"}");
-        cleanup();
+        cleanup(request);
+        return;
+    }
+
+    if (ctx->probe) {
+        request->send(200, "application/json", "{\"status\":\"ok\",\"probe\":true}");
+        OTA_LOG("[OTA] Probe request acknowledged");
+        cleanup(request);
         return;
     }
     
@@ -175,9 +192,10 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
         }
     });
     
+    size_t uploaded = ctx->written;
     request->send(response);
-    OTA_LOG("[OTA] HTTP upload success (%lu bytes)", static_cast<unsigned long>(ctx->written));
-    cleanup();
+    OTA_LOG("[OTA] HTTP upload success (%lu bytes)", static_cast<unsigned long>(uploaded));
+    cleanup(request);
 }
 
 void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, String filename, 
@@ -188,6 +206,11 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
         ctx = new OtaUploadContext();
         request->_tempObject = ctx;
         
+        if (Update.isRunning()) {
+            OTA_LOG("[OTA] Existing update in progress, aborting prior session");
+            Update.abort();
+        }
+
         if (!otaEnabled) {
             ctx->hasError = true;
             ctx->statusCode = 403;
@@ -195,6 +218,13 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
             return;
         }
         
+        if (request->hasHeader("X-OTA-PROBE")) {
+            ctx->probe = true;
+            ctx->authorized = true;
+            ctx->success = true;
+            return;
+        }
+
         if (!otaPassword.isEmpty()) {
             AsyncWebHeader* hdr = request->getHeader("X-OTA-PASSWORD");
             if (!hdr) {
@@ -236,6 +266,10 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
         return;
     }
     
+    if (ctx->probe) {
+        return;
+    }
+
     if (len) {
         if (Update.write(data, len) != len) {
             ctx->hasError = true;
@@ -255,6 +289,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
             ctx->statusCode = 500;
             ctx->errorReason = "end_failed";
             Update.printError(Serial);
+            Update.abort();
         }
     }
 }
@@ -266,8 +301,27 @@ String ConfigManagerOTA::getStatus() const {
     return "ready";
 }
 
-void ConfigManagerOTA::cleanup() {
-    // Clean up any OTA-related resources if needed
+void ConfigManagerOTA::cleanup(AsyncWebServerRequest* request) {
+#if CM_ENABLE_OTA
+    if (!request) {
+        return;
+    }
+
+    auto* ctx = static_cast<OtaUploadContext*>(request->_tempObject);
+    if (!ctx) {
+        return;
+    }
+
+    if (ctx->began && !ctx->success) {
+        OTA_LOG("[OTA] Aborting incomplete update");
+        Update.abort();
+    }
+
+    delete ctx;
+    request->_tempObject = nullptr;
+#else
+    (void)request;
+#endif
 }
 
 #endif // CM_ENABLE_OTA

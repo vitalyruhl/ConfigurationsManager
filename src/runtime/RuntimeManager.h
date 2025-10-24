@@ -27,6 +27,8 @@ struct RuntimeFieldMeta {
     int precision = 2;
     int order = 100;
     bool isBool = false;
+    bool isString = false;
+    bool isDivider = false;
     bool isButton = false;
     bool isCheckbox = false;
     bool isStateButton = false;
@@ -48,6 +50,7 @@ struct RuntimeFieldMeta {
     float floatInit = 0.0f;
     int floatPrecision = 2;
     bool initialState = false;
+    String staticValue;
     String card;
 };
 
