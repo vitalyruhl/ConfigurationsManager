@@ -538,25 +538,33 @@ function scheduleWsReconnect(url) {
   }
 }
 
+function fetchWithTimeout(resource, options = {}, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  const opts = { ...options, signal: controller.signal };
+  return fetch(resource, opts)
+    .finally(() => clearTimeout(id));
+}
+
 async function fetchRuntime() {
   try {
-    const r = await fetch("/runtime.json?ts=" + Date.now());
+    const r = await fetchWithTimeout("/runtime.json?ts=" + Date.now(), {}, 4000);
     if (!r.ok) return;
     runtime.value = await r.json();
     buildRuntimeGroups();
   } catch (e) {
-    /* ignore */
+    // ignore network/abort; polling will retry
   }
 }
 
 async function fetchRuntimeMeta() {
   try {
-    const r = await fetch("/runtime_meta.json?ts=" + Date.now());
+    const r = await fetchWithTimeout("/runtime_meta.json?ts=" + Date.now(), {}, 5000);
     if (!r.ok) return;
     runtimeMeta.value = await r.json();
     buildRuntimeGroups();
   } catch (e) {
-    /* ignore */
+    // ignore network/abort; polling will retry
   }
 }
 

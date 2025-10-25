@@ -33,6 +33,8 @@ void initializeAllSettings() {
     ConfigManager.addSetting(&boilerSettings.activeLow);
     ConfigManager.addSetting(&boilerSettings.boilerTimeMin);
     ConfigManager.addSetting(&boilerSettings.stopTimerOnTarget);
+    ConfigManager.addSetting(&boilerSettings.onlyOncePerPeriod);
+    ConfigManager.addSetting(&boilerSettings.youCanShowerPeriodMin);
 
     ConfigManager.addSetting(&displaySettings.turnDisplayOff);
     ConfigManager.addSetting(&displaySettings.onTimeSec);
@@ -55,4 +57,5 @@ void initializeAllSettings() {
 
     ConfigManager.addSetting(&buttonSettings.apModePin);
     ConfigManager.addSetting(&buttonSettings.resetDefaultsPin);
+    ConfigManager.addSetting(&buttonSettings.showerRequestPin);
 }

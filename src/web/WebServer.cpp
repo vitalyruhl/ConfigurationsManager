@@ -709,6 +709,10 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             String json = runtimeJsonProvider();
             AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
             enableCORS(response);
+            response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            response->addHeader("Connection", "close");
             request->send(response);
         } else {
             request->send(500, "application/json", "{\"error\":\"no_provider\"}");
@@ -721,6 +725,10 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             String json = runtimeMetaJsonProvider();
             AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
             enableCORS(response);
+            response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            response->addHeader("Connection", "close");
             request->send(response);
         } else {
             request->send(500, "application/json", "{\"error\":\"no_provider\"}");

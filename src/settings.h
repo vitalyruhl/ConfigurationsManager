@@ -31,7 +31,7 @@ struct WiFi_Settings // wifiSettings
     Config<String> dnsPrimary;
     Config<String> dnsSecondary;
 
-    WiFi_Settings() : 
+    WiFi_Settings() :
         wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .sortOrder = 1}),
         wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
         useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = false, .sortOrder = 3}),
@@ -43,7 +43,7 @@ struct WiFi_Settings // wifiSettings
     {
         // Settings registration moved to initializeAllSettings()
     }
-    
+
     void registerSettings()
     {
         // Register settings with ConfigManager
@@ -66,12 +66,29 @@ struct MQTT_Settings
     Config<String> mqtt_username;
     Config<String> mqtt_password;
     Config<String> Publish_Topic;
-    Config<String> mqtt_Settings_ShowerTime_topic;
-    Config<String> mqtt_Settings_SetState_topic;
-    Config<String> mqtt_Settings_WillShower_topic; // HA control: "I will shower" boolean
+    // Derived MQTT topics (no longer persisted): see updateTopics()
+    String topicSetShowerTime;      // <base>/Settings/SetShowerTime
+    String topicWillShower;         // <base>/Settings/WillShower
     Config<bool> mqtt_Settings_SetState; // payload to turn boiler on
     Config<int>mqtt_Settings_ShowerTime;
-    Config<String> mqtt_publish_YouCanShowerNow_topic; // status: you can shower now (publish)
+    String mqtt_publish_YouCanShowerNow_topic; // <base>/YouCanShowerNow (publish)
+    // Boiler settings: derived state topics (publish) and command topics (subscribe)
+    String topicState_BoilerEnabled;            // <base>/Settings/BoilerEnabled
+    String topicState_OnThreshold;              // <base>/Settings/OnThreshold
+    String topicState_OffThreshold;             // <base>/Settings/OffThreshold
+    String topicState_BoilerTimeMin;            // <base>/Settings/BoilerTimeMin
+    String topicState_StopTimerOnTarget;        // <base>/Settings/StopTimerOnTarget
+    String topicState_OncePerPeriod;            // <base>/Settings/YouCanShowerOncePerPeriod
+    String topicState_YouCanShowerPeriodMin;    // <base>/Settings/YouCanShowerPeriodMin
+    String topicSave;                           // <base>/Settings/Save (subscribe)
+    // Command (Set) topics
+    String topicSet_BoilerEnabled;              // <base>/Settings/SetBoilerEnabled
+    String topicSet_OnThreshold;                // <base>/Settings/SetOnThreshold
+    String topicSet_OffThreshold;               // <base>/Settings/SetOffThreshold
+    String topicSet_BoilerTimeMin;              // <base>/Settings/SetBoilerTimeMin
+    String topicSet_StopTimerOnTarget;          // <base>/Settings/SetStopTimerOnTarget
+    String topicSet_OncePerPeriod;              // <base>/Settings/SetYouCanShowerOncePerPeriod
+    String topicSet_YouCanShowerPeriodMin;      // <base>/Settings/SetYouCanShowerPeriodMin
     Config<float> MQTTPublischPeriod;
     Config<float> MQTTListenPeriod;
 
@@ -87,24 +104,19 @@ struct MQTT_Settings
                       mqtt_username(ConfigOptions<String>{.key = "MQTTUser", .name = "User", .category = "MQTT", .defaultValue = String("housebattery")}),
                       mqtt_password(ConfigOptions<String>{.key = "MQTTPass", .name = "Password", .category = "MQTT", .defaultValue = String("mqttsecret"), .showInWeb = true, .isPassword = true}),
                       Publish_Topic(ConfigOptions<String>{.key = "MQTTTPT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
-                      mqtt_Settings_ShowerTime_topic(ConfigOptions<String>{.key = "MQTTSTT", .name = "Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/ShowerTime"), .showInWeb = true, .isPassword = false}),
-                      mqtt_Settings_SetState_topic(ConfigOptions<String>{.key = "MQTTSTS", .name = "Set-Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/SetShowerTime"), .showInWeb = true, .isPassword = false}),
-                      mqtt_Settings_WillShower_topic(ConfigOptions<String>{.key = "MQTTWS", .name = "Will-Shower Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/WillShower"), .showInWeb = true, .isPassword = false}),
                       MQTTPublischPeriod(ConfigOptions<float>{.key = "MQTTPP", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
                       MQTTListenPeriod(ConfigOptions<float>{.key = "MQTTLP", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
                       mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false}),
-                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = true, .isPassword = false}),
-                      mqtt_publish_YouCanShowerNow_topic(ConfigOptions<String>{.key = "MQTTYSN", .name = "You-Can-Shower-Now Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/YouCanShowerNow"), .showInWeb = true, .isPassword = false})
-
+                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = true, .isPassword = false})
     {
         // Settings registration moved to registerSettings()
-        
+
         // Callback to update topics when Publish_Topic changes
         Publish_Topic.setCallback([this](String newValue){ this->updateTopics(); });
 
         updateTopics(); // Make sure topics are initialized
     }
-    
+
     void registerSettings()
     {
         ConfigManager.addSetting(&mqtt_port);
@@ -112,14 +124,10 @@ struct MQTT_Settings
         ConfigManager.addSetting(&mqtt_username);
         ConfigManager.addSetting(&mqtt_password);
         ConfigManager.addSetting(&Publish_Topic);
-        ConfigManager.addSetting(&mqtt_Settings_ShowerTime_topic);
-        ConfigManager.addSetting(&mqtt_Settings_SetState_topic);
         ConfigManager.addSetting(&MQTTPublischPeriod);
         ConfigManager.addSetting(&MQTTListenPeriod);
         ConfigManager.addSetting(&mqtt_Settings_SetState);
         ConfigManager.addSetting(&mqtt_Settings_ShowerTime);
-    ConfigManager.addSetting(&mqtt_Settings_WillShower_topic);
-    ConfigManager.addSetting(&mqtt_publish_YouCanShowerNow_topic);
     }
 
     void updateTopics()
@@ -128,10 +136,27 @@ struct MQTT_Settings
         mqtt_publish_AktualState = hostname + "/AktualState"; //show State of Boiler Heating/Save-Mode
         mqtt_publish_AktualBoilerTemperature = hostname + "/TemperatureBoiler"; //show Temperature of Boiler
         mqtt_publish_AktualTimeRemaining_topic = hostname + "/TimeRemaining"; //show Time Remaining if Boiler is Heating
-        // Keep YouCanShowerNow topic configurable; if left default, construct under base hostname
-        if (mqtt_publish_YouCanShowerNow_topic.get().length() == 0) {
-            mqtt_publish_YouCanShowerNow_topic.set(hostname + "/YouCanShowerNow");
-        }
+        mqtt_publish_YouCanShowerNow_topic = hostname + "/YouCanShowerNow";
+        // Settings/state topics
+        String sp = hostname + "/Settings";
+        topicWillShower = sp + "/WillShower";
+        topicSetShowerTime = sp + "/SetShowerTime";
+        topicSave = sp + "/Save";
+        topicState_BoilerEnabled = sp + "/BoilerEnabled";
+        topicState_OnThreshold = sp + "/OnAlarmTemp";
+        topicState_OffThreshold = sp + "/OffThreshold";
+        topicState_BoilerTimeMin = sp + "/BoilerTimeMin";
+        topicState_StopTimerOnTarget = sp + "/StopTimerOnTarget";
+        topicState_OncePerPeriod = sp + "/YouCanShowerOncePerPeriod";
+        topicState_YouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
+        // Set/* command topics
+        topicSet_BoilerEnabled = sp + "/SetBoilerEnabled";
+        topicSet_OnThreshold = sp + "/SetOnAlarmTemp";
+        topicSet_OffThreshold = sp + "/SetOffThreshold";
+        topicSet_BoilerTimeMin = sp + "/SetBoilerTimeMin";
+        topicSet_StopTimerOnTarget = sp + "/SetStopTimerOnTarget";
+        topicSet_OncePerPeriod = sp + "/SetYouCanShowerOncePerPeriod";
+        topicSet_YouCanShowerPeriodMin = sp + "/SetYouCanShowerPeriodMin";
     }
 };
 
@@ -160,6 +185,9 @@ struct BoilerSettings {
     Config<bool>  activeLow;// relay active low/high
     Config<int>   boilerTimeMin;// max time boiler is allowed to heat
     Config<bool>  stopTimerOnTarget; // stop timer when off-threshold reached
+    // Notification behavior for 'You can shower now'
+    Config<bool>  onlyOncePerPeriod; // publish '1' only once per period
+    Config<int>   youCanShowerPeriodMin; // period length in minutes
 
     BoilerSettings():
         enabled(ConfigOptions<bool>{
@@ -209,6 +237,20 @@ struct BoilerSettings {
             .category = "Boiler",
             .defaultValue = true,
             .showInWeb = true
+        }),
+        onlyOncePerPeriod(ConfigOptions<bool>{
+            .key = "YSNOnce",
+            .name = "Show 'You can shower' only once per period",
+            .category = "Boiler",
+            .defaultValue = false,
+            .showInWeb = true
+        }),
+        youCanShowerPeriodMin(ConfigOptions<int>{
+            .key = "YSNPeriodMin",
+            .name = "'You can shower' period (min)",
+            .category = "Boiler",
+            .defaultValue = 1440,
+            .showInWeb = false // deprecated: period now equals Boiler Max Heating Time
         })
     {
         // Settings registration moved to initializeAllSettings()
@@ -275,9 +317,11 @@ struct SystemSettings {
 struct ButtonSettings {
     Config<int> apModePin;
     Config<int> resetDefaultsPin;
+    Config<int> showerRequestPin;
     ButtonSettings():
         apModePin(ConfigOptions<int>{.key = "BtnAP", .name = "AP Mode Button GPIO", .category = "Buttons", .defaultValue = 13}),
-        resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15})
+        resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15}),
+        showerRequestPin(ConfigOptions<int>{.key = "BtnShower", .name = "Shower Request Button GPIO", .category = "Buttons", .defaultValue = -1, .showInWeb = true})
     {
         // Settings registration moved to initializeAllSettings()
     }
