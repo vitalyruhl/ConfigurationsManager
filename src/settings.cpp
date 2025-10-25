@@ -9,6 +9,7 @@ ButtonSettings buttonSettings;
 SigmaLogLevel logLevel;
 WiFi_Settings wifiSettings;
 BoilerSettings boilerSettings;
+TempSensorSettings tempSensorSettings;
 
 // Function to register all settings with ConfigManager
 // This solves the static initialization order problem
@@ -33,6 +34,11 @@ void initializeAllSettings() {
 
     ConfigManager.addSetting(&displaySettings.turnDisplayOff);
     ConfigManager.addSetting(&displaySettings.onTimeSec);
+
+    // Temp sensor settings
+    ConfigManager.addSetting(&tempSensorSettings.gpioPin);
+    ConfigManager.addSetting(&tempSensorSettings.corrOffset);
+    ConfigManager.addSetting(&tempSensorSettings.readInterval);
 
     ConfigManager.addSetting(&systemSettings.allowOTA);
     ConfigManager.addSetting(&systemSettings.otaPassword);

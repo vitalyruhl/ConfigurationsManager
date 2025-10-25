@@ -11,6 +11,9 @@
 #include "helpers/helpers.h"
 #include "helpers/relays.h"
 #include "helpers/mqtt_manager.h"
+// DS18B20
+#include <OneWire.h>
+#include <DallasTemperature.h>
 // New non-blocking blinker utility
 #include "binking/Blinker.h"
 
@@ -34,6 +37,8 @@ void updateStatusLED();
 void PinSetup();
 void handeleBoilerState(bool forceON = false);
 void UpdateBoilerAlarmState();
+static void cb_readTempSensor();
+static void setupTempSensor();
 
 // Shorthand helper for RuntimeManager access
 static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntimeManager(); }
@@ -61,6 +66,7 @@ Ticker PublischMQTTTicker;
 Ticker PublischMQTTTSettingsTicker;
 Ticker ListenMQTTTicker;
 Ticker displayTicker;
+Ticker TempReadTicker;
 
 // globale helpers variables
 float temperature = 70.0;    // current temperature in Celsius
@@ -76,6 +82,9 @@ static constexpr char TEMP_ALARM_ID[] = "temp_low";
 static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
 static const unsigned long displayUpdateInterval = 100; // Update display every 100ms
 static const unsigned long resetHoldDurationMs = 3000; // Require 3s hold to factory reset
+// DS18B20 globals
+static OneWire* oneWireBus = nullptr;
+static DallasTemperature* ds18 = nullptr;
 
 #pragma endregion configuration variables
 
@@ -137,6 +146,9 @@ void setup()
     sl->Info("[SETUP] init modules...");
     SetupStartDisplay();
     ShowDisplay();
+
+    // Initialize temperature sensor and start periodic reads
+    setupTempSensor();
 
     //----------------------------------------
 
@@ -374,6 +386,33 @@ void PinSetup()
     Relays::setBoiler(false); // Force known OFF state
 }
 
+
+static void cb_readTempSensor() {
+    if (!ds18) return;
+    ds18->requestTemperatures();
+    float t = ds18->getTempCByIndex(0);
+    if (t > -100.0f && t < 150.0f) {
+        temperature = t + tempSensorSettings.corrOffset.get();
+        // Optionally: push alarms now
+        // CRM().updateAlarms(); // cheap
+    }
+}
+
+static void setupTempSensor() {
+    int pin = tempSensorSettings.gpioPin.get();
+    if (pin <= 0) {
+        sl->Warn("[TEMP] DS18B20 GPIO pin not set or invalid -> skipping init");
+        return;
+    }
+    oneWireBus = new OneWire((uint8_t)pin);
+    ds18 = new DallasTemperature(oneWireBus);
+    ds18->begin();
+    float intervalSec = (float)tempSensorSettings.readInterval.get();
+    if (intervalSec < 1.0f) intervalSec = 30.0f;
+    TempReadTicker.attach(intervalSec, cb_readTempSensor);
+    sl->Printf("[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C", pin, intervalSec, tempSensorSettings.corrOffset.get()).Info();
+}
+
 //----------------------------------------
 // MQTT FUNCTIONS
 //----------------------------------------
@@ -415,7 +454,7 @@ void cb_publishToMQTT()
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
-        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 250, /*gapMs*/ 1500);
+        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 200, /*gapMs*/ 1500);
     }
 }
 

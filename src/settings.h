@@ -208,6 +208,17 @@ struct DisplaySettings {
     }
 };
 
+struct TempSensorSettings {
+    Config<int>   gpioPin;      // DS18B20 data pin
+    Config<float> corrOffset;   // correction offset in °C
+    Config<int>   readInterval; // seconds
+    TempSensorSettings():
+        gpioPin(ConfigOptions<int>{.key = "TsPin", .name = "GPIO Pin", .category = "Temp Sensor", .defaultValue = 4}),
+        corrOffset(ConfigOptions<float>{.key = "TsOfs", .name = "Correction Offset", .category = "Temp Sensor", .defaultValue = 0.0f, .showInWeb = true}),
+        readInterval(ConfigOptions<int>{.key = "TsInt", .name = "Read Interval (s)", .category = "Temp Sensor", .defaultValue = 30, .showInWeb = true})
+    {}
+};
+
 struct SystemSettings {
     Config<bool> allowOTA;
     Config<String> otaPassword;
@@ -245,6 +256,7 @@ extern I2CSettings i2cSettings;
 extern DisplaySettings displaySettings;
 extern SystemSettings systemSettings;
 extern ButtonSettings buttonSettings;
+extern TempSensorSettings tempSensorSettings;
 extern SigmaLogLevel logLevel;
 extern WiFi_Settings wifiSettings;
 extern BoilerSettings boilerSettings;
