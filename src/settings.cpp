@@ -10,6 +10,7 @@ SigmaLogLevel logLevel;
 WiFi_Settings wifiSettings;
 BoilerSettings boilerSettings;
 TempSensorSettings tempSensorSettings;
+NTPSettings ntpSettings;
 
 // Function to register all settings with ConfigManager
 // This solves the static initialization order problem
@@ -39,6 +40,12 @@ void initializeAllSettings() {
     ConfigManager.addSetting(&tempSensorSettings.gpioPin);
     ConfigManager.addSetting(&tempSensorSettings.corrOffset);
     ConfigManager.addSetting(&tempSensorSettings.readInterval);
+
+    // NTP settings
+    ConfigManager.addSetting(&ntpSettings.frequencySec);
+    ConfigManager.addSetting(&ntpSettings.server1);
+    ConfigManager.addSetting(&ntpSettings.server2);
+    ConfigManager.addSetting(&ntpSettings.tz);
 
     ConfigManager.addSetting(&systemSettings.allowOTA);
     ConfigManager.addSetting(&systemSettings.otaPassword);

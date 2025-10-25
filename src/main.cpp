@@ -11,6 +11,8 @@
 #include "helpers/helpers.h"
 #include "helpers/relays.h"
 #include "helpers/mqtt_manager.h"
+// Time/NTP support
+#include <time.h>
 // DS18B20
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -67,6 +69,7 @@ Ticker PublischMQTTTSettingsTicker;
 Ticker ListenMQTTTicker;
 Ticker displayTicker;
 Ticker TempReadTicker;
+Ticker NtpSyncTicker;
 
 // globale helpers variables
 float temperature = 70.0;    // current temperature in Celsius
@@ -85,6 +88,7 @@ static const unsigned long resetHoldDurationMs = 3000; // Require 3s hold to fac
 // DS18B20 globals
 static OneWire* oneWireBus = nullptr;
 static DallasTemperature* ds18 = nullptr;
+static bool youCanShowerNow = false; // derived status for MQTT
 
 #pragma endregion configuration variables
 
@@ -250,12 +254,17 @@ void setupGUI()
             o["Bo_Temp"] = temperature;
             o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
             o["Bo_TimeLeft"] = boilerTimeRemaining;
+            // Derived readiness: can shower when current temp >= off threshold
+            bool canShower = (temperature >= boilerSettings.offThreshold.get());
+            o["Bo_CanShower"] = canShower;
+            youCanShowerNow = canShower; // keep MQTT status aligned
         });
 
     // Add metadata for Boiler provider fields
     // Show whether boiler control is enabled (setting) and actual relay state
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "Enabled", .precision = 0, .order = 1, .isBool = true});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "Relay On", .precision = 0, .order = 2, .isBool = true});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_CanShower", .label = "You can shower now", .precision = 0, .order = 5, .isBool = true});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "Temperature", .unit = "°C", .precision = 1, .order = 10});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "Time Left", .unit = "min", .precision = 0, .order = 21});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "Time Set", .unit = "min", .precision = 0, .order = 22});
@@ -342,9 +351,17 @@ void handeleBoilerState(bool forceON)
     {
         lastBoilerCheck = now;
 
-
-        //todo: add check estimated time etc to handle Boiler
-        //todo: check on/of temp to activate/deactivate boiler
+        // Temperature-based auto control: turn off when upper threshold reached, allow turn-on when below lower threshold
+        if (Relays::getBoiler()) {
+            if (temperature >= boilerSettings.offThreshold.get()) {
+                Relays::setBoiler(false);
+                boilerTimeRemaining = 0;
+            }
+        } else {
+            if ((boilerSettings.enabled.get() || forceON) && (temperature <= boilerSettings.onThreshold.get()) && (boilerTimeRemaining > 0)) {
+                Relays::setBoiler(true);
+            }
+        }
 
 
         if (boilerSettings.enabled.get() || forceON)
@@ -434,6 +451,7 @@ void setupMQTT()
                             {
                                 sl->Debug("[MAIN] Ready to subscribe to MQTT topics...");
                                 mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
+                                mqttManager.subscribe(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str());
                                 cb_publishToMQTT(); // Publish initial values
                             });
 
@@ -452,6 +470,9 @@ void cb_publishToMQTT()
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
+        // Publish 'You can shower now' status based on off-threshold
+        youCanShowerNow = (temperature >= boilerSettings.offThreshold.get());
+        mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.get().c_str(), youCanShowerNow ? "1" : "0");
         buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 100, /*gapMs*/ 1500);
     }
 }
@@ -473,6 +494,29 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
         {
             sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Warn();
             messageTemp = "0";
+        }
+        // Interpret payload as minutes to keep boiler ON
+        int mins = messageTemp.toInt();
+        if (mins > 0) {
+            boilerTimeRemaining = mins;
+            if (!Relays::getBoiler()) {
+                Relays::setBoiler(true);
+            }
+            sl->Printf("[MAIN] MQTT set shower time: %d min (relay ON)", mins).Info();
+        }
+    }
+    else if (strcmp(topic, mqttSettings.mqtt_Settings_WillShower_topic.get().c_str()) == 0)
+    {
+        // Boolean-like arming: 'I will shower' -> start timer with configured minutes
+        bool willShower = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
+        if (willShower) {
+            int mins = mqttSettings.mqtt_Settings_ShowerTime.get();
+            if (mins <= 0) mins = 60;
+            boilerTimeRemaining = max(boilerTimeRemaining, mins);
+            if (!Relays::getBoiler()) {
+                Relays::setBoiler(true);
+            }
+            sl->Printf("[MAIN] HA request: will shower -> set %d min (relay ON)", mins).Info();
         }
     }
 }
@@ -792,6 +836,19 @@ void onWiFiConnected()
     sl->Printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI()).Info();
     sl->Printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
     sll->Printf("[MAIN] WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
+
+    // Start NTP sync now and schedule periodic resyncs
+    auto doNtpSync = [](){
+        // Use TZ-aware sync for correct local time (Berlin: CET/CEST)
+        configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str());
+    };
+    doNtpSync();
+    NtpSyncTicker.detach();
+    int ntpInt = ntpSettings.frequencySec.get();
+    if (ntpInt < 60) ntpInt = 3600; // default to 1 hour
+    NtpSyncTicker.attach(ntpInt, +[](){
+        configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str());
+    });
 }
 
 void onWiFiDisconnected()

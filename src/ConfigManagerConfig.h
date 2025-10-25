@@ -41,6 +41,9 @@
 #ifndef CM_ENABLE_SYSTEM_PROVIDER // Enable system info runtime provider card (heap, uptime, etc.)
 #define CM_ENABLE_SYSTEM_PROVIDER 1 //default: enabled
 #endif
+#ifndef CM_ENABLE_SYSTEM_TIME // Expose current date-time in system provider
+#define CM_ENABLE_SYSTEM_TIME 1 // default: enabled (can be disabled via build flag)
+#endif
 #ifndef CM_ENABLE_WS_PUSH // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled)
 #define CM_ENABLE_WS_PUSH 1 //default: enabled
 #endif

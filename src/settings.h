@@ -68,8 +68,10 @@ struct MQTT_Settings
     Config<String> Publish_Topic;
     Config<String> mqtt_Settings_ShowerTime_topic;
     Config<String> mqtt_Settings_SetState_topic;
+    Config<String> mqtt_Settings_WillShower_topic; // HA control: "I will shower" boolean
     Config<bool> mqtt_Settings_SetState; // payload to turn boiler on
     Config<int>mqtt_Settings_ShowerTime;
+    Config<String> mqtt_publish_YouCanShowerNow_topic; // status: you can shower now (publish)
     Config<float> MQTTPublischPeriod;
     Config<float> MQTTListenPeriod;
 
@@ -87,10 +89,12 @@ struct MQTT_Settings
                       Publish_Topic(ConfigOptions<String>{.key = "MQTTTPT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
                       mqtt_Settings_ShowerTime_topic(ConfigOptions<String>{.key = "MQTTSTT", .name = "Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/ShowerTime"), .showInWeb = true, .isPassword = false}),
                       mqtt_Settings_SetState_topic(ConfigOptions<String>{.key = "MQTTSTS", .name = "Set-Shower-Time Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/SetShowerTime"), .showInWeb = true, .isPassword = false}),
+                      mqtt_Settings_WillShower_topic(ConfigOptions<String>{.key = "MQTTWS", .name = "Will-Shower Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/Settings/WillShower"), .showInWeb = true, .isPassword = false}),
                       MQTTPublischPeriod(ConfigOptions<float>{.key = "MQTTPP", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
                       MQTTListenPeriod(ConfigOptions<float>{.key = "MQTTLP", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
                       mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false}),
-                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = false, .isPassword = false})
+                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = true, .isPassword = false}),
+                      mqtt_publish_YouCanShowerNow_topic(ConfigOptions<String>{.key = "MQTTYSN", .name = "You-Can-Shower-Now Topic", .category = "MQTT", .defaultValue = String("BoilerSaver/YouCanShowerNow"), .showInWeb = true, .isPassword = false})
 
     {
         // Settings registration moved to registerSettings()
@@ -114,6 +118,8 @@ struct MQTT_Settings
         ConfigManager.addSetting(&MQTTListenPeriod);
         ConfigManager.addSetting(&mqtt_Settings_SetState);
         ConfigManager.addSetting(&mqtt_Settings_ShowerTime);
+    ConfigManager.addSetting(&mqtt_Settings_WillShower_topic);
+    ConfigManager.addSetting(&mqtt_publish_YouCanShowerNow_topic);
     }
 
     void updateTopics()
@@ -122,6 +128,10 @@ struct MQTT_Settings
         mqtt_publish_AktualState = hostname + "/AktualState"; //show State of Boiler Heating/Save-Mode
         mqtt_publish_AktualBoilerTemperature = hostname + "/TemperatureBoiler"; //show Temperature of Boiler
         mqtt_publish_AktualTimeRemaining_topic = hostname + "/TimeRemaining"; //show Time Remaining if Boiler is Heating
+        // Keep YouCanShowerNow topic configurable; if left default, construct under base hostname
+        if (mqtt_publish_YouCanShowerNow_topic.get().length() == 0) {
+            mqtt_publish_YouCanShowerNow_topic.set(hostname + "/YouCanShowerNow");
+        }
     }
 };
 
@@ -219,6 +229,20 @@ struct TempSensorSettings {
     {}
 };
 
+// NTP Settings
+struct NTPSettings {
+    Config<int>   frequencySec; // Sync frequency (seconds)
+    Config<String> server1;     // Primary NTP server
+    Config<String> server2;     // Secondary NTP server
+    Config<String> tz;          // POSIX/TZ string for local time
+    NTPSettings():
+        frequencySec(ConfigOptions<int>{.key = "NTPFrq", .name = "NTP Sync Interval (s)", .category = "NTP", .defaultValue = 3600, .showInWeb = true}),
+        server1(ConfigOptions<String>{.key = "NTP1", .name = "NTP Server 1", .category = "NTP", .defaultValue = String("192.168.2.250"), .showInWeb = true}),
+        server2(ConfigOptions<String>{.key = "NTP2", .name = "NTP Server 2", .category = "NTP", .defaultValue = String("pool.ntp.org"), .showInWeb = true}),
+        tz(ConfigOptions<String>{.key = "NTPTZ", .name = "Time Zone (POSIX)", .category = "NTP", .defaultValue = String("CET-1CEST,M3.5.0/02,M10.5.0/03"), .showInWeb = true})
+    {}
+};
+
 struct SystemSettings {
     Config<bool> allowOTA;
     Config<String> otaPassword;
@@ -257,6 +281,7 @@ extern DisplaySettings displaySettings;
 extern SystemSettings systemSettings;
 extern ButtonSettings buttonSettings;
 extern TempSensorSettings tempSensorSettings;
+extern NTPSettings ntpSettings;
 extern SigmaLogLevel logLevel;
 extern WiFi_Settings wifiSettings;
 extern BoilerSettings boilerSettings;

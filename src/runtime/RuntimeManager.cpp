@@ -2,6 +2,7 @@
 #include "../ConfigManager.h"
 #include <algorithm>
 #include <utility>
+#include <time.h>
 
 // Logging support
 #if CM_ENABLE_LOGGING
@@ -271,6 +272,19 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             obj["loopAvg"] = loopAvgMs;
         }
 
+#if CM_ENABLE_SYSTEM_TIME
+        // Provide current local date-time in ISO 8601 without timezone suffix
+        time_t now = time(nullptr);
+        if (now > 1600000000) { // sanity check (~2020-09-13)
+            struct tm tmnow;
+            localtime_r(&now, &tmnow);
+            char buf[24];
+            // Format: YYYY-MM-DDTHH:MM:SS
+            strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tmnow);
+            obj["dateTime"] = buf;
+        }
+#endif
+
         // OTA status exposed to GUI
         if (configManager) {
             auto &ota = configManager->getOTAManager();
@@ -310,10 +324,14 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         upsertMeta("rssi", "WiFi RSSI", "dBm", 3, false, false, 0);
         upsertMeta("rssiTxt", "Signal", "", 4, false, true, 0);
 
-        // Connectivity and OTA state (booleans)
+    // Connectivity and OTA state (booleans)
         upsertMeta("wifiConnected", "WifiConnected", "", 5, true);
         upsertMeta("allowOTA", "AllowOTA", "", 6, true);
         upsertMeta("otaActive", "OtaActive", "", 7, true);
+
+#if CM_ENABLE_SYSTEM_TIME
+    upsertMeta("dateTime", "Date/Time", "", 8, false, true, 0);
+#endif
 
         // System numeric stats
         upsertMeta("cpuFreqMHz", "CpuFreqMHz", "", 20, false, false, 0);
