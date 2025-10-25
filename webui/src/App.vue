@@ -117,6 +117,8 @@ provide("dismissToast", dismissToast);
 
 async function loadSettings() {
   try {
+    console.log("[Frontend] Starting loadSettings...");
+    
     // Add timeout to HTTP request
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -124,13 +126,35 @@ async function loadSettings() {
     const r = await fetch("/config.json", { signal: controller.signal });
     clearTimeout(timeoutId);
     
-    if (!r.ok) throw new Error("HTTP Error");
-    const data = await r.json();
+    console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
+    console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
+    
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+    }
+    
+    // Check content-length header vs actual response
+    const contentLength = r.headers.get('content-length');
+    console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
+    
+    const text = await r.text();
+    console.log(`[Frontend] config.json - Actual response length: ${text.length}`);
+    
+    if (contentLength && parseInt(contentLength) !== text.length) {
+      console.warn(`[Frontend] Content-Length mismatch! Header: ${contentLength}, Actual: ${text.length}`);
+    }
+    
+    const data = JSON.parse(text);
     config.value = data.config || data;
     refreshKey.value++;
+    
+    console.log("[Frontend] config.json loaded successfully");
   } catch (e) {
+    console.error("[Frontend] loadSettings error:", e);
     if (e.name === 'AbortError') {
       notify("Connection timeout: Could not load settings", "error");
+    } else if (e.message.includes('Content-Length')) {
+      notify("Server response error: Data transmission interrupted", "error");
     } else {
       notify("Fehler: " + e.message, "error");
     }

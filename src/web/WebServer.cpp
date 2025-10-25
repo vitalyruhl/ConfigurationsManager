@@ -239,10 +239,49 @@ void ConfigManagerWeb::setupAPIRoutes() {
     // Configuration endpoints
     server->on("/config.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (configJsonProvider) {
-            String json = configJsonProvider();
-            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
-            enableCORS(response);
-            request->send(response);
+            try {
+                String json = configJsonProvider();
+                size_t jsonSize = json.length();
+
+                // Log the JSON size for debugging
+                Serial.printf("[WebServer] Sending config.json - Size: %zu bytes\n", jsonSize);
+
+                // Check if JSON is empty or too large
+                if (jsonSize == 0) {
+                    Serial.println("[WebServer] Error: Generated JSON is empty!");
+                    request->send(500, "application/json", "{\"error\":\"empty_json\"}");
+                    return;
+                }
+
+                if (jsonSize > 16384) { // 16KB limit - use chunked response for large JSON
+                    Serial.printf("[WebServer] Using chunked response for large JSON (%zu bytes)\n", jsonSize);
+
+                    AsyncWebServerResponse* response = request->beginChunkedResponse("application/json",
+                        [json](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+                            size_t remaining = json.length() - index;
+                            if (remaining == 0) return 0; // End of data
+
+                            size_t chunkSize = min(maxLen, remaining);
+                            memcpy(buffer, json.c_str() + index, chunkSize);
+                            return chunkSize;
+                        });
+                    enableCORS(response);
+                    request->send(response);
+                } else {
+                    // Normal response for smaller JSON
+                    AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+                    enableCORS(response);
+                    request->send(response);
+                }
+
+                Serial.printf("[WebServer] config.json sent successfully (%zu bytes)\n", jsonSize);
+            } catch (const std::exception& e) {
+                Serial.printf("[WebServer] Exception in config.json: %s\n", e.what());
+                request->send(500, "application/json", "{\"error\":\"json_generation_failed\"}");
+            } catch (...) {
+                Serial.println("[WebServer] Unknown exception in config.json generation");
+                request->send(500, "application/json", "{\"error\":\"unknown_error\"}");
+            }
         } else {
             request->send(500, "application/json", "{\"error\":\"no_provider\"}");
         }
