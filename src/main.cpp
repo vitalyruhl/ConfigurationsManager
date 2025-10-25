@@ -179,14 +179,14 @@ void setup()
     else
     {
     sl->Debug("[SETUP] Skipping MQTT setup in AP mode");
-    sll->Debug("[SETUP] AP mode - MQTT disabled");
+    sll->Debug("MQTT disabled");
     }
 
     setupGUI();
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     //---------------------------------------------------------------------------------------------------
     sl->Info("[SETUP] System setup completed.");
-    sll->Info("[SETUP] Setup completed.");
+    sll->Info("Setup completed.");
 }
 
 void loop()
@@ -489,7 +489,7 @@ static void setupTempSensor() {
     float intervalSec = (float)tempSensorSettings.readInterval.get();
     if (intervalSec < 1.0f) intervalSec = 30.0f;
     TempReadTicker.attach(intervalSec, cb_readTempSensor);
-    sl->Printf("[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C", pin, intervalSec, tempSensorSettings.corrOffset.get()).Info();
+    sl->Printf("[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C", pin, intervalSec, tempSensorSettings.corrOffset.get()).Debug();
 }
 
 //----------------------------------------
@@ -504,7 +504,7 @@ void BoilerSettings::publishSettingToMQTT(const String& settingName, const Strin
         String topic = mqttSettings.Publish_Topic.get() + "/Settings/" + settingName;
         sl->Printf("[MAIN] GUI Change: Publishing to topic [%s] (length: %d)", topic.c_str(), topic.length()).Debug();
         mqttManager.publish(topic.c_str(), value, true);
-        sl->Printf("[MAIN] GUI Change: Published %s = %s to MQTT", settingName.c_str(), value.c_str()).Info();
+        sl->Printf("[MAIN] GUI Change: Published %s = %s to MQTT", settingName.c_str(), value.c_str()).Debug();
     }
 }
 
@@ -515,7 +515,7 @@ void setupMQTT()
 {
     // -- Setup MQTT connection --
     sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
-    sll->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
+    sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
 
     mqttSettings.updateTopics();
 
@@ -529,33 +529,33 @@ void setupMQTT()
     // Set MQTT callbacks
     mqttManager.onConnected([]()
                             {
-                                sl->Info("[MAIN] MQTT Connected! Subscribing to command topics...");
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicSetShowerTime.c_str()).Info();
+                                sl->Debug("[MAIN] MQTT Connected! Subscribing to command topics...");
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicSetShowerTime.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topicSetShowerTime.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicWillShower.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicWillShower.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topicWillShower.c_str());
                                 // Subscribe to bidirectional boiler settings topics
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_BoilerEnabled.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_BoilerEnabled.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topic_BoilerEnabled.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OnThreshold.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OnThreshold.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topic_OnThreshold.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OffThreshold.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OffThreshold.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topic_OffThreshold.c_str());
 
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_StopTimerOnTarget.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_StopTimerOnTarget.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topic_StopTimerOnTarget.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OncePerPeriod.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OncePerPeriod.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topic_OncePerPeriod.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_YouCanShowerPeriodMin.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_YouCanShowerPeriodMin.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topic_YouCanShowerPeriodMin.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicSave.c_str()).Info();
+                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicSave.c_str()).Debug();
                                 mqttManager.subscribe(mqttSettings.topicSave.c_str());
-                                
+
                                 // // Clean up any potentially corrupted retained messages from previous versions
                                 // String baseSettings = mqttSettings.Publish_Topic.get() + "/Settings/";
                                 // mqttManager.publish((baseSettings + "StopTimerOnTarg11").c_str(), "", true); // Clear corrupted topic
                                 // sl->Info("[MAIN] Cleared potential corrupted retained messages");
-                                
+
                                 // One-time retained propagation of all relevant topics (on cold start)
                                 if (!didStartupMQTTPropagate) {
                                     // Compute derived status - only notify if boiler is/was actively heating
@@ -671,7 +671,7 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
     String messageTemp((char *)message, length); // Convert byte array to String using constructor
     messageTemp.trim();                          // Remove leading and trailing whitespace
 
-    sl->Printf("[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Info();
+    sl->Printf("[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
 
     // Debug: Print all registered topics
     sl->Printf("[MAIN] DEBUG: Comparing with SetShowerTime: %s", mqttSettings.topicSetShowerTime.c_str()).Debug();
@@ -699,7 +699,7 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
                 Relays::setBoiler(true);
             }
             ShowDisplay();
-            sl->Printf("[MAIN] MQTT set shower time: %d min (relay ON)", mins).Info();
+            sl->Printf("[MAIN] MQTT set shower time: %d min (relay ON)", mins).Debug();
             if (mqttManager.isConnected()) {
                 mqttManager.publish(mqttSettings.topicWillShower.c_str(), "1", true);
             }
@@ -724,71 +724,64 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
                 Relays::setBoiler(true);
             }
             ShowDisplay();
-            sl->Printf("[MAIN] HA request: will shower -> set %d min (relay ON)", mins).Info();
+            sl->Printf("[MAIN] HA request: will shower -> set %d min (relay ON)", mins).Debug();
         } else {
             willShowerRequested = false;
             boilerTimeRemaining = 0;
             if (Relays::getBoiler()) {
                 Relays::setBoiler(false);
             }
-            sl->Info("[MAIN] HA request: will shower = false -> timer cleared, relay OFF");
+            sl->Debug("[MAIN] HA request: will shower = false -> timer cleared, relay OFF");
         }
     }
     // Boiler settings updates via MQTT
     else if (strcmp(topic, mqttSettings.topic_BoilerEnabled.c_str()) == 0) {
         bool v = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
         boilerSettings.enabled.set(v);
-        sl->Printf("[MAIN] MQTT: BoilerEnabled set to %s", v ? "true" : "false").Info();
-        // Note: State publishing handled by ConfigManager callback to avoid echo loops
+        sl->Printf("[MAIN] MQTT: BoilerEnabled set to %s", v ? "true" : "false").Debug();
     }
     else if (strcmp(topic, mqttSettings.topic_OnThreshold.c_str()) == 0) {
         float v = messageTemp.toFloat();
         if (v > 0) {
             boilerSettings.onThreshold.set(v);
-            sl->Printf("[MAIN] MQTT: OnThreshold set to %.1f", v).Info();
-            // Note: State publishing handled by ConfigManager callback to avoid echo loops
+            sl->Printf("[MAIN] MQTT: OnThreshold set to %.1f", v).Debug();
         }
     }
     else if (strcmp(topic, mqttSettings.topic_OffThreshold.c_str()) == 0) {
         float v = messageTemp.toFloat();
         if (v > 0) {
             boilerSettings.offThreshold.set(v);
-            sl->Printf("[MAIN] MQTT: OffThreshold set to %.1f", v).Info();
-            // Note: State publishing handled by ConfigManager callback to avoid echo loops
+            sl->Printf("[MAIN] MQTT: OffThreshold set to %.1f", v).Debug();
         }
     }
     else if (strcmp(topic, mqttSettings.topic_BoilerTimeMin.c_str()) == 0) {
         int v = messageTemp.toInt();
         if (v >= 0) {
             boilerSettings.boilerTimeMin.set(v);
-            sl->Printf("[MAIN] MQTT: BoilerTimeMin set to %d", v).Info();
-            // reset gating when period changes
+            sl->Printf("[MAIN] MQTT: BoilerTimeMin set to %d", v).Debug();
             lastYouCanShower1PeriodId = -1; lastPublishedYouCanShower = false;
-            // Note: State publishing handled by ConfigManager callback to avoid echo loops
         }
     }
     else if (strcmp(topic, mqttSettings.topic_StopTimerOnTarget.c_str()) == 0) {
         bool v = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
         boilerSettings.stopTimerOnTarget.set(v);
-        sl->Printf("[MAIN] MQTT: StopTimerOnTarget set to %s", v ? "true" : "false").Info();
-        // Note: State publishing handled by ConfigManager callback to avoid echo loops
+        sl->Printf("[MAIN] MQTT: StopTimerOnTarget set to %s", v ? "true" : "false").Debug();
+
     }
     else if (strcmp(topic, mqttSettings.topic_OncePerPeriod.c_str()) == 0) {
         bool v = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
         boilerSettings.onlyOncePerPeriod.set(v);
-        sl->Printf("[MAIN] MQTT: OncePerPeriod set to %s", v ? "true" : "false").Info();
-        // reset gating when toggled
+        sl->Printf("[MAIN] MQTT: OncePerPeriod set to %s", v ? "true" : "false").Debug();
         lastYouCanShower1PeriodId = -1; lastPublishedYouCanShower = false;
-        // Note: State publishing handled by ConfigManager callback to avoid echo loops
     }
     else if (strcmp(topic, mqttSettings.topic_YouCanShowerPeriodMin.c_str()) == 0) {
         // Map incoming period to Boiler Max Heating Time for compatibility
         int v = messageTemp.toInt();
-        if (v <= 0) v = 1440;
+        if (v <= 0) v = 45; // default
         boilerSettings.boilerTimeMin.set(v);
-        sl->Printf("[MAIN] MQTT: YouCanShowerPeriodMin mapped to BoilerTimeMin = %d", v).Info();
+        sl->Printf("[MAIN] MQTT: YouCanShowerPeriodMin mapped to BoilerTimeMin = %d", v).Debug();
         lastYouCanShower1PeriodId = -1; lastPublishedYouCanShower = false;
-        // Note: State publishing handled by ConfigManager callback to avoid echo loops
+
     }
     else if (strcmp(topic, mqttSettings.topicSave.c_str()) == 0) {
         // Persist all current settings
@@ -810,19 +803,18 @@ void cb_MQTTListener()
 // HELPER FUNCTIONS
 //----------------------------------------
 
-
 void SetupCheckForResetButton()
 {
     // check for pressed reset button
     if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
     {
     sl->Internal("[MAIN] Reset button pressed -> Reset all settings...");
-    sll->Internal("[MAIN] Reset button pressed!");
+    sll->Internal("Reset!");
         ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
         ConfigManager.saveAll();           // Save the default settings to EEPROM
 
         // Show user feedback that reset is happening
-    sll->Internal("[MAIN] Settings reset complete - restarting...");
+    sll->Internal("restarting...");
         //ToDo: add non blocking delay to show message on display before restart
         ESP.restart(); // Restart the ESP32
     }
@@ -844,12 +836,10 @@ void SetupCheckForAPModeButton()
     if (digitalRead(buttonSettings.apModePin.get()) == LOW)
     {
     sl->Internal("[MAIN] AP mode button pressed -> starting AP mode...");
-    sll->Internal("[MAIN] AP mode button!");
-    sll->Internal("[MAIN] -> starting AP mode...");
+    sll->Internal("AP mode button!");
         ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
     }
 }
-
 
 void CheckButtons()
 {
@@ -911,7 +901,7 @@ void CheckButtons()
         {
             resetHandled = true;
             sl->Internal("[MAIN] Reset button long-press detected -> restoring defaults");
-            sll->Internal("[MAIN] Reset button -> restoring defaults");
+            sll->Internal("restoring defaults");
             ConfigManager.clearAllFromPrefs();
             ConfigManager.saveAll();
             delay(3000); // Small delay to allow message to be seen
@@ -1068,7 +1058,7 @@ void updateStatusLED(){
 bool SetupStartWebServer()
 {
     sl->Info("[MAIN] Starting Webserver...!");
-    sll->Info("[MAIN] Starting Webserver...!");
+    sll->Info("Starting Webserver...!");
 
     if (WiFi.getMode() == WIFI_AP)
     {
@@ -1111,7 +1101,7 @@ bool SetupStartWebServer()
 void onWiFiConnected()
 {
     sl->Info("[MAIN] WiFi connected! Activating services...");
-    sll->Info("[MAIN] WiFi connected!");
+    sll->Info("WiFi connected!");
 
     if (!tickerActive)
     {
@@ -1124,17 +1114,17 @@ void onWiFiConnected()
         // Start OTA if enabled
         if (systemSettings.allowOTA.get())
         {
-            sll->Debug("[MAIN] Start OTA-Module");
+            sll->Debug("Start OTA-Module");
             ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
         }
 
         tickerActive = true;
     }
     sl->Printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
-    sll->Printf("[MAIN] IP: %s\n\n", WiFi.localIP().toString().c_str()).Info();
+    sll->Printf("IP: %s\n\n", WiFi.localIP().toString().c_str()).Info();
     sl->Printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI()).Info();
     sl->Printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
-    sll->Printf("[MAIN] WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
+    sll->Printf("WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
 
     // Start NTP sync now and schedule periodic resyncs
     auto doNtpSync = [](){
@@ -1153,8 +1143,7 @@ void onWiFiConnected()
 void onWiFiDisconnected()
 {
     sl->Debug("[MAIN] WiFi disconnected! Deactivating services...");
-    sll->Warn("[MAIN] WiFi lost connection!");
-    sll->Warn("[MAIN] deactivate mqtt ticker.");
+    sll->Warn("WiFi lost connection!");
 
     if (tickerActive)
     {
@@ -1167,7 +1156,7 @@ void onWiFiDisconnected()
         // Stop OTA if it should be disabled
         if (systemSettings.allowOTA.get() == false && ConfigManager.isOTAInitialized())
         {
-            sll->Debug("[MAIN] Stop OTA-Module");
+            sll->Debug("Stop OTA-Module");
             ConfigManager.stopOTA();
         }
 
@@ -1178,7 +1167,7 @@ void onWiFiDisconnected()
 void onWiFiAPMode()
 {
     sl->Warn("[MAIN] WiFi in AP mode");
-    sll->Warn("[MAIN] Running in AP mode!");
+    sll->Warn("AP mode!");
 
     // Ensure services are stopped in AP mode
     if (tickerActive)
