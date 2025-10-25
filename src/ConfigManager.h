@@ -627,6 +627,10 @@ private:
     ConfigManagerOTA otaManager;
     ConfigManagerRuntime runtimeManager;
 
+    // Optional user-provided global CSS to inject into the Web UI
+    const char* customCss = nullptr;
+    size_t customCssLen = 0; // 0 -> treat as null-terminated string
+
     // WebSocket support
 #if CM_ENABLE_WS_PUSH
     AsyncWebSocket *ws = nullptr;
@@ -1000,9 +1004,13 @@ public:
     // Legacy methods for backward compatibility (simplified)
     void setCustomCss(const char *css, size_t len)
     {
-        // Note: setCustomCss not implemented in new WebManager, skip for now
-        CM_LOG("[W] setCustomCss not implemented in modular WebManager");
+        customCss = css;
+        customCssLen = len;
+        CM_LOG("[I] Custom CSS registered (len=%u)", (unsigned)len);
     }
+
+    const char* getCustomCss() const { return customCss; }
+    size_t getCustomCssLen() const { return customCss ? (customCssLen ? customCssLen : strlen(customCss)) : 0; }
 
     void clearAllFromPrefs()
     {

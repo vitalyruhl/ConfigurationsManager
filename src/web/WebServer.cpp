@@ -96,6 +96,40 @@ void ConfigManagerWeb::setupStaticRoutes() {
         handleJSRequest(request);
     });
 
+    // Optional user theme CSS injection
+    server->on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        // Serve custom CSS if provided by the app via ConfigManager.setCustomCss().
+        // If not provided, fall back to built-in default CSS (if compiled), else return empty.
+        const char* css = nullptr;
+        size_t len = 0;
+        if (configManager) {
+            css = configManager->getCustomCss();
+            len = configManager->getCustomCssLen();
+        }
+
+        bool usingBuiltin = false;
+#if defined(CM_DEFAULT_RUNTIME_STYLE_CSS)
+        if (!css) {
+            css = CM_DEFAULT_RUNTIME_STYLE_CSS;
+            len = sizeof(CM_DEFAULT_RUNTIME_STYLE_CSS) - 1;
+            usingBuiltin = true;
+        }
+#endif
+
+        auto* response = request->beginResponseStream("text/css");
+        response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        if (css && (len > 0 || (usingBuiltin && css[0] != '\0'))) {
+            if (len) {
+                response->write(reinterpret_cast<const uint8_t*>(css), len);
+            } else {
+                response->print(css);
+            }
+        }
+        request->send(response);
+    });
+
     // Favicon
     server->on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(404);
