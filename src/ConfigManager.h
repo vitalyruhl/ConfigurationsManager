@@ -640,6 +640,36 @@ private:
     uint32_t wsInterval = 2000;
     unsigned long wsLastPush = 0;
     std::function<String()> customPayloadBuilder;
+    // Manual heartbeat tracking
+    struct WsClientInfo { uint32_t id; unsigned long lastSeen; };
+    std::vector<WsClientInfo> wsClients;
+    unsigned long wsLastHeartbeat = 0;
+    uint32_t wsHeartbeatInterval = 15000; // ms
+    uint32_t wsHeartbeatTimeout = 45000;  // ms
+    void wsMarkSeen(uint32_t id) {
+        for (auto &c : wsClients) { if (c.id == id) { c.lastSeen = millis(); return; } }
+        wsClients.push_back({id, millis()});
+    }
+    void wsRemove(uint32_t id) {
+        wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [id](const WsClientInfo &c){ return c.id == id; }), wsClients.end());
+    }
+    void wsHeartbeatMaintenance() {
+        if (!wsEnabled || !ws) return;
+        const unsigned long now = millis();
+        if (now - wsLastHeartbeat >= wsHeartbeatInterval) {
+            wsLastHeartbeat = now;
+            ws->textAll("__ping"); // application-level ping
+        }
+        // Drop stale clients
+        for (const auto &c : wsClients) {
+            if (now - c.lastSeen > wsHeartbeatTimeout) {
+                if (auto *cl = ws->client(c.id)) cl->close();
+            }
+        }
+        // cleanup removed
+        wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [this](const WsClientInfo &c){ return ws->client(c.id) == nullptr; }), wsClients.end());
+        ws->cleanupClients();
+    }
 #endif
 
 public:
@@ -1216,6 +1246,8 @@ public:
         {
             ws->textAll(payload);
         }
+        // Run manual heartbeat maintenance
+        wsHeartbeatMaintenance();
     }
 
     void enableWebSocketPush(uint32_t intervalMs = 2000)
@@ -1223,15 +1255,48 @@ public:
         if (!wsInitialized)
         {
             ws = new AsyncWebSocket("/ws");
+            // Note: Heartbeat API not available in this ESPAsyncWebServer fork. If needed,
+            // we can implement periodic ping/pong via a timer and drop stale clients.
             ws->onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
                         {
-                if (type == WS_EVT_CONNECT) {
+                switch (type) {
+                case WS_EVT_CONNECT:
                     CM_LOG_VERBOSE("[WS] Client connect %u", client->id());
+                    wsMarkSeen(client->id());
                     if (pushOnConnect) handleWebsocketPush();
-                }
-                else if (type == WS_EVT_DISCONNECT) {
+                    break;
+                case WS_EVT_DISCONNECT:
                     CM_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
-                } });
+                    wsRemove(client->id());
+                    break;
+                case WS_EVT_ERROR:
+                    CM_LOG_VERBOSE("[WS] Error on client %u", client->id());
+                    break;
+                case WS_EVT_PONG:
+                    CM_LOG_VERBOSE("[WS] Pong from %u", client->id());
+                    wsMarkSeen(client->id());
+                    break;
+                case WS_EVT_DATA:
+                {
+                    // check for application-level pong
+                    if (arg && data && len) {
+                        AwsFrameInfo *info = reinterpret_cast<AwsFrameInfo*>(arg);
+                        if (info && info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+                            // Small fixed buffer for compare
+                            char buf[16];
+                            size_t n = len < sizeof(buf)-1 ? len : sizeof(buf)-1;
+                            memcpy(buf, data, n);
+                            buf[n] = '\0';
+                            if (strcmp(buf, "__pong") == 0) {
+                                wsMarkSeen(client->id());
+                            }
+                        }
+                    }
+                    break;
+                }
+                    break;
+                }
+            });
             webManager.getServer()->addHandler(ws);
             wsInitialized = true;
             CM_LOG_VERBOSE("[WS] Handler registered");

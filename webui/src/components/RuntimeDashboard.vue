@@ -274,6 +274,7 @@ const builtinSystemHiddenFields = new Set(["loopAvg"]);
 let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
+let wsConnecting = false;
 
 let checkboxDebounceTimer = null;
 
@@ -486,28 +487,38 @@ function startWebSocket(url) {
         /* ignore */
       }
     }
+    if (wsConnecting) return; // avoid racing connections
+    wsConnecting = true;
     ws = new WebSocket(url);
     ws.onopen = () => {
       wsConnected.value = true;
       wsRetry = 0;
+      wsConnecting = false;
       setTimeout(() => {
         if (!runtime.value.uptime) fetchRuntime();
       }, 300);
     };
     ws.onclose = () => {
       wsConnected.value = false;
+      wsConnecting = false;
       scheduleWsReconnect(url);
     };
     ws.onerror = () => {
       wsConnected.value = false;
+      wsConnecting = false;
       scheduleWsReconnect(url);
     };
     ws.onmessage = (ev) => {
+      // Manual heartbeat: respond to server "__ping" with "__pong"
+      if (typeof ev.data === "string" && ev.data === "__ping") {
+        try { ws.send("__pong"); } catch (e) {}
+        return;
+      }
       try {
         runtime.value = JSON.parse(ev.data);
         buildRuntimeGroups();
       } catch (e) {
-        /* ignore */
+        /* ignore non-JSON frames */
       }
     };
   } catch (e) {
@@ -516,7 +527,8 @@ function startWebSocket(url) {
 }
 
 function scheduleWsReconnect(url) {
-  const delay = Math.min(5000, 300 + wsRetry * wsRetry * 200);
+  // Start with a gentler backoff to avoid thrashing on flaky links
+  const delay = Math.min(8000, 1000 + wsRetry * wsRetry * 600);
   wsRetry++;
   setTimeout(() => {
     startWebSocket(url);

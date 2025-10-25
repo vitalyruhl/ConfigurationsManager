@@ -254,11 +254,11 @@ void setupGUI()
 
     // Add metadata for Boiler provider fields
     // Show whether boiler control is enabled (setting) and actual relay state
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "enabled", .precision = 0, .order = 1, .isBool = true});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "relay on", .precision = 0, .order = 2, .isBool = true});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "temperature", .unit = "°C", .precision = 1, .order = 10});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 0, .order = 21});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "time setted", .unit = "min", .precision = 0, .order = 22});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "Enabled", .precision = 0, .order = 1, .isBool = true});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "Relay On", .precision = 0, .order = 2, .isBool = true});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "Temperature", .unit = "°C", .precision = 1, .order = 10});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "Time Left", .unit = "min", .precision = 0, .order = 21});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "Time Set", .unit = "min", .precision = 0, .order = 22});
 
     // Add alarms provider for min Temperature monitoring with hysteresis
     CRM().registerRuntimeAlarm(TEMP_ALARM_ID);
@@ -266,7 +266,6 @@ void setupGUI()
         [](JsonObject &o)
         {
             o["AL_Status"] = globalAlarmState;
-            o["Current_Temp"] = temperature;
             o["On_Threshold"] = boilerSettings.onThreshold.get();
             o["Off_Threshold"] = boilerSettings.offThreshold.get();
         });
@@ -285,9 +284,8 @@ void setupGUI()
     CRM().addRuntimeMeta(alarmMeta);
 
     // show some Info
-    CRM().addRuntimeMeta({.group = "Alarms", .key = "Current_Temp", .label = "current temp", .unit = "°C", .precision = 1, .order = 100});
-    CRM().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "on threshold", .unit = "°C", .precision = 1, .order = 101});
-    CRM().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
+    CRM().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "Alarm Under Temperature", .unit = "°C", .precision = 1, .order = 101});
+    CRM().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "You can shower now temperature", .unit = "°C", .precision = 1, .order = 102});
 
     // Temperature slider for testing (initialize with current temperature value)
     CRM().addRuntimeProvider("Hand overrides", [](JsonObject &o) { }, 100);
@@ -454,7 +452,7 @@ void cb_publishToMQTT()
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
-        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 200, /*gapMs*/ 1500);
+        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 100, /*gapMs*/ 1500);
     }
 }
 
