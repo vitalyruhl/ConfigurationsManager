@@ -117,13 +117,23 @@ provide("dismissToast", dismissToast);
 
 async function loadSettings() {
   try {
-    const r = await fetch("/config.json");
+    // Add timeout to HTTP request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    const r = await fetch("/config.json", { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
     if (!r.ok) throw new Error("HTTP Error");
     const data = await r.json();
     config.value = data.config || data;
     refreshKey.value++;
   } catch (e) {
-    notify("Fehler: " + e.message, "error");
+    if (e.name === 'AbortError') {
+      notify("Connection timeout: Could not load settings", "error");
+    } else {
+      notify("Fehler: " + e.message, "error");
+    }
   }
 }
 function switchToSettings() {
@@ -182,20 +192,31 @@ async function saveSingle(category, key, value) {
   opBusy.value[opKey] = true;
   const tid = notify(`Saving: ${opKey} ...`, "info", 7000, true);
   try {
+    // Add timeout to HTTP request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     const r = await fetch(
       `/config/save?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value }),
+        signal: controller.signal
       }
     );
+    clearTimeout(timeoutId);
+    
     const json = await r.json().catch(() => ({}));
     if (!r.ok || json.status !== "ok") throw new Error(json.reason || "Failed");
     await loadSettings();
     updateToast(tid, `Saved: ${opKey}`, "success");
   } catch (e) {
-    updateToast(tid, `Save failed ${opKey}: ${e.message}`, "error");
+    if (e.name === 'AbortError') {
+      updateToast(tid, `Save timeout ${opKey}: Connection lost`, "error");
+    } else {
+      updateToast(tid, `Save failed ${opKey}: ${e.message}`, "error");
+    }
   } finally {
     delete opBusy.value[opKey];
   }

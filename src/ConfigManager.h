@@ -644,8 +644,8 @@ private:
     struct WsClientInfo { uint32_t id; unsigned long lastSeen; };
     std::vector<WsClientInfo> wsClients;
     unsigned long wsLastHeartbeat = 0;
-    uint32_t wsHeartbeatInterval = 15000; // ms
-    uint32_t wsHeartbeatTimeout = 45000;  // ms
+    uint32_t wsHeartbeatInterval = 30000; // ms - ping every 30 seconds instead of 15
+    uint32_t wsHeartbeatTimeout = 120000;  // ms - 2 minutes timeout instead of 45 seconds
     void wsMarkSeen(uint32_t id) {
         for (auto &c : wsClients) { if (c.id == id) { c.lastSeen = millis(); return; } }
         wsClients.push_back({id, millis()});

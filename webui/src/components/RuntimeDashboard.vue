@@ -475,7 +475,17 @@ function initLive() {
       : "ws://";
   const url =
     proto + (typeof location !== "undefined" ? location.host : "") + "/ws";
+  
+  // Start WebSocket attempt
   startWebSocket(url);
+  
+  // Also start a backup polling mechanism with a delay to ensure we have data flow
+  setTimeout(() => {
+    if (!wsConnected.value && !pollTimer) {
+      console.log("WebSocket not connected, starting backup polling");
+      fallbackPolling();
+    }
+  }, 3000); // Give WebSocket 3 seconds to connect
 }
 
 function startWebSocket(url) {
@@ -490,20 +500,51 @@ function startWebSocket(url) {
     if (wsConnecting) return; // avoid racing connections
     wsConnecting = true;
     ws = new WebSocket(url);
+    
+    // Set a timeout to quickly detect if WebSocket is not available
+    const connectionTimeout = setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.CONNECTING) {
+        try {
+          ws.close();
+        } catch (e) {
+          /* ignore */
+        }
+        wsConnected.value = false;
+        wsConnecting = false;
+        // Don't retry if WebSocket is not available (likely disabled on server)
+        if (wsRetry === 0) {
+          console.log("WebSocket not available, using polling mode");
+          if (!pollTimer) {
+            fallbackPolling();
+          }
+          return;
+        }
+        scheduleWsReconnect(url);
+      }
+    }, 2000); // 2 second timeout for initial connection
+    
     ws.onopen = () => {
+      clearTimeout(connectionTimeout);
       wsConnected.value = true;
       wsRetry = 0;
       wsConnecting = false;
+      // Stop polling when WebSocket is connected
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
       setTimeout(() => {
         if (!runtime.value.uptime) fetchRuntime();
       }, 300);
     };
     ws.onclose = () => {
+      clearTimeout(connectionTimeout);
       wsConnected.value = false;
       wsConnecting = false;
       scheduleWsReconnect(url);
     };
     ws.onerror = () => {
+      clearTimeout(connectionTimeout);
       wsConnected.value = false;
       wsConnecting = false;
       scheduleWsReconnect(url);
@@ -527,6 +568,15 @@ function startWebSocket(url) {
 }
 
 function scheduleWsReconnect(url) {
+  // If we've retried many times without success, WebSocket is likely disabled
+  if (wsRetry >= 5) {
+    console.log("WebSocket appears to be disabled after multiple failures, using polling mode only");
+    if (!pollTimer) {
+      fallbackPolling();
+    }
+    return;
+  }
+  
   // Start with a gentler backoff to avoid thrashing on flaky links
   const delay = Math.min(8000, 1000 + wsRetry * wsRetry * 600);
   wsRetry++;
