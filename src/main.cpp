@@ -33,6 +33,9 @@ void PinSetup();
 void handeleBoilerState(bool forceON = false);
 void UpdateBoilerAlarmState();
 
+// Shorthand helper for RuntimeManager access
+static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntimeManager(); }
+
 // WiFi Manager callback functions
 void onWiFiConnected();
 void onWiFiDisconnected();
@@ -173,7 +176,7 @@ void loop()
     {
         lastAlarmEval = millis();
         UpdateBoilerAlarmState();
-        ConfigManager.getRuntimeManager().updateAlarms();
+        CRM().updateAlarms();
     }
 
     mqttManager.loop(); // Handle MQTT Manager loop
@@ -270,7 +273,7 @@ void setupGUI()
     systemAppMeta.isString = true;
     systemAppMeta.staticValue = String(APP_NAME);
     systemAppMeta.order = 0;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(systemAppMeta);
+    CRM().addRuntimeMeta(systemAppMeta);
 
     RuntimeFieldMeta systemVersionMeta{};
     systemVersionMeta.group = "system";
@@ -279,7 +282,7 @@ void setupGUI()
     systemVersionMeta.isString = true;
     systemVersionMeta.staticValue = String(VERSION);
     systemVersionMeta.order = 1;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(systemVersionMeta);
+    CRM().addRuntimeMeta(systemVersionMeta);
 
     RuntimeFieldMeta systemBuildMeta{};
     systemBuildMeta.group = "system";
@@ -288,10 +291,10 @@ void setupGUI()
     systemBuildMeta.isString = true;
     systemBuildMeta.staticValue = String(VERSION_DATE);
     systemBuildMeta.order = 2;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(systemBuildMeta);
+    CRM().addRuntimeMeta(systemBuildMeta);
 
     // Runtime live values provider
-    ConfigManager.getRuntimeManager().addRuntimeProvider("Boiler",
+    CRM().addRuntimeProvider("Boiler",
         [](JsonObject &o)
         {
             o["Bo_EN_Set"] = boilerSettings.enabled.get();
@@ -303,15 +306,15 @@ void setupGUI()
 
     // Add metadata for Boiler provider fields
     // Show whether boiler control is enabled (setting) and actual relay state
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "enabled", .precision = 0, .order = 1, .isBool = true});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "relay on", .precision = 0, .order = 2, .isBool = true});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "temperature", .unit = "°C", .precision = 1, .order = 10});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 0, .order = 21});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "time setted", .unit = "min", .precision = 0, .order = 22});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "enabled", .precision = 0, .order = 1, .isBool = true});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "relay on", .precision = 0, .order = 2, .isBool = true});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "temperature", .unit = "°C", .precision = 1, .order = 10});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 0, .order = 21});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "time setted", .unit = "min", .precision = 0, .order = 22});
 
     // Add alarms provider for min Temperature monitoring with hysteresis
-    ConfigManager.getRuntimeManager().registerRuntimeAlarm(TEMP_ALARM_ID);
-    ConfigManager.getRuntimeManager().addRuntimeProvider("Alarms",
+    CRM().registerRuntimeAlarm(TEMP_ALARM_ID);
+    CRM().addRuntimeProvider("Alarms",
         [](JsonObject &o)
         {
             o["AL_Status"] = globalAlarmState;
@@ -331,15 +334,15 @@ void setupGUI()
     alarmMeta.boolAlarmValue = true;
     alarmMeta.alarmWhenTrue = true;
     alarmMeta.hasAlarm = true;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(alarmMeta);
+    CRM().addRuntimeMeta(alarmMeta);
 
     // show some Info
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Current_Temp", .label = "current temp", .unit = "°C", .precision = 1, .order = 100});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "on threshold", .unit = "°C", .precision = 1, .order = 101});
-    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
+    CRM().addRuntimeMeta({.group = "Alarms", .key = "Current_Temp", .label = "current temp", .unit = "°C", .precision = 1, .order = 100});
+    CRM().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "on threshold", .unit = "°C", .precision = 1, .order = 101});
+    CRM().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "off threshold", .unit = "°C", .precision = 1, .order = 102});
 
     // Temperature slider for testing (initialize with current temperature value)
-    ConfigManager.getRuntimeManager().addRuntimeProvider("Hand overrides", [](JsonObject &o) { }, 100);
+    CRM().addRuntimeProvider("Hand overrides", [](JsonObject &o) { }, 100);
 
     static float transientFloatVal = temperature; // Initialize with current temperature
     ConfigManager.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Temperature Test", -10.0f, 100.0f, temperature, 1, []()
@@ -354,7 +357,7 @@ void setupGUI()
     ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
         { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
 
-    ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
+    CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
 }
 
 
@@ -380,7 +383,7 @@ void UpdateBoilerAlarmState()
     if (globalAlarmState != previousState)
     {
         sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> %s", temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF").Debug();
-        ConfigManager.getRuntimeManager().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
+    CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
         handeleBoilerState(true); // Force boiler if the temperature is too low
     }
 }
