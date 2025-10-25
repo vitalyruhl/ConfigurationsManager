@@ -32,6 +32,7 @@ void initializeAllSettings() {
     ConfigManager.addSetting(&boilerSettings.relayPin);
     ConfigManager.addSetting(&boilerSettings.activeLow);
     ConfigManager.addSetting(&boilerSettings.boilerTimeMin);
+    ConfigManager.addSetting(&boilerSettings.stopTimerOnTarget);
 
     ConfigManager.addSetting(&displaySettings.turnDisplayOff);
     ConfigManager.addSetting(&displaySettings.onTimeSec);

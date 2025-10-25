@@ -159,6 +159,7 @@ struct BoilerSettings {
     Config<int>   relayPin;// GPIO for boiler relay
     Config<bool>  activeLow;// relay active low/high
     Config<int>   boilerTimeMin;// max time boiler is allowed to heat
+    Config<bool>  stopTimerOnTarget; // stop timer when off-threshold reached
 
     BoilerSettings():
         enabled(ConfigOptions<bool>{
@@ -200,6 +201,13 @@ struct BoilerSettings {
             .name = "Boiler Max Heating Time (min)",
             .category = "Boiler",
             .defaultValue = 90,
+            .showInWeb = true
+        }),
+        stopTimerOnTarget(ConfigOptions<bool>{
+            .key = "BoI_StopOnT",
+            .name = "Stop timer when target reached",
+            .category = "Boiler",
+            .defaultValue = true,
             .showInWeb = true
         })
     {

@@ -70,6 +70,7 @@ Ticker ListenMQTTTicker;
 Ticker displayTicker;
 Ticker TempReadTicker;
 Ticker NtpSyncTicker;
+Ticker WillShowerResetTicker;
 
 // globale helpers variables
 float temperature = 70.0;    // current temperature in Celsius
@@ -88,7 +89,10 @@ static const unsigned long resetHoldDurationMs = 3000; // Require 3s hold to fac
 // DS18B20 globals
 static OneWire* oneWireBus = nullptr;
 static DallasTemperature* ds18 = nullptr;
-static bool youCanShowerNow = false; // derived status for MQTT
+static bool youCanShowerNow = false; // derived status for MQTT/UI
+static bool willShowerRequested = false; // unified flag for UI+MQTT 'I will shower'
+static bool didStartupMQTTPropagate = false; // ensure one-time retained propagation
+static bool suppressNextWillShowerFalse = false; // ignore our own immediate reset publish
 
 #pragma endregion configuration variables
 
@@ -253,6 +257,7 @@ void setupGUI()
             o["Bo_EN"] = Relays::getBoiler();
             o["Bo_Temp"] = temperature;
             o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
+            // Expose time left in seconds
             o["Bo_TimeLeft"] = boilerTimeRemaining;
             // Derived readiness: can shower when current temp >= off threshold
             bool canShower = (temperature >= boilerSettings.offThreshold.get());
@@ -266,7 +271,7 @@ void setupGUI()
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "Relay On", .precision = 0, .order = 2, .isBool = true});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_CanShower", .label = "You can shower now", .precision = 0, .order = 5, .isBool = true});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "Temperature", .unit = "°C", .precision = 1, .order = 10});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "Time Left", .unit = "min", .precision = 0, .order = 21});
+    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "Time Left", .unit = "s", .precision = 0, .order = 21});
     CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "Time Set", .unit = "min", .precision = 0, .order = 22});
 
     // Add alarms provider for min Temperature monitoring with hysteresis
@@ -308,9 +313,36 @@ void setupGUI()
         }, String("°C"));
 
     // State button to manually control the boiler relay
-    static bool stateBtnState = false;
     ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
-        { return stateBtnState; }, [](bool v) { stateBtnState = v;  Relays::setBoiler(v); }, /*init*/ false);
+        { return willShowerRequested; }, [](bool v) {
+            willShowerRequested = v;
+            if (v) {
+                if (boilerTimeRemaining <= 0) {
+                    int mins = mqttSettings.mqtt_Settings_ShowerTime.get();
+                    if (mins <= 0) mins = 60;
+                    boilerTimeRemaining = mins * 60;
+                }
+                Relays::setBoiler(true);
+                // Publish a pulse (1 then 0) so MQTT sees the press, but remains 0 while time is running
+                if (mqttManager.isConnected()) {
+                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "1", true);
+                    WillShowerResetTicker.detach();
+                    WillShowerResetTicker.once(0.5f, +[](){
+                        if (mqttManager.isConnected()) {
+                            suppressNextWillShowerFalse = true;
+                            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+                        }
+                    });
+                }
+            } else {
+                // user canceled
+                boilerTimeRemaining = 0;
+                Relays::setBoiler(false);
+                if (mqttManager.isConnected()) {
+                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+                }
+            }
+        }, /*init*/ false);
 
     CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
 }
@@ -350,12 +382,23 @@ void handeleBoilerState(bool forceON)
     if (now - lastBoilerCheck >= 1000) // Check every second
     {
         lastBoilerCheck = now;
+        const bool stopOnTarget = boilerSettings.stopTimerOnTarget.get();
+        const bool wasOn = Relays::getBoiler();
+        const int prevTime = boilerTimeRemaining;
 
         // Temperature-based auto control: turn off when upper threshold reached, allow turn-on when below lower threshold
         if (Relays::getBoiler()) {
             if (temperature >= boilerSettings.offThreshold.get()) {
                 Relays::setBoiler(false);
-                boilerTimeRemaining = 0;
+                if (stopOnTarget) {
+                    boilerTimeRemaining = 0;
+                    if (willShowerRequested) {
+                        willShowerRequested = false;
+                        if (mqttManager.isConnected()) {
+                            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+                        }
+                    }
+                }
             }
         } else {
             if ((boilerSettings.enabled.get() || forceON) && (temperature <= boilerSettings.onThreshold.get()) && (boilerTimeRemaining > 0)) {
@@ -372,7 +415,7 @@ void handeleBoilerState(bool forceON)
                 {
                     Relays::setBoiler(true); // Turn on the boiler
                 }
-                boilerTimeRemaining--;
+                boilerTimeRemaining--; // count down in seconds
             }
             else
             {
@@ -387,6 +430,19 @@ void handeleBoilerState(bool forceON)
             if (Relays::getBoiler())
             {
                 Relays::setBoiler(false); // Turn off the boiler if disabled
+            }
+        }
+
+        // Detect timer end transition to 0 -> clear WillShower and publish retained OFF
+        if (prevTime > 0 && boilerTimeRemaining <= 0) {
+            if (willShowerRequested) {
+                willShowerRequested = false;
+                if (mqttManager.isConnected()) {
+                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+                }
+            }
+            if (Relays::getBoiler()) {
+                Relays::setBoiler(false);
             }
         }
     }
@@ -452,6 +508,24 @@ void setupMQTT()
                                 sl->Debug("[MAIN] Ready to subscribe to MQTT topics...");
                                 mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
                                 mqttManager.subscribe(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str());
+                                // One-time retained propagation of all relevant topics (on cold start)
+                                if (!didStartupMQTTPropagate) {
+                                    // Compute derived status
+                                    youCanShowerNow = (temperature >= boilerSettings.offThreshold.get());
+
+                                    // Publish current statuses retained
+                                    mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature), /*retained*/ true);
+                                    {
+                                        int timeLeftMin = (boilerTimeRemaining + 59) / 60;
+                                        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(timeLeftMin), /*retained*/ true);
+                                    }
+                                    mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(Relays::getBoiler()), /*retained*/ true);
+                                    mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.get().c_str(), youCanShowerNow ? "1" : "0", /*retained*/ true);
+                                    // Also propagate a default for the control topic 'WillShower' to a known state (0)
+                                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", /*retained*/ true);
+                                    didStartupMQTTPropagate = true;
+                                    sl->Info("[MAIN] Published retained MQTT startup state");
+                                }
                                 cb_publishToMQTT(); // Publish initial values
                             });
 
@@ -468,8 +542,9 @@ void cb_publishToMQTT()
     {
         // sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
+        int timeLeftMin = (boilerTimeRemaining + 59) / 60;
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(timeLeftMin));
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(Relays::getBoiler()));
         // Publish 'You can shower now' status based on off-threshold
         youCanShowerNow = (temperature >= boilerSettings.offThreshold.get());
         mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.get().c_str(), youCanShowerNow ? "1" : "0");
@@ -498,11 +573,17 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
         // Interpret payload as minutes to keep boiler ON
         int mins = messageTemp.toInt();
         if (mins > 0) {
-            boilerTimeRemaining = mins;
+            boilerTimeRemaining = mins * 60;
+            willShowerRequested = true;
             if (!Relays::getBoiler()) {
                 Relays::setBoiler(true);
             }
             sl->Printf("[MAIN] MQTT set shower time: %d min (relay ON)", mins).Info();
+            // Keep control topic at 0 while timer is active so HA switch is stateless
+            if (mqttManager.isConnected()) {
+                suppressNextWillShowerFalse = true;
+                mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+            }
         }
     }
     else if (strcmp(topic, mqttSettings.mqtt_Settings_WillShower_topic.get().c_str()) == 0)
@@ -512,11 +593,28 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
         if (willShower) {
             int mins = mqttSettings.mqtt_Settings_ShowerTime.get();
             if (mins <= 0) mins = 60;
-            boilerTimeRemaining = max(boilerTimeRemaining, mins);
+            boilerTimeRemaining = max(boilerTimeRemaining, mins * 60);
+            willShowerRequested = true;
             if (!Relays::getBoiler()) {
                 Relays::setBoiler(true);
             }
             sl->Printf("[MAIN] HA request: will shower -> set %d min (relay ON)", mins).Info();
+            // Reset control topic to 0 to avoid sticky ON state
+            if (mqttManager.isConnected()) {
+                suppressNextWillShowerFalse = true;
+                mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+            }
+        } else {
+            if (suppressNextWillShowerFalse) {
+                // ignore our own self-reset publish
+                suppressNextWillShowerFalse = false;
+                sl->Debug("[MAIN] Ignored self-reset WillShower=0");
+                return;
+            }
+            willShowerRequested = false;
+            boilerTimeRemaining = 0;
+            Relays::setBoiler(false);
+            sl->Info("[MAIN] HA request: will shower = false -> timer cleared, relay OFF");
         }
     }
 }
@@ -638,7 +736,7 @@ void WriteToDisplay()
 {
     // Static variables to track last displayed values
     static float lastTemperature = -999.0;
-    static int lastTimeRemaining = -1;
+    static int lastTimeRemainingSec = -1;
     static bool lastBoilerState = false;
     static bool lastDisplayActive = true;
 
@@ -659,13 +757,14 @@ void WriteToDisplay()
 
     // Only update display if values have changed
     bool needsUpdate = wasInactive; // Force refresh on wake
+    int timeLeftSec = boilerTimeRemaining;
     if (abs(temperature - lastTemperature) > 0.1 ||
-        boilerTimeRemaining != lastTimeRemaining ||
+        timeLeftSec != lastTimeRemainingSec ||
         boilerState != lastBoilerState)
     {
         needsUpdate = true;
         lastTemperature = temperature;
-        lastTimeRemaining = boilerTimeRemaining;
+        lastTimeRemainingSec = timeLeftSec;
         lastBoilerState = boilerState;
     }
 
@@ -697,9 +796,11 @@ void WriteToDisplay()
 
     // Show remaining time
     display.setCursor(3, 13);
-    if (boilerTimeRemaining > 0)
+    if (timeLeftSec > 0)
     {
-        display.printf("Time left: %d min", boilerTimeRemaining);
+        int mm = timeLeftSec / 60;
+        int ss = timeLeftSec % 60;
+        display.printf("Time left: %d:%02d", mm, ss);
     }
     else
     {
