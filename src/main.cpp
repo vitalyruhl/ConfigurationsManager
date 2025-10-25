@@ -11,6 +11,8 @@
 #include "helpers/helpers.h"
 #include "helpers/relays.h"
 #include "helpers/mqtt_manager.h"
+// New non-blocking blinker utility
+#include "binking/Blinker.h"
 
  #include "secret/wifiSecret.h"
 
@@ -35,6 +37,9 @@ void UpdateBoilerAlarmState();
 
 // Shorthand helper for RuntimeManager access
 static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntimeManager(); }
+
+// Global blinkers: built-in LED and optional buzzer
+static Blinker buildinLED(LED_BUILTIN, Blinker::HIGH_ACTIVE);
 
 // WiFi Manager callback functions
 void onWiFiConnected();
@@ -185,82 +190,13 @@ void loop()
     ConfigManager.handleWebsocketPush();
     ConfigManager.getOTAManager().handle();
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
-    updateStatusLED();
+    updateStatusLED();       // Schedule LED patterns if WiFi state changed
+    Blinker::loopAll();      // Advance all blinker state machines
     delay(10); // Small delay
 }
 
 //----------------------------------------
-// MQTT FUNCTIONS
-//----------------------------------------
-void setupMQTT()
-{
-    // -- Setup MQTT connection --
-    sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
-    sll->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
-
-    mqttSettings.updateTopics();
-
-    // Configure MQTT Manager
-    mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
-    mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-    mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
-    mqttManager.setMaxRetries(10);
-    mqttManager.setRetryInterval(5000);
-
-    // Set MQTT callbacks
-    mqttManager.onConnected([]()
-                            {
-                                sl->Debug("[MAIN] Ready to subscribe to MQTT topics...");
-                                mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
-                                cb_publishToMQTT(); // Publish initial values
-                            });
-
-    mqttManager.onDisconnected([]() { sl->Warn("[MAIN] MQTT disconnected"); });
-
-    mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
-
-    mqttManager.begin();
-}
-
-void cb_publishToMQTT()
-{
-    if (mqttManager.isConnected())
-    {
-        // sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
-    }
-}
-
-void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
-{
-    String messageTemp((char *)message, length); // Convert byte array to String using constructor
-    messageTemp.trim();                          // Remove leading and trailing whitespace
-
-    sl->Printf("[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
-    if (strcmp(topic, mqttSettings.mqtt_Settings_SetState_topic.get().c_str()) == 0)
-    {
-        // check if it is a number, if not set it to 0
-        if (messageTemp.equalsIgnoreCase("null") ||
-            messageTemp.equalsIgnoreCase("undefined") ||
-            messageTemp.equalsIgnoreCase("NaN") ||
-            messageTemp.equalsIgnoreCase("Infinity") ||
-            messageTemp.equalsIgnoreCase("-Infinity"))
-        {
-            sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Warn();
-            messageTemp = "0";
-        }
-    }
-}
-
-void cb_MQTTListener()
-{
-    mqttManager.loop(); // process MQTT connection and incoming messages
-}
-
-//----------------------------------------
-// HELPER FUNCTIONS
+// PROJECT FUNCTIONS
 //----------------------------------------
 
 void setupGUI()
@@ -360,7 +296,6 @@ void setupGUI()
     CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
 }
 
-
 void UpdateBoilerAlarmState()
 {
     bool previousState = globalAlarmState;
@@ -430,6 +365,90 @@ void handeleBoilerState(bool forceON)
     }
 }
 
+void PinSetup()
+{
+    analogReadResolution(12); // Use full 12-bit resolution
+    pinMode(buttonSettings.resetDefaultsPin.get(), INPUT_PULLUP);
+    pinMode(buttonSettings.apModePin.get(), INPUT_PULLUP);
+    Relays::initPins();
+    Relays::setBoiler(false); // Force known OFF state
+}
+
+//----------------------------------------
+// MQTT FUNCTIONS
+//----------------------------------------
+void setupMQTT()
+{
+    // -- Setup MQTT connection --
+    sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
+    sll->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
+
+    mqttSettings.updateTopics();
+
+    // Configure MQTT Manager
+    mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
+    mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
+    mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
+    mqttManager.setMaxRetries(10);
+    mqttManager.setRetryInterval(5000);
+
+    // Set MQTT callbacks
+    mqttManager.onConnected([]()
+                            {
+                                sl->Debug("[MAIN] Ready to subscribe to MQTT topics...");
+                                mqttManager.subscribe(mqttSettings.mqtt_Settings_SetState_topic.get().c_str());
+                                cb_publishToMQTT(); // Publish initial values
+                            });
+
+    mqttManager.onDisconnected([]() { sl->Warn("[MAIN] MQTT disconnected"); });
+
+    mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
+
+    mqttManager.begin();
+}
+
+void cb_publishToMQTT()
+{
+    if (mqttManager.isConnected())
+    {
+        // sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
+        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
+    }
+}
+
+void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
+{
+    String messageTemp((char *)message, length); // Convert byte array to String using constructor
+    messageTemp.trim();                          // Remove leading and trailing whitespace
+
+    sl->Printf("[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
+    if (strcmp(topic, mqttSettings.mqtt_Settings_SetState_topic.get().c_str()) == 0)
+    {
+        // check if it is a number, if not set it to 0
+        if (messageTemp.equalsIgnoreCase("null") ||
+            messageTemp.equalsIgnoreCase("undefined") ||
+            messageTemp.equalsIgnoreCase("NaN") ||
+            messageTemp.equalsIgnoreCase("Infinity") ||
+            messageTemp.equalsIgnoreCase("-Infinity"))
+        {
+            sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Warn();
+            messageTemp = "0";
+        }
+    }
+}
+
+void cb_MQTTListener()
+{
+    mqttManager.loop(); // process MQTT connection and incoming messages
+}
+
+//----------------------------------------
+// HELPER FUNCTIONS
+//----------------------------------------
+
+
 void SetupCheckForResetButton()
 {
     // check for pressed reset button
@@ -469,50 +488,69 @@ void SetupCheckForAPModeButton()
     }
 }
 
-bool SetupStartWebServer()
+
+void CheckButtons()
 {
-    sl->Info("[MAIN] Starting Webserver...!");
-    sll->Info("[MAIN] Starting Webserver...!");
+    static bool lastResetButtonState = HIGH;
+    static bool lastAPButtonState = HIGH;
+    static unsigned long lastButtonCheck = 0;
+    static unsigned long resetPressStart = 0;
+    static bool resetHandled = false;
 
-    if (WiFi.getMode() == WIFI_AP)
+    // Debounce: only check buttons every 50ms
+    if (millis() - lastButtonCheck < 50)
     {
-        // sl->Info("SetupStartWebServer(): Run in AP Mode! "); // Log AP mode - because callback may be not be called?!
-        // sl->Printf("\n\nWebserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
-        return false; // Skip webserver setup in AP mode
+        return;
+    }
+    lastButtonCheck = millis();
+
+    bool currentResetState = digitalRead(buttonSettings.resetDefaultsPin.get());
+    bool currentAPState = digitalRead(buttonSettings.apModePin.get());
+
+    // Check for button press (transition from HIGH to LOW)
+    if (lastResetButtonState == HIGH && currentResetState == LOW)
+    {
+        sl->Debug("[MAIN] Reset-Button pressed -> Start Display Ticker...");
+        ShowDisplay();
     }
 
-    if (WiFi.status() != WL_CONNECTED)
+    if (lastAPButtonState == HIGH && currentAPState == LOW)
     {
-        if (wifiSettings.useDhcp.get())
-        {
-            sl->Debug("[MAIN] startWebServer: DHCP enabled");
-            ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-        }
-        else
-        {
-            sl->Debug("[MAIN] startWebServer: DHCP disabled - using static IP");
-            IPAddress staticIP, gateway, subnet, dns1, dns2;
-            staticIP.fromString(wifiSettings.staticIp.get());
-            gateway.fromString(wifiSettings.gateway.get());
-            subnet.fromString(wifiSettings.subnet.get());
-
-            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
-            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
-            if (!dnsPrimaryStr.isEmpty())
-            {
-                dns1.fromString(dnsPrimaryStr);
-            }
-            if (!dnsSecondaryStr.isEmpty())
-            {
-                dns2.fromString(dnsSecondaryStr);
-            }
-
-            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
-        }
+        sl->Debug("[MAIN] AP-Mode-Button pressed -> Start Display Ticker...");
+        ShowDisplay();
     }
 
-    return true; // Webserver setup completed
+    lastResetButtonState = currentResetState;
+    lastAPButtonState = currentAPState;
+
+    // Detect long press on reset button to restore defaults at runtime
+    if (currentResetState == LOW)
+    {
+        if (resetPressStart == 0)
+        {
+            resetPressStart = millis();
+        }
+        else if (!resetHandled && millis() - resetPressStart >= resetHoldDurationMs)
+        {
+            resetHandled = true;
+            sl->Internal("[MAIN] Reset button long-press detected -> restoring defaults");
+            sll->Internal("[MAIN] Reset button -> restoring defaults");
+            ConfigManager.clearAllFromPrefs();
+            ConfigManager.saveAll();
+            delay(3000); // Small delay to allow message to be seen
+            ESP.restart();
+        }
+    }
+    else
+    {
+        resetPressStart = 0;
+        resetHandled = false;
+    }
 }
+
+//----------------------------------------
+// DISPLAY FUNCTIONS
+//----------------------------------------
 
 void WriteToDisplay()
 {
@@ -560,11 +598,15 @@ void WriteToDisplay()
     display.setTextSize(1);
     display.setTextColor(WHITE);
 
+    display.cp437(true);// Use CP437 for extended glyphs (e.g., degree symbol 248)
+
     // Show boiler status and temperature
     display.setCursor(3, 3);
     if (temperature > 0)
     {
-        display.printf("Boiler: %s | T:%.1f °C", boilerState ? "ON " : "OFF", temperature);
+        display.printf("Boiler: %s | T:%.1f ", boilerState ? "ON " : "OFF", temperature);
+        display.write((uint8_t)248); // degree symbol in CP437
+        display.print("C");
     }
     else
     {
@@ -583,74 +625,6 @@ void WriteToDisplay()
     }
 
     display.display();
-}
-
-void PinSetup()
-{
-    analogReadResolution(12); // Use full 12-bit resolution
-    pinMode(buttonSettings.resetDefaultsPin.get(), INPUT_PULLUP);
-    pinMode(buttonSettings.apModePin.get(), INPUT_PULLUP);
-    Relays::initPins();
-    Relays::setBoiler(false); // Force known OFF state
-}
-
-void CheckButtons()
-{
-    static bool lastResetButtonState = HIGH;
-    static bool lastAPButtonState = HIGH;
-    static unsigned long lastButtonCheck = 0;
-    static unsigned long resetPressStart = 0;
-    static bool resetHandled = false;
-
-    // Debounce: only check buttons every 50ms
-    if (millis() - lastButtonCheck < 50)
-    {
-        return;
-    }
-    lastButtonCheck = millis();
-
-    bool currentResetState = digitalRead(buttonSettings.resetDefaultsPin.get());
-    bool currentAPState = digitalRead(buttonSettings.apModePin.get());
-
-    // Check for button press (transition from HIGH to LOW)
-    if (lastResetButtonState == HIGH && currentResetState == LOW)
-    {
-        sl->Internal("[MAIN] Reset-Button pressed -> Start Display Ticker...");
-        ShowDisplay();
-    }
-
-    if (lastAPButtonState == HIGH && currentAPState == LOW)
-    {
-        sl->Internal("[MAIN] AP-Mode-Button pressed -> Start Display Ticker...");
-        ShowDisplay();
-    }
-
-    lastResetButtonState = currentResetState;
-    lastAPButtonState = currentAPState;
-
-    // Detect long press on reset button to restore defaults at runtime
-    if (currentResetState == LOW)
-    {
-        if (resetPressStart == 0)
-        {
-            resetPressStart = millis();
-        }
-        else if (!resetHandled && millis() - resetPressStart >= resetHoldDurationMs)
-        {
-            resetHandled = true;
-            sl->Internal("[MAIN] Reset button long-press detected -> restoring defaults");
-            sll->Internal("[MAIN] Reset button -> restoring defaults");
-            ConfigManager.clearAllFromPrefs();
-            ConfigManager.saveAll();
-            delay(3000); // Small delay to allow message to be seen
-            ESP.restart();
-        }
-    }
-    else
-    {
-        resetPressStart = 0;
-        resetHandled = false;
-    }
 }
 
 void ShowDisplay()
@@ -673,99 +647,34 @@ void ShowDisplayOff()
     }
 }
 
-// ------------------------------------------------------------------
-// Non-blocking status LED pattern
-//  States / patterns:
-//   - AP mode: fast blink (100ms on / 100ms off)
-//   - Connected STA: slow heartbeat (on 60ms every 2s)
-//   - Connecting / disconnected: double blink (2 quick pulses every 1s)
-// ------------------------------------------------------------------
-void updateStatusLED()
-{
-    static unsigned long lastChange = 0;
-    static uint8_t phase = 0;
-    unsigned long now = millis();
+void updateStatusLED(){
+    // ------------------------------------------------------------------
+    // Status LED using Blinker: select patterns based on WiFi state
+    //  - AP mode: fast blink (100ms on / 100ms off)
+    //  - Connected: heartbeat (60ms on every 2s)
+    //  - Connecting/disconnected: double blink every ~1s
+    // Patterns are scheduled on state change; timing is handled by Blinker::loopAll().
+    // ------------------------------------------------------------------
 
-    bool connected = ConfigManager.getWiFiManager().isConnected();
-    bool apMode = ConfigManager.getWiFiManager().isInAPMode();
+    static int lastMode = -1; // 1=AP, 2=CONNECTED, 3=CONNECTING
 
-    if (apMode)
+    const bool connected = ConfigManager.getWiFiManager().isConnected();
+    const bool apMode = ConfigManager.getWiFiManager().isInAPMode();
+
+    const int mode = apMode ? 1 : (connected ? 2 : 3);
+    if (mode == lastMode) return; // no change
+    lastMode = mode;
+
+    switch (mode)
     {
-        // simple fast blink 5Hz (100/100)
-        if (now - lastChange >= 100)
-        {
-            lastChange = now;
-            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-        }
-        return;
-    }
-
-    if (connected)
-    {
-        // heartbeat: brief flash every 2s
-        switch (phase)
-        {
-        case 0: // LED off idle
-            if (now - lastChange >= 2000)
-            {
-                phase = 1;
-                lastChange = now;
-                digitalWrite(LED_BUILTIN, HIGH);
-            }
-            break;
-        case 1: // LED on briefly
-            if (now - lastChange >= 60)
-            {
-                phase = 0;
-                lastChange = now;
-                digitalWrite(LED_BUILTIN, LOW);
-            }
-            break;
-        }
-        return;
-    }
-
-    // disconnected / connecting: double blink every ~1s
-    switch (phase)
-    {
-    case 0: // idle off
-        if (now - lastChange >= 1000)
-        {
-            phase = 1;
-            lastChange = now;
-            digitalWrite(LED_BUILTIN, HIGH);
-        }
+    case 1: // AP mode: 100/100 continuous
+        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 200, /*gapMs*/ 0);
         break;
-    case 1: // first on
-        if (now - lastChange >= 80)
-        {
-            phase = 2;
-            lastChange = now;
-            digitalWrite(LED_BUILTIN, LOW);
-        }
+    case 2: // Connected: 60ms ON heartbeat every 2s -> 120ms pulse + 1880ms gap
+        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 120, /*gapMs*/ 1880);
         break;
-    case 2: // gap
-        if (now - lastChange >= 120)
-        {
-            phase = 3;
-            lastChange = now;
-            digitalWrite(LED_BUILTIN, HIGH);
-        }
-        break;
-    case 3: // second on
-        if (now - lastChange >= 80)
-        {
-            phase = 4;
-            lastChange = now;
-            digitalWrite(LED_BUILTIN, LOW);
-        }
-        break;
-    case 4: // tail gap back to idle
-        if (now - lastChange >= 200)
-        {
-            phase = 0;
-            lastChange = now;
-        }
+    case 3: // Connecting: double blink every ~1s -> two 200ms pulses + 600ms gap
+        buildinLED.repeat(/*count*/ 2, /*frequencyMs*/ 200, /*gapMs*/ 600);
         break;
     }
 }
@@ -773,6 +682,49 @@ void updateStatusLED()
 //----------------------------------------
 // WIFI MANAGER CALLBACK FUNCTIONS
 //----------------------------------------
+
+bool SetupStartWebServer()
+{
+    sl->Info("[MAIN] Starting Webserver...!");
+    sll->Info("[MAIN] Starting Webserver...!");
+
+    if (WiFi.getMode() == WIFI_AP)
+    {
+        return false; // Skip webserver setup in AP mode
+    }
+
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        if (wifiSettings.useDhcp.get())
+        {
+            sl->Debug("[MAIN] startWebServer: DHCP enabled");
+            ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+        }
+        else
+        {
+            sl->Debug("[MAIN] startWebServer: DHCP disabled - using static IP");
+            IPAddress staticIP, gateway, subnet, dns1, dns2;
+            staticIP.fromString(wifiSettings.staticIp.get());
+            gateway.fromString(wifiSettings.gateway.get());
+            subnet.fromString(wifiSettings.subnet.get());
+
+            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
+            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
+            if (!dnsPrimaryStr.isEmpty())
+            {
+                dns1.fromString(dnsPrimaryStr);
+            }
+            if (!dnsSecondaryStr.isEmpty())
+            {
+                dns2.fromString(dnsSecondaryStr);
+            }
+
+            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
+        }
+    }
+
+    return true; // Webserver setup completed
+}
 
 void onWiFiConnected()
 {
