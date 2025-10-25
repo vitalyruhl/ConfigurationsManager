@@ -159,7 +159,7 @@ struct BoilerSettings {
         }),
         onThreshold(ConfigOptions<float>{
             .key = "BoI_OnT",
-            .name = "Boiler On Threshold",
+            .name = "Alarm Under Temperature",
             .category = "Boiler",
             .defaultValue = 55.0f,
             .showInWeb = true,
@@ -167,7 +167,7 @@ struct BoilerSettings {
         }),
         offThreshold(ConfigOptions<float>{
             .key = "BoI_OffT",
-            .name = "Boiler Off Threshold",
+            .name = "You can shower now temperature",
             .category = "Boiler",
             .defaultValue = 80.0f,
             .showInWeb = true,

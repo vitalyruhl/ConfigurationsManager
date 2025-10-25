@@ -727,6 +727,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
         }
     });
 
+#if !CM_ENABLE_WS_PUSH
+    // Gracefully handle WebSocket requests when WS push is disabled to avoid 404 log spam
+    server->on("/ws", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        // If the client attempts a WebSocket handshake, we deliberately respond with 426
+        // so the browser treats it as an upgrade-required failure (no noisy 404 logging).
+        AsyncWebServerResponse* response = request->beginResponse(426, "text/plain", "WebSocket disabled");
+        response->addHeader("Connection", "close");
+        response->addHeader("Sec-WebSocket-Version", "13");
+        request->send(response);
+    });
+#endif
+
 #if CM_ENABLE_RUNTIME_BUTTONS
     // Runtime button press endpoint
     server->on("/runtime_action/button", HTTP_POST,
