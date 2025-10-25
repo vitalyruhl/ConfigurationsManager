@@ -291,38 +291,40 @@ void setupGUI()
     ConfigManager.getRuntimeManager().addRuntimeMeta(systemBuildMeta);
 
     // Runtime live values provider
-    ConfigManager.getRuntimeManager().addRuntimeProvider({.name = String("Boiler"),
-                                                          .fill = [](JsonObject &o)
-                                                          {
-                                                              o["Bo_EN_Set"] = boilerSettings.enabled.get();
-                                                              o["Bo_EN"] = Relays::getBoiler();
-                                                              o["Bo_Temp"] = temperature;
-                                                              o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
-                                                              o["Bo_TimeLeft"] = boilerTimeRemaining;
-                                                          }});
+    ConfigManager.getRuntimeManager().addRuntimeProvider("Boiler",
+        [](JsonObject &o)
+        {
+            o["Bo_EN_Set"] = boilerSettings.enabled.get();
+            o["Bo_EN"] = Relays::getBoiler();
+            o["Bo_Temp"] = temperature;
+            o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
+            o["Bo_TimeLeft"] = boilerTimeRemaining;
+        });
 
     // Add metadata for Boiler provider fields
+    // Show whether boiler control is enabled (setting) and actual relay state
+    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "enabled", .precision = 0, .order = 1, .isBool = true});
+    ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "relay on", .precision = 0, .order = 2, .isBool = true});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "temperature", .unit = "°C", .precision = 1, .order = 10});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_TimeLeft", .label = "time left", .unit = "min", .precision = 0, .order = 21});
     ConfigManager.getRuntimeManager().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "time setted", .unit = "min", .precision = 0, .order = 22});
 
     // Add alarms provider for min Temperature monitoring with hysteresis
     ConfigManager.getRuntimeManager().registerRuntimeAlarm(TEMP_ALARM_ID);
-    ConfigManager.getRuntimeManager().addRuntimeProvider(
-        {.name = "Alarms",
-         .fill = [](JsonObject &o)
-         {
-             o["AL_Status"] = globalAlarmState;
-             o["Current_Temp"] = temperature;
-             o["On_Threshold"] = boilerSettings.onThreshold.get();
-             o["Off_Threshold"] = boilerSettings.offThreshold.get();
-         }});
+    ConfigManager.getRuntimeManager().addRuntimeProvider("Alarms",
+        [](JsonObject &o)
+        {
+            o["AL_Status"] = globalAlarmState;
+            o["Current_Temp"] = temperature;
+            o["On_Threshold"] = boilerSettings.onThreshold.get();
+            o["Off_Threshold"] = boilerSettings.offThreshold.get();
+        });
 
     // Define alarm metadata fields
     RuntimeFieldMeta alarmMeta{};
     alarmMeta.group = "Alarms";
     alarmMeta.key = "AL_Status";
-    alarmMeta.label = "alarm triggered";
+    alarmMeta.label = "Under Temperature Alarm (Boiler Error?)";
     alarmMeta.precision = 0;
     alarmMeta.order = 1;
     alarmMeta.isBool = true;
@@ -424,8 +426,6 @@ void handeleBoilerState(bool forceON)
         }
     }
 }
-
-
 
 void SetupCheckForResetButton()
 {
