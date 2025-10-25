@@ -125,7 +125,6 @@ struct MQTT_Settings
     }
 };
 
-
 struct I2CSettings {
     Config<int> sdaPin;
     Config<int> sclPin;

@@ -16,29 +16,29 @@ void initializeAllSettings() {
     // Register settings with their dedicated registration methods
     wifiSettings.registerSettings();
     mqttSettings.registerSettings();
-    
+
     // Register the other settings directly
     ConfigManager.addSetting(&i2cSettings.sdaPin);
     ConfigManager.addSetting(&i2cSettings.sclPin);
     ConfigManager.addSetting(&i2cSettings.busFreq);
     ConfigManager.addSetting(&i2cSettings.bmeFreq);
     ConfigManager.addSetting(&i2cSettings.displayAddr);
-    
+
     ConfigManager.addSetting(&boilerSettings.enabled);
     ConfigManager.addSetting(&boilerSettings.onThreshold);
     ConfigManager.addSetting(&boilerSettings.offThreshold);
     ConfigManager.addSetting(&boilerSettings.relayPin);
     ConfigManager.addSetting(&boilerSettings.activeLow);
     ConfigManager.addSetting(&boilerSettings.boilerTimeMin);
-    
+
     ConfigManager.addSetting(&displaySettings.turnDisplayOff);
     ConfigManager.addSetting(&displaySettings.onTimeSec);
-    
+
     ConfigManager.addSetting(&systemSettings.allowOTA);
     ConfigManager.addSetting(&systemSettings.otaPassword);
     ConfigManager.addSetting(&systemSettings.wifiRebootTimeoutMin);
     ConfigManager.addSetting(&systemSettings.version);
-    
+
     ConfigManager.addSetting(&buttonSettings.apModePin);
     ConfigManager.addSetting(&buttonSettings.resetDefaultsPin);
 }

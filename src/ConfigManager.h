@@ -1110,7 +1110,9 @@ public:
         int catCount = 0;
         for (auto *s : settings)
         {
-            if (!s->isVisible())
+            // Do not pre-filter dynamic visibility here; include all web-visible
+            // settings and let the UI honor the resolved showIf boolean.
+            if (!s->shouldShowInWeb())
                 continue;
 
             const char *category = s->getCategory();

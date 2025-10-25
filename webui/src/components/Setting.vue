@@ -1,9 +1,9 @@
 <template>
   <div v-if="visible">
-    <div v-if="type === 'boolean'" class="setting bool-setting">
+  <div v-if="type === 'boolean'" class="setting bool-setting">
       <label class="bool-label" :title="keyName">{{ displayName }}:</label>
       <div class="checkbox-wrapper">
-        <label class="switch">
+  <label class="switch small">
           <input 
             type="checkbox" 
             :checked="inputValue" 
@@ -84,6 +84,7 @@
   width: 60px;
   height: 34px;
 }
+.switch.small { width: 34px; height: 24px; }
 .switch input {
   opacity: 0;
   width: 0;
@@ -99,6 +100,8 @@
   background-color: #ccc;
   transition: .4s;
 }
+/* Ensure external styles (e.g., width: 3rem) don't override the scoped slider width */
+.switch.small .slider { width: 100% !important; }
 .slider:before {
   position: absolute;
   content: "";
@@ -109,6 +112,7 @@
   background-color: white;
   transition: .4s;
 }
+.switch.small .slider:before { height: 18px; width: 18px; left: 3px; bottom: 3px; }
 input:checked + .slider {
   background-color: #2196F3;
 }
@@ -117,6 +121,12 @@ input:focus + .slider {
 }
 input:checked + .slider:before {
   transform: translateX(26px);
+}
+/* For small variant, position knob using right instead of transform so it aligns regardless of track width */
+.switch.small input:checked + .slider:before {
+  transform: none;
+  left: auto;
+  right: 3px;
 }
 .slider.round {
   border-radius: 34px;

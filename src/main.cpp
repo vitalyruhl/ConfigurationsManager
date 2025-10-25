@@ -415,6 +415,7 @@ void cb_publishToMQTT()
         mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(boilerTimeRemaining));
         mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(boilerState));
+        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 250, /*gapMs*/ 1500);
     }
 }
 
@@ -671,10 +672,11 @@ void updateStatusLED(){
         buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 200, /*gapMs*/ 0);
         break;
     case 2: // Connected: 60ms ON heartbeat every 2s -> 120ms pulse + 1880ms gap
-        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 120, /*gapMs*/ 1880);
+        //mooved into send mqtt function to have heartbeat with mqtt messages
+        // buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 120, /*gapMs*/ 1880);
         break;
     case 3: // Connecting: double blink every ~1s -> two 200ms pulses + 600ms gap
-        buildinLED.repeat(/*count*/ 2, /*frequencyMs*/ 200, /*gapMs*/ 600);
+        buildinLED.repeat(/*count*/ 3, /*frequencyMs*/ 200, /*gapMs*/ 600);
         break;
     }
 }
