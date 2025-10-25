@@ -11,7 +11,7 @@
 #include "ConfigManager.h"
 
 #define VERSION "0.0.1"           // version of the software (major.minor.patch)
-#define VERSION_DATE "10.10.2025" // date of the version
+#define VERSION_DATE "25.10.2025" // date of the version
 #define APP_NAME "Boiler-Saver" // name of the application, used for SSID in AP mode and as a prefix for the hostname
 
 // Watchdog timeout remains compile-time constant
@@ -70,25 +70,16 @@ struct MQTT_Settings
     String topicSetShowerTime;      // <base>/Settings/SetShowerTime
     String topicWillShower;         // <base>/Settings/WillShower
     Config<bool> mqtt_Settings_SetState; // payload to turn boiler on
-    Config<int>mqtt_Settings_ShowerTime;
     String mqtt_publish_YouCanShowerNow_topic; // <base>/YouCanShowerNow (publish)
-    // Boiler settings: derived state topics (publish) and command topics (subscribe)
-    String topicState_BoilerEnabled;            // <base>/Settings/BoilerEnabled
-    String topicState_OnThreshold;              // <base>/Settings/OnThreshold
-    String topicState_OffThreshold;             // <base>/Settings/OffThreshold
-    String topicState_BoilerTimeMin;            // <base>/Settings/BoilerTimeMin
-    String topicState_StopTimerOnTarget;        // <base>/Settings/StopTimerOnTarget
-    String topicState_OncePerPeriod;            // <base>/Settings/YouCanShowerOncePerPeriod
-    String topicState_YouCanShowerPeriodMin;    // <base>/Settings/YouCanShowerPeriodMin
-    String topicSave;                           // <base>/Settings/Save (subscribe)
-    // Command (Set) topics
-    String topicSet_BoilerEnabled;              // <base>/Settings/SetBoilerEnabled
-    String topicSet_OnThreshold;                // <base>/Settings/SetOnThreshold
-    String topicSet_OffThreshold;               // <base>/Settings/SetOffThreshold
-    String topicSet_BoilerTimeMin;              // <base>/Settings/SetBoilerTimeMin
-    String topicSet_StopTimerOnTarget;          // <base>/Settings/SetStopTimerOnTarget
-    String topicSet_OncePerPeriod;              // <base>/Settings/SetYouCanShowerOncePerPeriod
-    String topicSet_YouCanShowerPeriodMin;      // <base>/Settings/SetYouCanShowerPeriodMin
+    // Boiler settings: single bidirectional topics (both subscribe and publish)
+    String topic_BoilerEnabled;            // <base>/Settings/BoilerEnabled
+    String topic_OnThreshold;              // <base>/Settings/OnThreshold
+    String topic_OffThreshold;             // <base>/Settings/OffThreshold
+    String topic_BoilerTimeMin;            // <base>/Settings/BoilerTimeMin
+    String topic_StopTimerOnTarget;        // <base>/Settings/StopTimerOnTarget
+    String topic_OncePerPeriod;            // <base>/Settings/YouCanShowerOncePerPeriod
+    String topic_YouCanShowerPeriodMin;    // <base>/Settings/YouCanShowerPeriodMin
+    String topicSave;                      // <base>/Settings/Save (subscribe)
     Config<float> MQTTPublischPeriod;
     Config<float> MQTTListenPeriod;
 
@@ -106,8 +97,7 @@ struct MQTT_Settings
                       Publish_Topic(ConfigOptions<String>{.key = "MQTTTPT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
                       MQTTPublischPeriod(ConfigOptions<float>{.key = "MQTTPP", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
                       MQTTListenPeriod(ConfigOptions<float>{.key = "MQTTLP", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
-                      mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false}),
-                      mqtt_Settings_ShowerTime(ConfigOptions<int>{.key = "ShwTm", .name = "Shower Time (min)", .category = "MQTT", .defaultValue = 90, .showInWeb = true, .isPassword = false})
+                      mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false})
     {
         // Settings registration moved to registerSettings()
 
@@ -127,7 +117,6 @@ struct MQTT_Settings
         ConfigManager.addSetting(&MQTTPublischPeriod);
         ConfigManager.addSetting(&MQTTListenPeriod);
         ConfigManager.addSetting(&mqtt_Settings_SetState);
-        ConfigManager.addSetting(&mqtt_Settings_ShowerTime);
     }
 
     void updateTopics()
@@ -142,21 +131,20 @@ struct MQTT_Settings
         topicWillShower = sp + "/WillShower";
         topicSetShowerTime = sp + "/SetShowerTime";
         topicSave = sp + "/Save";
-        topicState_BoilerEnabled = sp + "/BoilerEnabled";
-        topicState_OnThreshold = sp + "/OnAlarmTemp";
-        topicState_OffThreshold = sp + "/OffThreshold";
-        topicState_BoilerTimeMin = sp + "/BoilerTimeMin";
-        topicState_StopTimerOnTarget = sp + "/StopTimerOnTarget";
-        topicState_OncePerPeriod = sp + "/YouCanShowerOncePerPeriod";
-        topicState_YouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
-        // Set/* command topics
-        topicSet_BoilerEnabled = sp + "/SetBoilerEnabled";
-        topicSet_OnThreshold = sp + "/SetOnAlarmTemp";
-        topicSet_OffThreshold = sp + "/SetOffThreshold";
-        topicSet_BoilerTimeMin = sp + "/SetBoilerTimeMin";
-        topicSet_StopTimerOnTarget = sp + "/SetStopTimerOnTarget";
-        topicSet_OncePerPeriod = sp + "/SetYouCanShowerOncePerPeriod";
-        topicSet_YouCanShowerPeriodMin = sp + "/SetYouCanShowerPeriodMin";
+        // Single bidirectional topics for boiler settings
+        topic_BoilerEnabled = sp + "/BoilerEnabled";
+        topic_OnThreshold = sp + "/OnThreshold";
+        topic_OffThreshold = sp + "/OffThreshold";
+        topic_BoilerTimeMin = sp + "/BoilerTimeMin";
+        topic_StopTimerOnTarget = sp + "/StopTimerOnTarget";
+        topic_OncePerPeriod = sp + "/OncePerPeriod";
+        topic_YouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
+        
+        // Debug: Print topic lengths to detect potential issues
+        extern SigmaLoger *sl;
+        if (sl) {
+            sl->Printf("[MQTT] StopTimerOnTarget topic: [%s] (length: %d)", topic_StopTimerOnTarget.c_str(), topic_StopTimerOnTarget.length()).Debug();
+        }
     }
 };
 
@@ -187,7 +175,7 @@ struct BoilerSettings {
     Config<bool>  stopTimerOnTarget; // stop timer when off-threshold reached
     // Notification behavior for 'You can shower now'
     Config<bool>  onlyOncePerPeriod; // publish '1' only once per period
-    Config<int>   youCanShowerPeriodMin; // period length in minutes
+
 
     BoilerSettings():
         enabled(ConfigOptions<bool>{
@@ -240,20 +228,41 @@ struct BoilerSettings {
         }),
         onlyOncePerPeriod(ConfigOptions<bool>{
             .key = "YSNOnce",
-            .name = "Show 'You can shower' only once per period",
+            .name = "Notify once per period",
             .category = "Boiler",
-            .defaultValue = false,
+            .defaultValue = true,
             .showInWeb = true
-        }),
-        youCanShowerPeriodMin(ConfigOptions<int>{
-            .key = "YSNPeriodMin",
-            .name = "'You can shower' period (min)",
-            .category = "Boiler",
-            .defaultValue = 1440,
-            .showInWeb = false // deprecated: period now equals Boiler Max Heating Time
         })
+       
     {
         // Settings registration moved to initializeAllSettings()
+    }
+
+    // Forward declaration for MQTT publishing function
+    void publishSettingToMQTT(const String& settingName, const String& value);
+
+    void setupCallbacks() {
+        // Add callbacks to publish settings changes to MQTT when changed via web GUI
+        enabled.setCallback([this](bool newValue) {
+            this->publishSettingToMQTT("BoilerEnabled", newValue ? "1" : "0");
+        });
+        onThreshold.setCallback([this](float newValue) {
+            this->publishSettingToMQTT("OnThreshold", String(newValue));
+        });
+        offThreshold.setCallback([this](float newValue) {
+            this->publishSettingToMQTT("OffThreshold", String(newValue));
+        });
+        boilerTimeMin.setCallback([this](int newValue) {
+            this->publishSettingToMQTT("BoilerTimeMin", String(newValue));
+            // Also mirror to period topic for compatibility
+            this->publishSettingToMQTT("YouCanShowerPeriodMin", String(newValue));
+        });
+        stopTimerOnTarget.setCallback([this](bool newValue) {
+            this->publishSettingToMQTT("StopTimerOnTarget", newValue ? "1" : "0");
+        });
+        onlyOncePerPeriod.setCallback([this](bool newValue) {
+            this->publishSettingToMQTT("OncePerPeriod", newValue ? "1" : "0");
+        });
     }
 };
 

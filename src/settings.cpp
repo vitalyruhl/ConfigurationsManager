@@ -34,7 +34,6 @@ void initializeAllSettings() {
     ConfigManager.addSetting(&boilerSettings.boilerTimeMin);
     ConfigManager.addSetting(&boilerSettings.stopTimerOnTarget);
     ConfigManager.addSetting(&boilerSettings.onlyOncePerPeriod);
-    ConfigManager.addSetting(&boilerSettings.youCanShowerPeriodMin);
 
     ConfigManager.addSetting(&displaySettings.turnDisplayOff);
     ConfigManager.addSetting(&displaySettings.onTimeSec);
