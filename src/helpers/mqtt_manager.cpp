@@ -44,6 +44,10 @@ void MQTTManager::setKeepAlive(uint16_t keepAlive) {
     _mqttClient.setKeepAlive(keepAlive);
 }
 
+void MQTTManager::setBufferSize(uint16_t size) {
+    _mqttClient.setBufferSize(size);
+}
+
 void MQTTManager::setMaxRetries(uint8_t maxRetries) {
     _maxRetries = maxRetries;
 }

@@ -97,6 +97,9 @@ static bool didStartupMQTTPropagate = false; // ensure one-time retained propaga
 // Gating for 'You can shower now' once-per-period behavior
 static long lastYouCanShower1PeriodId = -1; // period id when we last published a '1'
 static bool lastPublishedYouCanShower = false; // track last published state to allow publishing 0 transitions
+// MQTT status monitoring
+static unsigned long lastMqttStatusLog = 0;
+static bool lastMqttConnectedState = false;
 
 #pragma endregion configuration variables
 
@@ -108,7 +111,7 @@ void setup()
 {
 
     LoggerSetupSerial(); // Initialize the serial logger
-    currentLogLevel = SIGMALOG_DEBUG; //overwrite the default SIGMALOG_INFO level to debug to see all messages
+    // currentLogLevel = SIGMALOG_DEBUG; //overwrite the default SIGMALOG_INFO level to debug to see all messages
     sl->Info("[SETUP] System setup start...");
 
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
@@ -213,6 +216,29 @@ void loop()
     }
 
     mqttManager.loop(); // Handle MQTT Manager loop
+    
+    // Monitor MQTT connection status and log periodically
+    bool currentMqttState = mqttManager.isConnected();
+    if (currentMqttState != lastMqttConnectedState) {
+        // State changed - log immediately
+        if (currentMqttState) {
+            sl->Printf("[MAIN] MQTT reconnected - Uptime: %lu ms, Reconnect count: %d", 
+                       mqttManager.getUptime(), mqttManager.getReconnectCount()).Info();
+        } else {
+            sl->Printf("[MAIN] MQTT connection lost - State: %d, Retry: %d", 
+                       (int)mqttManager.getState(), mqttManager.getCurrentRetry()).Warn();
+        }
+        lastMqttConnectedState = currentMqttState;
+        lastMqttStatusLog = millis();
+    } else if (millis() - lastMqttStatusLog > 60000) { // Log status every 60 seconds
+        if (currentMqttState) {
+            sl->Printf("[MAIN] MQTT status: Connected, Uptime: %lu ms", mqttManager.getUptime()).Debug();
+        } else {
+            sl->Printf("[MAIN] MQTT status: Disconnected, State: %d, Retry: %d/%d", 
+                       (int)mqttManager.getState(), mqttManager.getCurrentRetry(), 15).Debug();
+        }
+        lastMqttStatusLog = millis();
+    }
 
     // Advance boiler/timer logic once per second (function is self-throttled)
     handeleBoilerState(false);
@@ -517,14 +543,45 @@ void setupMQTT()
     sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
     sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
 
+    // Test network connectivity to MQTT broker before attempting connection
+    String mqttHost = mqttSettings.mqtt_server.get();
+    uint16_t mqttPort = static_cast<uint16_t>(mqttSettings.mqtt_port.get());
+    
+    sl->Printf("[MAIN] Testing connectivity to MQTT broker %s:%d", mqttHost.c_str(), mqttPort).Debug();
+    
+    WiFiClient testClient;
+    bool canConnect = testClient.connect(mqttHost.c_str(), mqttPort);
+    if (canConnect) {
+        testClient.stop();
+        sl->Printf("[MAIN] Network connectivity to MQTT broker: OK").Info();
+    } else {
+        sl->Printf("[MAIN] Network connectivity to MQTT broker: FAILED").Warn();
+        sl->Printf("[MAIN] Check if MQTT broker is running and accessible").Warn();
+    }
+
     mqttSettings.updateTopics();
 
-    // Configure MQTT Manager
+    // Configure MQTT Manager with improved stability settings
     mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
     mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-    mqttManager.setClientId(("ESP32_" + String(WiFi.macAddress())).c_str());
-    mqttManager.setMaxRetries(10);
-    mqttManager.setRetryInterval(5000);
+    
+    // Create unique client ID with MAC address, timestamp and random number to avoid conflicts
+    String macAddr = WiFi.macAddress();
+    macAddr.replace(":", "");
+    uint32_t chipId = ESP.getEfuseMac() & 0xFFFFFF;
+    String clientId = "ESP32_" + macAddr + "_" + String(chipId, HEX) + "_" + String(millis());
+    mqttManager.setClientId(clientId.c_str());
+    
+    // Improved connection parameters for stability
+    mqttManager.setKeepAlive(90);        // Longer keep-alive to avoid timeouts
+    mqttManager.setMaxRetries(15);       // More retries for flaky networks
+    mqttManager.setRetryInterval(10000); // Longer interval between retries
+    mqttManager.setBufferSize(512);      // Larger buffer for message handling
+    
+    sl->Printf("[MAIN] MQTT Client ID: %s", clientId.c_str()).Debug();
+    sl->Printf("[MAIN] MQTT Credentials: User=%s, Pass=%s", 
+               mqttSettings.mqtt_username.get().c_str(), 
+               mqttSettings.mqtt_password.get().length() > 0 ? "***" : "none").Debug();
 
     // Set MQTT callbacks
     mqttManager.onConnected([]()
@@ -588,7 +645,11 @@ void setupMQTT()
                                 cb_publishToMQTT(); // Publish initial values
                             });
 
-    mqttManager.onDisconnected([]() { sl->Warn("[MAIN] MQTT disconnected"); });
+    mqttManager.onDisconnected([]() { 
+        sl->Printf("[MAIN] MQTT disconnected - Retry count: %d, Uptime was: %lu ms", 
+                   mqttManager.getCurrentRetry(), mqttManager.getUptime()).Warn();
+        sll->Printf("MQTT disconnected - Will retry connection").Warn();
+    });
 
     mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
 
@@ -877,12 +938,14 @@ void CheckButtons()
         ShowDisplay();
     }
 
-    // Shower request press (edge trigger)
+    // Shower request press (toggle on/off)
     if (buttonSettings.showerRequestPin.get() > 0) {
         if (lastShowerButtonState == HIGH && currentShowerState == LOW) {
-            sl->Debug("[MAIN] Shower button pressed -> activating shower request");
+            // Toggle the shower request state
+            bool newState = !willShowerRequested;
+            sl->Printf("[MAIN] Shower button pressed -> toggling shower request to %s", newState ? "ON" : "OFF").Debug();
             ShowDisplay();
-            handleShowerRequest(true);
+            handleShowerRequest(newState);
         }
         lastShowerButtonState = currentShowerState;
     }

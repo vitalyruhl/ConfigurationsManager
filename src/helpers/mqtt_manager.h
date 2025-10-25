@@ -29,6 +29,7 @@ public:
     void setKeepAlive(uint16_t keepAlive = 60);
     void setMaxRetries(uint8_t maxRetries = 10);
     void setRetryInterval(unsigned long retryInterval = 5000);
+    void setBufferSize(uint16_t size = 256);
 
     // Callbacks
     void onConnected(ConnectedCallback callback);
