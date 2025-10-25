@@ -41,6 +41,7 @@ void handeleBoilerState(bool forceON = false);
 void UpdateBoilerAlarmState();
 static void cb_readTempSensor();
 static void setupTempSensor();
+static void handleShowerRequest(bool requested);
 
 // Shorthand helper for RuntimeManager access
 static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntimeManager(); }
@@ -74,7 +75,7 @@ Ticker WillShowerResetTicker;
 
 // globale helpers variables
 float temperature = 70.0;    // current temperature in Celsius
-int boilerTimeRemaining = 0; // remaining time for boiler in minutes
+int boilerTimeRemaining = 0; // remaining time for boiler in SECONDS
 bool boilerState = false;    // current state of the heater (on/off)
 
 bool tickerActive = false; // flag to indicate if the ticker is active
@@ -206,6 +207,9 @@ void loop()
 
     mqttManager.loop(); // Handle MQTT Manager loop
 
+    // Advance boiler/timer logic once per second (function is self-throttled)
+    handeleBoilerState(false);
+
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.getOTAManager().handle();
@@ -315,33 +319,7 @@ void setupGUI()
     // State button to manually control the boiler relay
     ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Will Duschen", []()
         { return willShowerRequested; }, [](bool v) {
-            willShowerRequested = v;
-            if (v) {
-                if (boilerTimeRemaining <= 0) {
-                    int mins = mqttSettings.mqtt_Settings_ShowerTime.get();
-                    if (mins <= 0) mins = 60;
-                    boilerTimeRemaining = mins * 60;
-                }
-                Relays::setBoiler(true);
-                // Publish a pulse (1 then 0) so MQTT sees the press, but remains 0 while time is running
-                if (mqttManager.isConnected()) {
-                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "1", true);
-                    WillShowerResetTicker.detach();
-                    WillShowerResetTicker.once(0.5f, +[](){
-                        if (mqttManager.isConnected()) {
-                            suppressNextWillShowerFalse = true;
-                            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
-                        }
-                    });
-                }
-            } else {
-                // user canceled
-                boilerTimeRemaining = 0;
-                Relays::setBoiler(false);
-                if (mqttManager.isConnected()) {
-                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
-                }
-            }
+            handleShowerRequest(v);
         }, /*init*/ false);
 
     CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
@@ -986,5 +964,39 @@ void onWiFiAPMode()
     if (tickerActive)
     {
         onWiFiDisconnected(); // Reuse disconnected logic
+    }
+}
+
+//----------------------------------------
+// Shower request handler (UI/MQTT helper)
+//----------------------------------------
+static void handleShowerRequest(bool v)
+{
+    willShowerRequested = v;
+    if (v) {
+        if (boilerTimeRemaining <= 0) {
+            int mins = mqttSettings.mqtt_Settings_ShowerTime.get();
+            if (mins <= 0) mins = 60;
+            boilerTimeRemaining = mins * 60;
+        }
+        Relays::setBoiler(true);
+        // Publish a pulse (1 then 0) so MQTT sees the press, but remains 0 while time is running
+        if (mqttManager.isConnected()) {
+            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "1", true);
+            WillShowerResetTicker.detach();
+            WillShowerResetTicker.once(0.5f, +[](){
+                if (mqttManager.isConnected()) {
+                    suppressNextWillShowerFalse = true;
+                    mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+                }
+            });
+        }
+    } else {
+        // user canceled
+        boilerTimeRemaining = 0;
+        Relays::setBoiler(false);
+        if (mqttManager.isConnected()) {
+            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
+        }
     }
 }
