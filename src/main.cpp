@@ -982,9 +982,10 @@ static void handleShowerRequest(bool v)
         Relays::setBoiler(true);
         // Publish a pulse (1 then 0) so MQTT sees the press, but remains 0 while time is running
         if (mqttManager.isConnected()) {
-            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "1", true);
+            // Send 1 as non-retained so live subscribers see it, but retained state remains 0
+            mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), String("1"), /*retained*/ false);
             WillShowerResetTicker.detach();
-            WillShowerResetTicker.once(0.5f, +[](){
+            WillShowerResetTicker.once(1.0f, +[](){
                 if (mqttManager.isConnected()) {
                     suppressNextWillShowerFalse = true;
                     mqttManager.publish(mqttSettings.mqtt_Settings_WillShower_topic.get().c_str(), "0", true);
