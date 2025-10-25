@@ -1116,18 +1116,18 @@ public:
 
     void handleRuntimeAlarms()
     {
-        runtimeManager.updateAlarms(); // Use updateAlarms() instead of handleRuntimeAlarms()
+        runtimeManager.updateAlarms();
     }
 
     bool isOTAInitialized()
     {
-        return otaManager.isInitialized(); // Use public method
+        return otaManager.isInitialized();
     }
 
     void stopOTA()
     {
-        // Note: stop() method not implemented in new OTAManager
-        CM_LOG("[W] stopOTA not implemented in modular OTAManager");
+        // Note: stop() method not implemented in OTAManager
+        CM_LOG("[W] stopOTA not implemented in OTAManager");
     }
 
     // JSON export

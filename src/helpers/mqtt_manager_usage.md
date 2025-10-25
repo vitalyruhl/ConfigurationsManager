@@ -34,7 +34,7 @@ void setup() {
     mqttManager.setServer("192.168.1.100", 1883);
     mqttManager.setCredentials("username", "password");
     mqttManager.setClientId("ESP32_Device_001");
-    
+
     // Optional settings
     mqttManager.setMaxRetries(10);           // Default: 10
     mqttManager.setRetryInterval(5000);      // Default: 5000ms
@@ -49,25 +49,25 @@ void setup() {
     // Connection successful callback
     mqttManager.onConnected([]() {
         Serial.println("MQTT connected!");
-        
+
         // Subscribe to topics
         mqttManager.subscribe("device/commands");
         mqttManager.subscribe("device/settings");
-        
+
         // Publish initial status
         mqttManager.publish("device/status", "online", true);
     });
-    
+
     // Connection lost callback
     mqttManager.onDisconnected([]() {
         Serial.println("MQTT disconnected!");
     });
-    
+
     // Message received callback
     mqttManager.onMessage([](char* topic, byte* payload, unsigned int length) {
         String message = String((char*)payload, length);
         Serial.printf("Received [%s]: %s\n", topic, message.c_str());
-        
+
         // Handle different topics
         if (strcmp(topic, "device/commands") == 0) {
             handleCommand(message);
@@ -81,7 +81,7 @@ void setup() {
 ```cpp
 void setup() {
     // ... configuration and callbacks ...
-    
+
     // Start MQTT manager
     mqttManager.begin();
 }
@@ -89,7 +89,7 @@ void setup() {
 void loop() {
     // Process MQTT operations (must be called regularly)
     mqttManager.loop();
-    
+
     // Your other code here
 }
 ```
@@ -131,13 +131,13 @@ mqttManager.unsubscribe("old/topic");
 ```cpp
 void loop() {
     mqttManager.loop();
-    
+
     // Check connection status
     if (mqttManager.isConnected()) {
         // Safe to publish/subscribe
         mqttManager.publish("heartbeat", String(millis()));
     }
-    
+
     // Get detailed state
     switch (mqttManager.getState()) {
         case MQTTManager::ConnectionState::DISCONNECTED:
@@ -163,7 +163,7 @@ void printMqttStats() {
     Serial.printf("MQTT Uptime: %lu ms\n", mqttManager.getUptime());
     Serial.printf("Reconnect Count: %u\n", mqttManager.getReconnectCount());
     Serial.printf("Current Retry: %u\n", mqttManager.getCurrentRetry());
-    Serial.printf("Last Attempt: %lu ms ago\n", 
+    Serial.printf("Last Attempt: %lu ms ago\n",
                   millis() - mqttManager.getLastConnectionAttempt());
 }
 ```
@@ -200,7 +200,7 @@ mqttManager.begin();  // No setClientId() called
 ```cpp
 // In setup()
 mqttManager.setServer(
-    mqttSettings.server.get().c_str(), 
+    mqttSettings.server.get().c_str(),
     mqttSettings.port.get()
 );
 mqttManager.setCredentials(
@@ -212,7 +212,7 @@ mqttManager.setCredentials(
 mqttManager.onConnected([]() {
     // Publish device configuration
     publishDeviceConfig();
-    
+
     // Subscribe to configuration topics
     mqttManager.subscribe(mqttSettings.commandTopic.get().c_str());
 });
@@ -225,7 +225,7 @@ Ticker sensorTicker;
 
 void setup() {
     // ... MQTT setup ...
-    
+
     // Publish sensor data every 30 seconds
     sensorTicker.attach(30, publishSensorData);
 }
@@ -234,7 +234,7 @@ void publishSensorData() {
     if (mqttManager.isConnected()) {
         float temp = readTemperature();
         float humidity = readHumidity();
-        
+
         mqttManager.publish("sensors/temperature", String(temp));
         mqttManager.publish("sensors/humidity", String(humidity));
     }
@@ -246,13 +246,13 @@ void publishSensorData() {
 ```cpp
 void handleMqttErrors() {
     static unsigned long lastCheck = 0;
-    
+
     if (millis() - lastCheck > 60000) {  // Check every minute
         lastCheck = millis();
-        
+
         if (mqttManager.getState() == MQTTManager::ConnectionState::FAILED) {
             Serial.println("MQTT connection failed after all retries");
-            
+
             // Maybe restart or switch to offline mode
             if (mqttManager.getReconnectCount() > 10) {
                 Serial.println("Too many failures, restarting device...");
@@ -269,7 +269,7 @@ void handleMqttErrors() {
 ```cpp
 void loop() {
     mqttManager.loop();  // Call this frequently!
-    
+
     // Keep other operations short to avoid blocking
     delay(10);  // Small delay is OK
 }
@@ -281,7 +281,7 @@ mqttManager.onMessage([](char* topic, byte* payload, unsigned int length) {
     // Create proper string with correct length
     String message = String((char*)payload, length);
     message.trim();  // Remove whitespace
-    
+
     // Avoid long operations in callback
     if (message.length() > 0) {
         handleMessageAsync(String(topic), message);
@@ -323,8 +323,8 @@ mqttManager.publish(TOPIC_TEMPERATURE, tempString);
 void printMqttDebug() {
     Serial.printf("MQTT State: %d\n", (int)mqttManager.getState());
     Serial.printf("Connected: %s\n", mqttManager.isConnected() ? "Yes" : "No");
-    Serial.printf("Retry Count: %u/%u\n", 
-                  mqttManager.getCurrentRetry(), 
+    Serial.printf("Retry Count: %u/%u\n",
+                  mqttManager.getCurrentRetry(),
                   /* max retries from your config */);
 }
 ```

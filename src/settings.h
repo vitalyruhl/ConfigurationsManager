@@ -10,7 +10,7 @@
 
 #include "ConfigManager.h"
 
-#define VERSION "0.0.1"           // version of the software (major.minor.patch)
+#define VERSION "1.0.0"           // version of the software (major.minor.patch)
 #define VERSION_DATE "25.10.2025" // date of the version
 #define APP_NAME "Boiler-Saver" // name of the application, used for SSID in AP mode and as a prefix for the hostname
 
@@ -71,7 +71,6 @@ struct MQTT_Settings
     String topicWillShower;         // <base>/Settings/WillShower
     Config<bool> mqtt_Settings_SetState; // payload to turn boiler on
     String mqtt_publish_YouCanShowerNow_topic; // <base>/YouCanShowerNow (publish)
-    // Boiler settings: single bidirectional topics (both subscribe and publish)
     String topic_BoilerEnabled;            // <base>/Settings/BoilerEnabled
     String topic_OnThreshold;              // <base>/Settings/OnThreshold
     String topic_OffThreshold;             // <base>/Settings/OffThreshold
@@ -89,7 +88,6 @@ struct MQTT_Settings
     String mqtt_publish_AktualBoilerTemperature;
     String mqtt_publish_AktualTimeRemaining_topic;
 
-    // Now show extra pretty category name since V2.2.0: e.g., ("keyname", "category", "web displayName", "web Pretty category", defaultValue)
     MQTT_Settings() : mqtt_port(ConfigOptions<int>{.key = "MQTTTPort", .name = "Port", .category = "MQTT", .defaultValue = 1883}),
                       mqtt_server(ConfigOptions<String>{.key = "MQTTServer", .name = "Server-IP", .category = "MQTT", .defaultValue = String("192.168.2.3")}),
                       mqtt_username(ConfigOptions<String>{.key = "MQTTUser", .name = "User", .category = "MQTT", .defaultValue = String("housebattery")}),
@@ -99,9 +97,7 @@ struct MQTT_Settings
                       MQTTListenPeriod(ConfigOptions<float>{.key = "MQTTLP", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
                       mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false})
     {
-        // Settings registration moved to registerSettings()
 
-        // Callback to update topics when Publish_Topic changes
         Publish_Topic.setCallback([this](String newValue){ this->updateTopics(); });
 
         updateTopics(); // Make sure topics are initialized
@@ -125,13 +121,12 @@ struct MQTT_Settings
         mqtt_publish_AktualState = hostname + "/AktualState"; //show State of Boiler Heating/Save-Mode
         mqtt_publish_AktualBoilerTemperature = hostname + "/TemperatureBoiler"; //show Temperature of Boiler
         mqtt_publish_AktualTimeRemaining_topic = hostname + "/TimeRemaining"; //show Time Remaining if Boiler is Heating
-        mqtt_publish_YouCanShowerNow_topic = hostname + "/YouCanShowerNow";
+        mqtt_publish_YouCanShowerNow_topic = hostname + "/YouCanShowerNow"; //for notifying that user can shower now
         // Settings/state topics
         String sp = hostname + "/Settings";
         topicWillShower = sp + "/WillShower";
         topicSetShowerTime = sp + "/SetShowerTime";
         topicSave = sp + "/Save";
-        // Single bidirectional topics for boiler settings
         topic_BoilerEnabled = sp + "/BoilerEnabled";
         topic_OnThreshold = sp + "/OnThreshold";
         topic_OffThreshold = sp + "/OffThreshold";
@@ -139,7 +134,7 @@ struct MQTT_Settings
         topic_StopTimerOnTarget = sp + "/StopTimerOnTarget";
         topic_OncePerPeriod = sp + "/OncePerPeriod";
         topic_YouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
-        
+
         // Debug: Print topic lengths to detect potential issues
         extern SigmaLoger *sl;
         if (sl) {
@@ -173,9 +168,7 @@ struct BoilerSettings {
     Config<bool>  activeLow;// relay active low/high
     Config<int>   boilerTimeMin;// max time boiler is allowed to heat
     Config<bool>  stopTimerOnTarget; // stop timer when off-threshold reached
-    // Notification behavior for 'You can shower now'
     Config<bool>  onlyOncePerPeriod; // publish '1' only once per period
-
 
     BoilerSettings():
         enabled(ConfigOptions<bool>{
@@ -233,7 +226,7 @@ struct BoilerSettings {
             .defaultValue = true,
             .showInWeb = true
         })
-       
+
     {
         // Settings registration moved to initializeAllSettings()
     }

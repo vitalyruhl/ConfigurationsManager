@@ -9,7 +9,7 @@ extern std::function<void(const char*)> ConfigManagerClass_logger;
 #define WIFI_LOG(...)
 #endif
 
-ConfigManagerWiFi::ConfigManagerWiFi() 
+ConfigManagerWiFi::ConfigManagerWiFi()
   : currentState(WIFI_STATE_DISCONNECTED)
   , autoRebootEnabled(false)
   , initialized(false)
@@ -28,11 +28,11 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
   reconnectInterval = reconnectIntervalMs;
   autoRebootTimeoutMs = autoRebootTimeoutMin * 60000UL; // Convert minutes to milliseconds
   autoRebootEnabled = (autoRebootTimeoutMin > 0);
-  
+
   // Initialize timing
   lastGoodConnectionMillis = millis();
   lastReconnectAttempt = 0;
-  
+
   // Determine initial state
   if (WiFi.getMode() == WIFI_AP) {
     currentState = WIFI_STATE_AP_MODE;
@@ -45,7 +45,7 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
     currentState = WIFI_STATE_DISCONNECTED;
     WIFI_LOG("[WiFi] Starting disconnected");
   }
-  
+
   initialized = true;
 }
 
@@ -61,15 +61,15 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   useDHCP = true;
   dns1 = IPAddress();
   dns2 = IPAddress();
-  
+
   WIFI_LOG("[WiFi] Starting DHCP connection to %s", ssid.c_str());
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
   WiFi.setAutoReconnect(true); // Enable automatic reconnection
   WiFi.persistent(true); // Store WiFi configuration in flash
   WiFi.begin(ssid.c_str(), password.c_str());
-  
+
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
 }
@@ -83,20 +83,20 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
   dns1 = primaryDNS;
   dns2 = secondaryDNS;
   useDHCP = false;
-  
+
   WIFI_LOG("[WiFi] Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
            ssid.c_str(),
            staticIP.toString().c_str(),
            (dns1 == IPAddress()) ? "0.0.0.0" : dns1.toString().c_str(),
            (dns2 == IPAddress()) ? "0.0.0.0" : dns2.toString().c_str());
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
   WiFi.setAutoReconnect(true); // Enable automatic reconnection
   WiFi.persistent(true); // Store WiFi configuration in flash
   applyStaticConfig();
   WiFi.begin(ssid.c_str(), password.c_str());
-  
+
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
 }
@@ -117,22 +117,22 @@ void ConfigManagerWiFi::applyStaticConfig() {
 
 void ConfigManagerWiFi::startAccessPoint(const String& apSSID, const String& apPassword) {
   WIFI_LOG("[WiFi] Starting Access Point: %s", apSSID.c_str());
-  
+
   WiFi.mode(WIFI_AP);
   if (apPassword.length() > 0) {
     WiFi.softAP(apSSID.c_str(), apPassword.c_str());
   } else {
     WiFi.softAP(apSSID.c_str());
   }
-  
+
   transitionToState(WIFI_STATE_AP_MODE);
 }
 
 void ConfigManagerWiFi::update() {
   if (!initialized) return;
-  
+
   WiFiManagerState previousState = currentState;
-  
+
   // Determine current WiFi state
   if (WiFi.getMode() == WIFI_AP) {
     if (currentState != WIFI_STATE_AP_MODE) {
@@ -141,7 +141,7 @@ void ConfigManagerWiFi::update() {
   } else if (WiFi.status() == WL_CONNECTED) {
     if (currentState != WIFI_STATE_CONNECTED) {
       // Log detailed connection info when first connecting
-      WIFI_LOG("[WiFi] WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s", 
+      WIFI_LOG("[WiFi] WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s",
                WiFi.localIP().toString().c_str(),
                WiFi.gatewayIP().toString().c_str(),
                WiFi.dnsIP().toString().c_str());
@@ -155,11 +155,11 @@ void ConfigManagerWiFi::update() {
       WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d, transitioning to disconnected", WiFi.status());
       transitionToState(WIFI_STATE_DISCONNECTED);
     }
-    
+
     // Handle reconnection attempts (non-blocking)
     handleReconnection();
   }
-  
+
   // Check auto-reboot condition
   if (autoRebootEnabled && currentState != WIFI_STATE_AP_MODE) {
     checkAutoReboot();
@@ -169,10 +169,10 @@ void ConfigManagerWiFi::update() {
 void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
   WiFiManagerState oldState = currentState;
   currentState = newState;
-  
+
   // Log state transitions
   WIFI_LOG("[WiFi] State: %s -> %s", getStatusString().c_str(), getStatusString().c_str());
-  
+
   // Execute callbacks based on state transitions
   switch (newState) {
     case WIFI_STATE_CONNECTED:
@@ -183,7 +183,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
         }
       }
       break;
-      
+
     case WIFI_STATE_DISCONNECTED:
     case WIFI_STATE_RECONNECTING:
       if (oldState == WIFI_STATE_CONNECTED) {
@@ -193,7 +193,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
         }
       }
       break;
-      
+
     case WIFI_STATE_AP_MODE:
       if (oldState != WIFI_STATE_AP_MODE) {
         WIFI_LOG("[WiFi] Access Point mode active");
@@ -202,11 +202,11 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
         }
       }
       break;
-      
+
     case WIFI_STATE_CONNECTING:
       WIFI_LOG("[WiFi] Connecting to %s...", ssid.c_str());
       break;
-      
+
     default:
       break;
   }
@@ -214,17 +214,17 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
 
 void ConfigManagerWiFi::handleReconnection() {
   if (WiFi.getMode() == WIFI_AP) return; // Don't reconnect in AP mode
-  
+
   unsigned long now = millis();
-  
+
   // Non-blocking reconnection attempt
   if (now - lastReconnectAttempt >= reconnectInterval) {
     lastReconnectAttempt = now;
-    
+
     if (currentState != WIFI_STATE_RECONNECTING) {
       transitionToState(WIFI_STATE_RECONNECTING);
     }
-    
+
     // Attempt non-blocking reconnection
     WIFI_LOG("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
     WiFi.setSleep(false); // Ensure WiFi sleep is disabled on reconnection attempts
@@ -240,10 +240,10 @@ void ConfigManagerWiFi::handleReconnection() {
 
 void ConfigManagerWiFi::checkAutoReboot() {
   if (!autoRebootEnabled || autoRebootTimeoutMs == 0) return;
-  
+
   unsigned long now = millis();
   unsigned long timeSinceLastConnection = now - lastGoodConnectionMillis;
-  
+
   if (timeSinceLastConnection >= autoRebootTimeoutMs) {
     // Time for auto-reboot
     WIFI_LOG("[WiFi] Auto-reboot triggered after %lu ms without connection", timeSinceLastConnection);
@@ -297,7 +297,6 @@ void ConfigManagerWiFi::forceReconnect() {
 void ConfigManagerWiFi::reconnect() {
   WIFI_LOG("[WiFi] Manual reconnect requested");
   WiFi.disconnect();
-  // Don't use delay here - let the state machine handle it
   forceReconnect();
 }
 

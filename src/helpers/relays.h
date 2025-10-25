@@ -16,7 +16,6 @@ inline void initPins(){
         digitalWrite(boilerPin, boilerLow ? HIGH : LOW); // inactive
         pinMode(boilerPin, OUTPUT);
     }
-    
 }
 
 inline void setBoiler(bool on){

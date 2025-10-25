@@ -39,7 +39,7 @@ public:
     bool begin();
     void loop();
     void disconnect();
-    
+
     // Status
     bool isConnected() const;
     ConnectionState getState() const;
@@ -61,7 +61,7 @@ public:
 private:
     WiFiClient _wifiClient;
     PubSubClient _mqttClient;
-    
+
     // Configuration
     String _server;
     uint16_t _port;
@@ -90,7 +90,7 @@ private:
     void _handleDisconnection();
     void _setState(ConnectionState newState);
     static void _mqttCallback(char* topic, byte* payload, unsigned int length);
-    
+
     // Static instance for callback
     static MQTTManager* _instance;
 };

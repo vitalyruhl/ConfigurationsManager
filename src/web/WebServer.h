@@ -9,7 +9,6 @@
 #include "../html_content.h"
 #endif
 
-// Forward declarations
 class ConfigManagerClass;
 
 class ConfigManagerWeb {
@@ -24,7 +23,7 @@ private:
     AsyncWebServer* server;
     ConfigManagerClass* configManager;
     bool initialized;
-    
+
     // Callbacks for ConfigManager integration
     JsonProvider configJsonProvider;
     JsonProvider runtimeJsonProvider;
@@ -33,12 +32,12 @@ private:
     SimpleCallback resetCallback;
     SettingUpdateCallback settingUpdateCallback;
     SettingUpdateCallback settingApplyCallback;  // For apply-only operations
-    
+
     // Web content
     bool embedWebUI;
     const char* customHTML;
     size_t customHTMLLen;
-    
+
     // Helper methods
     void setupStaticRoutes();
     void setupAPIRoutes();
@@ -48,7 +47,7 @@ private:
     void handleJSRequest(AsyncWebServerRequest* request);
     void handleRootRequest(AsyncWebServerRequest* request);
     void handleNotFound(AsyncWebServerRequest* request);
-    
+
     // Utility methods
     String getContentType(const String& path);
     void sendWebUI(AsyncWebServerRequest* request);
@@ -58,34 +57,34 @@ private:
 public:
     ConfigManagerWeb(AsyncWebServer* webServer = nullptr);
     ~ConfigManagerWeb();
-    
+
     // Initialization
     void begin(ConfigManagerClass* cm);
     void setCallbacks(
         JsonProvider configJson,
-        JsonProvider runtimeJson, 
+        JsonProvider runtimeJson,
         JsonProvider runtimeMetaJson,
         SimpleCallback reboot,
         SimpleCallback reset,
         SettingUpdateCallback settingUpdate,
         SettingUpdateCallback settingApply
     );
-    
+
     // Web content management
     void setEmbedWebUI(bool embed);
     void setCustomHTML(const char* html, size_t length);
-    
+
     // Server control
     AsyncWebServer* getServer() { return server; }
     bool isStarted() const;
-    
+
     // Route management
     void defineAllRoutes();
     void addCustomRoute(const char* path, WebRequestMethodComposite method, RequestHandler handler);
-    
+
     // CORS and security
     void enableCORSForAll(bool enable = true);
-    
+
     // Development and debugging
 #ifdef development
     void addDevelopmentRoutes();
