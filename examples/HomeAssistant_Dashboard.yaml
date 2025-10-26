@@ -1,0 +1,94 @@
+# Home Assistant Dashboard für BoilerSaver
+# Diese Konfiguration kann in der Lovelace UI als neue Ansicht hinzugefügt werden
+
+views:
+  - title: BoilerSaver Control
+    path: boilersaver
+    icon: mdi:water-boiler
+    cards:
+      # Temperatur-Anzeige mit Zeiger (Gauge)
+      - type: gauge
+        entity: sensor.boilersaver_temperatureboiler
+        name: Boiler Temperatur
+        unit: "°C"
+        min: 30
+        max: 90
+        severity:
+          red: 50
+          yellow: 60
+          green: 70
+        needle: true
+
+      # Will Shower Schalter
+      - type: entities
+        title: Steuerung
+        entities:
+          - entity: switch.boilersaver_willshowertoggle
+            name: Will Duschen
+            icon: mdi:account-clock
+            tap_action:
+              action: toggle
+        
+      # Status-Übersicht Karte
+      - type: entities
+        title: Boiler Status
+        entities:
+          - entity: binary_sensor.boilersaver_boileractive
+            name: Boiler Status
+            icon: mdi:water-boiler
+          - entity: sensor.boilersaver_timeremaining
+            name: Verbleibende Zeit
+            icon: mdi:timer
+          - entity: sensor.boilersaver_youcanshowernow
+            name: Dusch-Bereitschaft
+            icon: mdi:shower
+
+      # Einstellungen
+      - type: entities
+        title: Temperatur-Einstellungen
+        entities:
+          - entity: number.boilersaver_onthresholdset
+            name: Alarm Heizung Aus
+            icon: mdi:thermometer-low
+          - entity: number.boilersaver_offthresholdset
+            name: Will Duschen Temperatur
+            icon: mdi:thermometer-high
+          - entity: number.boilersaver_showertime
+            name: Duschzeit
+            icon: mdi:timer-cog
+
+
+      # Erweiterte Steuerung
+      - type: entities
+        title: Erweiterte Einstellungen
+        entities:
+          - entity: switch.boilersaver_boilerenable
+            name: Steuerung Aktiviert
+            icon: mdi:power
+          - entity: switch.boilersaver_stoptimerontargettoggle
+            name: Timer bei Ziel stoppen
+            icon: mdi:timer-stop
+          - entity: switch.boilersaver_onceperperiodtoggle
+            name: Nur einmal pro Periode
+            icon: mdi:clock-check
+
+      # Temperatur-Verlauf (optional)
+      - type: history-graph
+        title: Temperatur-Verlauf
+        entities:
+          - sensor.boilersaver_temperatureboiler
+        hours_to_show: 24
+        refresh_interval: 60
+
+     
+      # Save Button (als Button-Karte)
+      - type: button
+        name: ⚠️ PERMANENT SPEICHERN ⚠️
+        icon: mdi:content-save-alert
+        tap_action:
+          action: call-service
+          service: mqtt.publish
+          service_data:
+            topic: "BoilerSaver/Settings/Save"
+            payload: "1"
+        show_state: false   
