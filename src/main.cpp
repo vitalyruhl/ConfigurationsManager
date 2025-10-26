@@ -83,6 +83,8 @@ bool displayActive = true; // flag to indicate if the display is active
 
 static bool globalAlarmState = false;// Global alarm state for temperature monitoring
 static constexpr char TEMP_ALARM_ID[] = "temp_low";
+static constexpr char SENSOR_FAULT_ALARM_ID[] = "sensor_fault";
+static bool sensorFaultState = false; // Global alarm state for sensor fault monitoring
 
 static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
 static const unsigned long displayUpdateInterval = 100; // Update display every 100ms
@@ -216,16 +218,16 @@ void loop()
     }
 
     mqttManager.loop(); // Handle MQTT Manager loop
-    
+
     // Monitor MQTT connection status and log periodically
     bool currentMqttState = mqttManager.isConnected();
     if (currentMqttState != lastMqttConnectedState) {
         // State changed - log immediately
         if (currentMqttState) {
-            sl->Printf("[MAIN] MQTT reconnected - Uptime: %lu ms, Reconnect count: %d", 
+            sl->Printf("[MAIN] MQTT reconnected - Uptime: %lu ms, Reconnect count: %d",
                        mqttManager.getUptime(), mqttManager.getReconnectCount()).Info();
         } else {
-            sl->Printf("[MAIN] MQTT connection lost - State: %d, Retry: %d", 
+            sl->Printf("[MAIN] MQTT connection lost - State: %d, Retry: %d",
                        (int)mqttManager.getState(), mqttManager.getCurrentRetry()).Warn();
         }
         lastMqttConnectedState = currentMqttState;
@@ -234,7 +236,7 @@ void loop()
         if (currentMqttState) {
             sl->Printf("[MAIN] MQTT status: Connected, Uptime: %lu ms", mqttManager.getUptime()).Debug();
         } else {
-            sl->Printf("[MAIN] MQTT status: Disconnected, State: %d, Retry: %d/%d", 
+            sl->Printf("[MAIN] MQTT status: Disconnected, State: %d, Retry: %d/%d",
                        (int)mqttManager.getState(), mqttManager.getCurrentRetry(), 15).Debug();
         }
         lastMqttStatusLog = millis();
@@ -331,10 +333,12 @@ void setupGUI()
 
     // Add alarms provider for min Temperature monitoring with hysteresis
     CRM().registerRuntimeAlarm(TEMP_ALARM_ID);
+    CRM().registerRuntimeAlarm(SENSOR_FAULT_ALARM_ID);
     CRM().addRuntimeProvider("Alarms",
         [](JsonObject &o)
         {
             o["AL_Status"] = globalAlarmState;
+            o["SF_Status"] = sensorFaultState;
             o["On_Threshold"] = boilerSettings.onThreshold.get();
             o["Off_Threshold"] = boilerSettings.offThreshold.get();
         });
@@ -351,6 +355,19 @@ void setupGUI()
     alarmMeta.alarmWhenTrue = true;
     alarmMeta.hasAlarm = true;
     CRM().addRuntimeMeta(alarmMeta);
+
+    // Define sensor fault alarm metadata
+    RuntimeFieldMeta sensorFaultMeta{};
+    sensorFaultMeta.group = "Alarms";
+    sensorFaultMeta.key = "SF_Status";
+    sensorFaultMeta.label = "Temperature Sensor Fault";
+    sensorFaultMeta.precision = 0;
+    sensorFaultMeta.order = 2;
+    sensorFaultMeta.isBool = true;
+    sensorFaultMeta.boolAlarmValue = true;
+    sensorFaultMeta.alarmWhenTrue = true;
+    sensorFaultMeta.hasAlarm = true;
+    CRM().addRuntimeMeta(sensorFaultMeta);
 
     // show some Info
     CRM().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "Alarm Under Temperature", .unit = "°C", .precision = 1, .order = 101});
@@ -493,11 +510,37 @@ void PinSetup()
 
 
 static void cb_readTempSensor() {
-    if (!ds18) return;
+    if (!ds18) {
+        sl->Warn("[TEMP] DS18B20 sensor not initialized");
+        return;
+    }
     ds18->requestTemperatures();
     float t = ds18->getTempCByIndex(0);
-    if (t > -100.0f && t < 150.0f) {
+    sl->Printf("[TEMP] Raw sensor reading: %.2f°C", t).Debug();
+
+    // Check for sensor fault (-127°C indicates sensor error)
+    bool sensorError = (t <= -127.0f || t >= 85.0f); // DS18B20 valid range is -55°C to +125°C, but -127°C is error code
+
+    if (sensorError) {
+        if (!sensorFaultState) {
+            sensorFaultState = true;
+            CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, true, false);
+            sl->Printf("[TEMP] SENSOR FAULT detected! Reading: %.2f°C", t).Error();
+        }
+        sl->Printf("[TEMP] Invalid temperature reading: %.2f°C (sensor fault)", t).Warn();
+        // Try to check if sensor is still present
+        uint8_t deviceCount = ds18->getDeviceCount();
+        sl->Printf("[TEMP] Devices still found: %d", deviceCount).Debug();
+    } else {
+        // Clear sensor fault if it was set
+        if (sensorFaultState) {
+            sensorFaultState = false;
+            CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, false, false);
+            sl->Printf("[TEMP] Sensor fault cleared! Reading: %.2f°C", t).Info();
+        }
+
         temperature = t + tempSensorSettings.corrOffset.get();
+        sl->Printf("[TEMP] Temperature updated: %.2f°C (offset: %.2f°C)", temperature, tempSensorSettings.corrOffset.get()).Info();
         // Optionally: push alarms now
         // CRM().updateAlarms(); // cheap
     }
@@ -512,10 +555,45 @@ static void setupTempSensor() {
     oneWireBus = new OneWire((uint8_t)pin);
     ds18 = new DallasTemperature(oneWireBus);
     ds18->begin();
+
+    // Configure for better compatibility
+    ds18->setWaitForConversion(true);  // Wait for conversion to complete
+    ds18->setCheckForConversion(true); // Check if conversion is done
+
+    // Extended diagnostics
+    uint8_t deviceCount = ds18->getDeviceCount();
+    sl->Printf("[TEMP] OneWire devices found: %d", deviceCount).Info();
+
+    if (deviceCount == 0) {
+        sl->Info("[TEMP] No DS18B20 sensors found! Check:");
+        sl->Info("[TEMP] 1. Pull-up resistor (4.7kΩ) between VCC and GPIO");
+        sl->Info("[TEMP] 2. Wiring: VCC→3.3V, GND→GND, DATA→GPIO");
+        sl->Info("[TEMP] 3. Sensor connection and power");
+
+        // Set sensor fault alarm if no devices found
+        sensorFaultState = true;
+        CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, true, false);
+        sl->Printf("[TEMP] Sensor fault alarm activated - no devices found").Warn();
+    } else {
+        sl->Printf("[TEMP] Found %d DS18B20 sensor(s) on GPIO %d", deviceCount, pin).Info();
+
+        // Clear sensor fault alarm if devices are found
+        sensorFaultState = false;
+        CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, false, false);
+
+        // Check if sensor is using parasitic power
+        bool parasitic = ds18->readPowerSupply(0);
+        sl->Printf("[TEMP] Power mode: %s", parasitic ? "Normal (VCC connected)" : "Parasitic (VCC=GND)").Info();
+
+        // Set resolution to 12-bit for better accuracy
+        ds18->setResolution(12);
+        sl->Printf("[TEMP] Resolution set to 12-bit").Info();
+    }
+
     float intervalSec = (float)tempSensorSettings.readInterval.get();
     if (intervalSec < 1.0f) intervalSec = 30.0f;
     TempReadTicker.attach(intervalSec, cb_readTempSensor);
-    sl->Printf("[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C", pin, intervalSec, tempSensorSettings.corrOffset.get()).Debug();
+    sl->Printf("[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C", pin, intervalSec, tempSensorSettings.corrOffset.get()).Info();
 }
 
 //----------------------------------------
@@ -546,9 +624,9 @@ void setupMQTT()
     // Test network connectivity to MQTT broker before attempting connection
     String mqttHost = mqttSettings.mqtt_server.get();
     uint16_t mqttPort = static_cast<uint16_t>(mqttSettings.mqtt_port.get());
-    
+
     sl->Printf("[MAIN] Testing connectivity to MQTT broker %s:%d", mqttHost.c_str(), mqttPort).Debug();
-    
+
     WiFiClient testClient;
     bool canConnect = testClient.connect(mqttHost.c_str(), mqttPort);
     if (canConnect) {
@@ -564,23 +642,23 @@ void setupMQTT()
     // Configure MQTT Manager with improved stability settings
     mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
     mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-    
+
     // Create unique client ID with MAC address, timestamp and random number to avoid conflicts
     String macAddr = WiFi.macAddress();
     macAddr.replace(":", "");
     uint32_t chipId = ESP.getEfuseMac() & 0xFFFFFF;
     String clientId = "ESP32_" + macAddr + "_" + String(chipId, HEX) + "_" + String(millis());
     mqttManager.setClientId(clientId.c_str());
-    
+
     // Improved connection parameters for stability
     mqttManager.setKeepAlive(90);        // Longer keep-alive to avoid timeouts
     mqttManager.setMaxRetries(15);       // More retries for flaky networks
     mqttManager.setRetryInterval(10000); // Longer interval between retries
     mqttManager.setBufferSize(512);      // Larger buffer for message handling
-    
+
     sl->Printf("[MAIN] MQTT Client ID: %s", clientId.c_str()).Debug();
-    sl->Printf("[MAIN] MQTT Credentials: User=%s, Pass=%s", 
-               mqttSettings.mqtt_username.get().c_str(), 
+    sl->Printf("[MAIN] MQTT Credentials: User=%s, Pass=%s",
+               mqttSettings.mqtt_username.get().c_str(),
                mqttSettings.mqtt_password.get().length() > 0 ? "***" : "none").Debug();
 
     // Set MQTT callbacks
@@ -645,8 +723,8 @@ void setupMQTT()
                                 cb_publishToMQTT(); // Publish initial values
                             });
 
-    mqttManager.onDisconnected([]() { 
-        sl->Printf("[MAIN] MQTT disconnected - Retry count: %d, Uptime was: %lu ms", 
+    mqttManager.onDisconnected([]() {
+        sl->Printf("[MAIN] MQTT disconnected - Retry count: %d, Uptime was: %lu ms",
                    mqttManager.getCurrentRetry(), mqttManager.getUptime()).Warn();
         sll->Printf("MQTT disconnected - Will retry connection").Warn();
     });

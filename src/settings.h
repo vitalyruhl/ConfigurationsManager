@@ -35,7 +35,7 @@ struct WiFi_Settings // wifiSettings
         wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .sortOrder = 1}),
         wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
         useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = false, .sortOrder = 3}),
-        staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.126", .sortOrder = 4, .showIf = [this]() { return !useDhcp.get(); }}),
+        staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.130", .sortOrder = 4, .showIf = [this]() { return !useDhcp.get(); }}),
         gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this]() { return !useDhcp.get(); }}),
         subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this]() { return !useDhcp.get(); }}),
         dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this]() { return !useDhcp.get(); }}),
@@ -275,7 +275,7 @@ struct TempSensorSettings {
     Config<float> corrOffset;   // correction offset in °C
     Config<int>   readInterval; // seconds
     TempSensorSettings():
-        gpioPin(ConfigOptions<int>{.key = "TsPin", .name = "GPIO Pin", .category = "Temp Sensor", .defaultValue = 4}),
+        gpioPin(ConfigOptions<int>{.key = "TsPin", .name = "GPIO Pin", .category = "Temp Sensor", .defaultValue = 21}),
         corrOffset(ConfigOptions<float>{.key = "TsOfs", .name = "Correction Offset", .category = "Temp Sensor", .defaultValue = 0.0f, .showInWeb = true}),
         readInterval(ConfigOptions<int>{.key = "TsInt", .name = "Read Interval (s)", .category = "Temp Sensor", .defaultValue = 30, .showInWeb = true})
     {}
@@ -307,7 +307,7 @@ struct SystemSettings {
             .key = "WiFiRb",
             .name = "Reboot if WiFi lost (min)",
             .category = "System",
-            .defaultValue = 15,
+            .defaultValue = 5,
             .showInWeb = true
         }),
         version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
@@ -323,7 +323,7 @@ struct ButtonSettings {
     ButtonSettings():
         apModePin(ConfigOptions<int>{.key = "BtnAP", .name = "AP Mode Button GPIO", .category = "Buttons", .defaultValue = 13}),
         resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15}),
-        showerRequestPin(ConfigOptions<int>{.key = "BtnShower", .name = "Shower Request Button GPIO", .category = "Buttons", .defaultValue = -1, .showInWeb = true})
+        showerRequestPin(ConfigOptions<int>{.key = "BtnShower", .name = "Shower Request Button GPIO", .category = "Buttons", .defaultValue = 19, .showInWeb = true})
     {
         // Settings registration moved to initializeAllSettings()
     }
