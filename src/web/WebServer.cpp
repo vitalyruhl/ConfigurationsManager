@@ -855,6 +855,24 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     // Runtime checkbox change endpoint
     server->on("/runtime_action/checkbox", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+
+            // Check for query parameters first (frontend uses this method)
+            if (request->hasParam("group") && request->hasParam("key") && request->hasParam("value")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                String valueStr = request->getParam("value")->value();
+                bool value = (valueStr == "true" || valueStr == "1");
+
+                configManager->getRuntimeManager().handleCheckboxChange(group, key, value);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+
+            // Fallback to JSON body parsing
             request->_tempObject = new String();
         },
         nullptr,

@@ -8,6 +8,35 @@
       @change="onFlashFileSelected"
     />
 
+    <!-- OTA Password Modal -->
+    <div v-if="showPasswordModal" class="modal-overlay" @click="cancelPasswordInput">
+      <div class="modal-content" @click.stop>
+        <h3>OTA Password Required</h3>
+        <div class="password-input-container">
+          <input
+            ref="passwordInput"
+            v-model="otaPassword"
+            :type="showOtaPassword ? 'text' : 'password'"
+            placeholder="Enter OTA password"
+            @keyup.enter="confirmPasswordInput"
+            @keyup.escape="cancelPasswordInput"
+          />
+          <button 
+            type="button" 
+            class="password-toggle"
+            @click="showOtaPassword = !showOtaPassword"
+            :title="showOtaPassword ? 'Hide password' : 'Show password'"
+          >
+            {{ showOtaPassword ? '🙈' : '👁️' }}
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button @click="cancelPasswordInput" class="cancel-btn">Cancel</button>
+          <button @click="confirmPasswordInput" class="confirm-btn">Continue</button>
+        </div>
+      </div>
+    </div>
+
     <div class="live-cards">
       <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
         <h3>{{ group.title }}</h3>
@@ -239,7 +268,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import RuntimeActionButton from "./runtime/RuntimeActionButton.vue";
 import RuntimeCheckbox from "./runtime/RuntimeCheckbox.vue";
@@ -268,6 +297,13 @@ const flashing = ref(false);
 const otaFileInput = ref(null);
 const wsConnected = ref(false);
 const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
+
+// OTA Password Modal
+const showPasswordModal = ref(false);
+const otaPassword = ref('');
+const showOtaPassword = ref(false);
+const passwordInput = ref(null);
+const pendingOtaFile = ref(null);
 
 const builtinSystemHiddenFields = new Set(["loopAvg"]);
 
@@ -1196,13 +1232,45 @@ async function onFlashFileSelected(event) {
     return;
   }
 
-  let password = window.prompt("Enter OTA password", "");
-  if (password === null) {
-    otaFileInput.value.value = "";
+  // Store the file and show password modal
+  pendingOtaFile.value = file;
+  otaPassword.value = '';
+  showPasswordModal.value = true;
+  
+  // Focus the password input after modal is shown
+  await nextTick();
+  if (passwordInput.value) {
+    passwordInput.value.focus();
+  }
+}
+
+// Handle password modal confirmation
+function confirmPasswordInput() {
+  if (!pendingOtaFile.value) {
+    cancelPasswordInput();
     return;
   }
-  password = password.trim();
+  
+  const password = otaPassword.value.trim();
+  showPasswordModal.value = false;
+  
+  // Proceed with OTA update
+  performOtaUpdate(pendingOtaFile.value, password);
+  pendingOtaFile.value = null;
+}
 
+// Handle password modal cancellation
+function cancelPasswordInput() {
+  showPasswordModal.value = false;
+  otaPassword.value = '';
+  pendingOtaFile.value = null;
+  if (otaFileInput.value) {
+    otaFileInput.value.value = "";
+  }
+}
+
+// Perform the actual OTA update
+async function performOtaUpdate(file, password) {
   const headers = new Headers();
   if (password.length) headers.append("X-OTA-PASSWORD", password);
   const form = new FormData();
@@ -1405,6 +1473,9 @@ defineExpose({ startFlash });
 .bd--fallback.bd--off {
   background: #6e7681;
 }
+.bd--fallback.bd--safe {
+  background: #2ecc71;
+}
 .bd--fallback.bd--alarm {
   background: #f85149;
   animation: alarmPulse 1.1s ease-in-out infinite;
@@ -1583,5 +1654,107 @@ label.switch input:checked + .slider:before {
     opacity: 0.6;
     transform: scale(1.1);
   }
+}
+
+/* OTA Password Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  color: #f0f6fc;
+}
+
+.modal-content h3 {
+  margin: 0 0 16px 0;
+  color: #f0f6fc;
+  font-size: 18px;
+}
+
+.password-input-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.password-input-container input {
+  flex: 1;
+  padding: 8px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #f0f6fc;
+  font-size: 14px;
+}
+
+.password-input-container input:focus {
+  outline: none;
+  border-color: #1f6feb;
+  box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
+}
+
+.password-toggle {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #8b949e;
+  font-size: 14px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.password-toggle:hover {
+  background: #30363d;
+  color: #f0f6fc;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.cancel-btn {
+  background: #6e7681;
+  color: #f0f6fc;
+}
+
+.cancel-btn:hover {
+  background: #8b949e;
+}
+
+.confirm-btn {
+  background: #238636;
+  color: #f0f6fc;
+}
+
+.confirm-btn:hover {
+  background: #2ea043;
 }
 </style>

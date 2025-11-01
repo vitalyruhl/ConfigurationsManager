@@ -50,6 +50,7 @@ void SetupCheckForAPModeButton();
 void SetupCheckForResetButton();
 void updateStatusLED();                             // new non-blocking status LED handler
 void setHeaterState(bool on);
+void setFanState(bool on);
 void cbTestButton();
 void setupGUI();
 bool SetupStartWebServer();
@@ -468,6 +469,11 @@ void setup()
 
     setupGUI();
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
+    
+    // Enhanced WebSocket configuration
+    ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
+    ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
+    
     SetupStartTemperatureMeasuring();
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -484,6 +490,9 @@ void setup()
 
     Serial.println("Configuration printout:");
     Serial.println(ConfigManager.toJSON(true)); // Show ALL settings, not just web-visible ones
+    
+    // Note: debugPrintSettings() removed due to potential crashes during startup
+    Serial.println("\nSetup completed successfully!");
 
     // Test setting changes
     systemSettings.version.set(VERSION); // Update version on device
@@ -498,6 +507,32 @@ void loop()
     ConfigManager.updateLoopTiming();        // Update internal loop timing metrics for system provider
     ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
 
+    // WiFi status monitoring for debugging
+    static unsigned long lastWiFiCheck = 0;
+    if (millis() - lastWiFiCheck > 30000) // Check every 30 seconds
+    {
+        lastWiFiCheck = millis();
+        bool wifiStatus = ConfigManager.getWiFiStatus();
+        Serial.printf("[WiFi] Status: %s\n", wifiStatus ? "Connected" : "Disconnected");
+        if (wifiStatus) {
+            int currentRSSI = WiFi.RSSI();
+            String bssid = WiFi.BSSIDstr();
+            String accessPoint = "Unknown";
+            
+            // Identify access point by BSSID
+            if (bssid.indexOf("66:b5:8d:4c:e1:d5") >= 0 || bssid.indexOf("66-b5-8d-4c-e1-d5") >= 0) {
+                accessPoint = "FRITZ!Repeater 1200 AX";
+            } else {
+                accessPoint = "Main FRITZ!Box (or other AP)";
+            }
+            
+            Serial.printf("[WiFi] Current RSSI: %d dBm (%s)\n", currentRSSI, 
+                currentRSSI > -50 ? "excellent" : (currentRSSI > -60 ? "good" : (currentRSSI > -67 ? "ok" : (currentRSSI > -75 ? "weak" : "very weak"))));
+            Serial.printf("[WiFi] Connected to: %s\n", accessPoint.c_str());
+            Serial.printf("[WiFi] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
+        }
+    }
+
     // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
     static unsigned long lastAlarmEval = 0;
     if (millis() - lastAlarmEval > 1500)
@@ -508,7 +543,8 @@ void loop()
 
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
-    ConfigManager.getOTAManager().handle();
+    ConfigManager.handleOTA();           // Handle OTA updates
+    ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
 
     delay(10);
@@ -529,10 +565,11 @@ void setupGUI()
     // Register sensor runtime provider for BME280 data
     ConfigManager.getRuntimeManager().addRuntimeProvider("sensors", [](JsonObject &data)
     {
-        data["temp"] = temperature;
-        data["hum"] = Humidity;
-        data["dew"] = Dewpoint;
-        data["pressure"] = Pressure;
+        // Apply precision to sensor values to reduce JSON size
+        data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
+        data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place  
+        data["dew"] = roundf(Dewpoint * 10.0f) / 10.0f;        // 1 decimal place
+        data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
     });
 
     // Define sensor display fields using addRuntimeMeta
@@ -572,6 +609,22 @@ void setupGUI()
     pressureMeta.order = 13;
     ConfigManager.getRuntimeManager().addRuntimeMeta(pressureMeta);
 
+    // Add runtime provider for sensor range field
+    RuntimeFieldMeta rangeMeta;
+    rangeMeta.group = "sensors";
+    rangeMeta.key = "range";
+    rangeMeta.label = "Sensor Range";
+    rangeMeta.unit = "V";
+    rangeMeta.precision = 1;
+    rangeMeta.order = 14;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(rangeMeta);
+
+    // Add status provider for connection status
+    ConfigManager.getRuntimeManager().addRuntimeProvider("status", [](JsonObject &data)
+    {
+        data["connected"] = WiFi.status() == WL_CONNECTED;
+    });
+
     // Add interactive controls provider
     ConfigManager.getRuntimeManager().addRuntimeProvider("controls", [](JsonObject &data)
     {
@@ -603,6 +656,7 @@ void setupGUI()
     }, [](bool state)
     {
         fanState = state;
+        setFanState(state);
         Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
     }, false, "", 22);
 
@@ -627,6 +681,20 @@ void setupGUI()
         tempOffset = value;
         Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
     }, "", "°C", 24);
+
+    // Additional runtime fields as recommended
+    // Sensor range field for demonstration
+    static float sensorRange = 3.3f;
+    ConfigManager.defineRuntimeField("sensors", "range", "Sensor Range", "V", 0.0, 5.0);
+    
+    // Connection status boolean
+    static bool connectionStatus = false;
+    ConfigManager.defineRuntimeBool("status", "connected", "Connection Status", false, 1);
+    
+    // Overheat alarm 
+    ConfigManager.defineRuntimeAlarm("alarms", "overheat", "Overheat Warning", []() { 
+        return temperature > 40.0; // Trigger at 40°C for demo
+    });
 
     // Alarm status display using addRuntimeMeta for boolean values
     ConfigManager.getRuntimeManager().addRuntimeProvider("alarms", [](JsonObject &data)
@@ -756,7 +824,19 @@ void onWiFiConnected()
     // Show correct IP address when connected
     Serial.printf("\n\n[MAIN] Webserver running at: %s (Connected)\n", WiFi.localIP().toString().c_str());
     Serial.printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
-    Serial.printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
+    Serial.printf("[MAIN] WLAN-Strength is: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
+    
+    String bssid = WiFi.BSSIDstr();
+    String accessPoint = "Unknown";
+    if (bssid.indexOf("66:b5:8d:4c:e1:d5") >= 0 || bssid.indexOf("66-b5-8d-4c-e1-d5") >= 0) {
+        accessPoint = "FRITZ!Repeater 1200 AX";
+    } else {
+        accessPoint = "Main FRITZ!Box (or other AP)";
+    }
+    
+    Serial.printf("[MAIN] Connected to: %s\n", accessPoint.c_str());
+    Serial.printf("[MAIN] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
+    Serial.printf("[MAIN] Local MAC: %s\n\n", WiFi.macAddress().c_str());
 
     // Start NTP sync now and schedule periodic resyncs
     auto doNtpSync = []()
@@ -860,18 +940,13 @@ void readBme280()
 
     Dewpoint = computeDewPoint(temperature, Humidity);
 
-    // output formatted values to serial console
-    Serial.println("-----------------------");
-    Serial.printf("\r\nTemperature: %2.1lf °C | offset: %2.1lf K", temperature, tempSettings.tempCorrection.get());
-    Serial.printf("\r\nHumidity   : %2.1lf %rH | offset: %2.1lf %rH", Humidity, tempSettings.humidityCorrection.get());
-    Serial.printf("\r\nDewpoint   : %2.1lf °C", Dewpoint);
-    Serial.printf("\r\nPressure   : %4.0lf hPa", Pressure);
-    Serial.printf("\r\nAltitude   : %4.2lf m", bme280.data.altitude);
-    Serial.println("-----------------------");
+    // Note: Serial output removed from ticker interrupt context to prevent blocking
+    // Temperature readings are available via runtime providers in web interface
 }
 
 
 #define HEATER_PIN 23       // Example pin for heater relay
+#define FAN_PIN 25          // Example pin for fan relay
 #define LowActiveRelay true // Set to true if relay is active LOW, false if active HIGH
 void setHeaterState(bool on)
 {
@@ -885,6 +960,21 @@ void setHeaterState(bool on)
     {
         Serial.println("Heater OFF");
         digitalWrite(HEATER_PIN, LowActiveRelay ? HIGH : LOW); // Example: turn off heater relay
+    }
+}
+
+void setFanState(bool on)
+{
+    pinMode(FAN_PIN, OUTPUT); // Example pin for fan relay
+    if (on)
+    {
+        Serial.println("Fan ON");
+        digitalWrite(FAN_PIN, LowActiveRelay ? LOW : HIGH); // Example: turn on fan relay
+    }
+    else
+    {
+        Serial.println("Fan OFF");
+        digitalWrite(FAN_PIN, LowActiveRelay ? HIGH : LOW); // Example: turn off fan relay
     }
 }
 
