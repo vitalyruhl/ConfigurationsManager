@@ -149,10 +149,20 @@ void ConfigManagerWeb::setupAPIRoutes() {
             payload = configManager->getAppName();
         }
         if (payload.length() == 0) {
-            payload = String(APP_NAME);
+            payload = String("ConfigManager");  // Fallback if no app name set
         }
         if (payload.length()) payload += " ";
-        payload += String(VERSION);
+        
+        // Get version from ConfigManager
+        String version;
+        if (configManager) {
+            version = configManager->getVersion();
+        }
+        if (version.length() == 0) {
+            version = String("");  // Fallback if no version set
+        }
+        payload += version;
+        
         request->send(200, "text/plain", payload);
     });
     // Debug route to catch any config requests with body handling

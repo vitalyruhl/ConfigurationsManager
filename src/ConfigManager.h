@@ -620,6 +620,7 @@ private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
     String appName;
+    String appVersion;
 
     // Modular components
     ConfigManagerWiFi wifiManager;
@@ -906,6 +907,14 @@ public:
     }
 
     const String &getAppName() const { return appName; }
+
+    void setVersion(const String &version)
+    {
+        appVersion = version;
+        CM_LOG("[I] App version set: %s", version.c_str());
+    }
+
+    const String &getVersion() const { return appVersion; }
 
     // WiFi management - NON-BLOCKING!
     void startWebServer(const String &ssid, const String &password)

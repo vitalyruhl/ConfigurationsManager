@@ -27,7 +27,6 @@
 // Always async web server now
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-AsyncWebServer server(80);
 // #include <WiFiClientSecure.h>
 
 #define VERSION "V2.6.1" // 2025.10.08
@@ -43,11 +42,23 @@ AsyncWebServer server(80);
 // Since V2.0.0 there is a way to upload the firmware over the air (OTA).
 // You can set the hostname and the password for OTA in the setupOTA function.
 
-ConfigManagerClass ConfigManager;                                     // Create an instance of ConfigManager before using it in structures etc.
-ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initialize the logger to nullptr
+extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
 //--------------------------------------------------------------------
 // Forward declarations of functions
+void SetupCheckForAPModeButton();
+void SetupCheckForResetButton();
+void updateStatusLED();                             // new non-blocking status LED handler
+void setHeaterState(bool on);
+void cbTestButton();
+void setupGUI();
+bool SetupStartWebServer();
+void onWiFiConnected();
+void onWiFiDisconnected();
+void onWiFiAPMode();
+void SetupStartTemperatureMeasuring();
+void readBme280();
+static float computeDewPoint(float temperatureC, float relHumidityPct);
 void SetupCheckForAPModeButton();
 void blinkBuidInLED(int BlinkCount, int blinkRate); // legacy (blocking) blink – will be phased out
 void updateStatusLED();                             // new non-blocking status LED handler
@@ -67,7 +78,7 @@ h3 { color: orange; text-decoration: underline; }
 
 // minimal Init
 Config<bool> testBool(ConfigOptions<bool>{
-    .keyName = "tbool",
+    .key = "tbool",
     .category = "main",
     .defaultValue = true});
 
@@ -76,51 +87,46 @@ Config<bool> testBool(ConfigOptions<bool>{
 // Improved version since V2.0.0
 
 Config<int> updateInterval(ConfigOptions<int>{
-    .keyName = "interval",
+    .key = "interval",
+    .name = "Update Interval (seconds)",
     .category = "main",
-    .defaultValue = 30,
-    .prettyName = "Update Interval (seconds)"});
+    .defaultValue = 30});
 
 // Now, these will be truncated and added if their truncated keys are unique:
 Config<float> VeryLongCategoryName(ConfigOptions<float>{
-    .keyName = "VlongC",
+    .key = "VlongC",
+    .name = "category Correction long",
     .category = "VeryLongCategoryName",
-    .defaultValue = 0.1f,
-    .prettyName = "category Correction long",
-    .prettyCat = "key Correction"});
+    .defaultValue = 0.1f});
 
 Config<float> VeryLongKeyName(ConfigOptions<float>{
-    .keyName = "VeryLongKeyName",
+    .key = "VeryLongKeyName",
+    .name = "key Correction long",
     .category = "Temp",
-    .defaultValue = 0.1f,
-    .prettyName = "key Correction long",
-    .prettyCat = "key Correction"});
+    .defaultValue = 0.1f});
 
 //---------------------------------------------------------------------------------------------------
 // ---- Temporary dynamic visibility test settings ----
 // Category kept short ("DynTest") to avoid key truncation when combined with key names.
 Config<bool> tempBoolToggle(ConfigOptions<bool>{
-    .keyName = "toggle",
+    .key = "toggle",
+    .name = "Temp Toggle",
     .category = "DynTest",
-    .defaultValue = true,
-    .prettyName = "Temp Toggle",
-    .prettyCat = "Dynamic Test"});
+    .defaultValue = true});
 
 Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
-    .keyName = "trueS",
+    .key = "trueS",
+    .name = "Visible When True",
     .category = "DynTest",
     .defaultValue = String("Shown if toggle = true"),
-    .prettyName = "Visible When True",
-    .prettyCat = "Dynamic Test",
     .showIf = []()
     { return tempBoolToggle.get(); }});
 
 Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
-    .keyName = "falseS",
+    .key = "falseS",
+    .name = "Visible When False",
     .category = "DynTest",
     .defaultValue = String("Shown if toggle = false"),
-    .prettyName = "Visible When False",
-    .prettyCat = "Dynamic Test",
     .showIf = []()
     { return !tempBoolToggle.get(); }});
 // ---- End temporary dynamic visibility test settings ----
@@ -144,7 +150,11 @@ struct SystemSettings
                            .showInWeb = true}),
                        version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
     {
-        // Settings registration moved to initializeAllSettings()
+        // Register settings with ConfigManager
+        ConfigManager.addSetting(&allowOTA);
+        ConfigManager.addSetting(&otaPassword);
+        ConfigManager.addSetting(&wifiRebootTimeoutMin);
+        ConfigManager.addSetting(&version);
     }
 };
 
@@ -157,7 +167,10 @@ struct ButtonSettings
                        resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15}),
                        showerRequestPin(ConfigOptions<int>{.key = "BtnShower", .name = "Shower Request Button GPIO", .category = "Buttons", .defaultValue = 19, .showInWeb = true})
     {
-        // Settings registration moved to initializeAllSettings()
+        // Register settings with ConfigManager
+        ConfigManager.addSetting(&apModePin);
+        ConfigManager.addSetting(&resetDefaultsPin);
+        ConfigManager.addSetting(&showerRequestPin);
     }
 };
 
@@ -179,22 +192,12 @@ struct WiFi_Settings // wifiSettings
 
     WiFi_Settings() : wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .sortOrder = 1}),
                       wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
-                      useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = false, .sortOrder = 3}),
-                      staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.130", .sortOrder = 4, .showIf = [this]()
-                                                                                                                                                                      { return !useDhcp.get(); }}),
-                      gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this]()
-                                                                                                                                                                  { return !useDhcp.get(); }}),
-                      subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this]()
-                                                                                                                                                                    { return !useDhcp.get(); }}),
-                      dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this]()
-                                                                                                                                                                      { return !useDhcp.get(); }}),
-                      dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this]()
-                                                                                                                                                                    { return !useDhcp.get(); }})
-    {
-        // Settings registration moved to initializeAllSettings()
-    }
-
-    void registerSettings()
+                      useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = true, .sortOrder = 3}),
+                      staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.131", .sortOrder = 4, .showIf = [this](){ return !useDhcp.get(); }}),
+                      gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this](){ return !useDhcp.get(); }}),
+                      subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this](){ return !useDhcp.get(); }}),
+                      dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this](){ return !useDhcp.get(); }}),
+                      dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this](){ return !useDhcp.get(); }})
     {
         // Register settings with ConfigManager
         ConfigManager.addSetting(&wifiSsid);
@@ -206,6 +209,7 @@ struct WiFi_Settings // wifiSettings
         ConfigManager.addSetting(&dnsPrimary);
         ConfigManager.addSetting(&dnsSecondary);
     }
+
 };
 
 WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
@@ -223,6 +227,10 @@ struct NTPSettings
                     server2(ConfigOptions<String>{.key = "NTP2", .name = "NTP Server 2", .category = "NTP", .defaultValue = String("pool.ntp.org"), .showInWeb = true}),
                     tz(ConfigOptions<String>{.key = "NTPTZ", .name = "Time Zone (POSIX)", .category = "NTP", .defaultValue = String("CET-1CEST,M3.5.0/02,M10.5.0/03"), .showInWeb = true})
     {
+        ConfigManager.addSetting(&frequencySec);
+        ConfigManager.addSetting(&server1);
+        ConfigManager.addSetting(&server2);
+        ConfigManager.addSetting(&tz);
     }
 };
 
@@ -308,11 +316,7 @@ struct MQTT_Settings
         topic_YouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
 
         // Debug: Print topic lengths to detect potential issues
-        extern SigmaLoger *sl;
-        if (sl)
-        {
-            Serial.printf("[MQTT] StopTimerOnTarget topic: [%s] (length: %d)", topic_StopTimerOnTarget.c_str(), topic_StopTimerOnTarget.length()).Debug();
-        }
+        Serial.printf("[MQTT] StopTimerOnTarget topic: [%s] (length: %d)\n", topic_StopTimerOnTarget.c_str(), topic_StopTimerOnTarget.length());
     }
 };
 MQTT_Settings mqttSettings; // mqttSettings
@@ -331,11 +335,13 @@ MQTT_Settings mqttSettings; // mqttSettings
 
 BME280_I2C bme280;
 Ticker temperatureTicker;
+bool tickerActive = false; // flag to indicate if the ticker is active
+Ticker NtpSyncTicker;
 
 // forward declarations
-void readBme280();                                                                      // read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
-void SetupStartTemperatureMeasuring();                                                  // setup the BME280 temperature and humidity sensor
-static float computeDewPoint(float temperatureC, float relHumidityPct);                 // compute the dewpoint from temperature and humidity
+void readBme280(); // read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
+void SetupStartTemperatureMeasuring(); // setup the BME280 temperature and humidity sensor
+static float computeDewPoint(float temperatureC, float relHumidityPct); // compute the dewpoint from temperature and humidity
 static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntimeManager(); } // Shorthand helper for RuntimeManager access
 
 float temperature = 0.0; // current temperature in Celsius
@@ -350,13 +356,12 @@ struct TempSettings
     Config<int> seaLevelPressure;
     Config<int> readIntervalSec;
     Config<float> dewpointRiskWindow; // ΔT (°C) über Taupunkt, ab der Risiko-Alarm auslöst
-    // Shared OptionGroup constants to avoid repetition
-    static constexpr OptionGroup TG{.category = "Temp", .prettyCat = "Temperature Settings"};
-    TempSettings() : tempCorrection(TG.opt<float>("TCO", 0.1f, "Temperature Correction")),
-                     humidityCorrection(TG.opt<float>("HYO", 0.1f, "Humidity Correction")),
-                     seaLevelPressure(TG.opt<int>("SLP", 1013, "Sea Level Pressure")),
-                     readIntervalSec(TG.opt<int>("ReadTemp", 30, "Read Temp/Humidity every (s)")),
-                     dewpointRiskWindow(TG.opt<float>("DPWin", 1.5f, "Dewpoint Risk Window (°C)"))
+    
+    TempSettings() : tempCorrection(ConfigOptions<float>{.key = "TCO", .name = "Temperature Correction", .category = "Temp", .defaultValue = 0.1f}),
+                     humidityCorrection(ConfigOptions<float>{.key = "HYO", .name = "Humidity Correction", .category = "Temp", .defaultValue = 0.1f}),
+                     seaLevelPressure(ConfigOptions<int>{.key = "SLP", .name = "Sea Level Pressure", .category = "Temp", .defaultValue = 1013}),
+                     readIntervalSec(ConfigOptions<int>{.key = "ReadTemp", .name = "Read Temp/Humidity every (s)", .category = "Temp", .defaultValue = 30}),
+                     dewpointRiskWindow(ConfigOptions<float>{.key = "DPWin", .name = "Dewpoint Risk Window (°C)", .category = "Temp", .defaultValue = 1.5f})
     {
         ConfigManager.addSetting(&tempCorrection);
         ConfigManager.addSetting(&humidityCorrection);
@@ -389,6 +394,7 @@ void setup()
 
     //-----------------------------------------------------------------
     ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    ConfigManager.setVersion(VERSION);                                                   // Set the application version for web UI display
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
@@ -434,6 +440,8 @@ void setup()
         // ConfigManager.clearAllFromPrefs();
         wifiSettings.wifiSsid.set(MY_WIFI_SSID);
         wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+        wifiSettings.useDhcp.set(false);
         ConfigManager.saveAll();
         delay(1000); // Small delay
     }
@@ -446,7 +454,7 @@ void setup()
     }
     else
     {
-        Serial.println("[SETUP] Skipping MQTT setup in AP mode");
+        Serial.println("[SETUP] we are in AP mode");
     }
 
     setupGUI();
@@ -497,147 +505,90 @@ void loop()
 
 void setupGUI()
 {
-
     //-----------------------------------------------------------------
-    // example for dynamic settings visibility
+    // BME280 Sensor Display with Runtime Providers
     //-----------------------------------------------------------------
-    // Register example runtime provider with divider and additional info lines
-    // addRuntimeProvider make an section in gui
-
-    // then add the fields to show in gui.
-    // Existing Fields:
-    // defineRuntimeField (show Value),
-    // defineRuntimeString (Show a Static String, with Static Value),
-    // defineRuntimeBool (show a boolean Value green on true, white on false, red+blink on alarm),
-    // defineRuntimeDivider (show a divider line </hr>)
-    // defineRuntimeFieldThresholds (show Value with thresholds for warn and alarm, Warn = yellow and red = Alarm)
-
-    // example for temperature and humidity sensor, with thresholds and alarms
-    ConfigManager.addRuntimeProvider({.name = "sensors",
-                                      .fill = [](JsonObject &o)
-                                      {
-                                          // Primary short keys expected by frontend
-                                          o["temp"] = temperature;
-                                          o["hum"] = Humidity;
-                                          o["dew"] = Dewpoint;
-                                          o["Pressure"] = Pressure;
-                                      }});
-
-    // Runtime field metadata for dynamic UI
-    // With thresholds: warn (yellow) and alarm (red). Example ranges; adjust as needed.
-    ConfigManager.defineRuntimeFieldThresholds("sensors", "temp", "Temperature", "°C", 1,
-                                               1.0f, 30.0f, // warnMin / warnMax
-                                               0.0f, 32.0f, // alarmMin / alarmMax
-                                               true, true, true, true, 10);
-
-    ConfigManager.defineRuntimeFieldThresholds("sensors", "hum", "Humidity", "%", 1,
-                                               30.0f, 70.0f,
-                                               15.0f, 90.0f,
-                                               true, false, true, true, 11);
-
-    // only basic field, no thresholds
-    ConfigManager.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1, 12);
-    ConfigManager.defineRuntimeField("sensors", "Pressure", "Pressure", "hPa", 1, 13);
-
-    // Add interactive controls (demo): test button + heater toggle on system group
-    ConfigManager.addRuntimeProvider({.name = "Hand overrides",
-                                      .fill = [](JsonObject &o) { /* optionally expose current override states later */ }});
-    // Local state for heater override
-    static bool heaterState = false;
-    // Action button
-    ConfigManager.defineRuntimeButton("Hand overrides", "testBtn", "Test 1", []()
-                                      { cbTestButton(); }, 82);
-    // Action toggle
-    ConfigManager.defineRuntimeCheckbox("Hand overrides", "heater", "Heater", []()
-                                        { return heaterState; }, [](bool v)
-                                        { heaterState = v; setHeaterState(v); }, 83);
-
-    // ConfigManager.defineRuntimeDivider("Hand overrides", "More Controls", 88); // another divider (order 91)
-    // Stateful button (acts like on/off toggle with dynamic label states handled client-side) order 92
-    static bool stateBtnState = false;
-    ConfigManager.defineRuntimeStateButton("Hand overrides", "sb_mode", "Fan", []()
-                                           { return stateBtnState; }, [](bool v)
-                                           { stateBtnState = v; Serial.printf("[STATE_BUTTON] -> %s\n", v?"ON":"OFF"); setHeaterState(v); }, /*init*/ false, 91);
-    // Int slider (-10..10) order 93
-    static int transientIntVal = 0;
-    ConfigManager.defineRuntimeIntSlider("Hand overrides", "i_adj", "Int", -10, 10, 0, []()
-                                         { return transientIntVal; }, [](int v)
-                                         { transientIntVal = v; Serial.printf("[INT_SLIDER] -> %d\n", v); }, 92, String("steps"));
-    // Float slider (-10..10) with precision 2 order 94
-    static float transientFloatVal = 0.0f;
-    ConfigManager.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Float", -10.0f, 10.0f, 0.0f, 2, []()
-                                           { return transientFloatVal; }, [](float v)
-                                           { transientFloatVal = v; Serial.printf("[FLOAT_SLIDER] -> %.2f\n", v); }, 93, String("°C"));
-
-    // Example for runtime alarms based on multiple fields, of course you can also use global variables too.
-    // Cross-field alarm: temperature within 1.0°C above dewpoint (risk of condensation)
-    ConfigManager.defineRuntimeAlarm(
-        "dewpoint_risk",
-        [](const JsonObject &root)
-        {
-            float dewpointRiskWindow = tempSettings.dewpointRiskWindow.get(); // User-configurable window above dewpoint at which risk alarm triggers
-            if (!root.containsKey("sensors"))
-                return false;
-            const JsonObject sensors = root["sensors"].as<JsonObject>();
-            if (!sensors.containsKey("temp") || !sensors.containsKey("dew"))
-                return false;
-            float t = sensors["temp"].as<float>();
-            float d = sensors["dew"].as<float>();
-            return (t - d) <= dewpointRiskWindow; // risk window
-        },
-        []()
-        { Serial.println("[ALARM] Dewpoint ENTER"); }, // here you could also trigger a relay or similar
-        []()
-        { Serial.println("[ALARM] Dewpoint EXIT"); });
-
-    // Temperature MIN alarm -> Heater relay ON when temperature below alarmMin (0.5°C) and OFF when recovered.
-    // Uses a little hysteresis (enter < 0.0, exit > 0.5) to avoid fast toggling.
-    ConfigManager.defineRuntimeAlarm(
-        "temp_low",
-        [](const JsonObject &root)
-        {
-            static bool lastState = false; // remember last state for hysteresis
-            // Hysteresis: once active keep it on until t > 0.5
-            if (lastState)
-            { // currently active -> wait until we are clearly above release threshold
-                lastState = (temperature > 0.5f);
-            }
-            else
-            { // currently inactive -> trigger when below entry threshold
-                lastState = (temperature < 0.0f);
-            }
-            return lastState;
-        },
-        []()
-        {
-            Serial.println("[ALARM] -> HEATER ON");
-            // digitalWrite(RELAY_HEATER_PIN, HIGH);
-        },
-        []()
-        {
-            Serial.println("[ALARM] -> HEATER OFF");
-            // digitalWrite(RELAY_HEATER_PIN, LOW);
-        });
-
-    ConfigManager.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", true, /*order*/ 100);
-
+    
+    // Register sensor runtime provider for BME280 data
+    ConfigManager.getRuntimeManager().addRuntimeProvider("sensors", [](JsonObject &data)
     {
-        // Custom styling for the too-low-temperature alarm (yellow, no blink, instead of red standard)
-        // please note this css derectives will applyed to the element-style, so it cannot be overwritten by themes etc.
-        // use GLOBAL_THEME_OVERRIDE for global css changes
-        auto tooLowTempStyleOverride = ConfigManagerClass::defaultBoolStyle(true);
-        tooLowTempStyleOverride.rule("stateDotOnTrue")
-            .set("background", "#f1c40f")
-            .set("border", "none")
-            .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
-            .set("animation", "none");
-        tooLowTempStyleOverride.rule("stateDotOnAlarm")
-            .set("background", "#f1c40f")
-            .set("border", "none")
-            .set("boxShadow", "0 0 4px rgba(241,196,15,0.7)")
-            .set("animation", "none");
-        ConfigManager.defineRuntimeBool("alarms", "temp_low", "too low temperature", true, /*order*/ 100, tooLowTempStyleOverride);
-    }
+        data["temp"] = temperature;
+        data["hum"] = Humidity;
+        data["dew"] = Dewpoint;
+        data["pressure"] = Pressure;
+    });
+
+    // Define sensor display fields
+    ConfigManager.defineRuntimeField("sensors", "temp", "Temperature", "°C", 1, 10);
+    ConfigManager.defineRuntimeField("sensors", "hum", "Humidity", "%", 1, 11);
+    ConfigManager.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1, 12);
+    ConfigManager.defineRuntimeField("sensors", "pressure", "Pressure", "hPa", 1, 13);
+
+    // Add interactive controls provider
+    ConfigManager.getRuntimeManager().addRuntimeProvider("controls", [](JsonObject &data)
+    {
+        // Optionally expose control states
+    });
+
+    // Test button
+    ConfigManager.defineRuntimeButton("controls", "testBtn", "Test Button", []()
+    {
+        cbTestButton();
+    }, "", 20);
+
+    // Example toggle for heater simulation
+    static bool heaterState = false;
+    ConfigManager.defineRuntimeCheckbox("controls", "heater", "Heater", []()
+    {
+        return heaterState;
+    }, [](bool state)
+    {
+        heaterState = state;
+        setHeaterState(state);
+    }, "", 21);
+
+    // Example state button (toggle with visual feedback)
+    static bool fanState = false;
+    ConfigManager.defineRuntimeStateButton("controls", "fan", "Fan", []()
+    {
+        return fanState;
+    }, [](bool state)
+    {
+        fanState = state;
+        Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
+    }, false, "", 22);
+
+    // Integer slider for adjustments
+    static int adjustValue = 0;
+    ConfigManager.defineRuntimeIntSlider("controls", "adjust", "Adjustment", -10, 10, 0, []()
+    {
+        return adjustValue;
+    }, [](int value)
+    {
+        adjustValue = value;
+        Serial.printf("[ADJUST] Value: %d\n", value);
+    }, "", "steps", 23);
+
+    // Float slider for temperature offset
+    static float tempOffset = 0.0f;
+    ConfigManager.defineRuntimeFloatSlider("controls", "tempOffset", "Temp Offset", -5.0f, 5.0f, 0.0f, 2, []()
+    {
+        return tempOffset;
+    }, [](float value)
+    {
+        tempOffset = value;
+        Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
+    }, "", "°C", 24);
+
+    // Alarm status display
+    ConfigManager.getRuntimeManager().addRuntimeProvider("alarms", [](JsonObject &data)
+    {
+        data["dewpoint_risk"] = false; // Will be updated by alarm logic
+        data["temp_low"] = false;      // Will be updated by alarm logic
+    });
+
+    ConfigManager.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", false, 30);
+    ConfigManager.defineRuntimeBool("alarms", "temp_low", "Low Temperature", false, 31);
 }
 
 //----------------------------------------
@@ -649,13 +600,12 @@ void SetupCheckForResetButton()
     // check for pressed reset button
     if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
     {
-    sl->Internal("[MAIN] Reset button pressed -> Reset all settings...");
-    sll->Internal("Reset!");
+        Serial.println("[MAIN] Reset button pressed -> Reset all settings...");
         ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
         ConfigManager.saveAll();           // Save the default settings to EEPROM
 
         // Show user feedback that reset is happening
-    sll->Internal("restarting...");
+        Serial.println("[MAIN] restarting...");
         //ToDo: add non blocking delay to show message on display before restart
         ESP.restart(); // Restart the ESP32
     }
@@ -668,7 +618,7 @@ void SetupCheckForAPModeButton()
 
     if (wifiSettings.wifiSsid.get().length() == 0)
     {
-    sl->Printf("[MAIN] WiFi SSID is empty [%s] (fresh/unconfigured)", wifiSettings.wifiSsid.get().c_str()).Error();
+        Serial.println("[MAIN] WiFi SSID is empty (fresh/unconfigured)");
         ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
     }
 
@@ -676,8 +626,7 @@ void SetupCheckForAPModeButton()
 
     if (digitalRead(buttonSettings.apModePin.get()) == LOW)
     {
-    sl->Internal("[MAIN] AP mode button pressed -> starting AP mode...");
-    sll->Internal("AP mode button!");
+        Serial.println("[MAIN] AP mode button pressed -> starting AP mode...");
         ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
     }
 }
@@ -734,12 +683,6 @@ void onWiFiConnected()
 
     if (!tickerActive)
     {
-        ShowDisplay(); // Show the display
-
-        // Start MQTT tickers
-        PublischMQTTTicker.attach(mqttSettings.MQTTPublischPeriod.get(), cb_publishToMQTT);
-        ListenMQTTTicker.attach(mqttSettings.MQTTListenPeriod.get(), cb_MQTTListener);
-
         // Start OTA if enabled
         if (systemSettings.allowOTA.get())
         {
@@ -748,9 +691,9 @@ void onWiFiConnected()
 
         tickerActive = true;
     }
-    Serial.printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
-    Serial.printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI()).Info();
-    Serial.printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
+    Serial.printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
+    Serial.printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
 
     // Start NTP sync now and schedule periodic resyncs
     auto doNtpSync = []()
@@ -773,16 +716,10 @@ void onWiFiDisconnected()
 
     if (tickerActive)
     {
-        ShowDisplay(); // Show the display to indicate WiFi is lost
-
-        // Stop MQTT tickers
-        PublischMQTTTicker.detach();
-        ListenMQTTTicker.detach();
-
         // Stop OTA if it should be disabled
-        if (systemSettings.allowOTA.get() == false && ConfigManager.isOTAInitialized())
+        if (systemSettings.allowOTA.get() == false && ConfigManager.getOTAManager().isInitialized())
         {
-            ConfigManager.stopOTA();
+            // ConfigManager.stopOTA(); // Not needed in new API
         }
 
         tickerActive = false;
