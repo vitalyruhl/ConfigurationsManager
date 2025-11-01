@@ -70,10 +70,10 @@ void cbTestButton();
 // Served via /user_theme.css and auto-injected by the frontend if present.
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-h3 { color: orange; text-decoration: underline; }
-.rw[data-group="sensors"][data-key="temp"] .lab { color:rgba(16, 23, 198, 1); font-weight:900; }
-.rw[data-group="sensors"][data-key="temp"] .val { color:rgba(16, 23, 198, 1); font-weight:900; }
-.rw[data-group="sensors"][data-key="temp"] .un  { color:rgba(16, 23, 198, 1); font-weight:900; }
+h3 { color: orange; text-decoration: underline;}
+.rw[data-group="sensors"][data-key="temp"] .lab{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
 
 // minimal Init
@@ -190,24 +190,16 @@ struct WiFi_Settings // wifiSettings
     Config<String> dnsPrimary;
     Config<String> dnsSecondary;
 
-    WiFi_Settings() : wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .sortOrder = 1}),
-                      wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .isPassword = true, .sortOrder = 2}),
-                      useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = true, .sortOrder = 3}),
+    WiFi_Settings() : wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .showInWeb = true, .sortOrder = 1}),
+                      wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .showInWeb = true, .isPassword = true, .sortOrder = 2}),
+                      useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = true, .showInWeb = true, .sortOrder = 3}),
                       staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.131", .sortOrder = 4, .showIf = [this](){ return !useDhcp.get(); }}),
                       gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this](){ return !useDhcp.get(); }}),
                       subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this](){ return !useDhcp.get(); }}),
                       dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this](){ return !useDhcp.get(); }}),
                       dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this](){ return !useDhcp.get(); }})
     {
-        // Register settings with ConfigManager
-        ConfigManager.addSetting(&wifiSsid);
-        ConfigManager.addSetting(&wifiPassword);
-        ConfigManager.addSetting(&useDhcp);
-        ConfigManager.addSetting(&staticIp);
-        ConfigManager.addSetting(&gateway);
-        ConfigManager.addSetting(&subnet);
-        ConfigManager.addSetting(&dnsPrimary);
-        ConfigManager.addSetting(&dnsSecondary);
+        // Settings will be registered manually in setup() to avoid constructor timing issues
     }
 
 };
@@ -356,7 +348,7 @@ struct TempSettings
     Config<int> seaLevelPressure;
     Config<int> readIntervalSec;
     Config<float> dewpointRiskWindow; // ΔT (°C) über Taupunkt, ab der Risiko-Alarm auslöst
-    
+
     TempSettings() : tempCorrection(ConfigOptions<float>{.key = "TCO", .name = "Temperature Correction", .category = "Temp", .defaultValue = 0.1f}),
                      humidityCorrection(ConfigOptions<float>{.key = "HYO", .name = "Humidity Correction", .category = "Temp", .defaultValue = 0.1f}),
                      seaLevelPressure(ConfigOptions<int>{.key = "SLP", .name = "Sea Level Pressure", .category = "Temp", .defaultValue = 1013}),
@@ -412,6 +404,16 @@ void setup()
     ConfigManager.addSetting(&tempSettingAktiveOnFalse);
 
     ConfigManager.addSetting(&tempSettings.readIntervalSec);
+    
+    // IMPORTANT: Register WiFi settings manually (constructor registration seems to fail)
+    ConfigManager.addSetting(&wifiSettings.wifiSsid);
+    ConfigManager.addSetting(&wifiSettings.wifiPassword);
+    ConfigManager.addSetting(&wifiSettings.useDhcp);
+    ConfigManager.addSetting(&wifiSettings.staticIp);
+    ConfigManager.addSetting(&wifiSettings.gateway);
+    ConfigManager.addSetting(&wifiSettings.subnet);
+    ConfigManager.addSetting(&wifiSettings.dnsPrimary);
+    ConfigManager.addSetting(&wifiSettings.dnsSecondary);
     //----------------------------------------------------------------------------------------------------------------------------------
 
     ConfigManager.checkSettingsForErrors(); // 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
@@ -426,18 +428,21 @@ void setup()
     }
 
     //----------------------------------------------------------------------------------------------------------------------------------
-    // check for buttons on startup
+    // check for reset button on startup (but not AP mode button yet)
     SetupCheckForResetButton();
-    SetupCheckForAPModeButton();
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // set wifi settings if not set yet from my secret folder
+    Serial.printf("[DEBUG] SSID check: '%s' (isEmpty: %s, length: %d)\n", 
+                  wifiSettings.wifiSsid.get().c_str(), 
+                  wifiSettings.wifiSsid.get().isEmpty() ? "true" : "false",
+                  wifiSettings.wifiSsid.get().length());
+    
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
         Serial.println("-------------------------------------------------------------");
         Serial.println("SETUP: *** SSID is empty, setting My values *** ");
         Serial.println("-------------------------------------------------------------");
-        // ConfigManager.clearAllFromPrefs();
         wifiSettings.wifiSsid.set(MY_WIFI_SSID);
         wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
         wifiSettings.staticIp.set(MY_WIFI_IP);
@@ -445,6 +450,10 @@ void setup()
         ConfigManager.saveAll();
         delay(1000); // Small delay
     }
+
+    //----------------------------------------------------------------------------------------------------------------------------------
+    // check for AP mode button AFTER setting WiFi credentials
+    SetupCheckForAPModeButton();
 
     // perform the wifi connection
     bool startedInStationMode = SetupStartWebServer();
@@ -463,10 +472,18 @@ void setup()
     //----------------------------------------------------------------------------------------------------------------------------------
 
     Serial.println("Loaded configuration:");
-    Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+
+    // Show correct IP address depending on WiFi mode
+    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
+        Serial.printf("🖥️ Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
+    } else if (WiFi.status() == WL_CONNECTED) {
+        Serial.printf("🖥️ Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
+    } else {
+        Serial.println("🖥️ Webserver running (IP not available)");
+    }
 
     Serial.println("Configuration printout:");
-    Serial.println(ConfigManager.toJSON(false));
+    Serial.println(ConfigManager.toJSON(true)); // Show ALL settings, not just web-visible ones
 
     // Test setting changes
     systemSettings.version.set(VERSION); // Update version on device
@@ -508,7 +525,7 @@ void setupGUI()
     //-----------------------------------------------------------------
     // BME280 Sensor Display with Runtime Providers
     //-----------------------------------------------------------------
-    
+
     // Register sensor runtime provider for BME280 data
     ConfigManager.getRuntimeManager().addRuntimeProvider("sensors", [](JsonObject &data)
     {
@@ -518,11 +535,42 @@ void setupGUI()
         data["pressure"] = Pressure;
     });
 
-    // Define sensor display fields
-    ConfigManager.defineRuntimeField("sensors", "temp", "Temperature", "°C", 1, 10);
-    ConfigManager.defineRuntimeField("sensors", "hum", "Humidity", "%", 1, 11);
-    ConfigManager.defineRuntimeField("sensors", "dew", "Dewpoint", "°C", 1, 12);
-    ConfigManager.defineRuntimeField("sensors", "pressure", "Pressure", "hPa", 1, 13);
+    // Define sensor display fields using addRuntimeMeta
+    RuntimeFieldMeta tempMeta;
+    tempMeta.group = "sensors";
+    tempMeta.key = "temp";
+    tempMeta.label = "Temperature";
+    tempMeta.unit = "°C";
+    tempMeta.precision = 1;
+    tempMeta.order = 10;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(tempMeta);
+
+    RuntimeFieldMeta humMeta;
+    humMeta.group = "sensors";
+    humMeta.key = "hum";
+    humMeta.label = "Humidity";
+    humMeta.unit = "%";
+    humMeta.precision = 1;
+    humMeta.order = 11;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(humMeta);
+
+    RuntimeFieldMeta dewMeta;
+    dewMeta.group = "sensors";
+    dewMeta.key = "dew";
+    dewMeta.label = "Dewpoint";
+    dewMeta.unit = "°C";
+    dewMeta.precision = 1;
+    dewMeta.order = 12;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(dewMeta);
+
+    RuntimeFieldMeta pressureMeta;
+    pressureMeta.group = "sensors";
+    pressureMeta.key = "pressure";
+    pressureMeta.label = "Pressure";
+    pressureMeta.unit = "hPa";
+    pressureMeta.precision = 1;
+    pressureMeta.order = 13;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(pressureMeta);
 
     // Add interactive controls provider
     ConfigManager.getRuntimeManager().addRuntimeProvider("controls", [](JsonObject &data)
@@ -580,15 +628,28 @@ void setupGUI()
         Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
     }, "", "°C", 24);
 
-    // Alarm status display
+    // Alarm status display using addRuntimeMeta for boolean values
     ConfigManager.getRuntimeManager().addRuntimeProvider("alarms", [](JsonObject &data)
     {
         data["dewpoint_risk"] = false; // Will be updated by alarm logic
         data["temp_low"] = false;      // Will be updated by alarm logic
     });
 
-    ConfigManager.defineRuntimeBool("alarms", "dewpoint_risk", "Dewpoint Risk", false, 30);
-    ConfigManager.defineRuntimeBool("alarms", "temp_low", "Low Temperature", false, 31);
+    RuntimeFieldMeta dewpointRiskMeta;
+    dewpointRiskMeta.group = "alarms";
+    dewpointRiskMeta.key = "dewpoint_risk";
+    dewpointRiskMeta.label = "Dewpoint Risk";
+    dewpointRiskMeta.order = 30;
+    dewpointRiskMeta.isBool = true;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(dewpointRiskMeta);
+
+    RuntimeFieldMeta tempLowMeta;
+    tempLowMeta.group = "alarms";
+    tempLowMeta.key = "temp_low";
+    tempLowMeta.label = "Low Temperature";
+    tempLowMeta.order = 31;
+    tempLowMeta.isBool = true;
+    ConfigManager.getRuntimeManager().addRuntimeMeta(tempLowMeta);
 }
 
 //----------------------------------------
@@ -691,7 +752,9 @@ void onWiFiConnected()
 
         tickerActive = true;
     }
-    Serial.printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+
+    // Show correct IP address when connected
+    Serial.printf("\n\n[MAIN] Webserver running at: %s (Connected)\n", WiFi.localIP().toString().c_str());
     Serial.printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
     Serial.printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
 
