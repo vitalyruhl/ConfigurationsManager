@@ -256,11 +256,19 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             obj["rssi"] = rssi;
             obj["rssiTxt"] = rssiQualityText(rssi);
             obj["wifiConnected"] = true;
+            obj["localIP"] = WiFi.localIP().toString();
+            obj["gateway"] = WiFi.gatewayIP().toString();
+            obj["routerMAC"] = WiFi.BSSIDstr();
+            obj["channel"] = WiFi.channel();
         } else {
             // When disconnected, expose neutral values
             obj["rssi"] = 0;
             obj["rssiTxt"] = rssiQualityText(-100);
             obj["wifiConnected"] = false;
+            obj["localIP"] = "0.0.0.0";
+            obj["gateway"] = "0.0.0.0";
+            obj["routerMAC"] = "00:00:00:00:00:00";
+            obj["channel"] = 0;
         }
 
         obj["cpuFreqMHz"] = ESP.getCpuFreqMHz();
@@ -323,11 +331,15 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         // Orders 0-2 are used by app_name/app_version/build_date defined in main.cpp
         upsertMeta("rssi", "WiFi RSSI", "dBm", 3, false, false, 0);
         upsertMeta("rssiTxt", "Signal", "", 4, false, true, 0);
+        upsertMeta("localIP", "Local IP", "", 5, false, true, 0);
+        upsertMeta("gateway", "Gateway", "", 6, false, true, 0);
+        upsertMeta("routerMAC", "Router MAC", "", 7, false, true, 0);
+        upsertMeta("channel", "WiFi Channel", "", 8, false, false, 0);
 
     // Connectivity and OTA state (booleans)
-        upsertMeta("wifiConnected", "WifiConnected", "", 5, true);
-        upsertMeta("allowOTA", "AllowOTA", "", 6, true);
-        upsertMeta("otaActive", "OtaActive", "", 7, true);
+        upsertMeta("wifiConnected", "WifiConnected", "", 9, true);
+        upsertMeta("allowOTA", "AllowOTA", "", 10, true);
+        upsertMeta("otaActive", "OtaActive", "", 11, true);
 
 #if CM_ENABLE_SYSTEM_TIME
     upsertMeta("dateTime", "Date/Time", "", 8, false, true, 0);

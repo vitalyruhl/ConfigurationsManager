@@ -1,12 +1,18 @@
 #include "WiFiManager.h"
 #include <ESP.h>
 
-// Logging support
+// Logging support with verbosity levels
 #if CM_ENABLE_LOGGING
 extern std::function<void(const char*)> ConfigManagerClass_logger;
 #define WIFI_LOG(...) if(ConfigManagerClass_logger) { char buf[256]; snprintf(buf, sizeof(buf), __VA_ARGS__); ConfigManagerClass_logger(buf); }
+#if CM_ENABLE_VERBOSE_LOGGING
+#define WIFI_LOG_VERBOSE(...) WIFI_LOG(__VA_ARGS__)
+#else
+#define WIFI_LOG_VERBOSE(...)
+#endif
 #else
 #define WIFI_LOG(...)
+#define WIFI_LOG_VERBOSE(...)
 #endif
 
 ConfigManagerWiFi::ConfigManagerWiFi()
@@ -21,6 +27,11 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , onConnectedCallback(nullptr)
   , onDisconnectedCallback(nullptr)
   , onAPModeCallback(nullptr)
+  , smartRoamingEnabled(true)         // Default enabled
+  , roamingThreshold(-75)             // Default -75 dBm
+  , roamingCooldown(120000)           // Default 120 seconds in ms
+  , roamingImprovement(10)            // Default 10 dBm improvement
+  , lastRoamingAttempt(0)
 {
 }
 
@@ -40,10 +51,10 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
   } else if (WiFi.status() == WL_CONNECTED) {
     currentState = WIFI_STATE_CONNECTED;
     lastGoodConnectionMillis = millis();
-    WIFI_LOG("[WiFi] Already connected to %s", WiFi.SSID().c_str());
+    WIFI_LOG_VERBOSE("[WiFi] Already connected to %s", WiFi.SSID().c_str());
   } else {
     currentState = WIFI_STATE_DISCONNECTED;
-    WIFI_LOG("[WiFi] Starting disconnected");
+    WIFI_LOG_VERBOSE("[WiFi] Starting disconnected");
   }
 
   initialized = true;
@@ -62,7 +73,7 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   dns1 = IPAddress();
   dns2 = IPAddress();
 
-  WIFI_LOG("[WiFi] Starting DHCP connection to %s", ssid.c_str());
+  WIFI_LOG_VERBOSE("[WiFi] Starting DHCP connection to %s", ssid.c_str());
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
@@ -84,7 +95,7 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
   dns2 = secondaryDNS;
   useDHCP = false;
 
-  WIFI_LOG("[WiFi] Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
+  WIFI_LOG_VERBOSE("[WiFi] Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
            ssid.c_str(),
            staticIP.toString().c_str(),
            (dns1 == IPAddress()) ? "0.0.0.0" : dns1.toString().c_str(),
@@ -116,7 +127,7 @@ void ConfigManagerWiFi::applyStaticConfig() {
 }
 
 void ConfigManagerWiFi::startAccessPoint(const String& apSSID, const String& apPassword) {
-  WIFI_LOG("[WiFi] Starting Access Point: %s", apSSID.c_str());
+  WIFI_LOG_VERBOSE("[WiFi] Starting Access Point: %s", apSSID.c_str());
 
   WiFi.mode(WIFI_AP);
   if (apPassword.length() > 0) {
@@ -141,7 +152,7 @@ void ConfigManagerWiFi::update() {
   } else if (WiFi.status() == WL_CONNECTED) {
     if (currentState != WIFI_STATE_CONNECTED) {
       // Log detailed connection info when first connecting
-      WIFI_LOG("[WiFi] WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s",
+      WIFI_LOG_VERBOSE("[WiFi] WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s",
                WiFi.localIP().toString().c_str(),
                WiFi.gatewayIP().toString().c_str(),
                WiFi.dnsIP().toString().c_str());
@@ -164,14 +175,19 @@ void ConfigManagerWiFi::update() {
   if (autoRebootEnabled && currentState != WIFI_STATE_AP_MODE) {
     checkAutoReboot();
   }
+
+  // Check smart roaming when connected
+  if (currentState == WIFI_STATE_CONNECTED) {
+    checkSmartRoaming();
+  }
 }
 
 void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
   WiFiManagerState oldState = currentState;
   currentState = newState;
 
-  // Log state transitions
-  WIFI_LOG("[WiFi] State: %s -> %s", getStatusString().c_str(), getStatusString().c_str());
+  // Log state transitions (verbose only)
+  WIFI_LOG_VERBOSE("[WiFi] State: %s -> %s", getStatusString().c_str(), getStatusString().c_str());
 
   // Execute callbacks based on state transitions
   switch (newState) {
@@ -187,7 +203,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
     case WIFI_STATE_DISCONNECTED:
     case WIFI_STATE_RECONNECTING:
       if (oldState == WIFI_STATE_CONNECTED) {
-        WIFI_LOG("[WiFi] Disconnected from %s", ssid.c_str());
+        WIFI_LOG_VERBOSE("[WiFi] Disconnected from %s", ssid.c_str());
         if (onDisconnectedCallback) {
           onDisconnectedCallback();
         }
@@ -196,7 +212,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
 
     case WIFI_STATE_AP_MODE:
       if (oldState != WIFI_STATE_AP_MODE) {
-        WIFI_LOG("[WiFi] Access Point mode active");
+        WIFI_LOG_VERBOSE("[WiFi] Access Point mode active");
         if (onAPModeCallback) {
           onAPModeCallback();
         }
@@ -204,7 +220,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
       break;
 
     case WIFI_STATE_CONNECTING:
-      WIFI_LOG("[WiFi] Connecting to %s...", ssid.c_str());
+      WIFI_LOG_VERBOSE("[WiFi] Connecting to %s...", ssid.c_str());
       break;
 
     default:
@@ -226,7 +242,7 @@ void ConfigManagerWiFi::handleReconnection() {
     }
 
     // Attempt non-blocking reconnection
-    WIFI_LOG("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
+    WIFI_LOG_VERBOSE("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
     WiFi.setSleep(false); // Ensure WiFi sleep is disabled on reconnection attempts
     WiFi.setAutoReconnect(true); // Enable automatic reconnection
     if (useDHCP) {
@@ -343,4 +359,105 @@ IPAddress ConfigManagerWiFi::getLocalIP() const {
 
 int ConfigManagerWiFi::getRSSI() const {
   return WiFi.RSSI();
+}
+
+// Smart WiFi Roaming implementation
+void ConfigManagerWiFi::enableSmartRoaming(bool enable) {
+  smartRoamingEnabled = enable;
+  WIFI_LOG_VERBOSE("[WiFi] Smart Roaming %s", enable ? "enabled" : "disabled");
+}
+
+void ConfigManagerWiFi::setRoamingThreshold(int thresholdDbm) {
+  roamingThreshold = thresholdDbm;
+  WIFI_LOG_VERBOSE("[WiFi] Roaming threshold set to %d dBm", thresholdDbm);
+}
+
+void ConfigManagerWiFi::setRoamingCooldown(unsigned long cooldownSeconds) {
+  roamingCooldown = cooldownSeconds * 1000; // Convert to milliseconds
+  WIFI_LOG_VERBOSE("[WiFi] Roaming cooldown set to %lu seconds", cooldownSeconds);
+}
+
+void ConfigManagerWiFi::setRoamingImprovement(int improvementDbm) {
+  roamingImprovement = improvementDbm;
+  WIFI_LOG_VERBOSE("[WiFi] Roaming improvement threshold set to %d dBm", improvementDbm);
+}
+
+bool ConfigManagerWiFi::isSmartRoamingEnabled() const {
+  return smartRoamingEnabled;
+}
+
+void ConfigManagerWiFi::checkSmartRoaming() {
+  if (!smartRoamingEnabled || ssid.isEmpty()) {
+    return;
+  }
+
+  unsigned long currentTime = millis();
+  
+  // Check cooldown period
+  if (currentTime - lastRoamingAttempt < roamingCooldown) {
+    return;
+  }
+
+  int currentRSSI = WiFi.RSSI();
+  
+  // Only check if signal is below threshold
+  if (currentRSSI >= roamingThreshold) {
+    return;
+  }
+
+  WIFI_LOG_VERBOSE("[WiFi] Current RSSI (%d dBm) below threshold (%d dBm), scanning for better APs...", 
+           currentRSSI, roamingThreshold);
+
+  // Scan for networks
+  int networkCount = WiFi.scanNetworks();
+  if (networkCount <= 0) {
+    WIFI_LOG_VERBOSE("[WiFi] No networks found during roaming scan");
+    return;
+  }
+
+  int bestRSSI = currentRSSI;
+  int bestNetworkIndex = -1;
+
+  // Find the best network with our SSID
+  for (int i = 0; i < networkCount; i++) {
+    if (WiFi.SSID(i) == ssid) {
+      int networkRSSI = WiFi.RSSI(i);
+      
+      // Check if this network is significantly better
+      if (networkRSSI > bestRSSI + roamingImprovement) {
+        bestRSSI = networkRSSI;
+        bestNetworkIndex = i;
+      }
+    }
+  }
+
+  if (bestNetworkIndex != -1) {
+    String bestBSSID = WiFi.BSSIDstr(bestNetworkIndex);
+    String currentBSSID = WiFi.BSSIDstr();
+    
+    // Don't roam to the same AP
+    if (bestBSSID != currentBSSID) {
+      WIFI_LOG_VERBOSE("[WiFi] Found better AP: %s (RSSI: %d dBm, improvement: %d dBm)", 
+               bestBSSID.c_str(), bestRSSI, bestRSSI - currentRSSI);
+      
+      // Disconnect and reconnect to trigger roaming
+      WiFi.disconnect();
+      delay(500);
+      
+      if (useDHCP) {
+        WiFi.begin(ssid.c_str(), password.c_str());
+      } else {
+        WiFi.config(staticIP, gateway, subnet, dns1, dns2);
+        WiFi.begin(ssid.c_str(), password.c_str());
+      }
+      
+      lastRoamingAttempt = currentTime;
+      WIFI_LOG_VERBOSE("[WiFi] Initiated roaming to better access point");
+    }
+  } else {
+    WIFI_LOG_VERBOSE("[WiFi] No better AP found (current: %d dBm)", currentRSSI);
+  }
+
+  // Clean up scan results
+  WiFi.scanDelete();
 }

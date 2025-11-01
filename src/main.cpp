@@ -178,7 +178,6 @@ struct ButtonSettings
 SystemSettings systemSettings; // Create an instance of SystemSettings-Struct
 ButtonSettings buttonSettings; // Create an instance of ButtonSettings-Struct
 
-//--------------------------------------------------------------------------------------------------------------
 // Example of a structure for WiFi settings
 struct WiFi_Settings // wifiSettings
 {
@@ -415,6 +414,7 @@ void setup()
     ConfigManager.addSetting(&wifiSettings.subnet);
     ConfigManager.addSetting(&wifiSettings.dnsPrimary);
     ConfigManager.addSetting(&wifiSettings.dnsSecondary);
+    
     //----------------------------------------------------------------------------------------------------------------------------------
 
     ConfigManager.checkSettingsForErrors(); // 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
@@ -427,6 +427,14 @@ void setup()
     {
         Serial.println(e.what());
     }
+
+    //----------------------------------------------------------------------------------------------------------------------------------
+    // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
+    ConfigManager.enableSmartRoaming(true);        // Enable smart roaming by default
+    ConfigManager.setRoamingThreshold(-75);        // Trigger roaming at -75 dBm
+    ConfigManager.setRoamingCooldown(120);          // Wait 120 seconds between attempts  
+    ConfigManager.setRoamingImprovement(10);       // Require 10 dBm improvement
+    Serial.println("[MAIN] Smart WiFi Roaming enabled with default settings");
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
@@ -509,6 +517,7 @@ void loop()
 
     // WiFi status monitoring for debugging
     static unsigned long lastWiFiCheck = 0;
+    
     if (millis() - lastWiFiCheck > 30000) // Check every 30 seconds
     {
         lastWiFiCheck = millis();
@@ -517,18 +526,8 @@ void loop()
         if (wifiStatus) {
             int currentRSSI = WiFi.RSSI();
             String bssid = WiFi.BSSIDstr();
-            String accessPoint = "Unknown";
-            
-            // Identify access point by BSSID
-            if (bssid.indexOf("66:b5:8d:4c:e1:d5") >= 0 || bssid.indexOf("66-b5-8d-4c-e1-d5") >= 0) {
-                accessPoint = "FRITZ!Repeater 1200 AX";
-            } else {
-                accessPoint = "Main FRITZ!Box (or other AP)";
-            }
-            
-            Serial.printf("[WiFi] Current RSSI: %d dBm (%s)\n", currentRSSI, 
-                currentRSSI > -50 ? "excellent" : (currentRSSI > -60 ? "good" : (currentRSSI > -67 ? "ok" : (currentRSSI > -75 ? "weak" : "very weak"))));
-            Serial.printf("[WiFi] Connected to: %s\n", accessPoint.c_str());
+
+            Serial.printf("[WiFi] Current RSSI: %d dBm (%s)\n", currentRSSI, currentRSSI > -50 ? "excellent" : (currentRSSI > -60 ? "good" : (currentRSSI > -67 ? "ok" : (currentRSSI > -75 ? "weak" : "very weak"))));
             Serial.printf("[WiFi] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
         }
     }

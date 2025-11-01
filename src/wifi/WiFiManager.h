@@ -41,6 +41,13 @@ private:
   IPAddress dns2;
   bool useDHCP;
 
+  // Smart WiFi Roaming
+  bool smartRoamingEnabled;
+  int roamingThreshold;        // dBm threshold for roaming trigger
+  unsigned long roamingCooldown; // Minimum time between roaming attempts (ms)
+  int roamingImprovement;      // Minimum signal improvement required (dBm)
+  unsigned long lastRoamingAttempt;
+
   // Callback functions
   WiFiConnectedCallback onConnectedCallback;
   WiFiDisconnectedCallback onDisconnectedCallback;
@@ -52,6 +59,7 @@ private:
   void checkAutoReboot();
   void log(const char* format, ...) const;
   void applyStaticConfig();
+  void checkSmartRoaming();  // Smart roaming check method
 
 public:
   // Constructor
@@ -91,6 +99,13 @@ public:
   float getConnectionUptime() const; // in seconds
   IPAddress getLocalIP() const;
   int getRSSI() const;
+
+  // Smart WiFi Roaming configuration
+  void enableSmartRoaming(bool enable = true);
+  void setRoamingThreshold(int thresholdDbm = -75);
+  void setRoamingCooldown(unsigned long cooldownSeconds = 120);
+  void setRoamingImprovement(int improvementDbm = 10);
+  bool isSmartRoamingEnabled() const;
 
   // Compatibility methods for ConfigManager
   bool getStatus() const { return isConnected(); }

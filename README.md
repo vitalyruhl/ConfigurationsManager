@@ -1,12 +1,13 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.6.2 (2025.10.11)
+> Version 2.7.0 (2025.11.01)
 
-> Breaking changes in v2.6.x
+> Breaking changes in v2.7.x
 >
-> - Introduced compile-time feature flags (see `docs/FEATURE_FLAGS.md`). Some APIs and defaults have moved into guarded blocks.
-> - The embedded Web UI is now built and injected automatically by the prebuild script (`tools/preCompile_script.py`). Manual copying is no longer required.
-> - If you are upgrading from < 2.6, revisit your `platformio.ini` and adjust your `build_flags` accordingly.
+> - Introduced modular architecture with separate WiFi, Web, OTA, and Runtime managers
+> - Added integrated Smart WiFi Roaming feature for automatic access point switching
+> - Some APIs have been moved into dedicated manager classes (use `getWiFiManager()`, `getWebManager()`, etc.)
+> - If you are upgrading from < 2.7, check your code for WiFi management calls and update accordingly
 
 
 ## Overview
@@ -38,14 +39,15 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - 🎨 Live-Values - two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
 - 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
 - 📡 AP Mode fallback / captive portal style entry
-- 🔴 Live runtime values (`/runtime.json`) (you can make your own Web-Interface by design the Vue 3 embedded Project)
+- � **Smart WiFi Roaming** - Automatic switching to stronger access points in mesh networks
+- �🔴 Live runtime values (`/runtime.json`) (you can make your own Web-Interface by design the Vue 3 embedded Project)
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
 ### To see how I use it in my projects
 
-- [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)  
-- [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)  
+- [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)
+- [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)
 
 
 ## Documentation Index
@@ -54,6 +56,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 |-------|------|
 | Settings & OptionGroup | `docs/SETTINGS.md` |
 | Runtime Providers & Alarms | `docs/RUNTIME.md` |
+| Smart WiFi Roaming | `docs/SMART_ROAMING.md` |
 | Styling (per-field metadata) | `docs/STYLING.md` |
 | Theming (global CSS + disabling metadata) | `docs/THEMING.md` |
 | Feature Flags (compile-time switches) | `docs/FEATURE_FLAGS.md` |
@@ -254,6 +257,80 @@ void loop()
 }
 ```
 
+## Smart WiFi Roaming
+
+ConfigurationsManager v2.7.0+ includes **Smart WiFi Roaming** functionality that automatically switches to stronger access points in mesh networks. This feature is particularly useful for:
+
+- **FRITZ!Box Mesh networks** with multiple repeaters
+- **Enterprise WiFi** with multiple access points
+- **Home mesh systems** where devices get "stuck" to distant APs
+
+### How Smart Roaming Works
+
+1. **Signal Monitoring**: Continuously monitors WiFi signal strength (RSSI)
+2. **Threshold Detection**: Triggers roaming when signal drops below configured threshold
+3. **Network Scanning**: Scans for better access points with the same SSID
+4. **Intelligent Switching**: Only switches if a significantly better AP is found
+5. **Cooldown Prevention**: Prevents frequent switching with configurable cooldown period
+
+### Configuration
+
+Smart Roaming is **enabled by default** and can be configured programmatically:
+
+```cpp
+#include "ConfigManager.h"
+
+void setup() {
+    // ... other setup code ...
+
+    // Configure Smart WiFi Roaming (optional - defaults work well)
+    ConfigManager.enableSmartRoaming(true);        // Enable/disable (default: true)
+    ConfigManager.setRoamingThreshold(-75);        // Signal threshold in dBm (default: -75)
+    ConfigManager.setRoamingCooldown(120);          // Cooldown between attempts in seconds (default: 120)
+    ConfigManager.setRoamingImprovement(10);       // Minimum signal improvement required in dBm (default: 10)
+
+    // ... continue with WiFi setup ...
+}
+```
+
+### Default Settings
+
+| Parameter | Default Value | Description |
+|-----------|--------------|-------------|
+| **Enabled** | `true` | Smart roaming is active by default |
+| **Threshold** | `-75 dBm` | Trigger roaming when signal is weaker than -75 dBm |
+| **Cooldown** | `120 seconds` | Wait 2 minutes between roaming attempts |
+| **Improvement** | `10 dBm` | Only switch if new AP is 10+ dBm stronger |
+
+### Example Output
+
+When Smart Roaming is active, you'll see logs like:
+
+```
+[ConfigManager] [WiFi] Smart Roaming enabled
+[ConfigManager] [WiFi] Roaming threshold set to -75 dBm
+[ConfigManager] [WiFi] Current RSSI (-92 dBm) below threshold (-75 dBm), scanning for better APs...
+[ConfigManager] [WiFi] Found better AP: 60:B5:8D:4C:E1:D5 (RSSI: -45 dBm, improvement: 47 dBm)
+[ConfigManager] [WiFi] Initiated roaming to better access point
+```
+
+### Advanced Usage
+
+For complete control over the WiFi manager:
+
+```cpp
+// Access the WiFi manager directly
+auto& wifiMgr = ConfigManager.getWiFiManager();
+
+// Check if roaming is enabled
+if (wifiMgr.isSmartRoamingEnabled()) {
+    Serial.println("Smart roaming is active");
+}
+
+// Disable roaming temporarily
+wifiMgr.enableSmartRoaming(false);
+```
+
 ### PlatformIO Environment Examples
 
 ```ini
@@ -423,6 +500,36 @@ pio run -e usb -t clean # this will clean the previous project build files
 - **2.6.0**: Restyling of web interface, Grouped code in different Blocks, that can be deaktivated by #define derectives. (see docs/FEATURE_FLAGS.md) to reduce code size. Some Bugfixes. Reorder Documentation. (remove some info into extra docs files)
 - **2.6.1**: some Bugfixes, reorganaize Readme, new Screenshots, Installation instructions
 - **2.6.2**: some Bugfixes
+- **2.7.0**: Refactoring from one big ConfigManager class into multiple classes for better maintainability. Added **Smart WiFi Roaming** feature to automatically switch to stronger APs in mesh networks based on configurable signal strength thresholds. Refactor Runtime Provider into its own class. Improved logging messages and added more detailed status updates. (breaking changes!)
+
+## Smart WiFi Roaming Feature
+
+Version 2.7.0 introduces **Smart WiFi Roaming** - a game-changing feature for mesh networks and multi-AP environments:
+
+### 🎯 **Key Benefits**
+- **Automatic AP switching** when signal strength drops below threshold
+- **Intelligent roaming** with configurable signal improvement requirements
+- **Cooldown protection** to prevent frequent switching
+- **Static IP preservation** during roaming transitions
+- **FRITZ!Box Mesh optimized** - perfect for complex home networks
+
+### 🔧 **Simple Configuration**
+```cpp
+// Enable with defaults (works great out-of-the-box)
+ConfigManager.enableSmartRoaming(true);
+
+// Or customize for your environment
+ConfigManager.setRoamingThreshold(-75);    // Trigger at -75 dBm
+ConfigManager.setRoamingCooldown(120);     // Wait 2 minutes between attempts
+ConfigManager.setRoamingImprovement(10);   // Require 10+ dBm improvement
+```
+
+### 📊 **Real-world Performance**
+- Signal improved from **-90 dBm (very weak)** to **-45 dBm (good)**
+- Automatic switching between FRITZ!Box main router and repeaters
+- Zero configuration required - smart defaults work immediately
+
+See `docs/SMART_ROAMING.md` for complete documentation and optimization guides.
 
 ## ToDo / Issues
 

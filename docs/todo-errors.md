@@ -141,6 +141,9 @@
 - [Refactoring] remove CM_ALARM_GREEN_ON_FALSE in code
 - [Refactoring] remove CM_ENABLE_RUNTIME_CONTROLS in code
 - [FIXED] ~~we have a precesion settings: {"group":"alarms","key":"dewpoint_risk","label":"Dewpoint Risk","precision":1,"isBool":true}  but the /runtime.json send "dew":13.5344, - its not rounded, i think we can reduce the size of the json if we use the precision for numeric values too.~~ - Applied precision rounding to sensor values in runtime provider
+
+[E] (23502) bootloader_mmap: tried to bootloader_mmap twice
+[E] (23503) esp_image: bootloader_mmap(0x10020, 0x34a9c) failed
 ## ideas / todo
 
 

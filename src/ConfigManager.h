@@ -1368,6 +1368,13 @@ public:
     ConfigManagerOTA &getOTAManager() { return otaManager; }
     ConfigManagerRuntime &getRuntimeManager() { return runtimeManager; }
 
+    // Smart WiFi Roaming configuration - convenience methods
+    void enableSmartRoaming(bool enable = true) { wifiManager.enableSmartRoaming(enable); }
+    void setRoamingThreshold(int thresholdDbm = -75) { wifiManager.setRoamingThreshold(thresholdDbm); }
+    void setRoamingCooldown(unsigned long cooldownSeconds = 120) { wifiManager.setRoamingCooldown(cooldownSeconds); }
+    void setRoamingImprovement(int improvementDbm = 10) { wifiManager.setRoamingImprovement(improvementDbm); }
+    bool isSmartRoamingEnabled() const { return wifiManager.isSmartRoamingEnabled(); }
+
 public:
     static LogCallback logger;
     WebHTML webhtml;
