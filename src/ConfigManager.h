@@ -1063,8 +1063,16 @@ public:
     // Runtime methods - simplified for new modular structure
     void defineRuntimeField(const String &category, const String &key, const String &name, const String &unit, float min, float max)
     {
-        // Note: Use addRuntimeMeta directly instead
-        CM_LOG("[W] defineRuntimeField not implemented, use addRuntimeMeta directly");
+        // Create runtime field using addRuntimeMeta
+        RuntimeFieldMeta meta;
+        meta.group = category;
+        meta.key = key;
+        meta.label = name;
+        meta.unit = unit;
+        meta.alarmMin = min;
+        meta.alarmMax = max;
+        meta.hasAlarm = true;  // Since min/max are provided, assume alarm functionality is wanted
+        runtimeManager.addRuntimeMeta(meta);
     }
 
     // Interactive runtime controls (delegated to RuntimeManager)
@@ -1101,26 +1109,41 @@ public:
 
     void defineRuntimeStateButton(const String &category, const String &key, const String &name, std::function<bool()> getter, std::function<void(bool)> setter)
     {
-        // Note: State buttons not implemented in new RuntimeManager
-        CM_LOG("[W] defineRuntimeStateButton not implemented in modular RuntimeManager");
+        runtimeManager.defineRuntimeStateButton(category, key, name, getter, setter);
     }
 
     void defineRuntimeBool(const String &category, const String &key, const String &name, bool defaultValue, int order = 0)
     {
-        // Note: Use addRuntimeMeta directly instead
-        CM_LOG("[W] defineRuntimeBool not implemented, use addRuntimeMeta directly");
+        // Create boolean runtime field using addRuntimeMeta
+        RuntimeFieldMeta meta;
+        meta.group = category;
+        meta.key = key;
+        meta.label = name;
+        meta.isBool = true;
+        meta.order = order;
+        runtimeManager.addRuntimeMeta(meta);
     }
 
     void defineRuntimeAlarm(const String &category, const String &key, const String &name, std::function<bool()> condition, std::function<void()> onTrigger = nullptr, std::function<void()> onClear = nullptr)
     {
-        // Note: Use addRuntimeAlarm directly instead
-        CM_LOG("[W] defineRuntimeAlarm not implemented, use addRuntimeAlarm directly");
+        String alarmName = category + "." + key;
+        if (onTrigger || onClear) {
+            runtimeManager.addRuntimeAlarm(alarmName, condition, onTrigger, onClear);
+        } else {
+            runtimeManager.addRuntimeAlarm(alarmName, condition);
+        }
     }
 
     void defineRuntimeFloatSlider(const String &category, const String &key, const String &name, float min, float max, float &variable, int precision = 1, std::function<void()> onChange = nullptr)
     {
-        // Note: Float sliders not implemented in new RuntimeManager
-        CM_LOG("[W] defineRuntimeFloatSlider not implemented in modular RuntimeManager");
+        // Create getter and setter for the variable reference
+        auto getter = [&variable]() -> float { return variable; };
+        auto setter = [&variable, onChange](float value) { 
+            variable = value; 
+            if (onChange) onChange(); 
+        };
+        
+        runtimeManager.defineRuntimeFloatSlider(category, key, name, min, max, variable, precision, getter, setter);
     }
 
     void handleRuntimeAlarms()
