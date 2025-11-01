@@ -29,7 +29,7 @@
 #include <ESPAsyncWebServer.h>
 // #include <WiFiClientSecure.h>
 
-#define VERSION "V2.6.1" // 2025.10.08
+#define VERSION "V2.7.0" // 2025.11.01
 #define APP_NAME "CM-BME280-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
@@ -48,7 +48,7 @@ extern ConfigManagerClass ConfigManager;  // Use extern to reference the instanc
 // Forward declarations of functions
 void SetupCheckForAPModeButton();
 void SetupCheckForResetButton();
-void updateStatusLED();                             // new non-blocking status LED handler
+void updateStatusLED(); // new non-blocking status LED handler
 void setHeaterState(bool on);
 void setFanState(bool on);
 void cbTestButton();
@@ -61,8 +61,6 @@ void SetupStartTemperatureMeasuring();
 void readBme280();
 static float computeDewPoint(float temperatureC, float relHumidityPct);
 void SetupCheckForAPModeButton();
-void blinkBuidInLED(int BlinkCount, int blinkRate); // legacy (blocking) blink – will be phased out
-void updateStatusLED();                             // new non-blocking status LED handler
 void setHeaterState(bool on);
 void cbTestButton();
 
@@ -142,7 +140,7 @@ struct SystemSettings
     Config<int> wifiRebootTimeoutMin;
     Config<String> version;
     SystemSettings() : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true}),
-                       otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String("ota1234"), .showInWeb = true, .isPassword = true}),
+                       otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String(OTA_PASSWORT), .showInWeb = true, .isPassword = true}),
                        wifiRebootTimeoutMin(ConfigOptions<int>{
                            .key = "WiFiRb",
                            .name = "Reboot if WiFi lost (min)",
@@ -385,10 +383,11 @@ void setup()
             Serial.println(msg); });
 
     //-----------------------------------------------------------------
-    ConfigManager.setAppName(APP_NAME);                                                   // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    ConfigManager.setVersion(VERSION);                                                   // Set the application version for web UI display
+    ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
-    ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORT); // Set the settings password from wifiSecret.h
+    ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
 
     //----------------------------------------------------------------------------------------------------------------------------------
@@ -404,7 +403,13 @@ void setup()
     ConfigManager.addSetting(&tempSettingAktiveOnFalse);
 
     ConfigManager.addSetting(&tempSettings.readIntervalSec);
-    
+
+    // IMPORTANT: Register all remaining TempSettings manually (constructor registration seems to fail)
+    ConfigManager.addSetting(&tempSettings.tempCorrection);
+    ConfigManager.addSetting(&tempSettings.humidityCorrection);
+    ConfigManager.addSetting(&tempSettings.seaLevelPressure);
+    ConfigManager.addSetting(&tempSettings.dewpointRiskWindow);
+
     // IMPORTANT: Register WiFi settings manually (constructor registration seems to fail)
     ConfigManager.addSetting(&wifiSettings.wifiSsid);
     ConfigManager.addSetting(&wifiSettings.wifiPassword);
@@ -414,7 +419,21 @@ void setup()
     ConfigManager.addSetting(&wifiSettings.subnet);
     ConfigManager.addSetting(&wifiSettings.dnsPrimary);
     ConfigManager.addSetting(&wifiSettings.dnsSecondary);
-    
+
+    // IMPORTANT: Register SystemSettings manually (constructor registration seems to fail)
+    ConfigManager.addSetting(&systemSettings.allowOTA);
+    ConfigManager.addSetting(&systemSettings.otaPassword);
+    ConfigManager.addSetting(&systemSettings.wifiRebootTimeoutMin);
+    ConfigManager.addSetting(&systemSettings.version);
+
+    // IMPORTANT: Register ButtonSettings manually (constructor registration seems to fail)
+    ConfigManager.addSetting(&buttonSettings.apModePin);
+    ConfigManager.addSetting(&buttonSettings.resetDefaultsPin);
+    ConfigManager.addSetting(&buttonSettings.showerRequestPin);
+
+    // IMPORTANT: Register MQTT settings manually (has registerSettings method)
+    mqttSettings.registerSettings();
+
     //----------------------------------------------------------------------------------------------------------------------------------
 
     ConfigManager.checkSettingsForErrors(); // 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
@@ -432,7 +451,7 @@ void setup()
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
     ConfigManager.enableSmartRoaming(true);        // Enable smart roaming by default
     ConfigManager.setRoamingThreshold(-75);        // Trigger roaming at -75 dBm
-    ConfigManager.setRoamingCooldown(120);          // Wait 120 seconds between attempts  
+    ConfigManager.setRoamingCooldown(120);          // Wait 120 seconds between attempts
     ConfigManager.setRoamingImprovement(10);       // Require 10 dBm improvement
     Serial.println("[MAIN] Smart WiFi Roaming enabled with default settings");
 
@@ -442,11 +461,11 @@ void setup()
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // set wifi settings if not set yet from my secret folder
-    Serial.printf("[DEBUG] SSID check: '%s' (isEmpty: %s, length: %d)\n", 
-                  wifiSettings.wifiSsid.get().c_str(), 
+    Serial.printf("[DEBUG] SSID check: '%s' (isEmpty: %s, length: %d)\n",
+                  wifiSettings.wifiSsid.get().c_str(),
                   wifiSettings.wifiSsid.get().isEmpty() ? "true" : "false",
                   wifiSettings.wifiSsid.get().length());
-    
+
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
         Serial.println("-------------------------------------------------------------");
@@ -477,11 +496,11 @@ void setup()
 
     setupGUI();
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-    
+
     // Enhanced WebSocket configuration
     ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
     ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
-    
+
     SetupStartTemperatureMeasuring();
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -498,7 +517,7 @@ void setup()
 
     Serial.println("Configuration printout:");
     Serial.println(ConfigManager.toJSON(true)); // Show ALL settings, not just web-visible ones
-    
+
     // Note: debugPrintSettings() removed due to potential crashes during startup
     Serial.println("\nSetup completed successfully!");
 
@@ -517,7 +536,7 @@ void loop()
 
     // WiFi status monitoring for debugging
     static unsigned long lastWiFiCheck = 0;
-    
+
     if (millis() - lastWiFiCheck > 30000) // Check every 30 seconds
     {
         lastWiFiCheck = millis();
@@ -566,7 +585,7 @@ void setupGUI()
     {
         // Apply precision to sensor values to reduce JSON size
         data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
-        data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place  
+        data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place
         data["dew"] = roundf(Dewpoint * 10.0f) / 10.0f;        // 1 decimal place
         data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
     });
@@ -685,13 +704,13 @@ void setupGUI()
     // Sensor range field for demonstration
     static float sensorRange = 3.3f;
     ConfigManager.defineRuntimeField("sensors", "range", "Sensor Range", "V", 0.0, 5.0);
-    
+
     // Connection status boolean
     static bool connectionStatus = false;
     ConfigManager.defineRuntimeBool("status", "connected", "Connection Status", false, 1);
-    
-    // Overheat alarm 
-    ConfigManager.defineRuntimeAlarm("alarms", "overheat", "Overheat Warning", []() { 
+
+    // Overheat alarm
+    ConfigManager.defineRuntimeAlarm("alarms", "overheat", "Overheat Warning", []() {
         return temperature > 40.0; // Trigger at 40°C for demo
     });
 
@@ -824,7 +843,7 @@ void onWiFiConnected()
     Serial.printf("\n\n[MAIN] Webserver running at: %s (Connected)\n", WiFi.localIP().toString().c_str());
     Serial.printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
     Serial.printf("[MAIN] WLAN-Strength is: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
-    
+
     String bssid = WiFi.BSSIDstr();
     String accessPoint = "Unknown";
     if (bssid.indexOf("66:b5:8d:4c:e1:d5") >= 0 || bssid.indexOf("66-b5-8d-4c-e1-d5") >= 0) {
@@ -832,7 +851,7 @@ void onWiFiConnected()
     } else {
         accessPoint = "Main FRITZ!Box (or other AP)";
     }
-    
+
     Serial.printf("[MAIN] Connected to: %s\n", accessPoint.c_str());
     Serial.printf("[MAIN] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
     Serial.printf("[MAIN] Local MAC: %s\n\n", WiFi.macAddress().c_str());

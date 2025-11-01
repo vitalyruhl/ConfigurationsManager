@@ -38,6 +38,9 @@ private:
     const char* customHTML;
     size_t customHTMLLen;
 
+    // Settings security
+    String settingsPassword;
+
     // Helper methods
     void setupStaticRoutes();
     void setupAPIRoutes();
@@ -84,6 +87,7 @@ public:
 
     // CORS and security
     void enableCORSForAll(bool enable = true);
+    void setSettingsPassword(const String& password);
 
     // Development and debugging
 #ifdef development

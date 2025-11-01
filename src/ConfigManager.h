@@ -322,15 +322,11 @@ private:
     std::function<void(T)> callback = nullptr;
 
 public:
-#if CM_ENABLE_DYNAMIC_VISIBILITY
     std::function<bool()> showIfFunc = nullptr;
     bool isVisible() const override
     {
         return showIfFunc ? showIfFunc() : BaseSetting::isVisible();
     }
-#else
-    bool isVisible() const override { return BaseSetting::isVisible(); }
-#endif
 
     // New primary constructor for ConfigOptions
     explicit Config(const ConfigOptions<T> &opts)
@@ -338,9 +334,7 @@ public:
                      opts.showInWeb, opts.isPassword, opts.sortOrder),
           value(opts.defaultValue), defaultValue(opts.defaultValue)
     {
-#if CM_ENABLE_DYNAMIC_VISIBILITY
         showIfFunc = opts.showIf;
-#endif
         if (opts.callback)
         {
             callback = [opts](T newValue) { opts.callback(newValue); };
@@ -519,12 +513,10 @@ public:
         settingObj["sortOrder"] = sortOrder;
 
         // Add showIf result if function is defined
-#if CM_ENABLE_DYNAMIC_VISIBILITY
         if (showIfFunc != nullptr)
         {
             settingObj["showIf"] = showIfFunc();
         }
-#endif
     }
 
     bool fromJSON(const JsonVariant &jsonValue) override
@@ -565,7 +557,6 @@ public:
 };
 
 // Visibility helper factories
-#if CM_ENABLE_DYNAMIC_VISIBILITY
 inline std::function<bool()> showIfTrue(const Config<bool> &flag)
 {
     return [&flag]()
@@ -576,18 +567,6 @@ inline std::function<bool()> showIfFalse(const Config<bool> &flag)
     return [&flag]()
     { return !flag.get(); };
 }
-#else
-inline std::function<bool()> showIfTrue(const Config<bool> &)
-{
-    return []()
-    { return true; };
-}
-inline std::function<bool()> showIfFalse(const Config<bool> &)
-{
-    return []()
-    { return true; };
-}
-#endif
 
 // New template-based helper functions for conditional visibility
 template<typename T>
@@ -915,6 +894,13 @@ public:
     }
 
     const String &getVersion() const { return appVersion; }
+
+    // Settings security management
+    void setSettingsPassword(const String &password)
+    {
+        webManager.setSettingsPassword(password);
+        CM_LOG("[I] Settings password configured");
+    }
 
     // WiFi management - NON-BLOCKING!
     void startWebServer(const String &ssid, const String &password)

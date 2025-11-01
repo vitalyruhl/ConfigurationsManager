@@ -30,13 +30,45 @@
         </button>
       </div>
     </div>
+    <!-- Settings Authentication Modal -->
+    <div v-if="showSettingsAuth" class="modal-overlay" @click="cancelSettingsAuth">
+      <div class="modal-content" @click.stop>
+        <h3>{{ pendingFlashStart ? 'OTA Flash Access Required' : 'Settings Access Required' }}</h3>
+        <p v-if="pendingFlashStart" style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
+          Password required to start firmware flash/OTA update
+        </p>
+        <div class="password-input-container">
+          <input
+            ref="settingsPasswordInput"
+            v-model="settingsPassword"
+            :type="showSettingsPassword ? 'text' : 'password'"
+            placeholder="Enter settings password"
+            @keyup.enter="confirmSettingsAuth"
+            @keyup.escape="cancelSettingsAuth"
+            autocomplete="off"
+          />
+          <button
+            class="password-toggle"
+            @click="showSettingsPassword = !showSettingsPassword"
+            :title="showSettingsPassword ? 'Hide password' : 'Show password'"
+          >
+            {{ showSettingsPassword ? '🙈' : '👁️' }}
+          </button>
+        </div>
+        <div class="modal-buttons">
+          <button @click="cancelSettingsAuth" class="cancel-btn">Cancel</button>
+          <button @click="confirmSettingsAuth" class="confirm-btn">Authenticate</button>
+        </div>
+      </div>
+    </div>
+
     <RuntimeDashboard
       v-if="activeTab === 'live'"
       ref="runtimeDashboard"
       :config="config"
       @can-flash-change="handleCanFlashChange"
     />
-    <section v-else class="settings-view">
+    <section v-else-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
       <div id="settingsContainer" :key="refreshKey">
         <Category
           v-for="(settings, category) in config"
@@ -79,6 +111,32 @@ const runtimeDashboard = ref(null);
 const canFlash = ref(false);
 const toasts = ref([]); // {id,message,type,sticky,ts}
 let toastCounter = 0;
+
+// Settings authentication
+const showSettingsAuth = ref(false);
+const settingsAuthenticated = ref(false);
+const settingsPassword = ref("");
+const showSettingsPassword = ref(false);
+const settingsPasswordInput = ref(null);
+const pendingFlashStart = ref(false); // Track if we need to start flash after auth
+
+// Configurable settings password - loaded from backend
+const SETTINGS_PASSWORD = ref("cf"); // Default fallback
+
+async function loadSettingsPassword() {
+  try {
+    const response = await fetch("/config/settings_password");
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === "ok" && data.password) {
+        SETTINGS_PASSWORD.value = data.password;
+        console.log("[Frontend] Settings password loaded from backend");
+      }
+    }
+  } catch (e) {
+    console.warn("[Frontend] Could not load settings password from backend, using default:", e);
+  }
+}
 const opBusy = ref({});
 const rURIComp = encodeURIComponent;
 
@@ -119,12 +177,13 @@ async function loadSettings() {
   try {
     console.log("[Frontend] Starting loadSettings...");
     
-    // Add timeout to HTTP request
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    // Firefox-compatible timeout implementation
+    const fetchPromise = fetch("/config.json");
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
     
-    const r = await fetch("/config.json", { signal: controller.signal });
-    clearTimeout(timeoutId);
+    const r = await Promise.race([fetchPromise, timeoutPromise]);
     
     console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
     console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
@@ -161,8 +220,48 @@ async function loadSettings() {
   }
 }
 function switchToSettings() {
-  activeTab.value = "settings";
-  loadSettings();
+  if (settingsAuthenticated.value) {
+    activeTab.value = "settings";
+    loadSettings();
+  } else {
+    showSettingsAuth.value = true;
+    // Focus password input after modal appears
+    setTimeout(() => {
+      settingsPasswordInput.value?.focus();
+    }, 100);
+  }
+}
+
+function confirmSettingsAuth() {
+  if (settingsPassword.value === SETTINGS_PASSWORD.value) {
+    settingsAuthenticated.value = true;
+    showSettingsAuth.value = false;
+    settingsPassword.value = ""; // Clear password for security
+    
+    // Check if we need to start flash after authentication
+    if (pendingFlashStart.value) {
+      pendingFlashStart.value = false;
+      notify("Access granted - Starting OTA flash...", "success");
+      runtimeDashboard.value?.startFlash();
+    } else {
+      // Normal settings access
+      activeTab.value = "settings";
+      loadSettings();
+      notify("Settings access granted", "success");
+    }
+  } else {
+    notify("Invalid password", "error");
+    settingsPassword.value = ""; // Clear wrong password
+    settingsPasswordInput.value?.focus();
+  }
+}
+
+function cancelSettingsAuth() {
+  showSettingsAuth.value = false;
+  settingsPassword.value = "";
+  showSettingsPassword.value = false;
+  pendingFlashStart.value = false; // Clear any pending flash start
+  activeTab.value = "live"; // Stay on live tab
 }
 async function injectVersion() {
   try {
@@ -332,6 +431,16 @@ function startFlash() {
     notify("OTA is disabled", "error");
     return;
   }
+  
+  // Check if already authenticated for settings (reuse authentication)
+  if (!settingsAuthenticated.value) {
+    // Show authentication modal for Flash/OTA access
+    showSettingsAuth.value = true;
+    // Store that we want to start flash after authentication
+    pendingFlashStart.value = true;
+    return;
+  }
+  
   runtimeDashboard.value?.startFlash();
 }
 function handleCanFlashChange(v) {
@@ -339,6 +448,7 @@ function handleCanFlashChange(v) {
 }
 onMounted(() => {
   loadUserTheme();
+  loadSettingsPassword();
   loadSettings();
   injectVersion();
 });

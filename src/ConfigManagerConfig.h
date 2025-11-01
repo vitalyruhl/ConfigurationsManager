@@ -1,9 +1,6 @@
 #pragma once
 
 // Feature toggle defaults for ConfigManager. Override by defining macros before including ConfigManager.h.
-// Example:
-//   #define CM_ENABLE_RUNTIME_CONTROLS 0
-//   #include "ConfigManager.h"
 
 
 #ifndef CM_EMBED_WEBUI // Enable embedded web UI (HTML/CSS/JS) in binary
@@ -69,13 +66,5 @@
 #define CM_ENABLE_VERBOSE_LOGGING 0 //default: disabled
 #endif
 // ---------------------------------------------------------------------------------------------------------------------
-#if defined(CM_ALARM_GREEN_ON_FALSE)
-#undef CM_ALARM_GREEN_ON_FALSE
-#endif
-#if defined(CM_ENABLE_RUNTIME_CONTROLS)
-#undef CM_ENABLE_RUNTIME_CONTROLS
-#endif
-
-// Dynamic visibility is always enabled now
-#undef CM_ENABLE_DYNAMIC_VISIBILITY
-#define CM_ENABLE_DYNAMIC_VISIBILITY 1
+// Dynamic visibility is always enabled - legacy code removal completed
+// All related dynamic visibility flags are now obsolete and have been removed

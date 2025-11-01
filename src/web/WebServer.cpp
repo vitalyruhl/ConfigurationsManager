@@ -17,6 +17,7 @@ ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     , embedWebUI(true)
     , customHTML(nullptr)
     , customHTMLLen(0)
+    , settingsPassword("admin123") // Default settings password
 {
     if (!server) {
         server = new AsyncWebServer(80);
@@ -473,6 +474,12 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
         // Fallback - return empty value
         request->send(200, "application/json", "{\"status\":\"ok\",\"value\":\"\"}");
+    });
+
+    // Settings password endpoint - /config/settings_password (returns settings password for frontend auth)
+    server->on("/config/settings_password", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        String response = "{\"status\":\"ok\",\"password\":\"" + settingsPassword + "\"}";
+        request->send(200, "application/json", response);
     });
 
     // Bulk apply endpoint - /config/apply_all (applies all settings to memory only)
@@ -1083,4 +1090,9 @@ void ConfigManagerWeb::log(const char* format, ...) const {
         ConfigManagerClass_logger(buffer);
     }
 #endif
+}
+
+void ConfigManagerWeb::setSettingsPassword(const String& password) {
+    settingsPassword = password;
+    WEB_LOG("[Web] Settings password configured (length: %d)", password.length());
 }

@@ -625,11 +625,23 @@ function scheduleWsReconnect(url) {
 }
 
 function fetchWithTimeout(resource, options = {}, timeoutMs = 4000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  const opts = { ...options, signal: controller.signal };
-  return fetch(resource, opts)
-    .finally(() => clearTimeout(id));
+  // Firefox-compatible timeout implementation
+  if (typeof AbortController !== 'undefined') {
+    // Modern browsers with AbortController support
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const opts = { ...options, signal: controller.signal };
+    return fetch(resource, opts)
+      .finally(() => clearTimeout(id));
+  } else {
+    // Fallback for older browsers
+    return Promise.race([
+      fetch(resource, options),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+      )
+    ]);
+  }
 }
 
 async function fetchRuntime() {
