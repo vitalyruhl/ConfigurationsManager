@@ -463,6 +463,12 @@ void setup()
     Serial.println("[MAIN] Smart WiFi Roaming enabled with default settings");
 
     //----------------------------------------------------------------------------------------------------------------------------------
+    // Configure WiFi AP MAC filtering/priority (example - customize as needed)
+    // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
+    Serial.println("[MAIN] WiFi AP MAC Priority enabled for better AP selection");
+
+    //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
     SetupCheckForResetButton();
 
@@ -852,14 +858,6 @@ void onWiFiConnected()
     Serial.printf("[MAIN] WLAN-Strength is: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
 
     String bssid = WiFi.BSSIDstr();
-    String accessPoint = "Unknown";
-    if (bssid.indexOf("66:b5:8d:4c:e1:d5") >= 0 || bssid.indexOf("66-b5-8d-4c-e1-d5") >= 0) {
-        accessPoint = "FRITZ!Repeater 1200 AX";
-    } else {
-        accessPoint = "Main FRITZ!Box (or other AP)";
-    }
-
-    Serial.printf("[MAIN] Connected to: %s\n", accessPoint.c_str());
     Serial.printf("[MAIN] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
     Serial.printf("[MAIN] Local MAC: %s\n\n", WiFi.macAddress().c_str());
 

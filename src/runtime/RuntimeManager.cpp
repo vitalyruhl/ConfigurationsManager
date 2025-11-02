@@ -203,8 +203,16 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         if (m.isButton) o["isButton"] = true;
         if (m.isCheckbox) o["isCheckbox"] = true;
         if (m.isStateButton) o["isStateButton"] = true;
-        if (m.isIntSlider) o["isIntSlider"] = true;
-        if (m.isFloatSlider) o["isFloatSlider"] = true;
+        if (m.isIntSlider) {
+            o["isIntSlider"] = true;
+            o["min"] = m.intMin;
+            o["max"] = m.intMax;
+        }
+        if (m.isFloatSlider) {
+            o["isFloatSlider"] = true;
+            o["min"] = m.floatMin;
+            o["max"] = m.floatMax;
+        }
         if (m.hasAlarm) o["hasAlarm"] = true;
         if (m.alarmWhenTrue) o["alarmWhenTrue"] = true;
         if (m.boolAlarmValue != false) {  // Only include if not default false

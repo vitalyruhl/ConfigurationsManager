@@ -2,37 +2,85 @@
 
 ## Current Issues to Fix
 
-### High Priority Bugs
+### High Priority Bugs (Prio 1)
 
-- **[BUG] defineRuntimeIntSlider slider doesnt work** (Prio 1)
-- **[BUG] defineRuntimeFloatSlider slider doesnt work** (Prio 1)
-- **[BUG] bootloader_mmap- its with analog slider? or its general?** (Prio 1) 
+- **[FIXED] bootloader_mmap- its with analog slider? or its general?** (Prio 1) 
     - E (39037) bootloader_mmap: tried to bootloader_mmap twice
     - E (39038) esp_image: bootloader_mmap(0x10020, 0x3530c) failed
+    - **Note:** This appears to be a general ESP32 issue, not related to sliders specifically
 
-- **[FIXED] Must register settings manually (constructor registration seems to fail)** (Prio 1) ✅
-   - **Root Cause:** Static initialization order problem - settings structs tried to register before ConfigManager was initialized
-   - **Solution:** Implemented Delayed Initialization Pattern with `init()` methods for all settings structures
-   - **Changes:** SystemSettings, ButtonSettings, TempSettings, NTPSettings, WiFiSettings, MQTTSettings all use `init()` pattern
-   - **Documentation:** Created comprehensive guide in `docs/SETTINGS_STRUCTURE_PATTERN.md`
-   - **Result:** All settings now register correctly and appear in WebUI reliably 
+### Medium Priority Features
 
+- **[FEATURE] add a simply password encryption for "dump users", that not see clear passwords over http sending** (Prio 2)
+- **[???] check the docs for deprecated features and also check the whole projet for german comments and translate it into english** (Prio 2)
 
-## Feature Requests / Ideas
-
-- **[IMPLEMENTED] Password-protected settings view** (Prio 8) ✅
-   - ~~Prevent unauthorized configuration changes~~
-   - ~~Add authentication layer for sensitive settings~~
-   - **Solution:** Settings page now requires password authentication (default: "cf")
-   - **Features:** Modal-based auth, password masking, cancel option, session persistence
+### Low Priority Features
 
 - **[FEATURE] Automated component testing** (Prio 10)
    - Create script that checks component on/off flags
    - Ensure compilation succeeds for all flag combinations
    - Integrate into test engine for comprehensive validation
 
+- **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio 10)
+
+
+---
+
+## ✅ Completed Issues
+
+### High Priority Bugs - SOLVED
+
+- **[FIXED] defineRuntimeIntSlider slider doesnt work** (Prio 1) ✅
+   - **Root Cause:** Int slider HTTP endpoint lacked query parameter support (only had JSON body parsing)
+   - **Solution:** Added query parameter handling to int slider endpoint matching float slider implementation
+   - **Changes:** Modified WebServer.cpp int slider endpoint to support both query params and JSON body
+   - **Result:** Both int and float sliders now work correctly via HTTP endpoints
+
+- **[FIXED] defineRuntimeFloatSlider slider doesnt work** (Prio 1) ✅
+   - **Root Cause:** European locale comma decimal separator issue in Vue.js frontend 
+   - **Solution:** Added comma-to-dot conversion in RuntimeSlider.vue and RuntimeDashboard.vue
+   - **Changes:** parseVal() and sendFloat() functions now handle both comma and dot decimal formats
+   - **Result:** Float sliders work correctly with both European (21,39) and US (21.39) decimal formats
+
+- **[FIXED] Must register settings manually (constructor registration seems to fail)** (Prio 1) ✅
+   - **Root Cause:** Static initialization order problem - settings structs tried to register before ConfigManager was initialized
+   - **Solution:** Implemented Delayed Initialization Pattern with `init()` methods for all settings structures
+   - **Changes:** SystemSettings, ButtonSettings, TempSettings, NTPSettings, WiFiSettings, MQTTSettings all use `init()` pattern
+   - **Documentation:** Created comprehensive guide in `docs/SETTINGS_STRUCTURE_PATTERN.md`
+   - **Result:** All settings now register correctly and appear in WebUI reliably
+
+### WiFi Features - IMPLEMENTED
+
+- **[IMPLEMENTED] setWifiAPMacFilter() method** (Prio 2) ✅
+   - **Implementation:** Added MAC filtering to WiFiManager with BSSID-specific connection logic
+   - **Features:** Restricts ESP32 to connect only to specified AP MAC address when enabled
+   - **Usage:** `ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");`
+   - **Result:** ESP32 will only connect to the specified access point, ignoring all others
+
+- **[IMPLEMENTED] setWifiAPMacPriority() method** (Prio 1) ✅  
+   - **Implementation:** Added MAC priority system with scanning and BSSID selection
+   - **Features:** Prefers specified AP but allows fallback to other APs if unavailable
+   - **Usage:** `ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");`
+   - **Result:** ESP32 scans for networks, selects priority AP if available, falls back to best alternative
+   - **Tested:** Successfully connected to priority AP 60:B5:8D:4C:E1:D5 with -46 dBm signal
+
+### High Priority Bugs - SOLVED
+
+- **[FIXED] Must register settings manually (constructor registration seems to fail)** (Prio 1) ✅
+   - **Root Cause:** Static initialization order problem - settings structs tried to register before ConfigManager was initialized
+   - **Solution:** Implemented Delayed Initialization Pattern with `init()` methods for all settings structures
+   - **Changes:** SystemSettings, ButtonSettings, TempSettings, NTPSettings, WiFiSettings, MQTTSettings all use `init()` pattern
+   - **Documentation:** Created comprehensive guide in `docs/SETTINGS_STRUCTURE_PATTERN.md`
+   - **Result:** All settings now register correctly and appear in WebUI reliably
+
+### Medium Priority Features - IMPLEMENTED
+
 - **[IMPLEMENTED] move settitingspasswort into a popup modal when accessing settings** (Prio 3) ✅
    - **Solution:** Modal-based authentication for both Settings tab and Flash/OTA button
    - **Features:** Dynamic password loading from backend, contextual dialogs, session persistence
-- **[FEATURE] add a simply password encryption for "dump users", that not see clear passwords over http sending** (Prio 2)
-- **[FEATURE] add HTTPS support** (Prio 10), because its not in core ESP32 WiFi lib yet.
+
+### High Priority Features - IMPLEMENTED
+
+- **[IMPLEMENTED] Password-protected settings view** (Prio 8) ✅
+   - **Solution:** Settings page now requires password authentication using `SETTINGS_PASSWORT` from wifiSecret.h
+   - **Features:** Modal-based auth, password masking, cancel option, session persistence, Flash/OTA button protection

@@ -1361,6 +1361,16 @@ public:
     void setRoamingImprovement(int improvementDbm = 10) { wifiManager.setRoamingImprovement(improvementDbm); }
     bool isSmartRoamingEnabled() const { return wifiManager.isSmartRoamingEnabled(); }
 
+    // MAC Address Filtering and Priority - convenience methods
+    void setWifiAPMacFilter(const String& macAddress) { wifiManager.setWifiAPMacFilter(macAddress); }
+    void setWifiAPMacPriority(const String& macAddress) { wifiManager.setWifiAPMacPriority(macAddress); }
+    void clearMacFilter() { wifiManager.clearMacFilter(); }
+    void clearMacPriority() { wifiManager.clearMacPriority(); }
+    bool isMacFilterEnabled() const { return wifiManager.isMacFilterEnabled(); }
+    bool isMacPriorityEnabled() const { return wifiManager.isMacPriorityEnabled(); }
+    String getFilterMac() const { return wifiManager.getFilterMac(); }
+    String getPriorityMac() const { return wifiManager.getPriorityMac(); }
+
 public:
     static LogCallback logger;
     WebHTML webhtml;

@@ -32,6 +32,10 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , roamingCooldown(120000)           // Default 120 seconds in ms
   , roamingImprovement(10)            // Default 10 dBm improvement
   , lastRoamingAttempt(0)
+  , macFilterEnabled(false)           // MAC filtering disabled by default
+  , macPriorityEnabled(false)         // MAC priority disabled by default
+  , filterMac("")                     // No filter MAC by default
+  , priorityMac("")                   // No priority MAC by default
 {
 }
 
@@ -79,7 +83,18 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
   WiFi.setAutoReconnect(true); // Enable automatic reconnection
   WiFi.persistent(true); // Store WiFi configuration in flash
-  WiFi.begin(ssid.c_str(), password.c_str());
+  
+  // Check for MAC filtering/priority
+  String targetBSSID = findBestBSSID();
+  if (!targetBSSID.isEmpty()) {
+    // Convert String to uint8_t array for BSSID
+    uint8_t bssid[6];
+    sscanf(targetBSSID.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", 
+           &bssid[0], &bssid[1], &bssid[2], &bssid[3], &bssid[4], &bssid[5]);
+    WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
+  } else {
+    WiFi.begin(ssid.c_str(), password.c_str());
+  }
 
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
@@ -106,7 +121,18 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
   WiFi.setAutoReconnect(true); // Enable automatic reconnection
   WiFi.persistent(true); // Store WiFi configuration in flash
   applyStaticConfig();
-  WiFi.begin(ssid.c_str(), password.c_str());
+  
+  // Check for MAC filtering/priority
+  String targetBSSID = findBestBSSID();
+  if (!targetBSSID.isEmpty()) {
+    // Convert String to uint8_t array for BSSID
+    uint8_t bssid[6];
+    sscanf(targetBSSID.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", 
+           &bssid[0], &bssid[1], &bssid[2], &bssid[3], &bssid[4], &bssid[5]);
+    WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
+  } else {
+    WiFi.begin(ssid.c_str(), password.c_str());
+  }
 
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
@@ -417,16 +443,44 @@ void ConfigManagerWiFi::checkSmartRoaming() {
 
   int bestRSSI = currentRSSI;
   int bestNetworkIndex = -1;
+  String preferredBSSID = "";
 
-  // Find the best network with our SSID
+  // Find the best network with our SSID, considering MAC filtering/priority
   for (int i = 0; i < networkCount; i++) {
     if (WiFi.SSID(i) == ssid) {
       int networkRSSI = WiFi.RSSI(i);
+      String networkBSSID = WiFi.BSSIDstr(i);
       
-      // Check if this network is significantly better
-      if (networkRSSI > bestRSSI + roamingImprovement) {
-        bestRSSI = networkRSSI;
-        bestNetworkIndex = i;
+      // Apply MAC filtering if enabled
+      if (macFilterEnabled) {
+        if (networkBSSID.equalsIgnoreCase(filterMac)) {
+          // Only consider this AP if it matches the filter
+          if (networkRSSI > bestRSSI + roamingImprovement) {
+            bestRSSI = networkRSSI;
+            bestNetworkIndex = i;
+          }
+        }
+        // Skip all other APs when filter is enabled
+        continue;
+      }
+      
+      // Apply MAC priority if enabled
+      if (macPriorityEnabled && networkBSSID.equalsIgnoreCase(priorityMac)) {
+        // Prefer priority MAC even with smaller improvement requirement
+        if (networkRSSI > bestRSSI + (roamingImprovement / 2)) {
+          bestRSSI = networkRSSI;
+          bestNetworkIndex = i;
+          preferredBSSID = networkBSSID;
+        }
+      } else {
+        // Check if this network is significantly better
+        if (networkRSSI > bestRSSI + roamingImprovement) {
+          // Only use if no priority MAC was found or this is much better
+          if (preferredBSSID.isEmpty() || networkRSSI > bestRSSI + roamingImprovement) {
+            bestRSSI = networkRSSI;
+            bestNetworkIndex = i;
+          }
+        }
       }
     }
   }
@@ -460,4 +514,115 @@ void ConfigManagerWiFi::checkSmartRoaming() {
 
   // Clean up scan results
   WiFi.scanDelete();
+}
+
+// MAC Address Filtering and Priority implementation
+void ConfigManagerWiFi::setWifiAPMacFilter(const String& macAddress) {
+  filterMac = macAddress;
+  macFilterEnabled = true;
+  macPriorityEnabled = false; // Filter mode disables priority mode
+  WIFI_LOG("[WiFi] MAC Filter enabled for: %s", macAddress.c_str());
+}
+
+void ConfigManagerWiFi::setWifiAPMacPriority(const String& macAddress) {
+  priorityMac = macAddress;
+  macPriorityEnabled = true;
+  macFilterEnabled = false; // Priority mode disables filter mode
+  WIFI_LOG("[WiFi] MAC Priority enabled for: %s", macAddress.c_str());
+}
+
+void ConfigManagerWiFi::clearMacFilter() {
+  macFilterEnabled = false;
+  filterMac = "";
+  WIFI_LOG("[WiFi] MAC Filter disabled");
+}
+
+void ConfigManagerWiFi::clearMacPriority() {
+  macPriorityEnabled = false;
+  priorityMac = "";
+  WIFI_LOG("[WiFi] MAC Priority disabled");
+}
+
+bool ConfigManagerWiFi::isMacFilterEnabled() const {
+  return macFilterEnabled;
+}
+
+bool ConfigManagerWiFi::isMacPriorityEnabled() const {
+  return macPriorityEnabled;
+}
+
+String ConfigManagerWiFi::getFilterMac() const {
+  return filterMac;
+}
+
+String ConfigManagerWiFi::getPriorityMac() const {
+  return priorityMac;
+}
+
+// Helper method to find the best BSSID considering MAC filter/priority
+String ConfigManagerWiFi::findBestBSSID() {
+  if (ssid.isEmpty()) {
+    return "";
+  }
+
+  // If no MAC filtering/priority is enabled, let WiFi auto-connect
+  if (!macFilterEnabled && !macPriorityEnabled) {
+    return "";
+  }
+
+  WIFI_LOG_VERBOSE("[WiFi] Scanning for networks to apply MAC filter/priority...");
+  int networkCount = WiFi.scanNetworks();
+  
+  if (networkCount <= 0) {
+    WIFI_LOG_VERBOSE("[WiFi] No networks found during scan");
+    return "";
+  }
+
+  String bestBSSID = "";
+  int bestRSSI = -100; // Very weak signal as starting point
+
+  for (int i = 0; i < networkCount; i++) {
+    if (WiFi.SSID(i) == ssid) {
+      String networkBSSID = WiFi.BSSIDstr(i);
+      int networkRSSI = WiFi.RSSI(i);
+
+      // MAC Filter mode: only connect to specific MAC
+      if (macFilterEnabled) {
+        if (networkBSSID.equalsIgnoreCase(filterMac)) {
+          if (networkRSSI > bestRSSI) {
+            bestBSSID = networkBSSID;
+            bestRSSI = networkRSSI;
+          }
+        }
+        continue; // Skip all other APs when filter is enabled
+      }
+
+      // MAC Priority mode: prefer specific MAC, allow fallback
+      if (macPriorityEnabled) {
+        if (networkBSSID.equalsIgnoreCase(priorityMac)) {
+          // Always prefer the priority MAC if found
+          bestBSSID = networkBSSID;
+          bestRSSI = networkRSSI;
+          WIFI_LOG("[WiFi] Found priority AP: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
+          break; // Stop searching once priority AP is found
+        } else {
+          // Fallback option: use best available if no priority found yet
+          if (bestBSSID.isEmpty() && networkRSSI > bestRSSI) {
+            bestBSSID = networkBSSID;
+            bestRSSI = networkRSSI;
+          }
+        }
+      }
+    }
+  }
+
+  WiFi.scanDelete(); // Clean up
+
+  if (!bestBSSID.isEmpty()) {
+    WIFI_LOG("[WiFi] Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);
+  } else if (macFilterEnabled) {
+    WIFI_LOG("[WiFi] MAC Filter enabled but target AP %s not found", filterMac.c_str());
+  }
+
+  return bestBSSID;
 }

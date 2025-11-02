@@ -975,6 +975,24 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     // Runtime int slider change endpoint
     server->on("/runtime_action/int_slider", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+
+            // Check for query parameters first (frontend uses this method)
+            if (request->hasParam("group") && request->hasParam("key") && request->hasParam("value")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                String valueStr = request->getParam("value")->value();
+                int value = valueStr.toInt();
+
+                configManager->getRuntimeManager().handleIntSliderChange(group, key, value);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+
+            // Fallback to JSON body parsing
             request->_tempObject = new String();
         },
         nullptr,
@@ -1025,6 +1043,9 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 String group = request->getParam("group")->value();
                 String key = request->getParam("key")->value();
                 String valueStr = request->getParam("value")->value();
+                
+                // Handle European decimal format (comma instead of dot)
+                valueStr.replace(",", ".");
                 float value = valueStr.toFloat();
 
                 configManager->getRuntimeManager().handleFloatSliderChange(group, key, value);

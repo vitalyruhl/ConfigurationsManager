@@ -944,10 +944,13 @@ async function handleSliderCommit({ group, field, value }) {
 
 async function sendFloat(group, f, val) {
   try {
+    // Ensure value uses dot decimal separator for HTTP request
+    const normalizedVal = String(val).replace(',', '.');
+    
     const r = await fetch(
       `/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(
         f.key
-      )}&value=${val}`,
+      )}&value=${normalizedVal}`,
       {
         method: "POST",
       }
@@ -956,8 +959,8 @@ async function sendFloat(group, f, val) {
       notifySafe(`Set failed: ${f.key}`, "error");
     } else {
       if (!runtime.value[group]) runtime.value[group] = {};
-      runtime.value[group][f.key] = val;
-      notifySafe(`${f.key}=${val}`, "success", 1200);
+      runtime.value[group][f.key] = parseFloat(normalizedVal);
+      notifySafe(`${f.key}=${normalizedVal}`, "success", 1200);
     }
   } catch (e) {
     notifySafe(`Set error ${f.key}: ${e.message}`, "error");

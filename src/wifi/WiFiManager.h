@@ -48,6 +48,12 @@ private:
   int roamingImprovement;      // Minimum signal improvement required (dBm)
   unsigned long lastRoamingAttempt;
 
+  // MAC Address Filtering and Priority
+  bool macFilterEnabled;       // If true, only connect to specific MAC
+  bool macPriorityEnabled;     // If true, prefer specific MAC but allow fallback
+  String filterMac;            // MAC address for filtering/priority
+  String priorityMac;          // MAC address for priority (same as filterMac for simplicity)
+
   // Callback functions
   WiFiConnectedCallback onConnectedCallback;
   WiFiDisconnectedCallback onDisconnectedCallback;
@@ -60,6 +66,7 @@ private:
   void log(const char* format, ...) const;
   void applyStaticConfig();
   void checkSmartRoaming();  // Smart roaming check method
+  String findBestBSSID();    // Find best BSSID considering MAC filter/priority
 
 public:
   // Constructor
@@ -106,6 +113,16 @@ public:
   void setRoamingCooldown(unsigned long cooldownSeconds = 120);
   void setRoamingImprovement(int improvementDbm = 10);
   bool isSmartRoamingEnabled() const;
+
+  // MAC Address Filtering and Priority
+  void setWifiAPMacFilter(const String& macAddress);     // Only connect to this MAC
+  void setWifiAPMacPriority(const String& macAddress);   // Prefer this MAC, fallback to others
+  void clearMacFilter();                                  // Remove MAC filtering
+  void clearMacPriority();                               // Remove MAC priority
+  bool isMacFilterEnabled() const;
+  bool isMacPriorityEnabled() const;
+  String getFilterMac() const;
+  String getPriorityMac() const;
 
   // Compatibility methods for ConfigManager
   bool getStatus() const { return isConnected(); }
