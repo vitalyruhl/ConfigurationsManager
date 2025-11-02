@@ -45,8 +45,9 @@ Frontend pruning and compression
 Notes
 
 - Changing flags triggers a full frontend rebuild automatically.
-- Backward compatibility: old flags (CM_ENABLE_RUNTIME_INT_SLIDERS / CM_ENABLE_RUNTIME_FLOAT_SLIDERS) still enable sliders if present, but prefer the new combined flag.
-For deeper control, see `webui/vite.config.mjs` and `tools/preCompile_script.py`.
+- **DEPRECATED:** `CM_ENABLE_RUNTIME_INT_SLIDERS` and `CM_ENABLE_RUNTIME_FLOAT_SLIDERS` are deprecated as of v2.7.0. Use `CM_ENABLE_RUNTIME_ANALOG_SLIDERS=1` instead for both int and float sliders.
+- **DEPRECATED:** The `DCM_` prefix is deprecated. Use `CM_` prefix for all flags.
+- For deeper control, see `webui/vite.config.mjs` and `tools/preCompile_script.py`.
 
 Migration note: In some earlier notes the prefix `DCM_` was used—current flags use the `CM_` prefix.
 

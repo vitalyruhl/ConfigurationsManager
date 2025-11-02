@@ -10,7 +10,7 @@
 // - Open platformio.ini and add -D flags under each [env] in the build_flags section, e.g.:
 //     -DCM_ENABLE_OTA=1
 //     -DCM_ENABLE_WS_PUSH=1
-//     -DCM_ENABLE_RUNTIME_INT_SLIDERS=1
+//     -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1
 // - You can turn features off by setting =0. The extra build script will also prune the Web UI accordingly.
 //
 // See docs/FEATURE_FLAGS.md for the complete list and examples. For convenience, this project enables
@@ -21,7 +21,7 @@
 
 #include "secret/wifiSecret.h"
 
-#include <Ticker.h>     // for read temperature periodically
+#include <Ticker.h>     // for reading temperature periodically
 #include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
 #include "Wire.h"
 // Always async web server now
@@ -337,7 +337,7 @@ struct MQTT_Settings
 MQTT_Settings mqttSettings; // mqttSettings
 
 //--------------------------------------------------------------------------------------------------------------
-// implement read temperature function and variables to show how to unse live values
+// implement read temperature function and variables to show how to use live values
 //--------------------------------------------------------------------------------------------------------------
 // set the I2C address for the BME280 sensor for temperature and humidity
 #define I2C_SDA 21
@@ -471,7 +471,7 @@ void setup()
 
     try
     {
-        ConfigManager.loadAll(); // Load all settings from preferences, is nessesary before using the settings!
+        ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
     }
     catch (const std::exception &e)
     {
@@ -971,7 +971,7 @@ void SetupStartTemperatureMeasuring()
     }
     else
     {
-        Serial.println("ready to using BME280. Sart Ticker...");
+        Serial.println("ready to use BME280. Start Ticker...");
         int iv = tempSettings.readIntervalSec.get();
         if (iv < 2)
             iv = 2;
