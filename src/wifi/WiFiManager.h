@@ -103,6 +103,7 @@ public:
 
   // Status information
   String getStatusString() const;
+  String getWiFiStatusString(int status) const;
   float getConnectionUptime() const; // in seconds
   IPAddress getLocalIP() const;
   int getRSSI() const;

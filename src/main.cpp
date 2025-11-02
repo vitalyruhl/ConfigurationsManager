@@ -474,17 +474,17 @@ void setup()
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
-    ConfigManager.enableSmartRoaming(true);        // Enable smart roaming by default
+    ConfigManager.enableSmartRoaming(false);       // TEMPORARILY DISABLED for connection testing
     ConfigManager.setRoamingThreshold(-75);        // Trigger roaming at -75 dBm
-    ConfigManager.setRoamingCooldown(320);          // Wait 320 seconds between attempts
+    ConfigManager.setRoamingCooldown(30);           // Wait 30 seconds between attempts (reduced from 120)
     ConfigManager.setRoamingImprovement(10);       // Require 10 dBm improvement
-    Serial.println("[MAIN] Smart WiFi Roaming enabled with default settings");
+    Serial.println("[MAIN] Smart WiFi Roaming temporarily disabled for connection testing");
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure WiFi AP MAC filtering/priority (example - customize as needed)
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    // ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others - TEMPORARILY DISABLED DUE TO HEAP ISSUE
-    // Serial.println("[MAIN] WiFi AP MAC Priority enabled for better AP selection");
+    // ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others - TEMPORARILY DISABLED FOR TESTING
+    Serial.println("[MAIN] WiFi MAC Priority temporarily disabled for connection testing");
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
@@ -492,11 +492,6 @@ void setup()
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // set wifi settings if not set yet from my secret folder
-    Serial.printf("[DEBUG] SSID check: '%s' (isEmpty: %s, length: %d)\n",
-                  wifiSettings.wifiSsid.get().c_str(),
-                  wifiSettings.wifiSsid.get().isEmpty() ? "true" : "false",
-                  wifiSettings.wifiSsid.get().length());
-
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
         Serial.println("-------------------------------------------------------------");
@@ -509,6 +504,19 @@ void setup()
         ConfigManager.saveAll();
         delay(1000); // Small delay
     }
+
+    // TEMPORARY: Force DHCP for connection testing
+    Serial.println("[DEBUG] Forcing DHCP for connection testing...");
+    wifiSettings.useDhcp.set(true);
+    ConfigManager.saveAll();
+
+    // TEMPORARY: Add WiFi debug information
+    Serial.println("[DEBUG] Current WiFi settings:");
+    Serial.printf("  SSID: '%s' (length: %d)\n", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length());
+    Serial.printf("  Password: %s (length: %d)\n", wifiSettings.wifiPassword.get().isEmpty() ? "'[empty]'" : "'[set]'", wifiSettings.wifiPassword.get().length());
+    Serial.printf("  DHCP: %s\n", wifiSettings.useDhcp.get() ? "enabled" : "disabled");
+    Serial.printf("  WiFi Status: %d\n", WiFi.status());
+    Serial.printf("  WiFi Mode: %d\n", WiFi.getMode());
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for AP mode button AFTER setting WiFi credentials
@@ -561,6 +569,9 @@ void setup()
 
 void loop()
 {
+    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
+    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+
     // WiFi status monitoring for debugging
     static unsigned long lastWiFiCheck = 0;
     static unsigned long lastFlashCheck = 0;
@@ -587,13 +598,12 @@ void loop()
         CRM().updateAlarms(); // shows how to use shortcut helper CRM() instead of CRM()
     }
 
-    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+
     ConfigManager.handleClient(); // Handle web server client requests
     ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
     ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
-    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
-
+    updateStatusLED();
     delay(10);
 }
 

@@ -85,14 +85,20 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   WiFi.persistent(true); // Store WiFi configuration in flash
   
   // Check for MAC filtering/priority
-  String targetBSSID = findBestBSSID();
+  // TEMPORARY DEBUG: Disable MAC filtering/priority completely
+  String targetBSSID = ""; // findBestBSSID();
   if (!targetBSSID.isEmpty()) {
+    WIFI_LOG("[WiFi] Using specific BSSID: %s", targetBSSID.c_str());
     // Convert String to uint8_t array for BSSID
     uint8_t bssid[6];
     sscanf(targetBSSID.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", 
            &bssid[0], &bssid[1], &bssid[2], &bssid[3], &bssid[4], &bssid[5]);
+    WIFI_LOG("[WiFi] BSSID bytes: %02X:%02X:%02X:%02X:%02X:%02X", 
+           bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
     WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
   } else {
+    WIFI_LOG("[WiFi] Using any available BSSID for SSID: %s", ssid.c_str());
+    WIFI_LOG("[WiFi] Password length: %d characters", password.length());
     WiFi.begin(ssid.c_str(), password.c_str());
   }
 
@@ -188,9 +194,18 @@ void ConfigManagerWiFi::update() {
     lastGoodConnectionMillis = millis();
   } else {
     // WiFi is disconnected - log the actual status
+    int wifiStatus = WiFi.status();
     if (currentState == WIFI_STATE_CONNECTED) {
-      WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d, transitioning to disconnected", WiFi.status());
+      WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d, transitioning to disconnected", wifiStatus);
       transitionToState(WIFI_STATE_DISCONNECTED);
+    } else if (currentState == WIFI_STATE_CONNECTING) {
+      // Still trying to connect, log status periodically  
+      static unsigned long lastStatusLog = 0;
+      if (millis() - lastStatusLog > 5000) { // Log every 5 seconds
+        WIFI_LOG("[WiFi] Still connecting... WiFi.status() = %d (%s)", 
+               wifiStatus, getWiFiStatusString(wifiStatus).c_str());
+        lastStatusLog = millis();
+      }
     }
 
     // Handle reconnection attempts (non-blocking)
@@ -210,10 +225,31 @@ void ConfigManagerWiFi::update() {
 
 void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
   WiFiManagerState oldState = currentState;
+  
+  // Create string representations
+  String oldStateStr, newStateStr;
+  switch (oldState) {
+    case WIFI_STATE_CONNECTED: oldStateStr = "Connected"; break;
+    case WIFI_STATE_CONNECTING: oldStateStr = "Connecting"; break;
+    case WIFI_STATE_DISCONNECTED: oldStateStr = "Disconnected"; break;
+    case WIFI_STATE_AP_MODE: oldStateStr = "AP Mode"; break;
+    case WIFI_STATE_RECONNECTING: oldStateStr = "Reconnecting"; break;
+    default: oldStateStr = "Unknown"; break;
+  }
+  
+  switch (newState) {
+    case WIFI_STATE_CONNECTED: newStateStr = "Connected"; break;
+    case WIFI_STATE_CONNECTING: newStateStr = "Connecting"; break;
+    case WIFI_STATE_DISCONNECTED: newStateStr = "Disconnected"; break;
+    case WIFI_STATE_AP_MODE: newStateStr = "AP Mode"; break;
+    case WIFI_STATE_RECONNECTING: newStateStr = "Reconnecting"; break;
+    default: newStateStr = "Unknown"; break;
+  }
+  
   currentState = newState;
 
-  // Log state transitions (verbose only)
-  WIFI_LOG_VERBOSE("[WiFi] State: %s -> %s", getStatusString().c_str(), getStatusString().c_str());
+  // Log state transitions (with correct old and new state)
+  WIFI_LOG("[WiFi] State: %s -> %s", oldStateStr.c_str(), newStateStr.c_str());
 
   // Execute callbacks based on state transitions
   switch (newState) {
@@ -268,12 +304,16 @@ void ConfigManagerWiFi::handleReconnection() {
     }
 
     // Attempt non-blocking reconnection
-    WIFI_LOG_VERBOSE("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
+    WIFI_LOG("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
+    WIFI_LOG("[WiFi] Reconnection details - SSID: %s, Password length: %d, Use DHCP: %s", 
+           ssid.c_str(), password.length(), useDHCP ? "yes" : "no");
     WiFi.setSleep(false); // Ensure WiFi sleep is disabled on reconnection attempts
     WiFi.setAutoReconnect(true); // Enable automatic reconnection
     if (useDHCP) {
+      WIFI_LOG("[WiFi] Starting DHCP reconnection...");
       WiFi.begin(ssid.c_str(), password.c_str());
     } else {
+      WIFI_LOG("[WiFi] Starting static IP reconnection...");
       applyStaticConfig();
       WiFi.begin(ssid.c_str(), password.c_str());
     }
@@ -417,10 +457,15 @@ void ConfigManagerWiFi::checkSmartRoaming() {
     return;
   }
 
+  // Only check roaming if we're currently connected
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
   unsigned long currentTime = millis();
   
-  // Check cooldown period
-  if (currentTime - lastRoamingAttempt < roamingCooldown) {
+  // Check cooldown period (skip if this is the first roaming attempt)
+  if (lastRoamingAttempt > 0 && currentTime - lastRoamingAttempt < roamingCooldown) {
     return;
   }
 
@@ -562,37 +607,45 @@ String ConfigManagerWiFi::getPriorityMac() const {
 // Helper method to find the best BSSID considering MAC filter/priority
 String ConfigManagerWiFi::findBestBSSID() {
   if (ssid.isEmpty()) {
+    WIFI_LOG("[WiFi] No SSID set, skipping BSSID selection");
     return "";
   }
 
   // If no MAC filtering/priority is enabled, let WiFi auto-connect
   if (!macFilterEnabled && !macPriorityEnabled) {
+    WIFI_LOG_VERBOSE("[WiFi] No MAC filter/priority enabled, using auto-connect");
     return "";
   }
 
-  WIFI_LOG_VERBOSE("[WiFi] Scanning for networks to apply MAC filter/priority...");
+  WIFI_LOG("[WiFi] Scanning for networks to apply MAC filter/priority...");
   
   // Clear any previous scan results first
   WiFi.scanDelete();
-  delay(100); // Small delay to ensure cleanup
   
-  int networkCount = WiFi.scanNetworks();
+  int networkCount = WiFi.scanNetworks(false, false, false, 300); // Reduced scan time
   
   if (networkCount <= 0) {
-    WIFI_LOG_VERBOSE("[WiFi] No networks found during scan");
+    WIFI_LOG("[WiFi] No networks found during scan (count: %d), falling back to auto-connect", networkCount);
     WiFi.scanDelete(); // Ensure cleanup even on failure
     return "";
   }
 
+  WIFI_LOG("[WiFi] Found %d networks during scan", networkCount);
+
   String bestBSSID = "";
   int bestRSSI = -100; // Very weak signal as starting point
   bool priorityFound = false;
+  int matchingNetworks = 0;
 
   for (int i = 0; i < networkCount; i++) {
     String networkSSID = WiFi.SSID(i);
     if (networkSSID == ssid) {
+      matchingNetworks++;
       String networkBSSID = WiFi.BSSIDstr(i);
       int networkRSSI = WiFi.RSSI(i);
+      
+      WIFI_LOG_VERBOSE("[WiFi] Found matching network: SSID=%s, BSSID=%s, RSSI=%d", 
+                       networkSSID.c_str(), networkBSSID.c_str(), networkRSSI);
 
       // MAC Filter mode: only connect to specific MAC
       if (macFilterEnabled) {
@@ -600,6 +653,7 @@ String ConfigManagerWiFi::findBestBSSID() {
           if (networkRSSI > bestRSSI) {
             bestBSSID = networkBSSID;
             bestRSSI = networkRSSI;
+            WIFI_LOG("[WiFi] Filter match found: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
           }
         }
         continue; // Skip all other APs when filter is enabled
@@ -619,6 +673,7 @@ String ConfigManagerWiFi::findBestBSSID() {
           if (networkRSSI > bestRSSI) {
             bestBSSID = networkBSSID;
             bestRSSI = networkRSSI;
+            WIFI_LOG_VERBOSE("[WiFi] Fallback candidate: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
           }
         }
       }
@@ -627,13 +682,29 @@ String ConfigManagerWiFi::findBestBSSID() {
 
   // Clean up scan results
   WiFi.scanDelete();
-  delay(50); // Small delay after cleanup
+
+  WIFI_LOG("[WiFi] Scan complete: %d matching networks found", matchingNetworks);
 
   if (!bestBSSID.isEmpty()) {
     WIFI_LOG("[WiFi] Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);
   } else if (macFilterEnabled) {
     WIFI_LOG("[WiFi] MAC Filter enabled but target AP %s not found", filterMac.c_str());
+  } else if (macPriorityEnabled) {
+    WIFI_LOG("[WiFi] MAC Priority enabled but target AP %s not found, will use auto-connect", priorityMac.c_str());
   }
 
   return bestBSSID;
+}
+
+String ConfigManagerWiFi::getWiFiStatusString(int status) const {
+  switch (status) {
+    case WL_IDLE_STATUS: return "WL_IDLE_STATUS";
+    case WL_NO_SSID_AVAIL: return "WL_NO_SSID_AVAIL";
+    case WL_SCAN_COMPLETED: return "WL_SCAN_COMPLETED";
+    case WL_CONNECTED: return "WL_CONNECTED";
+    case WL_CONNECT_FAILED: return "WL_CONNECT_FAILED";
+    case WL_CONNECTION_LOST: return "WL_CONNECTION_LOST";
+    case WL_DISCONNECTED: return "WL_DISCONNECTED";
+    default: return "UNKNOWN_STATUS";
+  }
 }
