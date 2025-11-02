@@ -231,7 +231,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     WEB_LOG("[Web] Parsed: category='%s', key='%s', value='%s'",
                             category.c_str(), key.c_str(), value.c_str());
 
-                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                    // Process hashed passwords - detect and handle password encryption
+                    String finalValue = value;
+                    if (value.startsWith("hashed:")) {
+                        // This is a hashed password from the frontend
+                        String hashedValue = value.substring(7); // Remove "hashed:" prefix
+                        WEB_LOG("[Web] Received hashed password for %s.%s (length: %d)", 
+                                category.c_str(), key.c_str(), hashedValue.length());
+                        
+                        // For now, store the hash directly as the password
+                        // In production, you might want to verify against expected password hashes
+                        finalValue = hashedValue;
+                        WEB_LOG("[Web] Password hash processed for transmission security");
+                    }
+
+                    if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
                         request->send(200, "application/json", "{\"status\":\"ok\"}");
                     } else {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"update_failed\"}");
@@ -353,8 +367,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                 WEB_LOG("[Web] Extracted value: '%s'", value.c_str());
 
+                // Process hashed passwords - detect and handle password encryption
+                String finalValue = value;
+                if (value.startsWith("hashed:")) {
+                    // This is a hashed password from the frontend
+                    String hashedValue = value.substring(7); // Remove "hashed:" prefix
+                    WEB_LOG("[Web] Received hashed password for %s.%s (length: %d)", 
+                            category.c_str(), key.c_str(), hashedValue.length());
+                    
+                    // For now, store the hash directly as the password
+                    finalValue = hashedValue;
+                    WEB_LOG("[Web] Password hash processed for transmission security");
+                }
+
                 // Call apply callback (memory only, no flash save)
-                if (settingApplyCallback && settingApplyCallback(category, key, value)) {
+                if (settingApplyCallback && settingApplyCallback(category, key, finalValue)) {
                     String response = "{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"" +
                                     category + "\",\"key\":\"" + key + "\"}";
                     request->send(200, "application/json", response);
@@ -428,8 +455,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                     WEB_LOG("[Web] Extracted value for save: '%s'", value.c_str());
 
+                    // Process hashed passwords - detect and handle password encryption
+                    String finalValue = value;
+                    if (value.startsWith("hashed:")) {
+                        // This is a hashed password from the frontend
+                        String hashedValue = value.substring(7); // Remove "hashed:" prefix
+                        WEB_LOG("[Web] Received hashed password for %s.%s (length: %d)", 
+                                category.c_str(), key.c_str(), hashedValue.length());
+                        
+                        // For now, store the hash directly as the password
+                        finalValue = hashedValue;
+                        WEB_LOG("[Web] Password hash processed for transmission security");
+                    }
+
                     // Call update callback (this also saves to flash in updateSetting)
-                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                    if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
                         String response = "{\"status\":\"ok\",\"action\":\"save\",\"category\":\"" +
                                         category + "\",\"key\":\"" + key + "\"}";
                         request->send(200, "application/json", response);

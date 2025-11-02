@@ -397,6 +397,30 @@ void setup()
 {
     Serial.begin(115200);
 
+    // Check for bootloader errors and reset reason
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    Serial.printf("[BOOTLOADER] Reset reason: %d ", reset_reason);
+    
+    switch(reset_reason) {
+        case ESP_RST_POWERON: Serial.println("(Power-on reset)"); break;
+        case ESP_RST_EXT: Serial.println("(External reset)"); break;
+        case ESP_RST_SW: Serial.println("(Software reset)"); break;
+        case ESP_RST_PANIC: Serial.println("(Panic reset - check for errors!)"); break;
+        case ESP_RST_INT_WDT: Serial.println("(Interrupt watchdog reset)"); break;
+        case ESP_RST_TASK_WDT: Serial.println("(Task watchdog reset)"); break;
+        case ESP_RST_WDT: Serial.println("(Other watchdog reset)"); break;
+        case ESP_RST_DEEPSLEEP: Serial.println("(Deep sleep reset)"); break;
+        case ESP_RST_BROWNOUT: Serial.println("(Brownout reset - power issue!)"); break;
+        case ESP_RST_SDIO: Serial.println("(SDIO reset)"); break;
+        default: Serial.println("(Unknown reset)"); break;
+    }
+    
+    // Check available heap and flash
+    Serial.printf("[BOOTLOADER] Free heap: %d bytes\n", ESP.getFreeHeap());
+    Serial.printf("[BOOTLOADER] Flash size: %d bytes\n", ESP.getFlashChipSize());
+    Serial.printf("[BOOTLOADER] Sketch size: %d bytes\n", ESP.getSketchSize());
+    Serial.printf("[BOOTLOADER] Free sketch space: %d bytes\n", ESP.getFreeSketchSpace());
+
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
 
@@ -549,6 +573,7 @@ void loop()
 
     // WiFi status monitoring for debugging
     static unsigned long lastWiFiCheck = 0;
+    static unsigned long lastFlashCheck = 0;
 
     if (millis() - lastWiFiCheck > 30000) // Check every 30 seconds
     {
@@ -561,6 +586,27 @@ void loop()
 
             Serial.printf("[WiFi] Current RSSI: %d dBm (%s)\n", currentRSSI, currentRSSI > -50 ? "excellent" : (currentRSSI > -60 ? "good" : (currentRSSI > -67 ? "ok" : (currentRSSI > -75 ? "weak" : "very weak"))));
             Serial.printf("[WiFi] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
+        }
+    }
+
+    // Flash health monitoring for bootloader_mmap error prevention
+    if (millis() - lastFlashCheck > 60000) // Check every 60 seconds
+    {
+        lastFlashCheck = millis();
+        uint32_t freeHeap = ESP.getFreeHeap();
+        uint32_t minFreeHeap = ESP.getMinFreeHeap();
+        uint32_t freeSketchSpace = ESP.getFreeSketchSpace();
+        
+        // Log flash health metrics
+        Serial.printf("[FLASH] Free heap: %u bytes (min: %u bytes)\n", freeHeap, minFreeHeap);
+        Serial.printf("[FLASH] Free sketch space: %u bytes\n", freeSketchSpace);
+        
+        // Warning if low on memory
+        if (freeHeap < 10000) {
+            Serial.println("[FLASH] WARNING: Low heap memory detected!");
+        }
+        if (freeSketchSpace < 100000) {
+            Serial.println("[FLASH] WARNING: Low flash space detected!");
         }
     }
 

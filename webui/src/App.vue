@@ -102,6 +102,31 @@ import { ref, onMounted, provide } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
+// Simple SHA-256 implementation for password hashing
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+// Check if a value is a password field that should be hashed
+function isPasswordField(category, key, settingData) {
+  return settingData && settingData.isPassword === true;
+}
+
+// Hash password if it's a password field, otherwise return original value
+async function processValueForTransmission(category, key, value, settingData) {
+  if (isPasswordField(category, key, settingData) && value && value.trim() !== '') {
+    // Only hash non-empty passwords
+    const hashed = await sha256(value);
+    console.log(`[Security] Hashing password for ${category}.${key}`);
+    return `hashed:${hashed}`; // Prefix to indicate this is a hashed password
+  }
+  return value; // Return original value for non-passwords
+}
+
 const config = ref({});
 const refreshKey = ref(0);
 const version = ref("");
@@ -292,12 +317,18 @@ async function applySingle(category, key, value) {
   opBusy.value[opKey] = true;
   const tid = notify(`Applying: ${opKey} ...`, "info", 7000, true);
   try {
+    // Get setting metadata to check if this is a password field
+    const settingData = config.value[category] && config.value[category][key];
+    
+    // Process value (hash if password, otherwise use as-is)
+    const processedValue = await processValueForTransmission(category, key, value, settingData);
+    
     const r = await fetch(
       `/config/apply?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
+        body: JSON.stringify({ value: processedValue }),
       }
     );
     const json = await r.json().catch(() => ({}));
@@ -319,12 +350,18 @@ async function saveSingle(category, key, value) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
+    // Get setting metadata to check if this is a password field
+    const settingData = config.value[category] && config.value[category][key];
+    
+    // Process value (hash if password, otherwise use as-is)
+    const processedValue = await processValueForTransmission(category, key, value, settingData);
+    
     const r = await fetch(
       `/config/save?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
+        body: JSON.stringify({ value: processedValue }),
         signal: controller.signal
       }
     );
