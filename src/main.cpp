@@ -149,7 +149,11 @@ struct SystemSettings
                            .showInWeb = true}),
                        version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
     {
-        // Register settings with ConfigManager
+        // Constructor - do not register here due to static initialization order
+    }
+    
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&allowOTA);
         ConfigManager.addSetting(&otaPassword);
         ConfigManager.addSetting(&wifiRebootTimeoutMin);
@@ -166,7 +170,11 @@ struct ButtonSettings
                        resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15}),
                        showerRequestPin(ConfigOptions<int>{.key = "BtnShower", .name = "Shower Request Button GPIO", .category = "Buttons", .defaultValue = 19, .showInWeb = true})
     {
-        // Register settings with ConfigManager
+        // Constructor - do not register here due to static initialization order
+    }
+    
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&apModePin);
         ConfigManager.addSetting(&resetDefaultsPin);
         ConfigManager.addSetting(&showerRequestPin);
@@ -197,7 +205,19 @@ struct WiFi_Settings // wifiSettings
                       dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this](){ return !useDhcp.get(); }}),
                       dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this](){ return !useDhcp.get(); }})
     {
-        // Settings will be registered manually in setup() to avoid constructor timing issues
+        // Constructor - do not register here due to static initialization order
+    }
+
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
+        ConfigManager.addSetting(&wifiSsid);
+        ConfigManager.addSetting(&wifiPassword);
+        ConfigManager.addSetting(&useDhcp);
+        ConfigManager.addSetting(&staticIp);
+        ConfigManager.addSetting(&gateway);
+        ConfigManager.addSetting(&subnet);
+        ConfigManager.addSetting(&dnsPrimary);
+        ConfigManager.addSetting(&dnsSecondary);
     }
 
 };
@@ -217,6 +237,11 @@ struct NTPSettings
                     server2(ConfigOptions<String>{.key = "NTP2", .name = "NTP Server 2", .category = "NTP", .defaultValue = String("pool.ntp.org"), .showInWeb = true}),
                     tz(ConfigOptions<String>{.key = "NTPTZ", .name = "Time Zone (POSIX)", .category = "NTP", .defaultValue = String("CET-1CEST,M3.5.0/02,M10.5.0/03"), .showInWeb = true})
     {
+        // Constructor - do not register here due to static initialization order
+    }
+    
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&frequencySec);
         ConfigManager.addSetting(&server1);
         ConfigManager.addSetting(&server2);
@@ -273,7 +298,7 @@ struct MQTT_Settings
         updateTopics(); // Make sure topics are initialized
     }
 
-    void registerSettings()
+    void init()
     {
         ConfigManager.addSetting(&mqtt_port);
         ConfigManager.addSetting(&mqtt_server);
@@ -353,6 +378,11 @@ struct TempSettings
                      readIntervalSec(ConfigOptions<int>{.key = "ReadTemp", .name = "Read Temp/Humidity every (s)", .category = "Temp", .defaultValue = 30}),
                      dewpointRiskWindow(ConfigOptions<float>{.key = "DPWin", .name = "Dewpoint Risk Window (°C)", .category = "Temp", .defaultValue = 1.5f})
     {
+        // Constructor - do not register here due to static initialization order
+    }
+    
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&tempCorrection);
         ConfigManager.addSetting(&humidityCorrection);
         ConfigManager.addSetting(&seaLevelPressure);
@@ -391,7 +421,7 @@ void setup()
     //----------------------------------------------------------------------------------------------------------------------------------
 
     //----------------------------------------------------------------------------------------------------------------------------------
-    // Register other settings
+    // Register individual settings (non-structured)
     ConfigManager.addSetting(&updateInterval);
     ConfigManager.addSetting(&testBool);
     ConfigManager.addSetting(&VeryLongCategoryName);
@@ -402,37 +432,14 @@ void setup()
     ConfigManager.addSetting(&tempSettingAktiveOnTrue);
     ConfigManager.addSetting(&tempSettingAktiveOnFalse);
 
-    ConfigManager.addSetting(&tempSettings.readIntervalSec);
-
-    // IMPORTANT: Register all remaining TempSettings manually (constructor registration seems to fail)
-    ConfigManager.addSetting(&tempSettings.tempCorrection);
-    ConfigManager.addSetting(&tempSettings.humidityCorrection);
-    ConfigManager.addSetting(&tempSettings.seaLevelPressure);
-    ConfigManager.addSetting(&tempSettings.dewpointRiskWindow);
-
-    // IMPORTANT: Register WiFi settings manually (constructor registration seems to fail)
-    ConfigManager.addSetting(&wifiSettings.wifiSsid);
-    ConfigManager.addSetting(&wifiSettings.wifiPassword);
-    ConfigManager.addSetting(&wifiSettings.useDhcp);
-    ConfigManager.addSetting(&wifiSettings.staticIp);
-    ConfigManager.addSetting(&wifiSettings.gateway);
-    ConfigManager.addSetting(&wifiSettings.subnet);
-    ConfigManager.addSetting(&wifiSettings.dnsPrimary);
-    ConfigManager.addSetting(&wifiSettings.dnsSecondary);
-
-    // IMPORTANT: Register SystemSettings manually (constructor registration seems to fail)
-    ConfigManager.addSetting(&systemSettings.allowOTA);
-    ConfigManager.addSetting(&systemSettings.otaPassword);
-    ConfigManager.addSetting(&systemSettings.wifiRebootTimeoutMin);
-    ConfigManager.addSetting(&systemSettings.version);
-
-    // IMPORTANT: Register ButtonSettings manually (constructor registration seems to fail)
-    ConfigManager.addSetting(&buttonSettings.apModePin);
-    ConfigManager.addSetting(&buttonSettings.resetDefaultsPin);
-    ConfigManager.addSetting(&buttonSettings.showerRequestPin);
-
-    // IMPORTANT: Register MQTT settings manually (has registerSettings method)
-    mqttSettings.registerSettings();
+    // Initialize structured settings using Delayed Initialization Pattern
+    // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
+    systemSettings.init();    // System settings (OTA, version, etc.)
+    buttonSettings.init();    // GPIO button configuration
+    tempSettings.init();      // BME280 temperature sensor settings
+    ntpSettings.init();       // NTP time synchronization settings
+    wifiSettings.init();      // WiFi connection settings
+    mqttSettings.init();      // MQTT broker settings
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
