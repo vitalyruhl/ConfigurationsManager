@@ -571,18 +571,26 @@ String ConfigManagerWiFi::findBestBSSID() {
   }
 
   WIFI_LOG_VERBOSE("[WiFi] Scanning for networks to apply MAC filter/priority...");
+  
+  // Clear any previous scan results first
+  WiFi.scanDelete();
+  delay(100); // Small delay to ensure cleanup
+  
   int networkCount = WiFi.scanNetworks();
   
   if (networkCount <= 0) {
     WIFI_LOG_VERBOSE("[WiFi] No networks found during scan");
+    WiFi.scanDelete(); // Ensure cleanup even on failure
     return "";
   }
 
   String bestBSSID = "";
   int bestRSSI = -100; // Very weak signal as starting point
+  bool priorityFound = false;
 
   for (int i = 0; i < networkCount; i++) {
-    if (WiFi.SSID(i) == ssid) {
+    String networkSSID = WiFi.SSID(i);
+    if (networkSSID == ssid) {
       String networkBSSID = WiFi.BSSIDstr(i);
       int networkRSSI = WiFi.RSSI(i);
 
@@ -603,11 +611,12 @@ String ConfigManagerWiFi::findBestBSSID() {
           // Always prefer the priority MAC if found
           bestBSSID = networkBSSID;
           bestRSSI = networkRSSI;
+          priorityFound = true;
           WIFI_LOG("[WiFi] Found priority AP: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
           break; // Stop searching once priority AP is found
-        } else {
+        } else if (!priorityFound) {
           // Fallback option: use best available if no priority found yet
-          if (bestBSSID.isEmpty() && networkRSSI > bestRSSI) {
+          if (networkRSSI > bestRSSI) {
             bestBSSID = networkBSSID;
             bestRSSI = networkRSSI;
           }
@@ -616,7 +625,9 @@ String ConfigManagerWiFi::findBestBSSID() {
     }
   }
 
-  WiFi.scanDelete(); // Clean up
+  // Clean up scan results
+  WiFi.scanDelete();
+  delay(50); // Small delay after cleanup
 
   if (!bestBSSID.isEmpty()) {
     WIFI_LOG("[WiFi] Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);

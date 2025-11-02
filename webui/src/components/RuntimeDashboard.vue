@@ -1464,7 +1464,6 @@ defineExpose({ startFlash });
   padding-left: 0.35rem;
   min-width: 1.6rem;
   text-align: left;
-  opacity: 0.65;
   font-size: 0.7rem;
 }
 .rw.sev-warn .val {

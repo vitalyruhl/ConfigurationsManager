@@ -24,13 +24,11 @@
 #include <Ticker.h>     // for reading temperature periodically
 #include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
 #include "Wire.h"
-// Always async web server now
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-// #include <WiFiClientSecure.h>
 
-#define VERSION "V2.7.0" // 2025.11.01
-#define APP_NAME "CM-BME280-Demo"
+#define VERSION "V2.7.0" // 2025.11.02
+#define APP_NAME "CM-BME280-Full-GUI-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
 // ⚠️ Warning ⚠️
@@ -39,8 +37,6 @@
 // The category is limited to 13 characters, the key name to 1 character.
 // Since V2.0.0, the key will be truncated if it is too long, but you now have a user-friendly displayName to show in the web interface.
 
-// Since V2.0.0 there is a way to upload the firmware over the air (OTA).
-// You can set the hostname and the password for OTA in the setupOTA function.
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
@@ -65,7 +61,7 @@ void setHeaterState(bool on);
 void cbTestButton();
 
 // -------------------------------------------------------------------
-// Global theme override test: make all h1 headings orange without underline
+// Global theme override test: make all h3 headings orange without underline
 // Served via /user_theme.css and auto-injected by the frontend if present.
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
@@ -82,8 +78,6 @@ Config<bool> testBool(ConfigOptions<bool>{
     .defaultValue = true});
 
 //---------------------------------------------------------------------------------------------------
-// extended version with UI-friendly prettyName and prettyCategory
-// Improved version since V2.0.0
 
 Config<int> updateInterval(ConfigOptions<int>{
     .key = "interval",
@@ -105,8 +99,8 @@ Config<float> VeryLongKeyName(ConfigOptions<float>{
     .defaultValue = 0.1f});
 
 //---------------------------------------------------------------------------------------------------
-// ---- Temporary dynamic visibility test settings ----
-// Category kept short ("DynTest") to avoid key truncation when combined with key names.
+// ---- Temporary dynamic visibility example ----
+
 Config<bool> tempBoolToggle(ConfigOptions<bool>{
     .key = "toggle",
     .name = "Temp Toggle",
@@ -128,7 +122,7 @@ Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
     .defaultValue = String("Shown if toggle = false"),
     .showIf = []()
     { return !tempBoolToggle.get(); }});
-// ---- End temporary dynamic visibility test settings ----
+// ---- End temporary dynamic visibility example ----
 
 //--------------------------------------------------------------------------------------------------------------
 // Example: Using structures for grouped settings
@@ -140,7 +134,7 @@ struct SystemSettings
     Config<int> wifiRebootTimeoutMin;
     Config<String> version;
     SystemSettings() : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true}),
-                       otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String(OTA_PASSWORT), .showInWeb = true, .isPassword = true}),
+                       otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String(OTA_PASSWORD), .showInWeb = true, .isPassword = true}),
                        wifiRebootTimeoutMin(ConfigOptions<int>{
                            .key = "WiFiRb",
                            .name = "Reboot if WiFi lost (min)",
@@ -151,7 +145,7 @@ struct SystemSettings
     {
         // Constructor - do not register here due to static initialization order
     }
-    
+
     void init() {
         // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&allowOTA);
@@ -172,7 +166,7 @@ struct ButtonSettings
     {
         // Constructor - do not register here due to static initialization order
     }
-    
+
     void init() {
         // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&apModePin);
@@ -239,7 +233,7 @@ struct NTPSettings
     {
         // Constructor - do not register here due to static initialization order
     }
-    
+
     void init() {
         // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&frequencySec);
@@ -252,8 +246,8 @@ struct NTPSettings
 NTPSettings ntpSettings; // ntpSettings
 
 //--------------------------------------------------------------------------------------------------------------
-// MQTT Settings
 // Declaration as a struct with callback function
+// MQTT Settings
 struct MQTT_Settings
 {
     Config<int> mqtt_port;
@@ -357,7 +351,7 @@ Ticker NtpSyncTicker;
 void readBme280(); // read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
 void SetupStartTemperatureMeasuring(); // setup the BME280 temperature and humidity sensor
 static float computeDewPoint(float temperatureC, float relHumidityPct); // compute the dewpoint from temperature and humidity
-static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntimeManager(); } // Shorthand helper for RuntimeManager access
+static inline ConfigManagerRuntime &CRM() { return CRM(); } // Shorthand helper for RuntimeManager access
 
 float temperature = 0.0; // current temperature in Celsius
 float Dewpoint = 0.0;    // current dewpoint in Celsius
@@ -380,7 +374,7 @@ struct TempSettings
     {
         // Constructor - do not register here due to static initialization order
     }
-    
+
     void init() {
         // Register settings with ConfigManager after ConfigManager is ready
         ConfigManager.addSetting(&tempCorrection);
@@ -400,7 +394,7 @@ void setup()
     // Check for bootloader errors and reset reason
     esp_reset_reason_t reset_reason = esp_reset_reason();
     Serial.printf("[BOOTLOADER] Reset reason: %d ", reset_reason);
-    
+
     switch(reset_reason) {
         case ESP_RST_POWERON: Serial.println("(Power-on reset)"); break;
         case ESP_RST_EXT: Serial.println("(External reset)"); break;
@@ -414,7 +408,7 @@ void setup()
         case ESP_RST_SDIO: Serial.println("(SDIO reset)"); break;
         default: Serial.println("(Unknown reset)"); break;
     }
-    
+
     // Check available heap and flash
     Serial.printf("[BOOTLOADER] Free heap: %d bytes\n", ESP.getFreeHeap());
     Serial.printf("[BOOTLOADER] Flash size: %d bytes\n", ESP.getFlashChipSize());
@@ -440,7 +434,7 @@ void setup()
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
-    ConfigManager.setSettingsPassword(SETTINGS_PASSWORT); // Set the settings password from wifiSecret.h
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
     ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -482,15 +476,15 @@ void setup()
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
     ConfigManager.enableSmartRoaming(true);        // Enable smart roaming by default
     ConfigManager.setRoamingThreshold(-75);        // Trigger roaming at -75 dBm
-    ConfigManager.setRoamingCooldown(120);          // Wait 120 seconds between attempts
+    ConfigManager.setRoamingCooldown(320);          // Wait 320 seconds between attempts
     ConfigManager.setRoamingImprovement(10);       // Require 10 dBm improvement
     Serial.println("[MAIN] Smart WiFi Roaming enabled with default settings");
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure WiFi AP MAC filtering/priority (example - customize as needed)
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
-    Serial.println("[MAIN] WiFi AP MAC Priority enabled for better AP selection");
+    // ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others - TEMPORARILY DISABLED DUE TO HEAP ISSUE
+    // Serial.println("[MAIN] WiFi AP MAC Priority enabled for better AP selection");
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
@@ -532,9 +526,9 @@ void setup()
     }
 
     setupGUI();
-    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
 
     // Enhanced WebSocket configuration
+    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
     ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
 
@@ -555,7 +549,6 @@ void setup()
     Serial.println("Configuration printout:");
     Serial.println(ConfigManager.toJSON(true)); // Show ALL settings, not just web-visible ones
 
-    // Note: debugPrintSettings() removed due to potential crashes during startup
     Serial.println("\nSetup completed successfully!");
 
     // Test setting changes
@@ -568,9 +561,6 @@ void setup()
 
 void loop()
 {
-    ConfigManager.updateLoopTiming();        // Update internal loop timing metrics for system provider
-    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
-
     // WiFi status monitoring for debugging
     static unsigned long lastWiFiCheck = 0;
     static unsigned long lastFlashCheck = 0;
@@ -589,37 +579,17 @@ void loop()
         }
     }
 
-    // Flash health monitoring for bootloader_mmap error prevention
-    if (millis() - lastFlashCheck > 60000) // Check every 60 seconds
-    {
-        lastFlashCheck = millis();
-        uint32_t freeHeap = ESP.getFreeHeap();
-        uint32_t minFreeHeap = ESP.getMinFreeHeap();
-        uint32_t freeSketchSpace = ESP.getFreeSketchSpace();
-        
-        // Log flash health metrics
-        Serial.printf("[FLASH] Free heap: %u bytes (min: %u bytes)\n", freeHeap, minFreeHeap);
-        Serial.printf("[FLASH] Free sketch space: %u bytes\n", freeSketchSpace);
-        
-        // Warning if low on memory
-        if (freeHeap < 10000) {
-            Serial.println("[FLASH] WARNING: Low heap memory detected!");
-        }
-        if (freeSketchSpace < 100000) {
-            Serial.println("[FLASH] WARNING: Low flash space detected!");
-        }
-    }
-
     // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
     static unsigned long lastAlarmEval = 0;
     if (millis() - lastAlarmEval > 1500)
     {
         lastAlarmEval = millis();
-        CRM().updateAlarms();
+        CRM().updateAlarms(); // shows how to use shortcut helper CRM() instead of CRM()
     }
 
-    ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
+    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+    ConfigManager.handleClient(); // Handle web server client requests
+    ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
     ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
@@ -640,7 +610,7 @@ void setupGUI()
     //-----------------------------------------------------------------
 
     // Register sensor runtime provider for BME280 data
-    ConfigManager.getRuntimeManager().addRuntimeProvider("sensors", [](JsonObject &data)
+    CRM().addRuntimeProvider("sensors", [](JsonObject &data)
     {
         // Apply precision to sensor values to reduce JSON size
         data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
@@ -657,7 +627,7 @@ void setupGUI()
     tempMeta.unit = "°C";
     tempMeta.precision = 1;
     tempMeta.order = 10;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(tempMeta);
+    CRM().addRuntimeMeta(tempMeta);
 
     RuntimeFieldMeta humMeta;
     humMeta.group = "sensors";
@@ -666,7 +636,7 @@ void setupGUI()
     humMeta.unit = "%";
     humMeta.precision = 1;
     humMeta.order = 11;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(humMeta);
+    CRM().addRuntimeMeta(humMeta);
 
     RuntimeFieldMeta dewMeta;
     dewMeta.group = "sensors";
@@ -675,7 +645,7 @@ void setupGUI()
     dewMeta.unit = "°C";
     dewMeta.precision = 1;
     dewMeta.order = 12;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(dewMeta);
+    CRM().addRuntimeMeta(dewMeta);
 
     RuntimeFieldMeta pressureMeta;
     pressureMeta.group = "sensors";
@@ -684,7 +654,7 @@ void setupGUI()
     pressureMeta.unit = "hPa";
     pressureMeta.precision = 1;
     pressureMeta.order = 13;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(pressureMeta);
+    CRM().addRuntimeMeta(pressureMeta);
 
     // Add runtime provider for sensor range field
     RuntimeFieldMeta rangeMeta;
@@ -694,27 +664,27 @@ void setupGUI()
     rangeMeta.unit = "V";
     rangeMeta.precision = 1;
     rangeMeta.order = 14;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(rangeMeta);
+    CRM().addRuntimeMeta(rangeMeta);
 
     // Add status provider for connection status
-    ConfigManager.getRuntimeManager().addRuntimeProvider("status", [](JsonObject &data)
+    CRM().addRuntimeProvider("status", [](JsonObject &data)
     {
         data["connected"] = WiFi.status() == WL_CONNECTED;
     });
 
     // Add interactive controls provider
-    ConfigManager.getRuntimeManager().addRuntimeProvider("controls", [](JsonObject &data)
+    CRM().addRuntimeProvider("controls", [](JsonObject &data)
     {
         // Optionally expose control states
     });
 
-    // Test button
+    // Example button
     ConfigManager.defineRuntimeButton("controls", "testBtn", "Test Button", []()
     {
         cbTestButton();
     }, "", 20);
 
-    // Example toggle for heater simulation
+    // Example toggle slider
     static bool heaterState = false;
     ConfigManager.defineRuntimeCheckbox("controls", "heater", "Heater", []()
     {
@@ -737,7 +707,7 @@ void setupGUI()
         Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
     }, false, "", 22);
 
-    // Integer slider for adjustments
+    // Integer slider for adjustments (Note this is no persistent setting)
     static int adjustValue = 0;
     ConfigManager.defineRuntimeIntSlider("controls", "adjust", "Adjustment", -10, 10, 0, []()
     {
@@ -748,7 +718,7 @@ void setupGUI()
         Serial.printf("[ADJUST] Value: %d\n", value);
     }, "", "steps", 23);
 
-    // Float slider for temperature offset
+    // Float slider for temperature offset (Note this is no persistent setting)
     static float tempOffset = 0.0f;
     ConfigManager.defineRuntimeFloatSlider("controls", "tempOffset", "Temp Offset", -5.0f, 5.0f, 0.0f, 2, []()
     {
@@ -764,37 +734,51 @@ void setupGUI()
     static float sensorRange = 3.3f;
     ConfigManager.defineRuntimeField("sensors", "range", "Sensor Range", "V", 0.0, 5.0);
 
-    // Connection status boolean
+    // GUI Boolean example (shows connection status)
     static bool connectionStatus = false;
     ConfigManager.defineRuntimeBool("status", "connected", "Connection Status", false, 1);
 
-    // Overheat alarm
+    // GUI Boolean alarm example
     ConfigManager.defineRuntimeAlarm("alarms", "overheat", "Overheat Warning", []() {
         return temperature > 40.0; // Trigger at 40°C for demo
     });
 
     // Alarm status display using addRuntimeMeta for boolean values
-    ConfigManager.getRuntimeManager().addRuntimeProvider("alarms", [](JsonObject &data)
+    CRM().addRuntimeProvider("alarms", [](JsonObject &data)
     {
-        data["dewpoint_risk"] = false; // Will be updated by alarm logic
-        data["temp_low"] = false;      // Will be updated by alarm logic
+        // Dewpoint risk alarm: temperature is within risk window of dewpoint
+        bool dewpointRisk = false;
+        if (!isnan(temperature) && !isnan(Dewpoint)) {
+            float riskWindow = tempSettings.dewpointRiskWindow.get(); // Default 1.5°C
+            float tempDelta = temperature - Dewpoint;
+            dewpointRisk = (tempDelta <= riskWindow) && (tempDelta >= 0);
+        }
+
+        // Low temperature alarm: temperature below 10°C
+        bool tempLow = false;
+        if (!isnan(temperature)) {
+            tempLow = temperature < 10.0f;
+        }
+
+        data["dewpoint_risk"] = dewpointRisk;
+        data["temp_low"] = tempLow;
     });
 
     RuntimeFieldMeta dewpointRiskMeta;
     dewpointRiskMeta.group = "alarms";
     dewpointRiskMeta.key = "dewpoint_risk";
-    dewpointRiskMeta.label = "Dewpoint Risk";
+    dewpointRiskMeta.label = "Condensation Risk";
     dewpointRiskMeta.order = 30;
     dewpointRiskMeta.isBool = true;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(dewpointRiskMeta);
+    CRM().addRuntimeMeta(dewpointRiskMeta);
 
     RuntimeFieldMeta tempLowMeta;
     tempLowMeta.group = "alarms";
     tempLowMeta.key = "temp_low";
-    tempLowMeta.label = "Low Temperature";
+    tempLowMeta.label = "Low Temperature Alert";
     tempLowMeta.order = 31;
     tempLowMeta.isBool = true;
-    ConfigManager.getRuntimeManager().addRuntimeMeta(tempLowMeta);
+    CRM().addRuntimeMeta(tempLowMeta);
 }
 
 //----------------------------------------
@@ -998,9 +982,7 @@ static float computeDewPoint(float temperatureC, float relHumidityPct)
 
 void readBme280()
 {
-    //   set sea-level pressure
     bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
-
     bme280.read();
 
     temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
@@ -1008,9 +990,6 @@ void readBme280()
     Pressure = bme280.data.pressure;
 
     Dewpoint = computeDewPoint(temperature, Humidity);
-
-    // Note: Serial output removed from ticker interrupt context to prevent blocking
-    // Temperature readings are available via runtime providers in web interface
 }
 
 
