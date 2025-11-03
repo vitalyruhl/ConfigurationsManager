@@ -30,7 +30,7 @@
 #include <ESPAsyncWebServer.h>
 
 #define VERSION "V2.7.0" // 2025.11.02
-#define APP_NAME "CM-BME280"
+#define APP_NAME "CM-BME280-Full-GUI-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
 // ⚠️ Warning ⚠️
@@ -568,32 +568,24 @@ void setup()
 
 void loop()
 {
+
+    //-------------------------------------------------------------------------------------------------------------
+    // for working with the ConfigManager nessesary in loop
+    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
+    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+    ConfigManager.handleClient(); // Handle web server client requests
+    ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
+    ConfigManager.handleOTA();           // Handle OTA updates
+    ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
+    //-------------------------------------------------------------------------------------------------------------
+
+
     static unsigned long lastLoopLog = 0;
-    if (millis() - lastLoopLog > 5000) { // Every 5 seconds
+    if (millis() - lastLoopLog > 60000) { // Every 60 seconds
         lastLoopLog = millis();
         Serial.printf("[MAIN] Loop running, WiFi status: %d, heap: %d\n", WiFi.status(), ESP.getFreeHeap());
     }
 
-    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
-    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
-
-    // WiFi status monitoring for debugging
-    static unsigned long lastWiFiCheck = 0;
-    static unsigned long lastFlashCheck = 0;
-
-    if (millis() - lastWiFiCheck > 30000) // Check every 30 seconds
-    {
-        lastWiFiCheck = millis();
-        bool wifiStatus = ConfigManager.getWiFiStatus();
-        Serial.printf("[WiFi] Status: %s\n", wifiStatus ? "Connected" : "Disconnected");
-        if (wifiStatus) {
-            int currentRSSI = WiFi.RSSI();
-            String bssid = WiFi.BSSIDstr();
-
-            Serial.printf("[WiFi] Current RSSI: %d dBm (%s)\n", currentRSSI, currentRSSI > -50 ? "excellent" : (currentRSSI > -60 ? "good" : (currentRSSI > -67 ? "ok" : (currentRSSI > -75 ? "weak" : "very weak"))));
-            Serial.printf("[WiFi] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
-        }
-    }
 
     // Evaluate cross-field runtime alarms periodically (cheap doc build ~ small JSON)
     static unsigned long lastAlarmEval = 0;
@@ -604,10 +596,6 @@ void loop()
     }
 
 
-    ConfigManager.handleClient(); // Handle web server client requests
-    ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
-    ConfigManager.handleOTA();           // Handle OTA updates
-    ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
     updateStatusLED();
     delay(10);
 }
@@ -769,15 +757,15 @@ void setupGUI()
     Serial.println("[GUI] Defining runtime bool: status.connected");
     ConfigManager.defineRuntimeBool("status", "connected", "Connection Status", false, 1);
 
-    // GUI Boolean alarm example
-    Serial.println("[GUI] Defining runtime alarm: alarms.overheat");
-    ConfigManager.defineRuntimeAlarm("alarms", "overheat", "Overheat Warning", []() {
+    // GUI Boolean alarm example (registered in runtime alarm system)
+    Serial.println("[GUI] Defining runtime alarm: alerts.overheat");
+    ConfigManager.defineRuntimeAlarm("alerts", "overheat", "Overheat Warning", []() {
         return temperature > 40.0; // Trigger at 40°C for demo
     });
 
-    // Alarm status display using addRuntimeMeta for boolean values
-    Serial.println("[GUI] Adding runtime provider: alarms");
-    CRM().addRuntimeProvider("alarms", [](JsonObject &data)
+    // Alert status display using addRuntimeMeta for boolean values (separate from runtime alarm system)
+    Serial.println("[GUI] Adding runtime provider: alerts");
+    CRM().addRuntimeProvider("alerts", [](JsonObject &data)
     {
         // Dewpoint risk alarm: temperature is within risk window of dewpoint
         bool dewpointRisk = false;
@@ -797,22 +785,28 @@ void setupGUI()
         data["temp_low"] = tempLow;
     });
 
-    Serial.println("[GUI] Adding meta: alarms.dewpoint_risk");
+    Serial.println("[GUI] Adding meta: alerts.dewpoint_risk");
     RuntimeFieldMeta dewpointRiskMeta;
-    dewpointRiskMeta.group = "alarms";
+    dewpointRiskMeta.group = "alerts";
     dewpointRiskMeta.key = "dewpoint_risk";
     dewpointRiskMeta.label = "Condensation Risk";
     dewpointRiskMeta.order = 30;
     dewpointRiskMeta.isBool = true;
+    dewpointRiskMeta.hasAlarm = true;
+    dewpointRiskMeta.alarmWhenTrue = true;
+    dewpointRiskMeta.boolAlarmValue = true; // highlight when true
     CRM().addRuntimeMeta(dewpointRiskMeta);
 
-    Serial.println("[GUI] Adding meta: alarms.temp_low");
+    Serial.println("[GUI] Adding meta: alerts.temp_low");
     RuntimeFieldMeta tempLowMeta;
-    tempLowMeta.group = "alarms";
+    tempLowMeta.group = "alerts";
     tempLowMeta.key = "temp_low";
     tempLowMeta.label = "Low Temperature Alert";
     tempLowMeta.order = 31;
     tempLowMeta.isBool = true;
+    tempLowMeta.hasAlarm = true;
+    tempLowMeta.alarmWhenTrue = true;
+    tempLowMeta.boolAlarmValue = true; // highlight when true
     CRM().addRuntimeMeta(tempLowMeta);
 
     Serial.println("[GUI] setupGUI() end");

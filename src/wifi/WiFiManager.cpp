@@ -78,16 +78,16 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   dns1 = IPAddress();
   dns2 = IPAddress();
 
-  WIFI_LOG("[WiFi] Starting DHCP connection to %s", ssid.c_str());
+  WIFI_LOG_VERBOSE("[WiFi] Starting DHCP connection to %s", ssid.c_str());
 
   // SOLUTION: Perform complete WiFi stack reset to fix connectivity issues
   performWiFiStackReset();
 
   // Debug: Scan for available networks to see if our target is visible
-  WIFI_LOG("[WiFi] DEBUG: Scanning for available networks...");
+  WIFI_LOG_VERBOSE("[WiFi] DEBUG: Scanning for available networks...");
   WiFi.mode(WIFI_STA);
   int networkCount = WiFi.scanNetworks();
-  WIFI_LOG("[WiFi] DEBUG: Found %d networks", networkCount);
+  WIFI_LOG_VERBOSE("[WiFi] DEBUG: Found %d networks", networkCount);
   
   bool targetFound = false;
   for (int i = 0; i < networkCount; i++) {
@@ -96,11 +96,11 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
     String foundBSSID = WiFi.BSSIDstr(i);
     
     if (foundSSID == ssid) {
-      WIFI_LOG("[WiFi] DEBUG: Target network '%s' found! BSSID: %s, RSSI: %d dBm", 
+      WIFI_LOG_VERBOSE("[WiFi] DEBUG: Target network '%s' found! BSSID: %s, RSSI: %d dBm", 
              foundSSID.c_str(), foundBSSID.c_str(), foundRSSI);
       targetFound = true;
     } else {
-      WIFI_LOG("[WiFi] DEBUG: Available network: '%s' (BSSID: %s, RSSI: %d dBm)", 
+      WIFI_LOG_VERBOSE("[WiFi] DEBUG: Available network: '%s' (BSSID: %s, RSSI: %d dBm)",
              foundSSID.c_str(), foundBSSID.c_str(), foundRSSI);
     }
   }
@@ -128,18 +128,16 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
            bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
     WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
   } else {
-    WIFI_LOG("[WiFi] Using any available BSSID for SSID: %s", ssid.c_str());
-    WIFI_LOG("[WiFi] Password length: %d characters", password.length());
-    WIFI_LOG("[WiFi] About to call WiFi.begin()...");
+    WIFI_LOG_VERBOSE("[WiFi] Using any available BSSID for SSID: %s", ssid.c_str());
+    WIFI_LOG_VERBOSE("[WiFi] About to call WiFi.begin()...");
     WiFi.begin(ssid.c_str(), password.c_str());
-    WIFI_LOG("[WiFi] WiFi.begin() called, immediate WiFi.status(): %d (%s)", 
-           WiFi.status(), getWiFiStatusString(WiFi.status()).c_str());
+    WIFI_LOG_VERBOSE("[WiFi] WiFi.begin() called, immediate WiFi.status(): %d (%s)", WiFi.status(), getWiFiStatusString(WiFi.status()).c_str());
   }
 
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
   
-  WIFI_LOG("[WiFi] Setup complete, WiFi should be connecting now...");
+  WIFI_LOG_VERBOSE("[WiFi] Setup complete, WiFi should be connecting now...");
 }
 
 void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& gw, const IPAddress& sn, const String& wifiSSID, const String& wifiPassword, const IPAddress& primaryDNS, const IPAddress& secondaryDNS) {
@@ -216,14 +214,14 @@ void ConfigManagerWiFi::update() {
   WiFiManagerState previousState = currentState;
 
   // Debug: Log current status every few calls
-  static int debugCounter = 0;
-  debugCounter++;
-  if (debugCounter % 50 == 0) { // Every 50 calls (~every 0.5 second for more frequent debugging)
-    WIFI_LOG("[WiFi] DEBUG Update - Current State: %s, WiFi.status(): %d (%s)", 
-           getStatusString().c_str(), 
-           WiFi.status(), 
-           getWiFiStatusString(WiFi.status()).c_str());
-  }
+  // static int debugCounter = 0;
+  // debugCounter++;
+  // if (debugCounter % 50 == 0) { // Every 50 calls (~every 0.5 second for more frequent debugging)
+  //   WIFI_LOG("[WiFi] DEBUG Update - Current State: %s, WiFi.status(): %d (%s)", 
+  //          getStatusString().c_str(), 
+  //          WiFi.status(), 
+  //          getWiFiStatusString(WiFi.status()).c_str());
+  // }
 
   // Determine current WiFi state
   if (WiFi.getMode() == WIFI_AP) {
@@ -251,7 +249,7 @@ void ConfigManagerWiFi::update() {
       // Still trying to connect, log status periodically  
       static unsigned long lastStatusLog = 0;
       if (millis() - lastStatusLog > 5000) { // Log every 5 seconds
-        WIFI_LOG("[WiFi] Still connecting... WiFi.status() = %d (%s)", 
+        WIFI_LOG_VERBOSE("[WiFi] Still connecting... WiFi.status() = %d (%s)", 
                wifiStatus, getWiFiStatusString(wifiStatus).c_str());
         lastStatusLog = millis();
       }
@@ -298,13 +296,13 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
   currentState = newState;
 
   // Log state transitions (with correct old and new state)
-  WIFI_LOG("[WiFi] State: %s -> %s", oldStateStr.c_str(), newStateStr.c_str());
+  WIFI_LOG_VERBOSE("[WiFi] State: %s -> %s", oldStateStr.c_str(), newStateStr.c_str());
 
   // Execute callbacks based on state transitions
   switch (newState) {
     case WIFI_STATE_CONNECTED:
       if (oldState != WIFI_STATE_CONNECTED) {
-        WIFI_LOG("[WiFi] Connected! IP: %s", WiFi.localIP().toString().c_str());
+        WIFI_LOG_VERBOSE("[WiFi] Connected! IP: %s", WiFi.localIP().toString().c_str());
         if (onConnectedCallback) {
           onConnectedCallback();
         }
@@ -353,16 +351,16 @@ void ConfigManagerWiFi::handleReconnection() {
     }
 
     // Attempt non-blocking reconnection
-    WIFI_LOG("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
-    WIFI_LOG("[WiFi] Reconnection details - SSID: %s, Password length: %d, Use DHCP: %s", 
+    WIFI_LOG_VERBOSE("[WiFi] Attempting reconnection... Current WiFi.status() = %d", WiFi.status());
+    WIFI_LOG_VERBOSE("[WiFi] Reconnection details - SSID: %s, Password length: %d, Use DHCP: %s",
            ssid.c_str(), password.length(), useDHCP ? "yes" : "no");
     WiFi.setSleep(false); // Ensure WiFi sleep is disabled on reconnection attempts
     WiFi.setAutoReconnect(true); // Enable automatic reconnection
     if (useDHCP) {
-      WIFI_LOG("[WiFi] Starting DHCP reconnection...");
+      WIFI_LOG_VERBOSE("[WiFi] Starting DHCP reconnection...");
       WiFi.begin(ssid.c_str(), password.c_str());
     } else {
-      WIFI_LOG("[WiFi] Starting static IP reconnection...");
+      WIFI_LOG_VERBOSE("[WiFi] Starting static IP reconnection...");
       applyStaticConfig();
       WiFi.begin(ssid.c_str(), password.c_str());
     }
@@ -666,7 +664,7 @@ String ConfigManagerWiFi::findBestBSSID() {
     return "";
   }
 
-  WIFI_LOG("[WiFi] Scanning for networks to apply MAC filter/priority...");
+  WIFI_LOG_VERBOSE("[WiFi] Scanning for networks to apply MAC filter/priority...");
   
   // Clear any previous scan results first
   WiFi.scanDelete();
@@ -679,7 +677,7 @@ String ConfigManagerWiFi::findBestBSSID() {
     return "";
   }
 
-  WIFI_LOG("[WiFi] Found %d networks during scan", networkCount);
+  WIFI_LOG_VERBOSE("[WiFi] Found %d networks during scan", networkCount);
 
   String bestBSSID = "";
   int bestRSSI = -100; // Very weak signal as starting point
@@ -735,7 +733,7 @@ String ConfigManagerWiFi::findBestBSSID() {
   WIFI_LOG("[WiFi] Scan complete: %d matching networks found", matchingNetworks);
 
   if (!bestBSSID.isEmpty()) {
-    WIFI_LOG("[WiFi] Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);
+    WIFI_LOG_VERBOSE("[WiFi] Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);
   } else if (macFilterEnabled) {
     WIFI_LOG("[WiFi] MAC Filter enabled but target AP %s not found", filterMac.c_str());
   } else if (macPriorityEnabled) {
