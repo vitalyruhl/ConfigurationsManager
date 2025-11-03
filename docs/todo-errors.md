@@ -4,12 +4,9 @@
 
 ### High Priority Bugs (Prio 1)
 
-- ~~i've deaktivated // ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); to deaktivate the password protection for settings, but the webui still asks for a password.~~ **FIXED**: Changed default password to empty string; only enforces password if explicitly set via `setSettingsPassword()`.
-- ~~if i deaktivate the System information (not all need it allways on), the Flash button in webui does not work anymore. (The Button is deactivated, ota itself works fine).~~ **FIXED**: Flash button now works when system provider is disabled by checking config/meta fallback and runtime metadata as alternatives.
-
 ### Medium Priority Bugs (Prio 5)
 
-- ~~on upload the firmware via webui, the ui says restart esp, but it does not restart.~~ **FIXED**: Wired up reboot callback in `setupOTA()` so device restarts after successful HTTP OTA upload.
+- if no gui defined - the esp server shows per default an empty gui page. -> in this case set live button as unvisible and sow the settingspage instead.
 
 ### Low Priority Bugs/Features
 

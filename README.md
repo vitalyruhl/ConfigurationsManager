@@ -43,11 +43,6 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
-### To see how I use it in my projects
-
-- [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)
-- [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)
-
 ## Documentation Index
 
 | Topic                                     | File                    |
@@ -105,11 +100,19 @@ You can use the `setup_dependencies.py` script in the tools folder to install al
 
 > Example files live in the `examples/` directory:
 
-Only v2.6.x examples are kept:
+Only v2.7.x examples are kept:
 
 - `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
-- `main.cpp_example_bme280` – Extended sensor + thresholds + cross‑field alarms.
-- `main.cpp_CM-BME280-Full-GUI-Demo` – Full featured demo with all UI controls + BME280 sensor + runtime + alarms + OTA.
+- [BME280 Example light](examples/bme280/main.cpp_bme280)
+- [Full featured demo with all UI controls + BME280 sensor + runtime + alarms + OTA](examples/BME280-Full-GUI-Demo/main.cpp_BME280-Full-GUI-Demo)
+
+
+
+### To see how I use it in my projects
+
+- [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)
+- [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)
+
 
 ### minimal pattern (using `ESPAsyncWebServer`)
 

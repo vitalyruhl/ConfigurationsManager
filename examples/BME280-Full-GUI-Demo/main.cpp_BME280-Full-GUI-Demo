@@ -407,7 +407,7 @@ void setup()
     ConfigManagerClass::setLogger([](const char *msg)
         {
             Serial.print("[ConfigManager] ");
-            Serial.println(msg); 
+            Serial.println(msg);
         });
 
     //-----------------------------------------------------------------
@@ -882,8 +882,9 @@ void onWiFiConnected()
 
     if (!tickerActive)
     {
-        // Start OTA if enabled
-        if (systemSettings.allowOTA.get())
+        // Ensure ArduinoOTA is initialized once WiFi is connected and OTA is allowed
+        // This runs on every (re)connection to guarantee espota responds
+        if (systemSettings.allowOTA.get() && !ConfigManager.getOTAManager().isInitialized())
         {
             ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
         }
