@@ -1230,6 +1230,15 @@ public:
 #if CM_ENABLE_OTA
     void setupOTA(const String &hostname, const String &password = "")
     {
+        // Wire up reboot callback for web OTA uploads
+        otaManager.setCallbacks(
+            []() { 
+                ESP.restart(); 
+            },
+            [](const char* msg) { 
+                ConfigManagerClass::log_message(msg); 
+            }
+        );
         otaManager.setup(hostname, password);
     }
     void handleOTA() { otaManager.handle(); }

@@ -64,7 +64,12 @@ struct SystemSettings
     Config<String> otaPassword;
 
     Config<String> version;
-    SystemSettings() : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true}),
+    SystemSettings() : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true, 
+                                    // you need the callback to apply the setting change immediately, instead of only on reboot!
+                                  .callback = [](bool newValue) {
+                                      Serial.printf("[MAIN] OTA setting changed to: %s\n", newValue ? "enabled" : "disabled");
+                                      ConfigManager.getOTAManager().enable(newValue);
+                                  }}),
                        otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String(OTA_PASSWORD), .showInWeb = true, .isPassword = true}),
                        version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
                        {}

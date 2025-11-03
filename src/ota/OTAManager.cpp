@@ -150,6 +150,16 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
 }
 
 void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
+    // Handle probe requests first (they have no body, so no context is created)
+    if (request->hasHeader("X-OTA-PROBE")) {
+        if (!otaEnabled) {
+            request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
+        } else {
+            request->send(200, "application/json", "{\"status\":\"ok\",\"probe\":true}");
+        }
+        return;
+    }
+
     OtaUploadContext* ctx = static_cast<OtaUploadContext*>(request->_tempObject);
 
     if (!ctx) {
@@ -169,13 +179,6 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
     if (!ctx->success) {
         OTA_LOG("[OTA] Upload incomplete");
         request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete\"}");
-        cleanup(request);
-        return;
-    }
-
-    if (ctx->probe) {
-        request->send(200, "application/json", "{\"status\":\"ok\",\"probe\":true}");
-        OTA_LOG("[OTA] Probe request acknowledged");
         cleanup(request);
         return;
     }
@@ -215,13 +218,6 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
             ctx->hasError = true;
             ctx->statusCode = 403;
             ctx->errorReason = "ota_disabled";
-            return;
-        }
-
-        if (request->hasHeader("X-OTA-PROBE")) {
-            ctx->probe = true;
-            ctx->authorized = true;
-            ctx->success = true;
             return;
         }
 

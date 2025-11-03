@@ -347,88 +347,77 @@ const hasVisibleAlarm = computed(() => {
   return false;
 });
 
-// Replace previous canFlash and otaEnabled definitions to include otaEndpointAvailable gating
+// Replace previous canFlash with strict gating:
+// - Disable when probe says disabled (403/404)
+// - Enable when probe says enabled (200) OR runtime.system.otaActive === true
+// - Ignore config/meta for enabling to avoid stale states; only use config to pre-disable when explicitly false
 const canFlash = computed(() => {
-  let enabled = false;
+  console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
+  
+  // Probe is authoritative when negative
+  if (otaEndpointAvailable.value === false) {
+    console.log('[canFlash] Disabled by probe');
+    return false;
+  }
+
+  // If runtime system indicates OTA active, trust it
   try {
-    if (runtime.value?.system) {
-      if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-      ) {
-        enabled = !!runtime.value.system.otaActive;
-      } else if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "allowOTA")
-      ) {
-        enabled = !!runtime.value.system.allowOTA;
-      }
+    if (
+      runtime.value?.system &&
+      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
+    ) {
+      const result = !!runtime.value.system.otaActive && !flashing.value;
+      console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
+      return result;
     }
   } catch (e) {}
-  if (!enabled) {
-    const systemConfig = props.config?.System;
-    if (
-      systemConfig &&
-      Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
-      systemConfig.OTAEn &&
-      typeof systemConfig.OTAEn.value !== "undefined"
-    ) {
-      enabled = !!systemConfig.OTAEn.value;
-    }
+
+  // If endpoint probe succeeded, enable
+  if (otaEndpointAvailable.value === true) {
+    console.log('[canFlash] Enabled by probe success');
+    return !flashing.value;
   }
-  if (runtimeMeta.value.length) {
-    const systemMeta = runtimeMeta.value.find(
-      (group) => group.name === "system"
-    );
-    if (systemMeta) {
-      const field = systemMeta.fields.find((f) => f.key === "OTAEn");
-      if (field && field.enabled !== undefined) {
-        enabled = !!field.enabled;
-      }
-    }
+
+  // If config explicitly says disabled, pre-disable
+  const systemConfig = props.config?.System;
+  if (
+    systemConfig &&
+    Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
+    systemConfig.OTAEn &&
+    typeof systemConfig.OTAEn.value !== "undefined" &&
+    !systemConfig.OTAEn.value
+  ) {
+    console.log('[canFlash] Disabled by config');
+    return false;
   }
-  // Gate by endpoint availability if probed
-  if (otaEndpointAvailable.value === false) enabled = false;
-  return enabled && !flashing.value;
+
+  // Default: disabled until we know
+  console.log('[canFlash] Disabled by default (waiting for probe)');
+  return false;
 });
 
 const otaEnabled = computed(() => {
-  let enabled = false;
+  // Same source of truth as canFlash, but without the flashing guard
+  if (otaEndpointAvailable.value === false) return false;
   try {
-    if (runtime.value?.system) {
-      if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-      ) {
-        enabled = !!runtime.value.system.otaActive;
-      } else if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "allowOTA")
-      ) {
-        enabled = !!runtime.value.system.allowOTA;
-      }
+    if (
+      runtime.value?.system &&
+      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
+    ) {
+      return !!runtime.value.system.otaActive;
     }
   } catch (e) {}
-  if (!enabled) {
-    const systemConfig = props.config?.System;
-    if (
-      systemConfig &&
-      Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
-      systemConfig.OTAEn &&
-      typeof systemConfig.OTAEn.value !== "undefined"
-    ) {
-      enabled = !!systemConfig.OTAEn.value;
-    }
+  if (otaEndpointAvailable.value === true) return true;
+  const systemConfig = props.config?.System;
+  if (
+    systemConfig &&
+    Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
+    systemConfig.OTAEn &&
+    typeof systemConfig.OTAEn.value !== "undefined"
+  ) {
+    return !!systemConfig.OTAEn.value;
   }
-  if (runtimeMeta.value.length) {
-    const systemMeta = runtimeMeta.value.find(
-      (group) => group.name === "system"
-    );
-    if (systemMeta) {
-      const field = systemMeta.fields.find((f) => f.key === "OTAEn");
-      if (field && field.enabled !== undefined) {
-        enabled = !!field.enabled;
-      }
-    }
-  }
-  if (otaEndpointAvailable.value === false) enabled = false;
-  return enabled;
+  return false;
 });
 
 watch(canFlash, (val) => {
@@ -1349,14 +1338,18 @@ async function probeOtaEndpoint() {
       },
       body: new Blob(),
     });
-    if (r.status === 404) {
-      otaEndpointAvailable.value = false;
-    } else if (r.status === 403) {
-      otaEndpointAvailable.value = false;
-    } else {
+    console.log('[OTA Probe] Status:', r.status, 'Current state:', otaEndpointAvailable.value);
+    // Only enable if we get a successful response (200-299)
+    if (r.ok && r.status >= 200 && r.status < 300) {
+      console.log('[OTA Probe] Setting to true (200 OK)');
       otaEndpointAvailable.value = true;
+    } else {
+      console.log('[OTA Probe] Setting to false (error status:', r.status + ')');
+      otaEndpointAvailable.value = false;
     }
+    console.log('[OTA Probe] New state:', otaEndpointAvailable.value, 'canFlash:', canFlash.value);
   } catch (e) {
+    console.log('[OTA Probe] Network error:', e.message);
     // Network error -> keep as null (unknown) so we retry
     if (otaEndpointAvailable.value === null) {
       // leave it

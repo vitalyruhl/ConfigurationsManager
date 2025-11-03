@@ -146,20 +146,20 @@ const settingsPasswordInput = ref(null);
 const pendingFlashStart = ref(false); // Track if we need to start flash after auth
 
 // Configurable settings password - loaded from backend
-const SETTINGS_PASSWORD = ref("cf"); // Default fallback
+const SETTINGS_PASSWORD = ref(""); // Empty by default
 
 async function loadSettingsPassword() {
   try {
     const response = await fetch("/config/settings_password");
     if (response.ok) {
       const data = await response.json();
-      if (data.status === "ok" && data.password) {
+      if (data.status === "ok" && data.password !== undefined) {
         SETTINGS_PASSWORD.value = data.password;
-        console.log("[Frontend] Settings password loaded from backend");
+        console.log("[Frontend] Settings password loaded from backend:", data.password === "" ? "(none)" : "(set)");
       }
     }
   } catch (e) {
-    console.warn("[Frontend] Could not load settings password from backend, using default:", e);
+    console.warn("[Frontend] Could not load settings password from backend:", e);
   }
 }
 const opBusy = ref({});
@@ -245,7 +245,9 @@ async function loadSettings() {
   }
 }
 function switchToSettings() {
-  if (settingsAuthenticated.value) {
+  // If no password required, allow immediate access
+  if (SETTINGS_PASSWORD.value === "" || settingsAuthenticated.value) {
+    settingsAuthenticated.value = true; // Mark as authenticated if no password
     activeTab.value = "settings";
     loadSettings();
   } else {
@@ -258,7 +260,8 @@ function switchToSettings() {
 }
 
 function confirmSettingsAuth() {
-  if (settingsPassword.value === SETTINGS_PASSWORD.value) {
+  // If no password is set on backend, allow immediate access
+  if (SETTINGS_PASSWORD.value === "" || settingsPassword.value === SETTINGS_PASSWORD.value) {
     settingsAuthenticated.value = true;
     showSettingsAuth.value = false;
     settingsPassword.value = ""; // Clear password for security
@@ -272,7 +275,7 @@ function confirmSettingsAuth() {
       // Normal settings access
       activeTab.value = "settings";
       loadSettings();
-      notify("Settings access granted", "success");
+      notify(SETTINGS_PASSWORD.value === "" ? "Settings unlocked" : "Settings access granted", "success");
     }
   } else {
     notify("Invalid password", "error");

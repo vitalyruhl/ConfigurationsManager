@@ -17,7 +17,7 @@ ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     , embedWebUI(true)
     , customHTML(nullptr)
     , customHTMLLen(0)
-    , settingsPassword("admin123") // Default settings password
+    , settingsPassword("") // Empty by default - only protect if explicitly set
 {
     if (!server) {
         server = new AsyncWebServer(80);
