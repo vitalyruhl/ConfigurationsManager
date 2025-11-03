@@ -9,7 +9,6 @@
 > - Some APIs have been moved into dedicated manager classes (use `getWiFiManager()`, `getWebManager()`, etc.)
 > - If you are upgrading from < 2.7, check your code for WiFi management calls and update accordingly
 
-
 ## Overview
 
 ConfigurationsManager is a C++17 helper library + example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI (settings + live runtime dashboard + OTA flashing). It focuses on:
@@ -18,7 +17,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - Central registration + bulk load/save functions
 - Optional pretty display names and pretty category names (decouple storage key from UI)
 - Automatic key truncation safety (category + key <= 15 chars total in NVS) with friendly UI name preserved
--- Dynamic conditional visibility (`showIf` lambdas)
+  -- Dynamic conditional visibility (`showIf` lambdas)
 - Callbacks on value change
 - OTA update integration
 - Static or DHCP WiFi startup helpers (multiple overloads)
@@ -49,17 +48,16 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - [https://github.com/vitalyruhl/SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter)
 - [https://github.com/vitalyruhl/BoilerSaver](https://github.com/vitalyruhl/BoilerSaver)
 
-
 ## Documentation Index
 
-| Topic | File |
-|-------|------|
-| Settings & OptionGroup | `docs/SETTINGS.md` |
-| Runtime Providers & Alarms | `docs/RUNTIME.md` |
-| Smart WiFi Roaming | `docs/SMART_ROAMING.md` |
-| Styling (per-field metadata) | `docs/STYLING.md` |
-| Theming (global CSS + disabling metadata) | `docs/THEMING.md` |
-| Feature Flags (compile-time switches) | `docs/FEATURE_FLAGS.md` |
+| Topic                                     | File                    |
+| ----------------------------------------- | ----------------------- |
+| Settings & OptionGroup                    | `docs/SETTINGS.md`      |
+| Runtime Providers & Alarms                | `docs/RUNTIME.md`       |
+| Smart WiFi Roaming                        | `docs/SMART_ROAMING.md` |
+| Styling (per-field metadata)              | `docs/STYLING.md`       |
+| Theming (global CSS + disabling metadata) | `docs/THEMING.md`       |
+| Feature Flags (compile-time switches)     | `docs/FEATURE_FLAGS.md` |
 
 ## Requirements
 
@@ -92,10 +90,12 @@ When setting up your `platformio.ini`, ensure you include these **required** set
 Before using the precompile wrapper script, ensure you have the following installed:
 
 **Python Dependencies:**
+
 1. **Python 3.7+** - Make sure you have Python 3.7 or newer installed
 2. **Required Python packages**: Install with `pip install intelhex`
 
 **Node.js Dependencies:**
+
 - **Node.js 16+** (includes npm) - The precompile script builds a Vue.js web interface
 
 **Automated Setup:**
@@ -109,6 +109,7 @@ Only v2.6.x examples are kept:
 
 - `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
 - `main.cpp_example_bme280` – Extended sensor + thresholds + cross‑field alarms.
+- `main.cpp_CM-BME280-Full-GUI-Demo` – Full featured demo with all UI controls + BME280 sensor + runtime + alarms + OTA.
 
 ### minimal pattern (using `ESPAsyncWebServer`)
 
@@ -127,10 +128,10 @@ ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr; // Initial
 
 // Basic setting using new aggregate initialization (ConfigOptions<T>)
 Config<int> updateInterval(ConfigOptions<int>{
-    .keyName = "interval",
+    .key = "interval",
+    .name = "Update Interval (seconds)",
     .category = "main",
-    .defaultValue = 30,
-    .prettyName = "Update Interval (seconds)"});
+    .defaultValue = 30});
 
 // Example of a structure for WiFi settings
 struct WiFi_Settings // wifiSettings
@@ -143,7 +144,7 @@ struct WiFi_Settings // wifiSettings
     Config<String> subnet;
 
     // Shared OptionGroup constants to avoid repetition
-    static constexpr OptionGroup WIFI_GROUP{.category = "wifi", .prettyCat = "WiFi Settings"};
+    static constexpr OptionGroup WIFI_GROUP{"wifi", "WiFi Settings"};
 
     WiFi_Settings() : // Use OptionGroup helpers with shared constexpr instances
                       wifiSsid(WIFI_GROUP.opt<String>("ssid", "MyWiFi", "WiFi SSID")),
@@ -252,15 +253,15 @@ void loop()
         cfg.setupOTA("esp32", "otapassword123");
     }
 
+
+> Breaking changes in v2.7.x
+>
+> - Introduced modular architecture with separate WiFi, Web, OTA, and Runtime managers
+> - Added integrated Smart WiFi Roaming feature for automatic access point switching
+> - Some APIs have been moved into dedicated manager classes (use `getWiFiManager()`, `getWebManager()`, etc.)
+> - ConfigOptions field rename: `keyName` → `key`, `prettyName` → `name`, `prettyCat` → `categoryPretty`
+> - If you are upgrading from < 2.7, check your code for WiFi management calls and update accordingly
     delay(updateInterval.get());
-    Serial.print(".");
-}
-```
-
-## Smart WiFi Roaming
-
-ConfigurationsManager v2.7.0+ includes **Smart WiFi Roaming** functionality that automatically switches to stronger access points in mesh networks. This feature is particularly useful for:
-
 - **FRITZ!Box Mesh networks** with multiple repeaters
 - **Enterprise WiFi** with multiple access points
 - **Home mesh systems** where devices get "stuck" to distant APs
@@ -268,25 +269,9 @@ ConfigurationsManager v2.7.0+ includes **Smart WiFi Roaming** functionality that
 ### How Smart Roaming Works
 
 1. **Signal Monitoring**: Continuously monitors WiFi signal strength (RSSI)
-2. **Threshold Detection**: Triggers roaming when signal drops below configured threshold
-3. **Network Scanning**: Scans for better access points with the same SSID
-4. **Intelligent Switching**: Only switches if a significantly better AP is found
-5. **Cooldown Prevention**: Prevents frequent switching with configurable cooldown period
-
-### Configuration
-
-Smart Roaming is **enabled by default** and can be configured programmatically:
-
-```cpp
-#include "ConfigManager.h"
-
-void setup() {
-    // ... other setup code ...
 
     // Configure Smart WiFi Roaming (optional - defaults work well)
     ConfigManager.enableSmartRoaming(true);        // Enable/disable (default: true)
-    ConfigManager.setRoamingThreshold(-75);        // Signal threshold in dBm (default: -75)
-    ConfigManager.setRoamingCooldown(120);          // Cooldown between attempts in seconds (default: 120)
     ConfigManager.setRoamingImprovement(10);       // Minimum signal improvement required in dBm (default: 10)
 
     // ... continue with WiFi setup ...
@@ -295,14 +280,12 @@ void setup() {
 
 ### Default Settings
 
-| Parameter | Default Value | Description |
-|-----------|--------------|-------------|
-| **Enabled** | `true` | Smart roaming is active by default |
-| **Threshold** | `-75 dBm` | Trigger roaming when signal is weaker than -75 dBm |
-| **Cooldown** | `120 seconds` | Wait 2 minutes between roaming attempts |
-| **Improvement** | `10 dBm` | Only switch if new AP is 10+ dBm stronger |
-
-### Example Output
+| Parameter       | Default Value | Description                                        |
+| --------------- | ------------- | -------------------------------------------------- |
+| **Enabled**     | `true`        | Smart roaming is active by default                 |
+| **Threshold**   | `-75 dBm`     | Trigger roaming when signal is weaker than -75 dBm |
+| **Cooldown**    | `120 seconds` | Wait 2 minutes between roaming attempts            |
+| **Improvement** | `10 dBm`      | Only switch if new AP is 10+ dBm stronger          |
 
 When Smart Roaming is active, you'll see logs like:
 
@@ -319,9 +302,6 @@ When Smart Roaming is active, you'll see logs like:
 For complete control over the WiFi manager:
 
 ```cpp
-// Access the WiFi manager directly
-auto& wifiMgr = ConfigManager.getWiFiManager();
-
 // Check if roaming is enabled
 if (wifiMgr.isSmartRoamingEnabled()) {
     Serial.println("Smart roaming is active");
@@ -329,6 +309,7 @@ if (wifiMgr.isSmartRoamingEnabled()) {
 
 // Disable roaming temporarily
 wifiMgr.enableSmartRoaming(false);
+
 ```
 
 ### PlatformIO Environment Examples
@@ -340,34 +321,43 @@ board = nodemcu-32s
 framework = arduino
 upload_port = COM[5]
 monitor_speed = 115200
+;build_unflags = -std=gnu++11 ;required, to deactivate old default
 build_unflags = -std=gnu++11
 build_flags =
-    -DUNIT_TEST
-    -Wno-deprecated-declarations
-    -std=gnu++17
-    -DCM_EMBED_WEBUI=1
-    -DCM_ENABLE_WS_PUSH=0
-    -DCM_ENABLE_SYSTEM_PROVIDER=1
-    -DCM_ENABLE_OTA=1
-    -DCM_ENABLE_RUNTIME_BUTTONS=0
-    -DCM_ENABLE_RUNTIME_CHECKBOXES=1
-    -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
-    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
-    -DCM_ENABLE_RUNTIME_ALARMS=1
-    -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=0
-    -DCM_ENABLE_STYLE_RULES=0
-    -DCM_ENABLE_USER_CSS=0
-    -DCM_ENABLE_LOGGING=1
-    -DCM_ENABLE_VERBOSE_LOGGING=1
+	-DUNIT_TEST
+	-Wno-deprecated-declarations
+	-std=gnu++17
+	-DCM_EMBED_WEBUI=1
+	-DCM_ENABLE_WS_PUSH=1
+	-DCM_ENABLE_SYSTEM_PROVIDER=1
+	-DCM_ENABLE_OTA=1
+	-DCM_ENABLE_RUNTIME_BUTTONS=1
+	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
+	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+	-DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1
+	-DCM_ENABLE_RUNTIME_ALARMS=1
+	-DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
+	-DCM_ENABLE_STYLE_RULES=1
+	-DCM_ENABLE_USER_CSS=1
+	-DCM_ENABLE_LOGGING=1
+	-DCM_ENABLE_VERBOSE_LOGGING=0
+	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
+	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
+
 lib_deps =
-  bblanchon/ArduinoJson@^7.4.1
-  esphome/ESPAsyncWebServer-esphome@^3.2.2
-  esphome/AsyncTCP-esphome@^2.0.3
-  vitaly.ruhl/ESP32 Configuration Manager@^2.6.1
+	bblanchon/ArduinoJson@^7.4.1
+	esphome/ESPAsyncWebServer-esphome@^3.2.2
+	esphome/AsyncTCP-esphome@^2.0.3
+	ks-tec/BME280_I2C@1.4.1+002
+	knolleary/PubSubClient@^2.8
+	adafruit/Adafruit GFX Library@^1.12.1
 test_ignore = src/main.cpp
-; Use this in your own projects with a precompile script
-; Copy tools/precompile_wrapper.py to your project and add the line below
 extra_scripts = pre:tools/precompile_wrapper.py
+
+;use this in Your own projects to have a precompile script
+;copy the tools/precompile_wrapper.py to your project
+;extra_scripts = pre:tools/precompile_wrapper.py
+
 
 
 [env:ota]
@@ -375,35 +365,43 @@ platform = espressif32
 board = nodemcu-32s
 framework = arduino
 monitor_speed = 115200
+;build_unflags = -std=gnu++11 ;required, to deactivate old default
 build_unflags = -std=gnu++11
 build_flags =
-    -DUNIT_TEST
-    -Wno-deprecated-declarations
-    -std=gnu++17
-    -DCM_EMBED_WEBUI=1
-    -DCM_ENABLE_WS_PUSH=0
-    -DCM_ENABLE_SYSTEM_PROVIDER=1
-    -DCM_ENABLE_OTA=1
-    -DCM_ENABLE_RUNTIME_BUTTONS=0
-    -DCM_ENABLE_RUNTIME_CHECKBOXES=1
-    -DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
-    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=0
-    -DCM_ENABLE_RUNTIME_ALARMS=1
-    -DCM_ENABLE_RUNTIME_NUMBER_INPUTS=0
-    -DCM_ENABLE_STYLE_RULES=0
-    -DCM_ENABLE_USER_CSS=0
-    -DCM_ENABLE_LOGGING=1
-    -DCM_ENABLE_VERBOSE_LOGGING=1
+	-DUNIT_TEST
+	-Wno-deprecated-declarations
+	-std=gnu++17
+	-DCM_EMBED_WEBUI=1
+	-DCM_ENABLE_WS_PUSH=1
+	-DCM_ENABLE_SYSTEM_PROVIDER=1
+	-DCM_ENABLE_OTA=1
+	-DCM_ENABLE_RUNTIME_BUTTONS=1
+	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
+	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
+	-DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1
+	-DCM_ENABLE_RUNTIME_ALARMS=1
+	-DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
+	-DCM_ENABLE_STYLE_RULES=1
+	-DCM_ENABLE_USER_CSS=1
+	-DCM_ENABLE_LOGGING=1
+	-DCM_ENABLE_VERBOSE_LOGGING=0
+	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
+	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
+	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
+	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 lib_deps =
-  bblanchon/ArduinoJson@^7.4.1
-  esphome/ESPAsyncWebServer-esphome@^3.2.2
-  esphome/AsyncTCP-esphome@^2.0.3
-  vitaly.ruhl/ESP32 Configuration Manager@^2.6.1
-test_ignore =
-  src/main.cpp
-upload_protocol = espota
-upload_port = 192.168.1.123
-upload_flags = --auth=ota1234
+	bblanchon/ArduinoJson@^7.4.1
+	esphome/ESPAsyncWebServer-esphome@^3.2.2
+	esphome/AsyncTCP-esphome@^2.0.3
+	ks-tec/BME280_I2C@1.4.1+002
+	knolleary/PubSubClient@^2.8
+	adafruit/Adafruit GFX Library@^1.12.1
+test_ignore = src/main.cpp
+
+;;test-esp
+upload_port = 192.168.2.126
+upload_flags = --auth=ota
+
 extra_scripts = pre:tools/precompile_wrapper.py
 ```
 
@@ -450,26 +448,22 @@ pio run -e usb -t clean # this will clean the previous project build files
 
 ## Screenshots
 
->Example on Monitor HD
-![Example on Monitor HD](examples/screenshots/test-hd.jpg)
+> Example on Monitor HD
+> ![Example on Monitor HD](examples/screenshots/test-hd.jpg)
 
+> Example on mobile
+> ![Example on mobile](examples/screenshots/test-mobile.jpg)
 
->Example on mobile
-![Example on mobile](examples/screenshots/test-mobile.jpg)
+> Settings on HD
+> ![Settings on HD 1](examples/screenshots/test-settings-HD.jpg)
+> ![Settings on HD 2](examples/screenshots/test-settings2-HD.jpg)
 
-
->Settings on HD
-![Settings on HD 1](examples/screenshots/test-settings-HD.jpg)
-![Settings on HD 2](examples/screenshots/test-settings2-HD.jpg)
-
-
->Settings on mobile
-![Settings on mobile 1](examples/screenshots/test-settings-mobile.jpg)
-![Settings on mobile 2](examples/screenshots/test-settings-mobile2.jpg)
+> Settings on mobile
+> ![Settings on mobile 1](examples/screenshots/test-settings-mobile.jpg)
+> ![Settings on mobile 2](examples/screenshots/test-settings-mobile2.jpg)
 
 > CSS Theming
-![CSS Theming](examples/screenshots/Info-CSS.jpg)
-
+> ![CSS Theming](examples/screenshots/Info-CSS.jpg)
 
 ## Version History
 
@@ -484,7 +478,7 @@ pio run -e usb -t clean # this will clean the previous project build files
 - **2.0.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA. Add PrettyName for web interface
 - **2.0.1**: bugfixing, and add an additional site to transfer firmware over webinterface
 - **2.0.2**: bugfixing, prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
-              I has an mistake in TempCorrectionOffset("TCO","Temperature Correction", "Temp", 0.1) instead of TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1) --> buffer overflow and guru meditation error
+  I has an mistake in TempCorrectionOffset("TCO","Temperature Correction", "Temp", 0.1) instead of TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1) --> buffer overflow and guru meditation error
 - **2.1.0**: add callback for value changes
 - **2.2.0**: add optional pretty category names, convert static HTML to Vue3 project for better maintainability
 - **2.3.0**: introduce `ConfigOptions<T>` aggregate initialization (breaking style update) + dynamic `showIf` visibility + improved front-end auto-refresh
@@ -507,6 +501,7 @@ pio run -e usb -t clean # this will clean the previous project build files
 Version 2.7.0 introduces **Smart WiFi Roaming** - a game-changing feature for mesh networks and multi-AP environments:
 
 ### 🎯 **Key Benefits**
+
 - **Automatic AP switching** when signal strength drops below threshold
 - **Intelligent roaming** with configurable signal improvement requirements
 - **Cooldown protection** to prevent frequent switching
@@ -514,6 +509,7 @@ Version 2.7.0 introduces **Smart WiFi Roaming** - a game-changing feature for me
 - **FRITZ!Box Mesh optimized** - perfect for complex home networks
 
 ### 🔧 **Simple Configuration**
+
 ```cpp
 // Enable with defaults (works great out-of-the-box)
 ConfigManager.enableSmartRoaming(true);
@@ -525,6 +521,7 @@ ConfigManager.setRoamingImprovement(10);   // Require 10+ dBm improvement
 ```
 
 ### 📊 **Real-world Performance**
+
 - Signal improved from **-90 dBm (very weak)** to **-45 dBm (good)**
 - Automatic switching between FRITZ!Box main router and repeaters
 - Zero configuration required - smart defaults work immediately
@@ -542,6 +539,7 @@ See `docs/SMART_ROAMING.md` for complete documentation and optimization guides.
 - add reset to default for single settings
 
 ### maybe in future
+
 - i18n Support
 - make c++ V11 support
 
