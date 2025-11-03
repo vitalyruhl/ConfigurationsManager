@@ -394,30 +394,6 @@ void setup()
 {
     Serial.begin(115200);
 
-    // Check for bootloader errors and reset reason
-    esp_reset_reason_t reset_reason = esp_reset_reason();
-    Serial.printf("[BOOTLOADER] Reset reason: %d ", reset_reason);
-
-    switch(reset_reason) {
-        case ESP_RST_POWERON: Serial.println("(Power-on reset)"); break;
-        case ESP_RST_EXT: Serial.println("(External reset)"); break;
-        case ESP_RST_SW: Serial.println("(Software reset)"); break;
-        case ESP_RST_PANIC: Serial.println("(Panic reset - check for errors!)"); break;
-        case ESP_RST_INT_WDT: Serial.println("(Interrupt watchdog reset)"); break;
-        case ESP_RST_TASK_WDT: Serial.println("(Task watchdog reset)"); break;
-        case ESP_RST_WDT: Serial.println("(Other watchdog reset)"); break;
-        case ESP_RST_DEEPSLEEP: Serial.println("(Deep sleep reset)"); break;
-        case ESP_RST_BROWNOUT: Serial.println("(Brownout reset - power issue!)"); break;
-        case ESP_RST_SDIO: Serial.println("(SDIO reset)"); break;
-        default: Serial.println("(Unknown reset)"); break;
-    }
-
-    // Check available heap and flash
-    Serial.printf("[BOOTLOADER] Free heap: %d bytes\n", ESP.getFreeHeap());
-    Serial.printf("[BOOTLOADER] Flash size: %d bytes\n", ESP.getFlashChipSize());
-    Serial.printf("[BOOTLOADER] Sketch size: %d bytes\n", ESP.getSketchSize());
-    Serial.printf("[BOOTLOADER] Free sketch space: %d bytes\n", ESP.getFreeSketchSpace());
-
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
 
@@ -429,9 +405,10 @@ void setup()
 
     // Or as a lambda function...
     ConfigManagerClass::setLogger([](const char *msg)
-                                  {
+        {
             Serial.print("[ConfigManager] ");
-            Serial.println(msg); });
+            Serial.println(msg); 
+        });
 
     //-----------------------------------------------------------------
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
@@ -486,7 +463,7 @@ void setup()
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure WiFi AP MAC filtering/priority (example - customize as needed)
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others - Re-enabled
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)

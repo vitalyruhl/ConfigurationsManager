@@ -209,10 +209,13 @@ public:
     void enableBuiltinSystemProvider();
     void updateLoopTiming();
     double getLoopAverage() const { return loopAvgMs; }
+    // Refresh cached sketch metrics (size/free) to avoid repeated bootloader_mmap calls
+    void refreshSketchInfoCache();
 #else
     void enableBuiltinSystemProvider() {}
     void updateLoopTiming() {}
     double getLoopAverage() const { return 0.0; }
+    void refreshSketchInfoCache() {}
 #endif
 
     // Alarms

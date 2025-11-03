@@ -284,6 +284,10 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
     if (final) {
         if (Update.end(true)) {
             ctx->success = true;
+            // Refresh runtime sketch metrics cache so UI shows updated values without reboot
+            if (configManager) {
+                configManager->getRuntimeManager().refreshSketchInfoCache();
+            }
         } else {
             ctx->hasError = true;
             ctx->statusCode = 500;

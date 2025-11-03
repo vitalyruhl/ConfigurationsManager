@@ -240,6 +240,11 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
 
 #if CM_ENABLE_SYSTEM_PROVIDER
 
+// File-scope cache to avoid repeated bootloader_mmap calls
+size_t _cm_cachedSketchSize = 0;
+size_t _cm_cachedFreeSketch = 0;
+bool _cm_sketchInfoInitialized = false;
+
 // Simple RSSI-to-text quality mapper
 static const char* rssiQualityText(int rssi) {
     // Typical RSSI range: -30 (excellent) to -90 (very weak)
@@ -281,8 +286,18 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
 
         obj["cpuFreqMHz"] = ESP.getCpuFreqMHz();
         obj["flashSize"] = ESP.getFlashChipSize();
-        obj["sketchSize"] = ESP.getSketchSize();
-        obj["freeSketchSpace"] = ESP.getFreeSketchSpace();
+
+        // Avoid repeated bootloader_mmap calls (not reentrant) by caching sketch metrics
+        extern size_t _cm_cachedSketchSize;
+        extern size_t _cm_cachedFreeSketch;
+        extern bool _cm_sketchInfoInitialized;
+        if (!_cm_sketchInfoInitialized) {
+            _cm_cachedSketchSize = ESP.getSketchSize();
+            _cm_cachedFreeSketch = ESP.getFreeSketchSpace();
+            _cm_sketchInfoInitialized = true;
+        }
+        obj["sketchSize"] = _cm_cachedSketchSize;
+        obj["freeSketchSpace"] = _cm_cachedFreeSketch;
 
         if (loopSamples > 0) {
             obj["loopAvg"] = loopAvgMs;
@@ -369,6 +384,14 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
     builtinSystemProviderRegistered = true;
     builtinSystemProviderEnabled = true;
     RUNTIME_LOG("[RT] Built-in system provider enabled");
+}
+
+void ConfigManagerRuntime::refreshSketchInfoCache() {
+#if CM_ENABLE_SYSTEM_PROVIDER
+    _cm_cachedSketchSize = ESP.getSketchSize();
+    _cm_cachedFreeSketch = ESP.getFreeSketchSpace();
+    _cm_sketchInfoInitialized = true;
+#endif
 }
 
 void ConfigManagerRuntime::updateLoopTiming() {

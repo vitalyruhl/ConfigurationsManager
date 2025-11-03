@@ -59,6 +59,9 @@ private:
   WiFiDisconnectedCallback onDisconnectedCallback;
   WiFiAPModeCallback onAPModeCallback;
 
+  // Connection attempt strategy
+  uint8_t connectAttempts; // 0 = normal, 1 = stack reset, 2+ = restart
+
   // Private methods
   void transitionToState(WiFiManagerState newState);
   void handleReconnection();
@@ -67,6 +70,7 @@ private:
   void applyStaticConfig();
   void checkSmartRoaming();  // Smart roaming check method
   String findBestBSSID();    // Find best BSSID considering MAC filter/priority
+  void attemptConnect();     // Apply phased connection strategy
 
 public:
   // Constructor
