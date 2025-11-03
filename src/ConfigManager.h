@@ -62,6 +62,7 @@ struct ConfigOptions
     int sortOrder = 100;                 // Sort order in GUI (lower = higher priority)
     void (*callback)(T) = nullptr;       // Value change callback
     std::function<bool()> showIf = nullptr; // Conditional visibility
+    const char *categoryPretty = nullptr;   // Optional pretty name for category/card
 };
 
 // Server abstraction
@@ -201,6 +202,7 @@ protected:
     const char *keyName;
     const char *category;
     const char *displayName;
+    const char *categoryPrettyName = nullptr;
     SettingType type;
     int sortOrder = 100;
     bool hasKeyLengthError = false;
@@ -279,8 +281,8 @@ public:
 
     // New constructor for ConfigOptions-based initialization
     BaseSetting(const char* key, const char* name, const char* category, SettingType type,
-                bool showInWeb = true, bool isPassword = false, int sortOrder = 100)
-        : keyName(key), displayName(name), category(category), type(type),
+                bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr)
+        : keyName(key), displayName(name), category(category), categoryPrettyName(categoryPretty), type(type),
           showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
     {
         // If no key provided, generate one from name and category
@@ -304,7 +306,7 @@ public:
     const char *getDisplayName() const { return displayName; }
     const char *getKey() const { return keyName; }
     const char *getCategory() const { return category; }
-    const char *getCategoryPretty() const { return category; } // Same as category for now
+    const char *getCategoryPretty() const { return categoryPrettyName ? categoryPrettyName : category; }
     const char *getName() const { return keyName; }
     int getSortOrder() const { return sortOrder; }
     bool isSecret() const { return isPassword; }
@@ -331,7 +333,7 @@ public:
     // New primary constructor for ConfigOptions
     explicit Config(const ConfigOptions<T> &opts)
         : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type,
-                     opts.showInWeb, opts.isPassword, opts.sortOrder),
+                     opts.showInWeb, opts.isPassword, opts.sortOrder, opts.categoryPretty),
           value(opts.defaultValue), defaultValue(opts.defaultValue)
     {
         showIfFunc = opts.showIf;
@@ -1188,7 +1190,7 @@ public:
                 const char *prettyName = s->getCategoryPretty();
                 if (prettyName)
                 {
-                    // catObj["_categoryName"] = prettyName; // Hidden from web GUI
+                    catObj["categoryPretty"] = prettyName; // Used by frontend Category.vue
                 }
             }
 

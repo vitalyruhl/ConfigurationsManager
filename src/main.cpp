@@ -92,12 +92,13 @@ Config<float> VeryLongCategoryName(ConfigOptions<float>{
     .key = "VlongC",
     .name = "category Correction long",
     .category = "VeryLongCategoryName",
-    .defaultValue = 0.1f});
+    .defaultValue = 0.1f,
+    .categoryPretty = "Category correction long - Example"});
 
 Config<float> VeryLongKeyName(ConfigOptions<float>{
     .key = "VeryLongKeyName",
-    .name = "key Correction long",
-    .category = "Temp",
+    .name = "Key correction long",
+    .category = "VeryLongCategoryName",
     .defaultValue = 0.1f});
 
 //---------------------------------------------------------------------------------------------------
