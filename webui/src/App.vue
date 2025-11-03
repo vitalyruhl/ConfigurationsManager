@@ -98,7 +98,7 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted, provide } from "vue";
+import { ref, onMounted, provide, nextTick } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
@@ -463,21 +463,28 @@ function rebootDevice() {
     })
     .catch((e) => notify("Error: " + e.message, "error"));
 }
-function startFlash() {
-  if (!canFlash.value) {
-    notify("OTA is disabled", "error");
+// Wait until the runtime dashboard is mounted and has reported canFlash (or timeout)
+async function waitForFlashReady(timeoutMs = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (runtimeDashboard.value && canFlash.value) return true;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return runtimeDashboard.value && canFlash.value;
+}
+
+async function startFlash() {
+  // Ensure RuntimeDashboard is mounted (only on 'live' tab)
+  if (activeTab.value !== "live") {
+    activeTab.value = "live";
+    await nextTick();
+  }
+  // Wait briefly for canFlash to resolve after mount
+  const ready = await waitForFlashReady(2000);
+  if (!ready) {
+    notify("Preparing Flash UI… please try again in a moment", "info");
     return;
   }
-  
-  // Check if already authenticated for settings (reuse authentication)
-  if (!settingsAuthenticated.value) {
-    // Show authentication modal for Flash/OTA access
-    showSettingsAuth.value = true;
-    // Store that we want to start flash after authentication
-    pendingFlashStart.value = true;
-    return;
-  }
-  
   runtimeDashboard.value?.startFlash();
 }
 function handleCanFlashChange(v) {

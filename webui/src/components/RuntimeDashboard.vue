@@ -304,6 +304,7 @@ const otaPassword = ref('');
 const showOtaPassword = ref(false);
 const passwordInput = ref(null);
 const pendingOtaFile = ref(null);
+const savedOtaPassword = ref('');
 
 const builtinSystemHiddenFields = new Set(["loopAvg"]);
 
@@ -1220,12 +1221,13 @@ function startFlash() {
     notifySafe("OTA is disabled", "error");
     return;
   }
-  if (!otaFileInput.value) {
-    notifySafe("Browser file input not ready.", "error");
-    return;
-  }
-  otaFileInput.value.value = "";
-  otaFileInput.value.click();
+  // Ask for OTA password first (single prompt at button press)
+  savedOtaPassword.value = '';
+  otaPassword.value = '';
+  showPasswordModal.value = true;
+  nextTick(() => {
+    if (passwordInput.value) passwordInput.value.focus();
+  });
 }
 
 async function onFlashFileSelected(event) {
@@ -1247,37 +1249,42 @@ async function onFlashFileSelected(event) {
     return;
   }
 
-  // Store the file and show password modal
-  pendingOtaFile.value = file;
-  otaPassword.value = '';
-  showPasswordModal.value = true;
-  
-  // Focus the password input after modal is shown
-  await nextTick();
-  if (passwordInput.value) {
-    passwordInput.value.focus();
-  }
+  // We already asked for password at button press; use saved one
+  const pwd = savedOtaPassword.value || '';
+  pendingOtaFile.value = null; // not needed anymore
+  await performOtaUpdate(file, pwd);
+  if (otaFileInput.value) otaFileInput.value.value = "";
 }
 
 // Handle password modal confirmation
 function confirmPasswordInput() {
-  if (!pendingOtaFile.value) {
-    cancelPasswordInput();
-    return;
-  }
-  
   const password = otaPassword.value.trim();
   showPasswordModal.value = false;
-  
-  // Proceed with OTA update
-  performOtaUpdate(pendingOtaFile.value, password);
-  pendingOtaFile.value = null;
+
+  // If a file was already selected (unlikely in new flow), upload now; otherwise open picker
+  if (pendingOtaFile.value) {
+    performOtaUpdate(pendingOtaFile.value, password);
+    pendingOtaFile.value = null;
+    otaPassword.value = '';
+    return;
+  }
+
+  // Store password and then prompt for file selection
+  savedOtaPassword.value = password;
+  if (!otaFileInput.value) {
+    notifySafe("Browser file input not ready.", "error");
+    return;
+  }
+  otaFileInput.value.value = "";
+  otaFileInput.value.click();
+  otaPassword.value = '';
 }
 
 // Handle password modal cancellation
 function cancelPasswordInput() {
   showPasswordModal.value = false;
   otaPassword.value = '';
+  savedOtaPassword.value = '';
   pendingOtaFile.value = null;
   if (otaFileInput.value) {
     otaFileInput.value.value = "";

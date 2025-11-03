@@ -76,7 +76,7 @@ h3 { color: orange; text-decoration: underline;}
 // minimal Init
 Config<bool> testBool(ConfigOptions<bool>{
     .key = "tbool",
-    .category = "main",
+    .category = "Example Settings",
     .defaultValue = true});
 
 //---------------------------------------------------------------------------------------------------
@@ -84,7 +84,7 @@ Config<bool> testBool(ConfigOptions<bool>{
 Config<int> updateInterval(ConfigOptions<int>{
     .key = "interval",
     .name = "Update Interval (seconds)",
-    .category = "main",
+    .category = "Example Settings",
     .defaultValue = 30});
 
 // Now, these will be truncated and added if their truncated keys are unique:
@@ -106,13 +106,13 @@ Config<float> VeryLongKeyName(ConfigOptions<float>{
 Config<bool> tempBoolToggle(ConfigOptions<bool>{
     .key = "toggle",
     .name = "Temp Toggle",
-    .category = "DynTest",
+    .category = "Dynamic visibility example",
     .defaultValue = true});
 
 Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
     .key = "trueS",
     .name = "Visible When True",
-    .category = "DynTest",
+    .category = "Dynamic visibility example",
     .defaultValue = String("Shown if toggle = true"),
     .showIf = []()
     { return tempBoolToggle.get(); }});
@@ -120,7 +120,7 @@ Config<String> tempSettingAktiveOnTrue(ConfigOptions<String>{
 Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
     .key = "falseS",
     .name = "Visible When False",
-    .category = "DynTest",
+    .category = "Dynamic visibility example",
     .defaultValue = String("Shown if toggle = false"),
     .showIf = []()
     { return !tempBoolToggle.get(); }});
