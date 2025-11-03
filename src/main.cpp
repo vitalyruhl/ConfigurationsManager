@@ -48,7 +48,7 @@ struct WiFi_Settings // wifiSettings
                       wifiRebootTimeoutMin(ConfigOptions<int>{
                            .key = "WiFiRb",
                            .name = "Reboot if WiFi lost (min)",
-                           .category = "System",
+                           .category = "WiFi",
                            .defaultValue = 5,
                            .showInWeb = true})
                     {}

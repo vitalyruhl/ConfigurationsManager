@@ -3,6 +3,7 @@
     <h1 id="mainHeader" class="ta-center">{{ version }}</h1>
     <div class="tabs">
       <button
+        v-if="hasLiveContent"
         :class="{ active: activeTab === 'live' }"
         @click="activeTab = 'live'"
       >
@@ -63,7 +64,7 @@
     </div>
 
     <RuntimeDashboard
-      v-if="activeTab === 'live'"
+      v-if="activeTab === 'live' && hasLiveContent"
       ref="runtimeDashboard"
       :config="config"
       @can-flash-change="handleCanFlashChange"
@@ -136,6 +137,9 @@ const runtimeDashboard = ref(null);
 const canFlash = ref(false);
 const toasts = ref([]); // {id,message,type,sticky,ts}
 let toastCounter = 0;
+
+// Detect if there is any live UI content available
+const hasLiveContent = ref(true);
 
 // Settings authentication
 const showSettingsAuth = ref(false);
@@ -233,6 +237,8 @@ async function loadSettings() {
     refreshKey.value++;
     
     console.log("[Frontend] config.json loaded successfully");
+    // Re-evaluate live content availability after config loads
+    checkLiveContent();
   } catch (e) {
     console.error("[Frontend] loadSettings error:", e);
     if (e.name === 'AbortError') {
@@ -241,6 +247,74 @@ async function loadSettings() {
       notify("Server response error: Data transmission interrupted", "error");
     } else {
       notify("Fehler: " + e.message, "error");
+    }
+  }
+}
+
+// Helper: fetch with timeout (Firefox-friendly)
+async function fetchWithTimeout(resource, options = {}, timeoutMs = 5000) {
+  if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(resource, { ...options, signal: controller.signal });
+      return res;
+    } finally {
+      clearTimeout(id);
+    }
+  }
+  return Promise.race([
+    fetch(resource, options),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), timeoutMs))
+  ]);
+}
+
+async function checkLiveContent() {
+  try {
+    // 1) Prefer explicit runtime meta definition
+    const m = await fetchWithTimeout(`/runtime_meta.json?ts=${Date.now()}`, {}, 4000);
+    if (m && m.ok) {
+      const meta = await m.json().catch(() => []);
+      if (Array.isArray(meta) && meta.length > 0) {
+        hasLiveContent.value = true;
+        return;
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  // 2) Fallback: check runtime data has any groups with values
+  try {
+    const r = await fetchWithTimeout(`/runtime.json?ts=${Date.now()}`, {}, 4000);
+    if (r && r.ok) {
+      const rt = await r.json().catch(() => ({}));
+      // Consider there is live content only if there is at least one non-empty group
+      const groups = Object.keys(rt || {});
+      const hasContent = groups.some(g => {
+        const o = rt[g];
+        if (!o || typeof o !== 'object') return false;
+        return Object.keys(o).length > 0;
+      });
+      hasLiveContent.value = !!hasContent;
+    } else {
+      hasLiveContent.value = false;
+    }
+  } catch (_) {
+    hasLiveContent.value = false;
+  }
+
+  // If no live content, switch to settings automatically
+  if (!hasLiveContent.value) {
+    if (activeTab.value === 'live') {
+      // Auto-switch to settings; auto-auth if no password
+      if (SETTINGS_PASSWORD.value === "" || settingsAuthenticated.value) {
+        settingsAuthenticated.value = true;
+        activeTab.value = 'settings';
+        loadSettings();
+      } else {
+        // prompt for settings auth
+        switchToSettings();
+      }
+      notify("No live dashboard defined – opening Settings", "info");
     }
   }
 }
@@ -498,6 +572,7 @@ onMounted(() => {
   loadSettingsPassword();
   loadSettings();
   injectVersion();
+  checkLiveContent();
 });
 </script>
 <style scoped>

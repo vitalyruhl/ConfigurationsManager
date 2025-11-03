@@ -6,8 +6,6 @@
 
 ### Medium Priority Bugs (Prio 5)
 
-- if no gui defined - the esp server shows per default an empty gui page. -> in this case set live button as unvisible and sow the settingspage instead.
-
 ### Low Priority Bugs/Features
 
 - **[FEATURE] Automated component testing** (Prio 10)
