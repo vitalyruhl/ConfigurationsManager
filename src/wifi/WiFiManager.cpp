@@ -1,5 +1,6 @@
 #include "WiFiManager.h"
 #include <ESP.h>
+#include <esp_wifi.h>
 
 // Logging support with verbosity levels
 #if CM_ENABLE_LOGGING
@@ -77,7 +78,37 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   dns1 = IPAddress();
   dns2 = IPAddress();
 
-  WIFI_LOG_VERBOSE("[WiFi] Starting DHCP connection to %s", ssid.c_str());
+  WIFI_LOG("[WiFi] Starting DHCP connection to %s", ssid.c_str());
+
+  // SOLUTION: Perform complete WiFi stack reset to fix connectivity issues
+  performWiFiStackReset();
+
+  // Debug: Scan for available networks to see if our target is visible
+  WIFI_LOG("[WiFi] DEBUG: Scanning for available networks...");
+  WiFi.mode(WIFI_STA);
+  int networkCount = WiFi.scanNetworks();
+  WIFI_LOG("[WiFi] DEBUG: Found %d networks", networkCount);
+  
+  bool targetFound = false;
+  for (int i = 0; i < networkCount; i++) {
+    String foundSSID = WiFi.SSID(i);
+    int32_t foundRSSI = WiFi.RSSI(i);
+    String foundBSSID = WiFi.BSSIDstr(i);
+    
+    if (foundSSID == ssid) {
+      WIFI_LOG("[WiFi] DEBUG: Target network '%s' found! BSSID: %s, RSSI: %d dBm", 
+             foundSSID.c_str(), foundBSSID.c_str(), foundRSSI);
+      targetFound = true;
+    } else {
+      WIFI_LOG("[WiFi] DEBUG: Available network: '%s' (BSSID: %s, RSSI: %d dBm)", 
+             foundSSID.c_str(), foundBSSID.c_str(), foundRSSI);
+    }
+  }
+  
+  if (!targetFound) {
+    WIFI_LOG("[WiFi] ERROR: Target network '%s' not found in scan!", ssid.c_str());
+  }
+  WiFi.scanDelete(); // Clean up
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
@@ -99,11 +130,16 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   } else {
     WIFI_LOG("[WiFi] Using any available BSSID for SSID: %s", ssid.c_str());
     WIFI_LOG("[WiFi] Password length: %d characters", password.length());
+    WIFI_LOG("[WiFi] About to call WiFi.begin()...");
     WiFi.begin(ssid.c_str(), password.c_str());
+    WIFI_LOG("[WiFi] WiFi.begin() called, immediate WiFi.status(): %d (%s)", 
+           WiFi.status(), getWiFiStatusString(WiFi.status()).c_str());
   }
 
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
+  
+  WIFI_LOG("[WiFi] Setup complete, WiFi should be connecting now...");
 }
 
 void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& gw, const IPAddress& sn, const String& wifiSSID, const String& wifiPassword, const IPAddress& primaryDNS, const IPAddress& secondaryDNS) {
@@ -121,6 +157,9 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
            staticIP.toString().c_str(),
            (dns1 == IPAddress()) ? "0.0.0.0" : dns1.toString().c_str(),
            (dns2 == IPAddress()) ? "0.0.0.0" : dns2.toString().c_str());
+
+  // SOLUTION: Perform complete WiFi stack reset to fix connectivity issues (same as DHCP method)
+  performWiFiStackReset();
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false); // Disable WiFi sleep to prevent disconnections
@@ -175,6 +214,16 @@ void ConfigManagerWiFi::update() {
   if (!initialized) return;
 
   WiFiManagerState previousState = currentState;
+
+  // Debug: Log current status every few calls
+  static int debugCounter = 0;
+  debugCounter++;
+  if (debugCounter % 50 == 0) { // Every 50 calls (~every 0.5 second for more frequent debugging)
+    WIFI_LOG("[WiFi] DEBUG Update - Current State: %s, WiFi.status(): %d (%s)", 
+           getStatusString().c_str(), 
+           WiFi.status(), 
+           getWiFiStatusString(WiFi.status()).c_str());
+  }
 
   // Determine current WiFi state
   if (WiFi.getMode() == WIFI_AP) {
@@ -707,4 +756,36 @@ String ConfigManagerWiFi::getWiFiStatusString(int status) const {
     case WL_DISCONNECTED: return "WL_DISCONNECTED";
     default: return "UNKNOWN_STATUS";
   }
+}
+
+void ConfigManagerWiFi::performWiFiStackReset() {
+  WIFI_LOG("[WiFi] Performing complete WiFi stack reset for connectivity fix...");
+  
+  // 1. Complete WiFi shutdown
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  delay(500);  // Longer delay for complete shutdown
+  
+  // 2. Reset WiFi stack (ESP32 specific)
+  esp_wifi_stop();
+  esp_wifi_deinit();
+  delay(200);
+  
+  // 3. Reinitialize WiFi stack
+  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  esp_wifi_init(&cfg);
+  delay(200);
+  
+  // 4. Set WiFi mode and configuration
+  WiFi.mode(WIFI_STA);
+  delay(100);
+  
+  // Set additional WiFi parameters for stability
+  WiFi.setSleep(false);       // Disable WiFi sleep
+  WiFi.setAutoReconnect(true);  // Enable auto-reconnect
+  WiFi.persistent(true);      // Store WiFi configuration in flash
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Set specific power level
+  
+  WIFI_LOG("[WiFi] WiFi stack reset complete - WiFi.mode() = %d, WiFi.status() = %d", 
+         WiFi.getMode(), WiFi.status());
 }

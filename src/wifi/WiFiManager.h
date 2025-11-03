@@ -125,6 +125,9 @@ public:
   String getFilterMac() const;
   String getPriorityMac() const;
 
+  // WiFi Stack Management
+  void performWiFiStackReset();                          // Complete WiFi stack reset for connectivity issues
+
   // Compatibility methods for ConfigManager
   bool getStatus() const { return isConnected(); }
 };

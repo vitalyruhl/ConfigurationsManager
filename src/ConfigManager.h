@@ -676,6 +676,9 @@ public:
             });
     }
 
+    // Runtime manager accessor (for GUI/runtime integrations)
+    ConfigManagerRuntime& getRuntime() { return runtimeManager; }
+
     // Settings management
     BaseSetting *findSetting(const String &category, const String &key)
     {

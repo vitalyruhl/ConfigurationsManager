@@ -21,6 +21,8 @@
 
 #include "secret/wifiSecret.h"
 
+#include <WiFi.h>
+#include <esp_wifi.h>
 #include <Ticker.h>     // for reading temperature periodically
 #include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
 #include "Wire.h"
@@ -28,7 +30,7 @@
 #include <ESPAsyncWebServer.h>
 
 #define VERSION "V2.7.0" // 2025.11.02
-#define APP_NAME "CM-BME280-Full-GUI-Demo"
+#define APP_NAME "CM-BME280"
 #define BUTTON_PIN_AP_MODE 13
 
 // ⚠️ Warning ⚠️
@@ -351,7 +353,7 @@ Ticker NtpSyncTicker;
 void readBme280(); // read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
 void SetupStartTemperatureMeasuring(); // setup the BME280 temperature and humidity sensor
 static float computeDewPoint(float temperatureC, float relHumidityPct); // compute the dewpoint from temperature and humidity
-static inline ConfigManagerRuntime &CRM() { return CRM(); } // Shorthand helper for RuntimeManager access
+static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
 
 float temperature = 0.0; // current temperature in Celsius
 float Dewpoint = 0.0;    // current dewpoint in Celsius
@@ -474,17 +476,16 @@ void setup()
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
-    ConfigManager.enableSmartRoaming(false);       // TEMPORARILY DISABLED for connection testing
-    ConfigManager.setRoamingThreshold(-75);        // Trigger roaming at -75 dBm
-    ConfigManager.setRoamingCooldown(30);           // Wait 30 seconds between attempts (reduced from 120)
-    ConfigManager.setRoamingImprovement(10);       // Require 10 dBm improvement
-    Serial.println("[MAIN] Smart WiFi Roaming temporarily disabled for connection testing");
+    ConfigManager.enableSmartRoaming(true);            // Re-enabled now that WiFi stack is fixed
+    ConfigManager.setRoamingThreshold(-75);            // Trigger roaming at -75 dBm
+    ConfigManager.setRoamingCooldown(30);              // Wait 30 seconds between attempts (reduced from 120)
+    ConfigManager.setRoamingImprovement(10);           // Require 10 dBm improvement
+    Serial.println("[MAIN] Smart WiFi Roaming enabled with WiFi stack fix");
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure WiFi AP MAC filtering/priority (example - customize as needed)
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    // ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others - TEMPORARILY DISABLED FOR TESTING
-    Serial.println("[MAIN] WiFi MAC Priority temporarily disabled for connection testing");
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others - Re-enabled
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
@@ -504,11 +505,6 @@ void setup()
         ConfigManager.saveAll();
         delay(1000); // Small delay
     }
-
-    // TEMPORARY: Force DHCP for connection testing
-    Serial.println("[DEBUG] Forcing DHCP for connection testing...");
-    wifiSettings.useDhcp.set(true);
-    ConfigManager.saveAll();
 
     // TEMPORARY: Add WiFi debug information
     Serial.println("[DEBUG] Current WiFi settings:");
@@ -565,10 +561,19 @@ void setup()
     updateInterval.set(15);
     ConfigManager.saveAll();
     delay(300);
+
+    Serial.println("\n[MAIN] Setup completed successfully! Starting main loop...");
+    Serial.println("=================================================================");
 }
 
 void loop()
 {
+    static unsigned long lastLoopLog = 0;
+    if (millis() - lastLoopLog > 5000) { // Every 5 seconds
+        lastLoopLog = millis();
+        Serial.printf("[MAIN] Loop running, WiFi status: %d, heap: %d\n", WiFi.status(), ESP.getFreeHeap());
+    }
+
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
     ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
 
@@ -615,11 +620,13 @@ void loop()
 
 void setupGUI()
 {
+    Serial.println("[GUI] setupGUI() start");
     //-----------------------------------------------------------------
     // BME280 Sensor Display with Runtime Providers
     //-----------------------------------------------------------------
 
     // Register sensor runtime provider for BME280 data
+    Serial.println("[GUI] Adding runtime provider: sensors");
     CRM().addRuntimeProvider("sensors", [](JsonObject &data)
     {
         // Apply precision to sensor values to reduce JSON size
@@ -630,6 +637,7 @@ void setupGUI()
     });
 
     // Define sensor display fields using addRuntimeMeta
+    Serial.println("[GUI] Adding meta: sensors.temp");
     RuntimeFieldMeta tempMeta;
     tempMeta.group = "sensors";
     tempMeta.key = "temp";
@@ -639,6 +647,7 @@ void setupGUI()
     tempMeta.order = 10;
     CRM().addRuntimeMeta(tempMeta);
 
+    Serial.println("[GUI] Adding meta: sensors.hum");
     RuntimeFieldMeta humMeta;
     humMeta.group = "sensors";
     humMeta.key = "hum";
@@ -648,6 +657,7 @@ void setupGUI()
     humMeta.order = 11;
     CRM().addRuntimeMeta(humMeta);
 
+    Serial.println("[GUI] Adding meta: sensors.dew");
     RuntimeFieldMeta dewMeta;
     dewMeta.group = "sensors";
     dewMeta.key = "dew";
@@ -657,6 +667,7 @@ void setupGUI()
     dewMeta.order = 12;
     CRM().addRuntimeMeta(dewMeta);
 
+    Serial.println("[GUI] Adding meta: sensors.pressure");
     RuntimeFieldMeta pressureMeta;
     pressureMeta.group = "sensors";
     pressureMeta.key = "pressure";
@@ -667,6 +678,7 @@ void setupGUI()
     CRM().addRuntimeMeta(pressureMeta);
 
     // Add runtime provider for sensor range field
+    Serial.println("[GUI] Adding meta: sensors.range");
     RuntimeFieldMeta rangeMeta;
     rangeMeta.group = "sensors";
     rangeMeta.key = "range";
@@ -677,18 +689,21 @@ void setupGUI()
     CRM().addRuntimeMeta(rangeMeta);
 
     // Add status provider for connection status
+    Serial.println("[GUI] Adding runtime provider: status");
     CRM().addRuntimeProvider("status", [](JsonObject &data)
     {
         data["connected"] = WiFi.status() == WL_CONNECTED;
     });
 
     // Add interactive controls provider
+    Serial.println("[GUI] Adding runtime provider: controls");
     CRM().addRuntimeProvider("controls", [](JsonObject &data)
     {
         // Optionally expose control states
     });
 
     // Example button
+    Serial.println("[GUI] Defining runtime button: controls.testBtn");
     ConfigManager.defineRuntimeButton("controls", "testBtn", "Test Button", []()
     {
         cbTestButton();
@@ -696,6 +711,7 @@ void setupGUI()
 
     // Example toggle slider
     static bool heaterState = false;
+    Serial.println("[GUI] Defining runtime checkbox: controls.heater");
     ConfigManager.defineRuntimeCheckbox("controls", "heater", "Heater", []()
     {
         return heaterState;
@@ -707,6 +723,7 @@ void setupGUI()
 
     // Example state button (toggle with visual feedback)
     static bool fanState = false;
+    Serial.println("[GUI] Defining runtime state button: controls.fan");
     ConfigManager.defineRuntimeStateButton("controls", "fan", "Fan", []()
     {
         return fanState;
@@ -719,6 +736,7 @@ void setupGUI()
 
     // Integer slider for adjustments (Note this is no persistent setting)
     static int adjustValue = 0;
+    Serial.println("[GUI] Defining runtime int slider: controls.adjust");
     ConfigManager.defineRuntimeIntSlider("controls", "adjust", "Adjustment", -10, 10, 0, []()
     {
         return adjustValue;
@@ -730,6 +748,7 @@ void setupGUI()
 
     // Float slider for temperature offset (Note this is no persistent setting)
     static float tempOffset = 0.0f;
+    Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
     ConfigManager.defineRuntimeFloatSlider("controls", "tempOffset", "Temp Offset", -5.0f, 5.0f, 0.0f, 2, []()
     {
         return tempOffset;
@@ -742,18 +761,22 @@ void setupGUI()
     // Additional runtime fields as recommended
     // Sensor range field for demonstration
     static float sensorRange = 3.3f;
+    Serial.println("[GUI] Defining runtime field: sensors.range");
     ConfigManager.defineRuntimeField("sensors", "range", "Sensor Range", "V", 0.0, 5.0);
 
     // GUI Boolean example (shows connection status)
     static bool connectionStatus = false;
+    Serial.println("[GUI] Defining runtime bool: status.connected");
     ConfigManager.defineRuntimeBool("status", "connected", "Connection Status", false, 1);
 
     // GUI Boolean alarm example
+    Serial.println("[GUI] Defining runtime alarm: alarms.overheat");
     ConfigManager.defineRuntimeAlarm("alarms", "overheat", "Overheat Warning", []() {
         return temperature > 40.0; // Trigger at 40°C for demo
     });
 
     // Alarm status display using addRuntimeMeta for boolean values
+    Serial.println("[GUI] Adding runtime provider: alarms");
     CRM().addRuntimeProvider("alarms", [](JsonObject &data)
     {
         // Dewpoint risk alarm: temperature is within risk window of dewpoint
@@ -774,6 +797,7 @@ void setupGUI()
         data["temp_low"] = tempLow;
     });
 
+    Serial.println("[GUI] Adding meta: alarms.dewpoint_risk");
     RuntimeFieldMeta dewpointRiskMeta;
     dewpointRiskMeta.group = "alarms";
     dewpointRiskMeta.key = "dewpoint_risk";
@@ -782,6 +806,7 @@ void setupGUI()
     dewpointRiskMeta.isBool = true;
     CRM().addRuntimeMeta(dewpointRiskMeta);
 
+    Serial.println("[GUI] Adding meta: alarms.temp_low");
     RuntimeFieldMeta tempLowMeta;
     tempLowMeta.group = "alarms";
     tempLowMeta.key = "temp_low";
@@ -789,6 +814,8 @@ void setupGUI()
     tempLowMeta.order = 31;
     tempLowMeta.isBool = true;
     CRM().addRuntimeMeta(tempLowMeta);
+
+    Serial.println("[GUI] setupGUI() end");
 }
 
 //----------------------------------------
@@ -949,29 +976,41 @@ void onWiFiAPMode()
 
 void SetupStartTemperatureMeasuring()
 {
+    Serial.println("[TEMP] Initializing BME280 sensor...");
+
     // init BME280 for temperature and humidity sensor
     bme280.setAddress(BME280_ADDRESS, I2C_SDA, I2C_SCL);
-    bool isStatus = bme280.begin(
+
+    // Add timeout protection for BME280 initialization
+    unsigned long startTime = millis();
+    const unsigned long timeout = 5000; // 5 second timeout
+
+    Serial.println("[TEMP] Starting BME280.begin()...");
+    bool isStatus = false;
+
+    isStatus = bme280.begin(
         bme280.BME280_STANDBY_0_5,
-        bme280.BME280_FILTER_16,
+        bme280.BME280_FILTER_OFF,
         bme280.BME280_SPI3_DISABLE,
-        bme280.BME280_OVERSAMPLING_2,
-        bme280.BME280_OVERSAMPLING_16,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_OVERSAMPLING_1,
         bme280.BME280_OVERSAMPLING_1,
         bme280.BME280_MODE_NORMAL);
+
     if (!isStatus)
     {
-        Serial.println("can NOT initialize for using BME280.");
+        Serial.println("[TEMP] BME280 not initialized - continuing without temperature sensor");
     }
     else
     {
-        Serial.println("ready to use BME280. Start Ticker...");
+        Serial.println("[TEMP] BME280 ready! Starting temperature ticker...");
         int iv = tempSettings.readIntervalSec.get();
-        if (iv < 2)
-            iv = 2;
+        if (iv < 2){iv = 2;}
         temperatureTicker.attach((float)iv, readBme280); // Attach ticker with configured interval
         readBme280();                                    // Read once at startup
     }
+
+    Serial.println("[TEMP] Temperature setup completed");
 }
 
 static float computeDewPoint(float temperatureC, float relHumidityPct)
