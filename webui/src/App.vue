@@ -619,4 +619,98 @@ onMounted(() => {
   font-size: 0.9rem;
   padding: 0 4px;
 }
+
+/* Settings authentication modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000; /* above toasts */
+}
+
+.modal-content {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  color: #f0f6fc;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+
+.modal-content h3 {
+  margin: 0 0 16px 0;
+  color: #f0f6fc;
+  font-size: 18px;
+}
+
+.password-input-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.password-input-container input {
+  flex: 1;
+  padding: 8px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #f0f6fc;
+  font-size: 14px;
+}
+
+.password-input-container input:focus {
+  outline: none;
+  border-color: #1f6feb;
+  box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
+}
+
+.password-toggle {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #8b949e;
+  font-size: 14px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.password-toggle:hover {
+  background: #30363d;
+  color: #f0f6fc;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.modal-buttons .cancel-btn {
+  background: #6e7681;
+  color: #f0f6fc;
+}
+
+.modal-buttons .cancel-btn:hover {
+  background: #8b949e;
+}
+
+.modal-buttons .confirm-btn {
+  background: #238636;
+  color: #f0f6fc;
+}
+
+.modal-buttons .confirm-btn:hover {
+  background: #2ea043;
+}
 </style>
