@@ -4,9 +4,14 @@
 
 ### High Priority Bugs (Prio 1)
 
-### Medium Priority Features (Prio 5)
+- i've deaktivated // ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); to deaktivate the password protection for settings, but the webui still asks for a password.
+- if i deaktivate the System information (not all need it allways on), the Flash button in webui does not work anymore. (The Button is deactivated, ota itself works fine).
 
-### Low Priority Features
+### Medium Priority Bugs (Prio 5)
+
+- on upload the firmware via webui, the ui says restart esp, but it does not restart.
+
+### Low Priority Bugs/Features
 
 - **[FEATURE] Automated component testing** (Prio 10)
 
@@ -16,4 +21,4 @@
 
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
 
-- if there are more cards, the card brocken down is under the longest card from above. It looks not fine -> remake the grid to be more flexible (Prio 10)
+- **[FEATURE] if there are more cards, the card brocken down is under the longest card from above. It looks not fine -> remake the grid to be more flexible (Prio 10)**
