@@ -10,17 +10,16 @@ This document describes how to declare, register, persist and display configurat
 - Persistence: loadAll() on startup, saveAll() (or individual save) after changes.
 - Visibility: showIf predicate determines whether a setting appears in the web UI JSON.
 
-## Declaring a Setting
+## Declaring a Setting (v2.7+)
 
 ```cpp
 Config<int> sample(ConfigOptions<int>{
-  .keyName = "interval",
+  .key = "interval",
+  .name = "Update Interval (s)",
   .category = "main",
   .defaultValue = 30,
-  .prettyName = "Update Interval (s)",
-  .prettyCat = "Main Settings",
   .showInWeb = true,
-  .cb = [](){ Serial.println("Interval changed"); }
+  .callback = [](){ Serial.println("Interval changed"); }
 });
 ```
 
@@ -33,7 +32,7 @@ cfg.loadAll();
 
 ### Key Length & Truncation Safety
 
-Internal storage key format: `<category>_<keyName>` truncated to 15 chars to satisfy ESP32 NVS limits. Provide human‑friendly `.prettyName` / `.prettyCat` for UI text. Avoid relying on the raw key for user output.
+Internal storage key format: `<category>_<key>` truncated to 15 chars to satisfy ESP32 NVS limits. Provide human‑friendly `.name` / `.categoryPretty` for UI text. Avoid relying on the raw key for user output.
 
 ### Password / Secret Fields
 
@@ -44,17 +43,16 @@ Set `.isPassword = true` to mask in the UI. The backend stores the real value; t
 
 When many settings share the same category and pretty category, you can use `OptionGroup` to avoid repetition.
 
-Before:
+Before (direct ConfigOptions):
 
 ```cpp
 Config<String> wifiSsid(ConfigOptions<String>{
-  .keyName="ssid", .category="wifi", .defaultValue="MyWiFi",
-  .prettyName="WiFi SSID", .prettyCat="Network Settings"
+  .key = "ssid", .name = "WiFi SSID", .category = "wifi", .defaultValue = "MyWiFi",
+  .categoryPretty = "Network Settings"
 });
 Config<String> wifiPassword(ConfigOptions<String>{
-  .keyName="password", .category="wifi", .defaultValue="secretpass",
-  .prettyName="WiFi Password", .prettyCat="Network Settings",
-  .showInWeb = true, .isPassword = true
+  .key = "password", .name = "WiFi Password", .category = "wifi", .defaultValue = "secretpass",
+  .categoryPretty = "Network Settings", .showInWeb = true, .isPassword = true
 });
 ```
 
@@ -70,7 +68,7 @@ Config<String> wifiPassword( WIFI_GROUP.opt<String>(
   "password", String("secretpass"), "WiFi Password", true, true) );
 ```
 
-The template `opt<T>(key, defaultValue, prettyName, showInWeb, isPassword, cb, showIf)` returns a fully populated `ConfigOptions<T>`.
+The template `opt<T>(key, defaultValue, name, showInWeb, isPassword, callback, showIf)` returns a fully populated `ConfigOptions<T>`.
 
 
 Use an OptionGroup when many settings share the same category and pretty category:
@@ -88,10 +86,10 @@ template<class T>
 ConfigOptions<T> OptionGroup::opt(
    const char* key,
    T defaultValue,
-   const char* prettyName,
+  const char* name,
    bool showInWeb = true,
    bool isPassword = false,
-   ConfigCallback cb = nullptr,
+  ConfigCallback callback = nullptr,
    std::function<bool()> showIf = nullptr) const;
 ```
 
@@ -103,16 +101,16 @@ The `showIf` member of `ConfigOptions<T>` is a `std::function<bool()>`. It is ev
 
 ```cpp
 Config<bool> enableAdvanced(ConfigOptions<bool>{
-  .keyName = "adv",
+  .key = "adv",
+  .name = "Enable Advanced",
   .category = "sys",
-  .defaultValue = false,
-  .prettyName = "Enable Advanced"
+  .defaultValue = false
 });
 Config<int> hiddenUnlessEnabled(ConfigOptions<int>{
-  .keyName = "hnum",
+  .key = "hnum",
+  .name = "Hidden Number",
   .category = "sys",
   .defaultValue = 42,
-  .prettyName = "Hidden Number",
   .showIf = [](){ return enableAdvanced.get(); }
 });
 ```
@@ -168,7 +166,7 @@ Set `.isPassword = true` to mask the value in the UI. The real value is stored a
 
 ## Truncation & Key Safety
 
-Stored key = `<category>_<keyName>` truncated to 15 chars to satisfy ESP32 NVS length limits. Provide human readable names via prettyName/prettyCat.
+Stored key = `<category>_<key>` truncated to 15 chars to satisfy ESP32 NVS length limits. Provide human readable names via name/categoryPretty.
 
 ## Changing Values Programmatically
 
@@ -180,7 +178,7 @@ cfg.saveAll();     // or batch
 
 ## Callbacks
 
-Provide `.cb` or call `myConfig.setCallback([](){ ... });` after construction. Callback fires only when value changes.
+Provide `.callback` or call `myConfig.setCallback([](T v){ ... });` after construction. Callback fires only when value changes.
 
 ## Dynamic Visibility Pattern
 

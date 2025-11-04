@@ -45,9 +45,19 @@ function shouldShow(settingData){
   return true;
 }
 const prettyName = computed(() => {
+  // Prefer category-level pretty name if provided
+  if (
+    Object.prototype.hasOwnProperty.call(props.settings, 'categoryPretty') &&
+    typeof props.settings.categoryPretty === 'string' &&
+    props.settings.categoryPretty.trim().length
+  ) {
+    return props.settings.categoryPretty;
+  }
+  // Fallback: look for a per-setting provided pretty name
   for (const key in props.settings) {
     if (key === 'categoryPretty') continue;
-    if (props.settings[key].categoryPretty) return props.settings[key].categoryPretty;
+    const sd = props.settings[key];
+    if (sd && typeof sd === 'object' && sd.categoryPretty) return sd.categoryPretty;
   }
   return props.category;
 });

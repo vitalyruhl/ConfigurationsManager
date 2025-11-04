@@ -16,8 +16,15 @@ export default defineConfig({
   build: {
     cssCodeSplit: false,
     sourcemap: false,
-    target: 'es2019',
-    minify: 'esbuild'
+    target: ['es2018', 'firefox78', 'chrome87', 'safari13'], // Better browser compatibility
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined, // Avoid chunk splitting issues
+      }
+    },
+    // Use modern module preload polyfill setting
+    modulePreload: { polyfill: true },
   },
   server: {
     proxy: {

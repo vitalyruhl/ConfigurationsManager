@@ -8,6 +8,35 @@
       @change="onFlashFileSelected"
     />
 
+    <!-- OTA Password Modal -->
+    <div v-if="showPasswordModal" class="modal-overlay" @click="cancelPasswordInput">
+      <div class="modal-content" @click.stop>
+        <h3>OTA Password Required</h3>
+        <div class="password-input-container">
+          <input
+            ref="passwordInput"
+            v-model="otaPassword"
+            :type="showOtaPassword ? 'text' : 'password'"
+            placeholder="Enter OTA password"
+            @keyup.enter="confirmPasswordInput"
+            @keyup.escape="cancelPasswordInput"
+          />
+          <button 
+            type="button" 
+            class="password-toggle"
+            @click="showOtaPassword = !showOtaPassword"
+            :title="showOtaPassword ? 'Hide password' : 'Show password'"
+          >
+            {{ showOtaPassword ? '🙈' : '👁️' }}
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button @click="cancelPasswordInput" class="cancel-btn">Cancel</button>
+          <button @click="confirmPasswordInput" class="confirm-btn">Continue</button>
+        </div>
+      </div>
+    </div>
+
     <div class="live-cards">
       <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
         <h3>{{ group.title }}</h3>
@@ -239,7 +268,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import RuntimeActionButton from "./runtime/RuntimeActionButton.vue";
 import RuntimeCheckbox from "./runtime/RuntimeCheckbox.vue";
@@ -269,11 +298,20 @@ const otaFileInput = ref(null);
 const wsConnected = ref(false);
 const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
 
+// OTA Password Modal
+const showPasswordModal = ref(false);
+const otaPassword = ref('');
+const showOtaPassword = ref(false);
+const passwordInput = ref(null);
+const pendingOtaFile = ref(null);
+const savedOtaPassword = ref('');
+
 const builtinSystemHiddenFields = new Set(["loopAvg"]);
 
 let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
+let wsConnecting = false;
 
 let checkboxDebounceTimer = null;
 
@@ -309,88 +347,77 @@ const hasVisibleAlarm = computed(() => {
   return false;
 });
 
-// Replace previous canFlash and otaEnabled definitions to include otaEndpointAvailable gating
+// Replace previous canFlash with strict gating:
+// - Disable when probe says disabled (403/404)
+// - Enable when probe says enabled (200) OR runtime.system.otaActive === true
+// - Ignore config/meta for enabling to avoid stale states; only use config to pre-disable when explicitly false
 const canFlash = computed(() => {
-  let enabled = false;
+  //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
+  
+  // Probe is authoritative when negative
+  if (otaEndpointAvailable.value === false) {
+    //console.log('[canFlash] Disabled by probe');
+    return false;
+  }
+
+  // If runtime system indicates OTA active, trust it
   try {
-    if (runtime.value?.system) {
-      if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-      ) {
-        enabled = !!runtime.value.system.otaActive;
-      } else if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "allowOTA")
-      ) {
-        enabled = !!runtime.value.system.allowOTA;
-      }
+    if (
+      runtime.value?.system &&
+      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
+    ) {
+      const result = !!runtime.value.system.otaActive && !flashing.value;
+      //console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
+      return result;
     }
   } catch (e) {}
-  if (!enabled) {
-    const systemConfig = props.config?.System;
-    if (
-      systemConfig &&
-      Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
-      systemConfig.OTAEn &&
-      typeof systemConfig.OTAEn.value !== "undefined"
-    ) {
-      enabled = !!systemConfig.OTAEn.value;
-    }
+
+  // If endpoint probe succeeded, enable
+  if (otaEndpointAvailable.value === true) {
+    //console.log('[canFlash] Enabled by probe success');
+    return !flashing.value;
   }
-  if (runtimeMeta.value.length) {
-    const systemMeta = runtimeMeta.value.find(
-      (group) => group.name === "system"
-    );
-    if (systemMeta) {
-      const field = systemMeta.fields.find((f) => f.key === "OTAEn");
-      if (field && field.enabled !== undefined) {
-        enabled = !!field.enabled;
-      }
-    }
+
+  // If config explicitly says disabled, pre-disable
+  const systemConfig = props.config?.System;
+  if (
+    systemConfig &&
+    Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
+    systemConfig.OTAEn &&
+    typeof systemConfig.OTAEn.value !== "undefined" &&
+    !systemConfig.OTAEn.value
+  ) {
+    //console.log('[canFlash] Disabled by config');
+    return false;
   }
-  // Gate by endpoint availability if probed
-  if (otaEndpointAvailable.value === false) enabled = false;
-  return enabled && !flashing.value;
+
+  // Default: disabled until we know
+  //console.log('[canFlash] Disabled by default (waiting for probe)');
+  return false;
 });
 
 const otaEnabled = computed(() => {
-  let enabled = false;
+  // Same source of truth as canFlash, but without the flashing guard
+  if (otaEndpointAvailable.value === false) return false;
   try {
-    if (runtime.value?.system) {
-      if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-      ) {
-        enabled = !!runtime.value.system.otaActive;
-      } else if (
-        Object.prototype.hasOwnProperty.call(runtime.value.system, "allowOTA")
-      ) {
-        enabled = !!runtime.value.system.allowOTA;
-      }
+    if (
+      runtime.value?.system &&
+      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
+    ) {
+      return !!runtime.value.system.otaActive;
     }
   } catch (e) {}
-  if (!enabled) {
-    const systemConfig = props.config?.System;
-    if (
-      systemConfig &&
-      Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
-      systemConfig.OTAEn &&
-      typeof systemConfig.OTAEn.value !== "undefined"
-    ) {
-      enabled = !!systemConfig.OTAEn.value;
-    }
+  if (otaEndpointAvailable.value === true) return true;
+  const systemConfig = props.config?.System;
+  if (
+    systemConfig &&
+    Object.prototype.hasOwnProperty.call(systemConfig, "OTAEn") &&
+    systemConfig.OTAEn &&
+    typeof systemConfig.OTAEn.value !== "undefined"
+  ) {
+    return !!systemConfig.OTAEn.value;
   }
-  if (runtimeMeta.value.length) {
-    const systemMeta = runtimeMeta.value.find(
-      (group) => group.name === "system"
-    );
-    if (systemMeta) {
-      const field = systemMeta.fields.find((f) => f.key === "OTAEn");
-      if (field && field.enabled !== undefined) {
-        enabled = !!field.enabled;
-      }
-    }
-  }
-  if (otaEndpointAvailable.value === false) enabled = false;
-  return enabled;
+  return false;
 });
 
 watch(canFlash, (val) => {
@@ -474,7 +501,17 @@ function initLive() {
       : "ws://";
   const url =
     proto + (typeof location !== "undefined" ? location.host : "") + "/ws";
+  
+  // Start WebSocket attempt
   startWebSocket(url);
+  
+  // Also start a backup polling mechanism with a delay to ensure we have data flow
+  setTimeout(() => {
+    if (!wsConnected.value && !pollTimer) {
+      //console.log("WebSocket not connected, starting backup polling");
+      fallbackPolling();
+    }
+  }, 3000); // Give WebSocket 3 seconds to connect
 }
 
 function startWebSocket(url) {
@@ -486,28 +523,69 @@ function startWebSocket(url) {
         /* ignore */
       }
     }
+    if (wsConnecting) return; // avoid racing connections
+    wsConnecting = true;
     ws = new WebSocket(url);
+    
+    // Set a timeout to quickly detect if WebSocket is not available
+    const connectionTimeout = setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.CONNECTING) {
+        try {
+          ws.close();
+        } catch (e) {
+          /* ignore */
+        }
+        wsConnected.value = false;
+        wsConnecting = false;
+        // Don't retry if WebSocket is not available (likely disabled on server)
+        if (wsRetry === 0) {
+          //console.log("WebSocket not available, using polling mode");
+          if (!pollTimer) {
+            fallbackPolling();
+          }
+          return;
+        }
+        scheduleWsReconnect(url);
+      }
+    }, 2000); // 2 second timeout for initial connection
+    
     ws.onopen = () => {
+      clearTimeout(connectionTimeout);
       wsConnected.value = true;
       wsRetry = 0;
+      wsConnecting = false;
+      // Stop polling when WebSocket is connected
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
       setTimeout(() => {
         if (!runtime.value.uptime) fetchRuntime();
       }, 300);
     };
     ws.onclose = () => {
+      clearTimeout(connectionTimeout);
       wsConnected.value = false;
+      wsConnecting = false;
       scheduleWsReconnect(url);
     };
     ws.onerror = () => {
+      clearTimeout(connectionTimeout);
       wsConnected.value = false;
+      wsConnecting = false;
       scheduleWsReconnect(url);
     };
     ws.onmessage = (ev) => {
+      // Manual heartbeat: respond to server "__ping" with "__pong"
+      if (typeof ev.data === "string" && ev.data === "__ping") {
+        try { ws.send("__pong"); } catch (e) {}
+        return;
+      }
       try {
         runtime.value = JSON.parse(ev.data);
         buildRuntimeGroups();
       } catch (e) {
-        /* ignore */
+        /* ignore non-JSON frames */
       }
     };
   } catch (e) {
@@ -516,7 +594,17 @@ function startWebSocket(url) {
 }
 
 function scheduleWsReconnect(url) {
-  const delay = Math.min(5000, 300 + wsRetry * wsRetry * 200);
+  // If we've retried many times without success, WebSocket is likely disabled
+  if (wsRetry >= 5) {
+    //console.log("WebSocket appears to be disabled after multiple failures, using polling mode only");
+    if (!pollTimer) {
+      fallbackPolling();
+    }
+    return;
+  }
+  
+  // Start with a gentler backoff to avoid thrashing on flaky links
+  const delay = Math.min(8000, 1000 + wsRetry * wsRetry * 600);
   wsRetry++;
   setTimeout(() => {
     startWebSocket(url);
@@ -526,25 +614,45 @@ function scheduleWsReconnect(url) {
   }
 }
 
+function fetchWithTimeout(resource, options = {}, timeoutMs = 4000) {
+  // Firefox-compatible timeout implementation
+  if (typeof AbortController !== 'undefined') {
+    // Modern browsers with AbortController support
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const opts = { ...options, signal: controller.signal };
+    return fetch(resource, opts)
+      .finally(() => clearTimeout(id));
+  } else {
+    // Fallback for older browsers
+    return Promise.race([
+      fetch(resource, options),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+      )
+    ]);
+  }
+}
+
 async function fetchRuntime() {
   try {
-    const r = await fetch("/runtime.json?ts=" + Date.now());
+    const r = await fetchWithTimeout("/runtime.json?ts=" + Date.now(), {}, 4000);
     if (!r.ok) return;
     runtime.value = await r.json();
     buildRuntimeGroups();
   } catch (e) {
-    /* ignore */
+    // ignore network/abort; polling will retry
   }
 }
 
 async function fetchRuntimeMeta() {
   try {
-    const r = await fetch("/runtime_meta.json?ts=" + Date.now());
+    const r = await fetchWithTimeout("/runtime_meta.json?ts=" + Date.now(), {}, 5000);
     if (!r.ok) return;
     runtimeMeta.value = await r.json();
     buildRuntimeGroups();
   } catch (e) {
-    /* ignore */
+    // ignore network/abort; polling will retry
   }
 }
 
@@ -826,10 +934,13 @@ async function handleSliderCommit({ group, field, value }) {
 
 async function sendFloat(group, f, val) {
   try {
+    // Ensure value uses dot decimal separator for HTTP request
+    const normalizedVal = String(val).replace(',', '.');
+    
     const r = await fetch(
       `/runtime_action/float_slider?group=${rURIComp(group)}&key=${rURIComp(
         f.key
-      )}&value=${val}`,
+      )}&value=${normalizedVal}`,
       {
         method: "POST",
       }
@@ -838,8 +949,8 @@ async function sendFloat(group, f, val) {
       notifySafe(`Set failed: ${f.key}`, "error");
     } else {
       if (!runtime.value[group]) runtime.value[group] = {};
-      runtime.value[group][f.key] = val;
-      notifySafe(`${f.key}=${val}`, "success", 1200);
+      runtime.value[group][f.key] = parseFloat(normalizedVal);
+      notifySafe(`${f.key}=${normalizedVal}`, "success", 1200);
     }
   } catch (e) {
     notifySafe(`Set error ${f.key}: ${e.message}`, "error");
@@ -1099,12 +1210,13 @@ function startFlash() {
     notifySafe("OTA is disabled", "error");
     return;
   }
-  if (!otaFileInput.value) {
-    notifySafe("Browser file input not ready.", "error");
-    return;
-  }
-  otaFileInput.value.value = "";
-  otaFileInput.value.click();
+  // Ask for OTA password first (single prompt at button press)
+  savedOtaPassword.value = '';
+  otaPassword.value = '';
+  showPasswordModal.value = true;
+  nextTick(() => {
+    if (passwordInput.value) passwordInput.value.focus();
+  });
 }
 
 async function onFlashFileSelected(event) {
@@ -1126,13 +1238,50 @@ async function onFlashFileSelected(event) {
     return;
   }
 
-  let password = window.prompt("Enter OTA password", "");
-  if (password === null) {
-    otaFileInput.value.value = "";
+  // We already asked for password at button press; use saved one
+  const pwd = savedOtaPassword.value || '';
+  pendingOtaFile.value = null; // not needed anymore
+  await performOtaUpdate(file, pwd);
+  if (otaFileInput.value) otaFileInput.value.value = "";
+}
+
+// Handle password modal confirmation
+function confirmPasswordInput() {
+  const password = otaPassword.value.trim();
+  showPasswordModal.value = false;
+
+  // If a file was already selected (unlikely in new flow), upload now; otherwise open picker
+  if (pendingOtaFile.value) {
+    performOtaUpdate(pendingOtaFile.value, password);
+    pendingOtaFile.value = null;
+    otaPassword.value = '';
     return;
   }
-  password = password.trim();
 
+  // Store password and then prompt for file selection
+  savedOtaPassword.value = password;
+  if (!otaFileInput.value) {
+    notifySafe("Browser file input not ready.", "error");
+    return;
+  }
+  otaFileInput.value.value = "";
+  otaFileInput.value.click();
+  otaPassword.value = '';
+}
+
+// Handle password modal cancellation
+function cancelPasswordInput() {
+  showPasswordModal.value = false;
+  otaPassword.value = '';
+  savedOtaPassword.value = '';
+  pendingOtaFile.value = null;
+  if (otaFileInput.value) {
+    otaFileInput.value.value = "";
+  }
+}
+
+// Perform the actual OTA update
+async function performOtaUpdate(file, password) {
   const headers = new Headers();
   if (password.length) headers.append("X-OTA-PASSWORD", password);
   const form = new FormData();
@@ -1182,18 +1331,25 @@ async function onFlashFileSelected(event) {
 let otaProbeTimer = null;
 async function probeOtaEndpoint() {
   try {
-    const r = await fetch("/ota_update", { method: "GET" });
-    if (r.status === 404) {
-      // Not compiled/exposed
-      otaEndpointAvailable.value = false;
-    } else if (r.status === 403) {
-      // Explicitly disabled at runtime
-      otaEndpointAvailable.value = false;
-    } else {
-      // Any other response (200/401 etc.) means endpoint exists
+    const r = await fetch("/ota_update", {
+      method: "POST",
+      headers: {
+        "X-OTA-PROBE": "1",
+      },
+      body: new Blob(),
+    });
+    //console.log('[OTA Probe] Status:', r.status, 'Current state:', otaEndpointAvailable.value);
+    // Only enable if we get a successful response (200-299)
+    if (r.ok && r.status >= 200 && r.status < 300) {
+      //console.log('[OTA Probe] Setting to true (200 OK)');
       otaEndpointAvailable.value = true;
+    } else {
+      //console.log('[OTA Probe] Setting to false (error status:', r.status + ')');
+      otaEndpointAvailable.value = false;
     }
+    //console.log('[OTA Probe] New state:', otaEndpointAvailable.value, 'canFlash:', canFlash.value);
   } catch (e) {
+    //console.log('[OTA Probe] Network error:', e.message);
     // Network error -> keep as null (unknown) so we retry
     if (otaEndpointAvailable.value === null) {
       // leave it
@@ -1308,7 +1464,6 @@ defineExpose({ startFlash });
   padding-left: 0.35rem;
   min-width: 1.6rem;
   text-align: left;
-  opacity: 0.65;
   font-size: 0.7rem;
 }
 .rw.sev-warn .val {
@@ -1331,6 +1486,9 @@ defineExpose({ startFlash });
 }
 .bd--fallback.bd--off {
   background: #6e7681;
+}
+.bd--fallback.bd--safe {
+  background: #2ecc71;
 }
 .bd--fallback.bd--alarm {
   background: #f85149;
@@ -1510,5 +1668,107 @@ label.switch input:checked + .slider:before {
     opacity: 0.6;
     transform: scale(1.1);
   }
+}
+
+/* OTA Password Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  color: #f0f6fc;
+}
+
+.modal-content h3 {
+  margin: 0 0 16px 0;
+  color: #f0f6fc;
+  font-size: 18px;
+}
+
+.password-input-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.password-input-container input {
+  flex: 1;
+  padding: 8px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #f0f6fc;
+  font-size: 14px;
+}
+
+.password-input-container input:focus {
+  outline: none;
+  border-color: #1f6feb;
+  box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
+}
+
+.password-toggle {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #8b949e;
+  font-size: 14px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.password-toggle:hover {
+  background: #30363d;
+  color: #f0f6fc;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.cancel-btn {
+  background: #6e7681;
+  color: #f0f6fc;
+}
+
+.cancel-btn:hover {
+  background: #8b949e;
+}
+
+.confirm-btn {
+  background: #238636;
+  color: #f0f6fc;
+}
+
+.confirm-btn:hover {
+  background: #2ea043;
 }
 </style>
