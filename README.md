@@ -56,8 +56,10 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 
 ## Requirements
 
-- Compatible development board (ESP32 development board)
-- PlatformIO (preferred) or Arduino IDE (Arduino IDE not tested!)
+- **ESP32 development board** (ESP32, ESP32-S2, ESP32-S3, ESP32-C3)
+- **PlatformIO** (preferred) or Arduino IDE (Arduino IDE not tested!)
+- **Node.js 18.0.0+** (required for Vite 7.x web UI build)
+- **Python 3.8+** (recommended: 3.10+)
 - Add `-std=gnu++17` (and remove default gnu++11) in `platformio.ini`
 
 ## Installation
@@ -67,18 +69,81 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 ```
 
+## Quick Start Guide
+
+**1. Install the library** (see above)
+
+**2. Copy required tools to your project:**
+   ```bash
+   # Copy the entire tools folder from examples to your project root
+   cp -r .pio/libdeps/your_env/ESP32ConfigManager/examples/tools ./tools
+   ```
+   Or manually copy: `examples/tools/` → `your_project/tools/`
+
+**3. Configure `platformio.ini`:**
+   - Copy the example from `examples/example_min/platformio.ini_example_min`
+   - Key requirements: 
+     - `build_unflags = -std=gnu++11`
+     - `build_flags = ... -std=gnu++17 -DCM_EMBED_WEBUI=1 ...`
+     - `extra_scripts = pre:tools/precompile_wrapper.py`
+
+**4. Install dependencies:**
+   ```bash
+   pip install intelhex
+   # Node.js 18+ REQUIRED (for Vite 7.x web UI build)
+   # Python 3.8+ (recommended: 3.10+)
+   ```
+   **⚠️ Check your versions:**
+   ```bash
+   node --version   # Must be v18.0.0 or higher!
+   python --version # Recommended v3.10 or higher
+   ```
+
+**5. Copy example code:**
+   - Use `examples/example_min/main.cpp_example_min` as starting point
+   - See other examples for advanced features
+
 ## Setup Requirements
+
+### Required Files Setup
+
+**⚠️ IMPORTANT: Copy the `tools/` folder to your project root!**
+
+Before you can use this library, you **must** copy the entire `tools/` folder from `examples/tools/` to your project's root directory. This folder contains:
+
+- `precompile_wrapper.py` - Builds and optimizes the Vue.js web interface
+- `webui_to_header.js` - Converts the built web UI into a compressed C++ header file
+- `setup_dependencies.py` - Automated dependency installer (optional helper)
+
+**Why is this required?**
+Without these scripts in your project, the library will use a pre-compiled, non-optimized web UI that wastes flash memory. The precompile wrapper optimizes and compresses the web interface specifically for your build configuration, significantly reducing flash usage.
 
 ### PlatformIO Configuration
 
-When setting up your `platformio.ini`, ensure you include these **required** settings:
+Your `platformio.ini` **must** include these settings:
 
-- `build_unflags = -std=gnu++11` → **Required** to deactivate the old default C++ standard
-- `-Wno-deprecated-declarations` → **Required** to suppress deprecated warnings from ArduinoJson
-- `-std=gnu++17` → **Required** to enable C++17 features
-- `extra_scripts = pre:tools/precompile_wrapper.py` → **Required** to build and inject the web UI automatically
+```ini
+[env:your_env]
+platform = espressif32
+board = your_board
+framework = arduino
 
-> **Important**: Copy `tools/precompile_wrapper.py` from the `/examples` folder to your project and use it instead of the library's internal script to reduce flash usage!
+build_unflags = -std=gnu++11          # Remove old C++ standard (required!)
+build_flags =
+    -Wno-deprecated-declarations      # Suppress ArduinoJson warnings
+    -std=gnu++17                      # Enable C++17 features (required!)
+    -DCM_EMBED_WEBUI=1                # Enable embedded web UI
+    # Add other CM_ENABLE_* flags as needed (see docs/FEATURE_FLAGS.md)
+
+extra_scripts = pre:tools/precompile_wrapper.py  # Build web UI (required!)
+
+lib_deps =
+    bblanchon/ArduinoJson@^7.4.1
+    esphome/ESPAsyncWebServer-esphome@^3.2.2
+    esphome/AsyncTCP-esphome@^2.0.3
+```
+
+> **📋 See complete examples in `examples/example_min/platformio.ini_example_min`**
 
 ### Dependencies
 
@@ -86,15 +151,24 @@ Before using the precompile wrapper script, ensure you have the following instal
 
 **Python Dependencies:**
 
-1. **Python 3.7+** - Make sure you have Python 3.7 or newer installed
+1. **Python 3.8+** - Minimum Python 3.8 required
+   - **⚠️ Recommended: Python 3.10+ or newer** for full compatibility with Vite 7.x build tools
+   - Python 3.13 is fully supported (tested and working)
 2. **Required Python packages**: Install with `pip install intelhex`
 
 **Node.js Dependencies:**
 
-- **Node.js 16+** (includes npm) - The precompile script builds a Vue.js web interface
+- **Node.js 18.0.0 or higher** (includes npm) - **REQUIRED for Vite 7.x**
+  - **⚠️ Node.js 16 and below are NOT supported!**
+  - Recommended: Node.js 18 LTS or Node.js 20 LTS
+  - The precompile script builds a Vue 3 + Vite 7.x web interface
 
 **Automated Setup:**
 You can use the `setup_dependencies.py` script in the tools folder to install all dependencies automatically.
+
+**Version Compatibility:**
+- Vite 7.1.12 (used in this project) requires Node.js 18.0.0+
+- If you encounter build errors, ensure your Node.js version: `node --version` (should show v18.x.x or higher)
 
 ## Examples
 
@@ -443,9 +517,39 @@ pio run -e ota -t upload --upload-port 192.168.2.126
 
 # Or over the Web UI by press the "Flash" Button and upload the firmware.bin
 
-#Troubleshooting:
-pio run -e usb -t erase #this will delete all flash data on your esp32!
-pio run -e usb -t clean # this will clean the previous project build files
+## Troubleshooting
+
+### Build Issues
+
+**"Vite build failed" or "ERR_UNSUPPORTED_ESM_URL_SCHEME":**
+- Ensure you have **Node.js 18.0.0 or higher** installed
+- Check: `node --version` (must be v18.x.x or higher)
+- Vite 7.x does NOT work with Node.js 16 or older
+- Update Node.js: Download from [nodejs.org](https://nodejs.org/)
+
+**"Python version incompatibility" or module import errors:**
+- Ensure you have **Python 3.8+** (recommended: 3.10+)
+- Check: `python --version`
+- Install intelhex: `pip install intelhex`
+
+**"Cannot find tools/precompile_wrapper.py":**
+- Copy the entire `tools/` folder from `examples/tools/` to your project root
+- Verify `extra_scripts = pre:tools/precompile_wrapper.py` in your `platformio.ini`
+
+**Web UI not building or old version showing:**
+```bash
+pio run -e usb -t clean # Clean previous build files
+# Then rebuild
+pio run -e usb
+```
+
+### Flash/Memory Issues
+
+**ESP32 won't boot or guru meditation errors:**
+```bash
+pio run -e usb -t erase # WARNING: Deletes all flash data on ESP32!
+pio run -e usb -t upload # Re-upload firmware
+```
 
 ```
 
@@ -498,6 +602,7 @@ pio run -e usb -t clean # this will clean the previous project build files
 - **2.6.1**: some Bugfixes, reorganaize Readme, new Screenshots, Installation instructions
 - **2.6.2**: some Bugfixes
 - **2.7.0**: Refactoring from one big ConfigManager class into multiple classes for better maintainability. Added **Smart WiFi Roaming** feature to automatically switch to stronger APs in mesh networks based on configurable signal strength thresholds. Refactor Runtime Provider into its own class. Improved logging messages and added more detailed status updates. (breaking changes!) note: Settings page now requires password authentication (default: "cf")
+- **2.7.1-2**: Bugfixes for smart generation of the index.html from project - move devDependencies to dependencies, refactor the precompile_wrapper.py.
 
 ## Smart WiFi Roaming Feature
 

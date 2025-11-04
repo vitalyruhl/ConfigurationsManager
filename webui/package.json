@@ -1,6 +1,6 @@
 {
   "name": "esp32-config-webui",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -11,11 +11,11 @@
     "test": "npm-run-all --parallel mock-server dev"
   },
   "dependencies": {
-    "vue": "^3.5.22"
+    "vue": "^3.5.22",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.1.12"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.1",
-    "vite": "^7.1.12",
     "nodemon": "^3.1.10",
     "npm-run-all": "^4.1.5"
   }

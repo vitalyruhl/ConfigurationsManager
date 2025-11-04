@@ -1,5 +1,7 @@
 # Feature Flags (Build-Time)
 
+> **⚠️ Prerequisites:** Before using feature flags, ensure you have copied the `tools/` folder from `examples/tools/` to your project root and configured `extra_scripts = pre:tools/precompile_wrapper.py` in your `platformio.ini`. See the main README for setup instructions.
+
 This project exposes many optional features that you can enable/disable at compile time to trim flash/RAM and reduce the embedded web UI size. Flags are passed via PlatformIO `build_flags` using `-D<FLAG>=0/1`.
 
 Why build flags?
