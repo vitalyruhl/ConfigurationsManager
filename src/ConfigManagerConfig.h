@@ -33,7 +33,7 @@
 #define CM_ENABLE_RUNTIME_ALARMS 0  //default: disabled
 #endif
 #ifndef CM_ENABLE_RUNTIME_META // Enable generation of runtime metadata consumed by the web UI (/runtime_meta.json)
-#define CM_ENABLE_RUNTIME_META (CM_ENABLE_RUNTIME_ALARMS || CM_ENABLE_SYSTEM_PROVIDER)
+#define CM_ENABLE_RUNTIME_META (CM_EMBED_WEBUI || CM_ENABLE_SYSTEM_PROVIDER)
 #endif
 #ifndef CM_ENABLE_SYSTEM_PROVIDER // Enable system info runtime provider card (heap, uptime, etc.)
 #define CM_ENABLE_SYSTEM_PROVIDER 1 //default: enabled
