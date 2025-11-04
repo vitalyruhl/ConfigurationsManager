@@ -352,11 +352,11 @@ const hasVisibleAlarm = computed(() => {
 // - Enable when probe says enabled (200) OR runtime.system.otaActive === true
 // - Ignore config/meta for enabling to avoid stale states; only use config to pre-disable when explicitly false
 const canFlash = computed(() => {
-  console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
+  //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
   
   // Probe is authoritative when negative
   if (otaEndpointAvailable.value === false) {
-    console.log('[canFlash] Disabled by probe');
+    //console.log('[canFlash] Disabled by probe');
     return false;
   }
 
@@ -367,14 +367,14 @@ const canFlash = computed(() => {
       Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
     ) {
       const result = !!runtime.value.system.otaActive && !flashing.value;
-      console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
+      //console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
       return result;
     }
   } catch (e) {}
 
   // If endpoint probe succeeded, enable
   if (otaEndpointAvailable.value === true) {
-    console.log('[canFlash] Enabled by probe success');
+    //console.log('[canFlash] Enabled by probe success');
     return !flashing.value;
   }
 
@@ -387,12 +387,12 @@ const canFlash = computed(() => {
     typeof systemConfig.OTAEn.value !== "undefined" &&
     !systemConfig.OTAEn.value
   ) {
-    console.log('[canFlash] Disabled by config');
+    //console.log('[canFlash] Disabled by config');
     return false;
   }
 
   // Default: disabled until we know
-  console.log('[canFlash] Disabled by default (waiting for probe)');
+  //console.log('[canFlash] Disabled by default (waiting for probe)');
   return false;
 });
 
@@ -508,7 +508,7 @@ function initLive() {
   // Also start a backup polling mechanism with a delay to ensure we have data flow
   setTimeout(() => {
     if (!wsConnected.value && !pollTimer) {
-      console.log("WebSocket not connected, starting backup polling");
+      //console.log("WebSocket not connected, starting backup polling");
       fallbackPolling();
     }
   }, 3000); // Give WebSocket 3 seconds to connect
@@ -539,7 +539,7 @@ function startWebSocket(url) {
         wsConnecting = false;
         // Don't retry if WebSocket is not available (likely disabled on server)
         if (wsRetry === 0) {
-          console.log("WebSocket not available, using polling mode");
+          //console.log("WebSocket not available, using polling mode");
           if (!pollTimer) {
             fallbackPolling();
           }
@@ -596,7 +596,7 @@ function startWebSocket(url) {
 function scheduleWsReconnect(url) {
   // If we've retried many times without success, WebSocket is likely disabled
   if (wsRetry >= 5) {
-    console.log("WebSocket appears to be disabled after multiple failures, using polling mode only");
+    //console.log("WebSocket appears to be disabled after multiple failures, using polling mode only");
     if (!pollTimer) {
       fallbackPolling();
     }
@@ -1338,18 +1338,18 @@ async function probeOtaEndpoint() {
       },
       body: new Blob(),
     });
-    console.log('[OTA Probe] Status:', r.status, 'Current state:', otaEndpointAvailable.value);
+    //console.log('[OTA Probe] Status:', r.status, 'Current state:', otaEndpointAvailable.value);
     // Only enable if we get a successful response (200-299)
     if (r.ok && r.status >= 200 && r.status < 300) {
-      console.log('[OTA Probe] Setting to true (200 OK)');
+      //console.log('[OTA Probe] Setting to true (200 OK)');
       otaEndpointAvailable.value = true;
     } else {
-      console.log('[OTA Probe] Setting to false (error status:', r.status + ')');
+      //console.log('[OTA Probe] Setting to false (error status:', r.status + ')');
       otaEndpointAvailable.value = false;
     }
-    console.log('[OTA Probe] New state:', otaEndpointAvailable.value, 'canFlash:', canFlash.value);
+    //console.log('[OTA Probe] New state:', otaEndpointAvailable.value, 'canFlash:', canFlash.value);
   } catch (e) {
-    console.log('[OTA Probe] Network error:', e.message);
+    //console.log('[OTA Probe] Network error:', e.message);
     // Network error -> keep as null (unknown) so we retry
     if (otaEndpointAvailable.value === null) {
       // leave it

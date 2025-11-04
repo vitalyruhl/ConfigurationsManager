@@ -2,29 +2,88 @@
 #include "ConfigManager.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <Ticker.h>     // for reading temperature periodically
+#include <BME280_I2C.h> // Include BME280 library Temperature and Humidity sensor
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
 #define VERSION "V2.7.0" // 2025.11.02
-#define APP_NAME "CM-Minimal-Demo"
+#define APP_NAME "CM-BME280-Demo"
+
+
+//--------------------------------------------------------------------------------------------------------------
+// set the I2C address for the BME280 sensor for temperature and humidity
+#define I2C_SDA 21
+#define I2C_SCL 22
+#define I2C_FREQUENCY 400000
+#define BME280_FREQUENCY 400000
+// #define BME280_ADDRESS 0x76 // I2C address for the BME280 sensor (default is 0x76) redefine, if needed
+//-------------------------------------------------------------------------------------------------------------
 
 
 //--------------------------------------------------------------------
 // Forward declarations of functions
+void setupGUI();
 bool SetupStartWebServer();
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
+void SetupStartTemperatureMeasuring();
+void readBme280();
+void readBme280(); // read the values from the BME280 (Temperature, Humidity) and calculate the dewpoint
+void SetupStartTemperatureMeasuring(); // setup the BME280 temperature and humidity sensor
 
 // Global objects and variables
+#include "secret/wifiSecret.h" // Include your WiFi credentials here
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
+BME280_I2C bme280;
+Ticker temperatureTicker;
+bool tickerActive = false; // flag to indicate if the ticker is active
+Ticker NtpSyncTicker;
+
+static float computeDewPoint(float temperatureC, float relHumidityPct); // compute the dewpoint from temperature and humidity
+static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
+
+float temperature = 0.0; // current temperature in Celsius
+float Dewpoint = 0.0;    // current dewpoint in Celsius
+float Humidity = 0.0;    // current humidity in percent
+float Pressure = 0.0;    // current pressure in hPa
+
+
+// -------------------------------------------------------------------
+// Global theme override test: make all h3 headings orange without underline
+static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
+    h3 {color:orange;text-decoration:underline;}
+)CSS";
 
 //--------------------------------------------------------------------------------------------------------------
 // nessesary Settings, you dont need to make them, but they are needed for the ConfigManager to work properly
+struct SystemSettings
+{
+    Config<bool> allowOTA;
+    Config<String> otaPassword;
 
-// You can put your wifi settings here in defaultValues, if project is not public. Or you can put it in your secret folder, like me.
-#include "secret/wifiSecret.h" // Include your WiFi credentials here
+    Config<String> version;
+    SystemSettings() : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true, 
+                                    // you need the callback to apply the setting change immediately, instead of only on reboot!
+                                  .callback = [](bool newValue) {
+                                      Serial.printf("[MAIN] OTA setting changed to: %s\n", newValue ? "enabled" : "disabled");
+                                      ConfigManager.getOTAManager().enable(newValue);
+                                  }}),
+                       otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String(OTA_PASSWORD), .showInWeb = true, .isPassword = true}),
+                       version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
+                       {}
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
+        ConfigManager.addSetting(&allowOTA);
+        ConfigManager.addSetting(&otaPassword);
+        ConfigManager.addSetting(&version);
+    }
+};
 
+SystemSettings systemSettings; // Create an instance of SystemSettings-Struct
+
+// Example of a structure for WiFi settings
 struct WiFi_Settings // wifiSettings
 {
     Config<String> wifiSsid;
@@ -40,10 +99,10 @@ struct WiFi_Settings // wifiSettings
     WiFi_Settings() : wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .showInWeb = true, .sortOrder = 1}),
                       wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .showInWeb = true, .isPassword = true, .sortOrder = 2}),
                       useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = true, .showInWeb = true, .sortOrder = 3}),
-                      staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.0.10", .sortOrder = 4, .showIf = [this](){ return !useDhcp.get(); }}),
-                      gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.0.1", .sortOrder = 5, .showIf = [this](){ return !useDhcp.get(); }}),
+                      staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.131", .sortOrder = 4, .showIf = [this](){ return !useDhcp.get(); }}),
+                      gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this](){ return !useDhcp.get(); }}),
                       subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this](){ return !useDhcp.get(); }}),
-                      dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.0.1", .sortOrder = 7, .showIf = [this](){ return !useDhcp.get(); }}),
+                      dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this](){ return !useDhcp.get(); }}),
                       dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this](){ return !useDhcp.get(); }}),
                       wifiRebootTimeoutMin(ConfigOptions<int>{
                            .key = "WiFiRb",
@@ -69,6 +128,29 @@ struct WiFi_Settings // wifiSettings
 
 WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
 
+struct TempSettings
+{
+    Config<float> tempCorrection;
+    Config<float> humidityCorrection;
+    Config<int> seaLevelPressure;
+    Config<int> readIntervalSec;
+
+    TempSettings() : tempCorrection(ConfigOptions<float>{.key = "TCO", .name = "Temperature Correction", .category = "Temp", .defaultValue = 0.1f}),
+                     humidityCorrection(ConfigOptions<float>{.key = "HYO", .name = "Humidity Correction", .category = "Temp", .defaultValue = 0.1f}),
+                     seaLevelPressure(ConfigOptions<int>{.key = "SLP", .name = "Sea Level Pressure", .category = "Temp", .defaultValue = 1013}),
+                     readIntervalSec(ConfigOptions<int>{.key = "ReadTemp", .name = "Read Temp/Humidity every (s)", .category = "Temp", .defaultValue = 30})
+                     {}
+
+    void init() {
+        // Register settings with ConfigManager after ConfigManager is ready
+        ConfigManager.addSetting(&tempCorrection);
+        ConfigManager.addSetting(&humidityCorrection);
+        ConfigManager.addSetting(&seaLevelPressure);
+        ConfigManager.addSetting(&readIntervalSec);
+    }
+};
+TempSettings tempSettings;
+
 void setup()
 {
     Serial.begin(115200);
@@ -85,13 +167,17 @@ void setup()
     // Set APP information and global CSS override
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
+    // ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     // ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     // ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
     //----------------------------------------------------------------------------------------------------------------------------------
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others, i need it for testing
+
     //----------------------------------------------------------------------------------------------------------------------------------
     //register your Settings here
+    systemSettings.init();    // System settings (OTA, version, etc.)
     wifiSettings.init();      // WiFi connection settings
+    tempSettings.init();      // BME280 temperature sensor settings
+    // ntpSettings.init();       // NTP time synchronization settings
     //----------------------------------------------------------------------------------------------------------------------------------
 
     ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
@@ -102,7 +188,11 @@ void setup()
     ConfigManager.setRoamingImprovement(10);           // Require 10 dBm improvement
 
     //----------------------------------------------------------------------------------------------------------------------------------
-    // set wifi settings if not set yet from my secret folder (its a behavior to easy testing, but you can set it also in AP-Mode)
+    // Configure WiFi AP MAC filtering/priority (example - customize as needed)
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
+
+    //----------------------------------------------------------------------------------------------------------------------------------
+    // set wifi settings if not set yet from my secret folder (its a behavior to easy testing, but you can set it in AP-Mode)
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
         Serial.println("-------------------------------------------------------------");
@@ -110,6 +200,8 @@ void setup()
         Serial.println("-------------------------------------------------------------");
         wifiSettings.wifiSsid.set(MY_WIFI_SSID);
         wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+        wifiSettings.useDhcp.set(false);
         ConfigManager.saveAll();
         delay(1000); // Small delay
     }
@@ -117,10 +209,14 @@ void setup()
     // perform the wifi connection
     SetupStartWebServer();
 
-   // Enhanced WebSocket configuration
+    setupGUI();
+
+    // Enhanced WebSocket configuration
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
     ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
+
+    SetupStartTemperatureMeasuring();
 
     // Show correct IP address depending on WiFi mode
     if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
@@ -130,6 +226,9 @@ void setup()
     } else {
         Serial.println("🖥️ Webserver running (IP not available)");
     }
+
+    Serial.println("\n[MAIN] Setup completed successfully! Starting main loop...");
+    Serial.println("=================================================================");
 }
 
 void loop()
@@ -158,13 +257,77 @@ void loop()
 // GUI SETUP
 //----------------------------------------
 
+void setupGUI()
+{
+    Serial.println("[GUI] setupGUI() start");
+    //-----------------------------------------------------------------
+    // BME280 Sensor Display with Runtime Providers
+    //-----------------------------------------------------------------
+
+    // Register sensor runtime provider for BME280 data
+    CRM().addRuntimeProvider("sensors", [](JsonObject &data)
+    {
+        data["temp"] = temperature;
+        data["hum"] = Humidity;
+        data["dew"] = Dewpoint;
+        data["pressure"] = Pressure;
+    });
+
+    // Define sensor display fields using addRuntimeMeta
+    RuntimeFieldMeta tempMeta;
+    tempMeta.group = "sensors";
+    tempMeta.key = "temp";
+    tempMeta.label = "Temperature";
+    tempMeta.unit = "°C";
+    tempMeta.precision = 1;
+    tempMeta.order = 10;
+    CRM().addRuntimeMeta(tempMeta);
+
+    RuntimeFieldMeta humMeta;
+    humMeta.group = "sensors";
+    humMeta.key = "hum";
+    humMeta.label = "Humidity";
+    humMeta.unit = "%";
+    humMeta.precision = 1;
+    humMeta.order = 11;
+    CRM().addRuntimeMeta(humMeta);
+
+    RuntimeFieldMeta dewMeta;
+    dewMeta.group = "sensors";
+    dewMeta.key = "dew";
+    dewMeta.label = "Dewpoint";
+    dewMeta.unit = "°C";
+    dewMeta.precision = 1;
+    dewMeta.order = 12;
+    CRM().addRuntimeMeta(dewMeta);
+
+    RuntimeFieldMeta pressureMeta;
+    pressureMeta.group = "sensors";
+    pressureMeta.key = "pressure";
+    pressureMeta.label = "Pressure";
+    pressureMeta.unit = "hPa";
+    pressureMeta.precision = 1;
+    pressureMeta.order = 13;
+    CRM().addRuntimeMeta(pressureMeta);
+
+    RuntimeFieldMeta rangeMeta;
+    rangeMeta.group = "sensors";
+    rangeMeta.key = "range";
+    rangeMeta.label = "Sensor Range";
+    rangeMeta.unit = "V";
+    rangeMeta.precision = 1;
+    rangeMeta.order = 14;
+    CRM().addRuntimeMeta(rangeMeta);
+
+}
+
 bool SetupStartWebServer()
 {
     Serial.println("[MAIN] Starting Webserver...!");
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        return false; // Skip in AP mode
+        return false; // Skip webserver setup in AP mode
     }
 
     if (WiFi.status() != WL_CONNECTED)
@@ -206,9 +369,20 @@ void onWiFiConnected()
 
     // Ensure ArduinoOTA is initialized once WiFi is connected and OTA is allowed
     // This runs on every (re)connection to guarantee espota responds
-    if (!ConfigManager.getOTAManager().isInitialized())
+    if (systemSettings.allowOTA.get() && !ConfigManager.getOTAManager().isInitialized())
     {
-        ConfigManager.setupOTA(APP_NAME, "ota"); // Use default password for simplicity
+        ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
+    }
+
+    if (!tickerActive)
+    {
+        // Start OTA if enabled
+        if (systemSettings.allowOTA.get())
+        {
+            ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
+        }
+
+        tickerActive = true;
     }
 
     // Show correct IP address when connected
@@ -221,15 +395,97 @@ void onWiFiConnected()
     Serial.printf("[MAIN] Local MAC: %s\n\n", WiFi.macAddress().c_str());
 }
 
-
-//folowing functions are optional, only if you want to do something special on these events
-
 void onWiFiDisconnected()
 {
-    Serial.println("[MAIN] WiFi disconnected!");
+    Serial.println("[MAIN] WiFi disconnected! Deactivating services...");
+
+    if (tickerActive)
+    {
+        // Stop OTA if it should be disabled
+        if (systemSettings.allowOTA.get() == false && ConfigManager.getOTAManager().isInitialized())
+        tickerActive = false;
+    }
 }
 
 void onWiFiAPMode()
 {
     Serial.println("[MAIN] WiFi in AP mode");
+
+    // Ensure services are stopped in AP mode
+    if (tickerActive)
+    {
+        onWiFiDisconnected(); // Reuse disconnected logic
+    }
 }
+
+//----------------------------------------
+// Other FUNCTIONS
+//----------------------------------------
+
+void SetupStartTemperatureMeasuring()
+{
+    Serial.println("[TEMP] Initializing BME280 sensor...");
+
+    // init BME280 for temperature and humidity sensor
+    bme280.setAddress(BME280_ADDRESS, I2C_SDA, I2C_SCL);
+
+    // Add timeout protection for BME280 initialization
+    unsigned long startTime = millis();
+    const unsigned long timeout = 5000; // 5 second timeout
+
+    Serial.println("[TEMP] Starting BME280.begin()...");
+    bool isStatus = false;
+
+    isStatus = bme280.begin(
+        bme280.BME280_STANDBY_0_5,
+        bme280.BME280_FILTER_OFF,
+        bme280.BME280_SPI3_DISABLE,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_MODE_NORMAL);
+
+    if (!isStatus)
+    {
+        Serial.println("[TEMP] BME280 not initialized - continuing without temperature sensor");
+    }
+    else
+    {
+        Serial.println("[TEMP] BME280 ready! Starting temperature ticker...");
+        int iv = tempSettings.readIntervalSec.get();
+        if (iv < 2){iv = 2;}
+        temperatureTicker.attach((float)iv, readBme280); // Attach ticker with configured interval
+        readBme280();                                    // Read once at startup
+    }
+
+    Serial.println("[TEMP] Temperature setup completed");
+}
+
+static float computeDewPoint(float temperatureC, float relHumidityPct)
+{
+    if (isnan(temperatureC) || isnan(relHumidityPct))
+        return NAN;
+    if (relHumidityPct <= 0.0f)
+        relHumidityPct = 0.1f; // Unterlauf abfangen
+    if (relHumidityPct > 100.0f)
+        relHumidityPct = 100.0f; // Clamp
+    const float a = 17.62f;
+    const float b = 243.12f;
+    float rh = relHumidityPct / 100.0f;
+    float gamma = (a * temperatureC) / (b + temperatureC) + log(rh);
+    float dew = (b * gamma) / (a - gamma);
+    return dew;
+}
+
+void readBme280()
+{
+    bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
+    bme280.read();
+
+    temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
+    Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
+    Pressure = bme280.data.pressure;
+
+    Dewpoint = computeDewPoint(temperature, Humidity);
+}
+

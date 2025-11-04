@@ -122,7 +122,7 @@ async function processValueForTransmission(category, key, value, settingData) {
   if (isPasswordField(category, key, settingData) && value && value.trim() !== '') {
     // Only hash non-empty passwords
     const hashed = await sha256(value);
-    console.log(`[Security] Hashing password for ${category}.${key}`);
+    //console.log(`[Security] Hashing password for ${category}.${key}`);
     return `hashed:${hashed}`; // Prefix to indicate this is a hashed password
   }
   return value; // Return original value for non-passwords
@@ -159,7 +159,7 @@ async function loadSettingsPassword() {
       const data = await response.json();
       if (data.status === "ok" && data.password !== undefined) {
         SETTINGS_PASSWORD.value = data.password;
-        console.log("[Frontend] Settings password loaded from backend:", data.password === "" ? "(none)" : "(set)");
+        // //console.log("[Frontend] Settings password loaded from backend:", data.password === "" ? "(none)" : "(set)");
       }
     }
   } catch (e) {
@@ -204,7 +204,7 @@ provide("dismissToast", dismissToast);
 
 async function loadSettings() {
   try {
-    console.log("[Frontend] Starting loadSettings...");
+    //console.log("[Frontend] Starting loadSettings...");
     
     // Firefox-compatible timeout implementation
     const fetchPromise = fetch("/config.json");
@@ -214,8 +214,8 @@ async function loadSettings() {
     
     const r = await Promise.race([fetchPromise, timeoutPromise]);
     
-    console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
-    console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
+    //console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
+    //console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
     
     if (!r.ok) {
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
@@ -223,10 +223,10 @@ async function loadSettings() {
     
     // Check content-length header vs actual response
     const contentLength = r.headers.get('content-length');
-    console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
+    //console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
     
     const text = await r.text();
-    console.log(`[Frontend] config.json - Actual response length: ${text.length}`);
+    //console.log(`[Frontend] config.json - Actual response length: ${text.length}`);
     
     if (contentLength && parseInt(contentLength) !== text.length) {
       console.warn(`[Frontend] Content-Length mismatch! Header: ${contentLength}, Actual: ${text.length}`);
@@ -236,7 +236,7 @@ async function loadSettings() {
     config.value = data.config || data;
     refreshKey.value++;
     
-    console.log("[Frontend] config.json loaded successfully");
+    //console.log("[Frontend] config.json loaded successfully");
     // Re-evaluate live content availability after config loads
     checkLiveContent();
   } catch (e) {

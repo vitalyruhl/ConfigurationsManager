@@ -17,3 +17,5 @@
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
 
 - **[FEATURE] if there are more cards, the card brocken down is under the longest card from above. It looks not fine -> remake the grid to be more flexible (Prio 10)**
+
+- **[FEATURE] Failover Wifi native support** (Prio 5)
