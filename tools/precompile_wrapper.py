@@ -161,17 +161,18 @@ def main():
             return uniq
 
         def _ensure_webui_sources(libdir: Path) -> bool:
-            """Ensure libdir/webui contains index.html. Try to copy from any local lib path if missing."""
+            """Ensure libdir/webui sources are present and up-to-date.
+            If a local library/project copy exists, prefer syncing it into libdeps so the build uses the project's WebUI.
+            """
             wdir = libdir / 'webui'
             idx = wdir / 'index.html'
-            if idx.exists():
-                return True
-            # Try to find a local library path with full webui
+            # Always try to sync from a local source if available, even when files exist already.
+            # This lets developers customize webui in their workspace and have it take effect at build time.
             local_paths = _collect_local_lib_paths(project_dir / 'platformio.ini')
             for lp in local_paths:
                 src_wui = lp / 'webui'
                 if (src_wui / 'index.html').exists():
-                    print(f"[precompile_wrapper] webui sources missing in libdeps, copying from local library: {src_wui}")
+                    print(f"[precompile_wrapper] Syncing webui sources from local project: {src_wui} -> {wdir}")
                     # copy selected items (avoid node_modules heavy copy when possible)
                     import shutil
                     wdir.mkdir(parents=True, exist_ok=True)
@@ -188,7 +189,6 @@ def main():
                                 shutil.copy2(s, d)
                         except Exception as ce:
                             print(f"[precompile_wrapper] Warning: failed copying {s} -> {d}: {ce}")
-                    
                     # Ensure vite CLI is available. If npm install later still fails because vite bin missing,
                     # proactively copy node_modules from local lib as a fallback.
                     src_nm = src_wui / 'node_modules'
@@ -207,8 +207,13 @@ def main():
                             shutil.copytree(src_nm, dst_nm)
                     except Exception as ce:
                         print(f"[precompile_wrapper] Note: could not copy node_modules: {ce}")
+                    # After syncing, ensure index.html exists in destination
                     return (wdir / 'index.html').exists()
-            print("[precompile_wrapper] WARNING: webui sources not found in library; skipping Vue rebuild and keeping packaged header.")
+
+            # If no local sources available, ensure at least the packaged webui exists
+            if idx.exists():
+                return True
+            print("[precompile_wrapper] WARNING: webui sources not found; skipping Vue rebuild and keeping packaged header.")
             return False
 
         flags_tokens = _collect_build_flags(project_dir / 'platformio.ini', active_env)

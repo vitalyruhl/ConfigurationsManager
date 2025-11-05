@@ -253,24 +253,32 @@ async function sha256(message) {
   return sha256Fallback(message);
 }
 
-// Check if a value is a password field that should be hashed
+// Check if a value is a password field that should be encrypted
+// Prefer explicit metadata; fall back to heuristic on key/display name
 function isPasswordField(category, key, settingData) {
-  return settingData && settingData.isPassword === true;
+  if (settingData && settingData.isPassword === true) return true;
+  const k = (key || '').toString().toLowerCase();
+  const dn = ((settingData && (settingData.displayName || settingData.name)) || '').toString().toLowerCase();
+  return k.includes('pass') || dn.includes('pass');
 }
 
 // Process value for transmission
 // Encrypt passwords using project-specific salt to prevent WiFi sniffing
-// The backend stores encrypted password and decrypts only when needed (e.g., for OTA)
+// IMPORTANT: Always keep the encryption branch present at bundle time.
+// Do NOT guard by comparing to the placeholder string here, otherwise
+// the bundler may optimize it away before our post-build salt injection.
+// The placeholder will be replaced in the built JS by the header generator.
 async function processValueForTransmission(category, key, value, settingData) {
   if (isPasswordField(category, key, settingData) && value && value.trim() !== '') {
-    // Only encrypt if salt is configured (not the placeholder)
-    if (ENCRYPTION_SALT && ENCRYPTION_SALT !== '__ENCRYPTION_SALT__') {
+    try {
       const encrypted = encryptPassword(value, ENCRYPTION_SALT);
       return encrypted;
+    } catch (e) {
+      console.warn('[Security] Password encryption failed, sending plaintext:', e);
+      // Fall through to return plaintext if encryption fails
     }
-    // No salt configured - transmit plaintext (user choice)
   }
-  return value; // Return original value for non-passwords or when encryption disabled
+  return value; // Return original value for non-passwords
 }
 
 const config = ref({});
@@ -629,9 +637,20 @@ async function saveAll() {
     if (
       input.dataset.isPassword === "1" &&
       (!input.value || input.value === "***")
-    )
+    ) {
+      // Skip placeholder or empty password fields
       return;
-    all[cat][key] = input.type === "checkbox" ? input.checked : input.value;
+    }
+    let v = input.type === "checkbox" ? input.checked : input.value;
+    // Encrypt password fields in bulk actions as well
+    if (input.dataset.isPassword === "1" && typeof v === 'string' && v.trim() !== '') {
+      try {
+        v = encryptPassword(v, ENCRYPTION_SALT);
+      } catch (e) {
+        console.warn('[Security] Password encryption (saveAll) failed, sending plaintext:', e);
+      }
+    }
+    all[cat][key] = v;
   });
   refreshing.value = true;
   try {
@@ -657,7 +676,15 @@ async function applyAll() {
   collectSettingsInputs().forEach((input) => {
     const [cat, key] = input.name.split(".");
     if (!all[cat]) all[cat] = {};
-    all[cat][key] = input.type === "checkbox" ? input.checked : input.value;
+    let v = input.type === "checkbox" ? input.checked : input.value;
+    if (input.dataset.isPassword === "1" && typeof v === 'string' && v.trim() !== '') {
+      try {
+        v = encryptPassword(v, ENCRYPTION_SALT);
+      } catch (e) {
+        console.warn('[Security] Password encryption (applyAll) failed, sending plaintext:', e);
+      }
+    }
+    all[cat][key] = v;
   });
   refreshing.value = true;
   try {
