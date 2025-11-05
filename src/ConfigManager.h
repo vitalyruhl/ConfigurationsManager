@@ -735,6 +735,48 @@ public:
             s->load(prefs);
         }
         prefs.end();
+
+        // After loading persisted settings on boot, propagate important runtime-affecting values
+        // so subsystems (like OTA) reflect saved configuration immediately.
+        auto containsNoCase = [](const String &hay, const char *needle) {
+            String h = hay; h.toLowerCase();
+            String n = String(needle); n.toLowerCase();
+            return h.indexOf(n) >= 0;
+        };
+
+        for (auto *s : settings) {
+            String cat = s->getCategory();
+            String key = s->getDisplayName();
+
+            // System OTA password at boot
+            if (containsNoCase(cat, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
+                // Extract current value through JSON view (avoids RTTI/dynamic_cast)
+                DynamicJsonDocument d(256);
+                JsonObject obj = d.to<JsonObject>();
+                s->toJSON(obj);
+
+                String disp = s->getDisplayName();
+                String pwd;
+                if (obj.containsKey(disp)) {
+                    JsonObject so = obj[disp].as<JsonObject>();
+                    if (so.containsKey("actualValue")) {
+                        pwd = so["actualValue"].as<String>();
+                    } else if (so.containsKey("value")) {
+                        if (so["value"].is<const char*>()) {
+                            pwd = so["value"].as<String>();
+                        } else {
+                            // Fallback for non-string serializable values
+                            serializeJson(so["value"], pwd);
+                        }
+                    }
+                }
+
+                if (pwd.length() > 0) {
+                    otaManager.setPassword(pwd);
+                    CM_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
+                }
+            }
+        }
     }
 
     void saveAll()
@@ -799,6 +841,21 @@ public:
         }
 
         bool result = setting->fromJSON(doc.as<JsonVariant>());
+
+        // Side-effects: keep runtime subsystems in sync with specific settings
+        if (result) {
+            // Heuristic: treat keys containing both "ota" and "pass" (case-insensitive) as OTA password
+            auto containsNoCase = [](const String &hay, const char *needle) {
+                String h = hay; h.toLowerCase();
+                String n = String(needle); n.toLowerCase();
+                return h.indexOf(n) >= 0;
+            };
+            if (containsNoCase(category, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
+                // Apply immediately to OTA manager; this affects both HTTP OTA (/ota_update) and ArduinoOTA if initialized
+                otaManager.setPassword(value);
+                CM_LOG("[DEBUG] OTA password (memory) updated via setting '%s.%s' (len=%d)", category.c_str(), key.c_str(), (int)value.length());
+            }
+        }
 
         CM_LOG("[DEBUG] Setting apply result (memory only): %s", result ? "SUCCESS" : "FAILED");
         return result;
@@ -869,6 +926,18 @@ public:
             prefs.end();
 
             CM_LOG("[DEBUG] Setting saved to flash successfully");
+
+            // Side-effects: keep runtime subsystems in sync with specific settings
+            // Heuristic: treat keys containing both "ota" and "pass" (case-insensitive) as OTA password
+            auto containsNoCase = [](const String &hay, const char *needle) {
+                String h = hay; h.toLowerCase();
+                String n = String(needle); n.toLowerCase();
+                return h.indexOf(n) >= 0;
+            };
+            if (containsNoCase(category, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
+                otaManager.setPassword(value);
+                CM_LOG("[DEBUG] OTA password (persisted) updated via setting '%s.%s' (len=%d)", category.c_str(), key.c_str(), (int)value.length());
+            }
         }
 
         CM_LOG("[DEBUG] Setting update result: %s", result ? "SUCCESS" : "FAILED");

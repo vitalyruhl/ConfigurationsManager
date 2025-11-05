@@ -327,6 +327,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     server->on("/config/apply", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             // Response is sent in body handler
+            Serial.println("[WebServer] /config/apply request received");
         },
         NULL,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
@@ -341,6 +342,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
             // Process when all data received
             if (index + len == total) {
+                Serial.printf("[WebServer] /config/apply body complete (%u bytes)\n", (unsigned)total);
                 // Get URL parameters
                 AsyncWebParameter* pCategory = request->getParam("category");
                 AsyncWebParameter* pKey = request->getParam("key");
@@ -421,6 +423,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
         [this](AsyncWebServerRequest* request) {
             // Setup CORS headers
             AsyncWebServerResponse* response = nullptr;
+            Serial.println("[WebServer] /config/save request received");
 
             // Extract category and key from URL parameters
             String category = request->hasParam("category") ? request->getParam("category")->value() : "";
@@ -446,6 +449,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                 }
 
                 if (index + len == total) {
+                    Serial.printf("[WebServer] /config/save body complete (%u bytes)\n", (unsigned)total);
                     // Body complete, process the request
                     String category = request->hasParam("category") ? request->getParam("category")->value() : "";
                     String key = request->hasParam("key") ? request->getParam("key")->value() : "";

@@ -1,17 +1,17 @@
 <template>
   <div class="category">
     <h2>{{ prettyName }}</h2>
-    <Setting
-      v-for="(settingData, key) in filteredSettings"
-      :key="key"
-      :category="category"
-      :keyName="key"
-      :settingData="settingData"
-      :busy="!!busyMap[category + '.' + key]"
-      v-if="shouldShow(settingData)"
-      @apply="onApply"
-      @save="onSave"
-    />
+    <template v-for="(settingData, key) in filteredSettings" :key="key">
+      <Setting
+        v-if="shouldShow(settingData)"
+        :category="category"
+        :keyName="key"
+        :settingData="settingData"
+        :busy="!!busyMap[category + '.' + key]"
+        @apply="onApply"
+        @save="onSave"
+      />
+    </template>
   </div>
 </template>
 <style scoped>
