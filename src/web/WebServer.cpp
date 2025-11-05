@@ -167,7 +167,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
         request->send(200, "text/plain", payload);
     });
     // Debug route to catch any config requests with body handling
-    server->on("/config", HTTP_ANY,
+        server->on("/config_raw", HTTP_ANY,
         [this](AsyncWebServerRequest* request) {
             // Response sent in body handler for POST requests
             if (request->method() != HTTP_POST) {
@@ -182,7 +182,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                 static_cast<String*>(request->_tempObject)->reserve(total);
             }
 
-            String* body = static_cast<String*>(request->_tempObject);
+                String* body = static_cast<String*>(request->_tempObject);
             body->concat(String((const char*)data).substring(0, len));
 
             if (index + len == total) {

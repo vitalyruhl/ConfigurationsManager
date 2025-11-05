@@ -693,6 +693,7 @@ pio run -e usb -t upload # Re-upload firmware
 - **2.7.3**: Fixed critical bug where `CM_ENABLE_RUNTIME_META` was incorrectly dependent on `CM_ENABLE_SYSTEM_PROVIDER`, causing runtime metadata to be disabled when system provider was turned off. Runtime metadata is now always enabled for proper WebUI functionality.
 - **2.7.4**: **Major improvement:** Tools folder is now included in the library package! No more manual copying required - reference the precompile script directly from the library installation path: `extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py`. Updated all documentation to reflect the simplified setup process.
 - **2.7.5**: **Security improvement:** Added XOR-based password encryption for HTTP transmission. Passwords are encrypted during transmission between the WebUI and ESP32 to prevent casual WiFi packet sniffing (storage remains plaintext on ESP32). New, simple setup via a single `src/salt.h` file that configures both WebUI and firmware. See docs/SECURITY.md for details.
+- **2.7.6**: Minor bugfixes and documentation updates.
 
 ## Smart WiFi Roaming Feature
 

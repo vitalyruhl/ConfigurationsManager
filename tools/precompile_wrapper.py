@@ -216,6 +216,44 @@ def main():
             print("[precompile_wrapper] WARNING: webui sources not found; skipping Vue rebuild and keeping packaged header.")
             return False
 
+        def _sync_cpp_sources(libdir: Path) -> bool:
+            """Sync C++ sources from a local project/library into libdeps copy.
+            This ensures the backend (endpoints, decrypt logic) matches the local workspace when testing in another project.
+            """
+            try:
+                local_paths = _collect_local_lib_paths(project_dir / 'platformio.ini')
+                for lp in local_paths:
+                    # Expect a library-like layout at lp (this workspace): src/ ...
+                    src_root = lp / 'src'
+                    if src_root.exists() and src_root.is_dir():
+                        import shutil
+                        dst_root = libdir / 'src'
+                        print(f"[precompile_wrapper] Syncing C++ sources from local project: {src_root} -> {dst_root}")
+                        # Replace destination src completely to avoid stale files
+                        if dst_root.exists():
+                            try:
+                                shutil.rmtree(dst_root)
+                            except Exception as rexc:
+                                print(f"[precompile_wrapper] Warning: failed to remove old src: {rexc}")
+                        shutil.copytree(src_root, dst_root)
+
+                        # Optionally also sync library manifest to reflect version/capabilities
+                        man_src = lp / 'library.json'
+                        man_dst = libdir / 'library.json'
+                        try:
+                            if man_src.exists():
+                                shutil.copy2(man_src, man_dst)
+                                print(f"[precompile_wrapper] Updated library.json in libdeps from local project")
+                        except Exception as mexc:
+                            print(f"[precompile_wrapper] Note: could not update library.json: {mexc}")
+
+                        return True
+                # No local project found; keep packaged sources
+                return False
+            except Exception as e:
+                print(f"[precompile_wrapper] Note: could not sync C++ sources: {e}")
+                return False
+
         flags_tokens = _collect_build_flags(project_dir / 'platformio.ini', active_env)
         if flags_tokens:
             env_vars['PLATFORMIO_BUILD_FLAGS'] = ' '.join(flags_tokens)
@@ -254,6 +292,14 @@ def main():
             _ensure_webui_sources(lib_path)
         except Exception as e_copy:
             print(f"[precompile_wrapper] Note: could not ensure webui sources: {e_copy}")
+
+        # Ensure backend (C++) sources are synced from the local workspace if available
+        try:
+            synced = _sync_cpp_sources(lib_path)
+            if synced:
+                print("[precompile_wrapper] Using local backend sources (with decrypt + /config/password)")
+        except Exception as e_sync:
+            print(f"[precompile_wrapper] Note: C++ source sync step failed: {e_sync}")
 
         # Ensure header generator is available where library expects it (lib/tools)
         try:
