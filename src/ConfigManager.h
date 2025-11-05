@@ -16,6 +16,9 @@
 
 #include "ConfigManagerConfig.h"
 
+// Password encryption salt (user can override by copying salt.h to their project)
+#include "salt.h"
+
 // Modular components
 #include "wifi/WiFiManager.h"
 #include "web/WebServer.h"
@@ -906,11 +909,26 @@ public:
         webManager.setSettingsPassword(password);
         CM_LOG("[I] Settings password configured");
     }
+    
+    // Password encryption salt for XOR encryption
+    // Automatically loads from src/salt.h if not explicitly set
+    void initializeEncryption()
+    {
+        #ifdef ENCRYPTION_SALT
+            webManager.setEncryptionSalt(ENCRYPTION_SALT);
+            CM_LOG("[I] Encryption salt loaded from salt.h (length: %d)", String(ENCRYPTION_SALT).length());
+        #else
+            CM_LOG("[W] No ENCRYPTION_SALT defined - passwords will be transmitted in plaintext");
+        #endif
+    }
 
     // WiFi management - NON-BLOCKING!
     void startWebServer(const String &ssid, const String &password)
     {
         CM_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
+
+        // Initialize encryption from salt.h
+        initializeEncryption();
 
         // Start WiFi connection non-blocking
         wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout

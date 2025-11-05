@@ -220,6 +220,25 @@ def main():
         else:
             print(f"[precompile_wrapper] WARNING: No build flags found in platformio.ini")
 
+        # Extract ENCRYPTION_SALT from project's src/salt.h for password encryption
+        try:
+            import re
+            salt_file = project_dir / 'src' / 'salt.h'
+            if salt_file.exists():
+                content = salt_file.read_text(encoding='utf-8', errors='ignore')
+                match = re.search(r'#define\s+ENCRYPTION_SALT\s+"([^"]+)"', content)
+                if match:
+                    encryption_salt = match.group(1)
+                    env_vars['CM_ENCRYPTION_SALT'] = encryption_salt
+                    env_vars['PROJECT_DIR'] = str(project_dir)
+                    print(f"[precompile_wrapper] Found ENCRYPTION_SALT in src/salt.h (length: {len(encryption_salt)})")
+                else:
+                    print("[precompile_wrapper] No ENCRYPTION_SALT found in src/salt.h")
+            else:
+                print("[precompile_wrapper] No src/salt.h file found - using library default")
+        except Exception as e:
+            print(f"[precompile_wrapper] Note: Could not read src/salt.h: {e}")
+
         # Change working directory to the library so its relative paths resolve
         os.chdir(str(lib_path))
         print(f"[precompile_wrapper] Changed CWD to: {os.getcwd()}")

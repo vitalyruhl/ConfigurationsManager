@@ -231,20 +231,31 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     WEB_LOG("[Web] Parsed: category='%s', key='%s', value='%s'",
                             category.c_str(), key.c_str(), value.c_str());
 
-                    // Process hashed passwords - detect and handle password encryption
+                    // Handle encrypted password transmission
+                    // Passwords are sent as encrypted hex string using XOR with project-specific salt
+                    // This prevents casual WiFi sniffing while allowing the ESP32 to decrypt and use the password
                     String finalValue = value;
-                    if (value.startsWith("hashed:")) {
-                        // This is a hashed password from the frontend
-                        String hashedValue = value.substring(7); // Remove "hashed:" prefix
-                        WEB_LOG("[Web] Received hashed password for %s.%s (length: %d)", 
-                                category.c_str(), key.c_str(), hashedValue.length());
-                        
-                        // For now, store the hash directly as the password
-                        // In production, you might want to verify against expected password hashes
-                        finalValue = hashedValue;
-                        WEB_LOG("[Web] Password hash processed for transmission security");
+                    
+                    // Check if value looks like encrypted hex (even length, only hex chars)
+                    bool isHex = (value.length() > 0 && value.length() % 2 == 0);
+                    if (isHex) {
+                        for (size_t i = 0; i < value.length(); i++) {
+                            char c = value[i];
+                            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                                isHex = false;
+                                break;
+                            }
+                        }
                     }
-
+                    
+                    // If it looks like hex and we have a salt, try to decrypt
+                    if (isHex && !encryptionSalt.isEmpty()) {
+                        String decrypted = decryptPassword(value, encryptionSalt);
+                        WEB_LOG("[Web] Decrypted password (encrypted length: %d, decrypted length: %d)", 
+                                value.length(), decrypted.length());
+                        finalValue = decrypted;
+                    }
+                    
                     if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
                         request->send(200, "application/json", "{\"status\":\"ok\"}");
                     } else {
@@ -367,19 +378,29 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                 WEB_LOG("[Web] Extracted value: '%s'", value.c_str());
 
-                // Process hashed passwords - detect and handle password encryption
+                // Handle encrypted password transmission
                 String finalValue = value;
-                if (value.startsWith("hashed:")) {
-                    // This is a hashed password from the frontend
-                    String hashedValue = value.substring(7); // Remove "hashed:" prefix
-                    WEB_LOG("[Web] Received hashed password for %s.%s (length: %d)", 
-                            category.c_str(), key.c_str(), hashedValue.length());
-                    
-                    // For now, store the hash directly as the password
-                    finalValue = hashedValue;
-                    WEB_LOG("[Web] Password hash processed for transmission security");
+                
+                // Check if value looks like encrypted hex
+                bool isHex = (value.length() > 0 && value.length() % 2 == 0);
+                if (isHex) {
+                    for (size_t i = 0; i < value.length(); i++) {
+                        char c = value[i];
+                        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                            isHex = false;
+                            break;
+                        }
+                    }
                 }
-
+                
+                // If it looks like hex and we have a salt, try to decrypt
+                if (isHex && !encryptionSalt.isEmpty()) {
+                    String decrypted = decryptPassword(value, encryptionSalt);
+                    WEB_LOG("[Web] Decrypted password for apply (encrypted length: %d, decrypted length: %d)", 
+                            value.length(), decrypted.length());
+                    finalValue = decrypted;
+                }
+                
                 // Call apply callback (memory only, no flash save)
                 if (settingApplyCallback && settingApplyCallback(category, key, finalValue)) {
                     String response = "{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"" +
@@ -455,19 +476,29 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                     WEB_LOG("[Web] Extracted value for save: '%s'", value.c_str());
 
-                    // Process hashed passwords - detect and handle password encryption
+                    // Handle encrypted password transmission
                     String finalValue = value;
-                    if (value.startsWith("hashed:")) {
-                        // This is a hashed password from the frontend
-                        String hashedValue = value.substring(7); // Remove "hashed:" prefix
-                        WEB_LOG("[Web] Received hashed password for %s.%s (length: %d)", 
-                                category.c_str(), key.c_str(), hashedValue.length());
-                        
-                        // For now, store the hash directly as the password
-                        finalValue = hashedValue;
-                        WEB_LOG("[Web] Password hash processed for transmission security");
+                    
+                    // Check if value looks like encrypted hex
+                    bool isHex = (value.length() > 0 && value.length() % 2 == 0);
+                    if (isHex) {
+                        for (size_t i = 0; i < value.length(); i++) {
+                            char c = value[i];
+                            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                                isHex = false;
+                                break;
+                            }
+                        }
                     }
-
+                    
+                    // If it looks like hex and we have a salt, try to decrypt
+                    if (isHex && !encryptionSalt.isEmpty()) {
+                        String decrypted = decryptPassword(value, encryptionSalt);
+                        WEB_LOG("[Web] Decrypted password for save (encrypted length: %d, decrypted length: %d)", 
+                                value.length(), decrypted.length());
+                        finalValue = decrypted;
+                    }
+                    
                     // Call update callback (this also saves to flash in updateSetting)
                     if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
                         String response = "{\"status\":\"ok\",\"action\":\"save\",\"category\":\"" +
@@ -1156,4 +1187,61 @@ void ConfigManagerWeb::log(const char* format, ...) const {
 void ConfigManagerWeb::setSettingsPassword(const String& password) {
     settingsPassword = password;
     WEB_LOG("[Web] Settings password configured (length: %d)", password.length());
+}
+
+void ConfigManagerWeb::setEncryptionSalt(const String& salt) {
+    encryptionSalt = salt;
+    WEB_LOG("[Web] Encryption salt configured (length: %d)", salt.length());
+}
+
+// XOR-based password encryption matching JavaScript implementation
+String ConfigManagerWeb::encryptPassword(const String& password, const String& salt) {
+    if (password.isEmpty() || salt.isEmpty()) {
+        return password;
+    }
+    
+    String result;
+    result.reserve(password.length() * 2); // Each byte becomes 2 hex chars
+    
+    for (size_t i = 0; i < password.length(); i++) {
+        uint8_t pwdByte = (uint8_t)password[i];
+        uint8_t saltByte = (uint8_t)salt[i % salt.length()];
+        uint8_t encrypted = pwdByte ^ saltByte;
+        
+        // Convert to hex (2 chars)
+        char hex[3];
+        sprintf(hex, "%02x", encrypted);
+        result += hex;
+    }
+    
+    return result;
+}
+
+// XOR-based password decryption matching JavaScript implementation
+String ConfigManagerWeb::decryptPassword(const String& encryptedHex, const String& salt) {
+    if (encryptedHex.isEmpty() || salt.isEmpty()) {
+        return encryptedHex;
+    }
+    
+    // Check if it's valid hex (even length, only hex chars)
+    if (encryptedHex.length() % 2 != 0) {
+        return encryptedHex; // Not encrypted, return as-is
+    }
+    
+    String result;
+    result.reserve(encryptedHex.length() / 2);
+    
+    for (size_t i = 0; i < encryptedHex.length(); i += 2) {
+        // Parse 2 hex chars to byte
+        char hexByte[3] = {encryptedHex[i], encryptedHex[i+1], '\0'};
+        uint8_t encrypted = (uint8_t)strtol(hexByte, nullptr, 16);
+        
+        // XOR with salt
+        uint8_t saltByte = (uint8_t)salt[(i/2) % salt.length()];
+        uint8_t decrypted = encrypted ^ saltByte;
+        
+        result += (char)decrypted;
+    }
+    
+    return result;
 }

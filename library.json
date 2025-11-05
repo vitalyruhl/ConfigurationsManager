@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "2.7.4",
+  "version": "2.7.5",
   "keywords": "esp32, configuration, wifi, web-server, ota",
   "description": "Robust configuration management system with web interface for ESP32 and ota support.",
   "repository": {
@@ -29,7 +29,12 @@
       "webui/public/*",
       "webui/*.json",
       "README.md",
-      "library.json"
+      "library.json",
+      "webui/logo.svg",
+      "webui/db.json",
+      "webui/db.live.json",
+      "webui/README.md",
+      "webui/runtime_meta_min.json"
     ],
     "exclude": [
       "webui/node_modules",

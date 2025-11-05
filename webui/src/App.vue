@@ -103,13 +103,154 @@ import { ref, onMounted, provide, nextTick } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
-// Simple SHA-256 implementation for password hashing
+// Encryption salt - replaced at compile time from build flags
+// This is unique per project and makes simple sniffing difficult
+const ENCRYPTION_SALT = "__ENCRYPTION_SALT__"; // Will be replaced by build script
+
+// Simple XOR-based encryption with salt
+// Not cryptographically strong, but makes WiFi sniffing difficult for casual attackers
+function encryptPassword(password, salt) {
+  if (!password || !salt) return password;
+  
+  const saltBytes = new TextEncoder().encode(salt);
+  const pwdBytes = new TextEncoder().encode(password);
+  const encrypted = new Uint8Array(pwdBytes.length);
+  
+  for (let i = 0; i < pwdBytes.length; i++) {
+    // XOR with salt bytes (repeating)
+    encrypted[i] = pwdBytes[i] ^ saltBytes[i % saltBytes.length];
+  }
+  
+  // Convert to hex
+  return Array.from(encrypted)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function decryptPassword(encrypted, salt) {
+  if (!encrypted || !salt || encrypted.length % 2 !== 0) return encrypted;
+  
+  try {
+    const saltBytes = new TextEncoder().encode(salt);
+    const encryptedBytes = new Uint8Array(encrypted.length / 2);
+    
+    // Convert hex to bytes
+    for (let i = 0; i < encrypted.length; i += 2) {
+      encryptedBytes[i / 2] = parseInt(encrypted.substr(i, 2), 16);
+    }
+    
+    // XOR decrypt
+    const decrypted = new Uint8Array(encryptedBytes.length);
+    for (let i = 0; i < encryptedBytes.length; i++) {
+      decrypted[i] = encryptedBytes[i] ^ saltBytes[i % saltBytes.length];
+    }
+    
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    console.warn('[Security] Decryption failed:', e);
+    return encrypted; // Return as-is if decryption fails
+  }
+}
+
+// Simple SHA-256 implementation (kept for potential future use)
+// Fallback for non-secure contexts (HTTP) using a pure JS implementation
 async function sha256(message) {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex;
+  // Check if crypto.subtle is available (HTTPS or localhost only)
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const msgBuffer = new TextEncoder().encode(message);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    } catch (e) {
+      console.warn('[Security] crypto.subtle failed, using fallback:', e);
+    }
+  }
+  
+  // Fallback: Pure JavaScript SHA-256 implementation for HTTP contexts
+  // Based on https://geraintluff.github.io/sha256/ (public domain)
+  function sha256Fallback(ascii) {
+    function rightRotate(value, amount) {
+      return (value >>> amount) | (value << (32 - amount));
+    }
+    
+    const mathPow = Math.pow;
+    const maxWord = mathPow(2, 32);
+    const lengthProperty = 'length';
+    let i, j;
+    let result = '';
+    
+    const words = [];
+    const asciiBitLength = ascii[lengthProperty] * 8;
+    
+    let hash = sha256Fallback.h = sha256Fallback.h || [];
+    const k = sha256Fallback.k = sha256Fallback.k || [];
+    let primeCounter = k[lengthProperty];
+    
+    const isComposite = {};
+    for (let candidate = 2; primeCounter < 64; candidate++) {
+      if (!isComposite[candidate]) {
+        for (i = 0; i < 313; i += candidate) {
+          isComposite[i] = candidate;
+        }
+        hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
+        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+      }
+    }
+    
+    ascii += '\x80';
+    while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
+    for (i = 0; i < ascii[lengthProperty]; i++) {
+      j = ascii.charCodeAt(i);
+      if (j >> 8) return;
+      words[i >> 2] |= j << ((3 - i) % 4) * 8;
+    }
+    words[words[lengthProperty]] = ((asciiBitLength / maxWord) | 0);
+    words[words[lengthProperty]] = (asciiBitLength);
+    
+    for (j = 0; j < words[lengthProperty];) {
+      const w = words.slice(j, j += 16);
+      const oldHash = hash;
+      hash = hash.slice(0, 8);
+      
+      for (i = 0; i < 64; i++) {
+        const w15 = w[i - 15], w2 = w[i - 2];
+        
+        const a = hash[0], e = hash[4];
+        const temp1 = hash[7]
+          + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
+          + ((e & hash[5]) ^ ((~e) & hash[6]))
+          + k[i]
+          + (w[i] = (i < 16) ? w[i] : (
+              w[i - 16]
+              + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
+              + w[i - 7]
+              + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
+            ) | 0
+          );
+        const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
+          + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+        
+        hash = [(temp1 + temp2) | 0].concat(hash);
+        hash[4] = (hash[4] + temp1) | 0;
+      }
+      
+      for (i = 0; i < 8; i++) {
+        hash[i] = (hash[i] + oldHash[i]) | 0;
+      }
+    }
+    
+    for (i = 0; i < 8; i++) {
+      for (j = 3; j + 1; j--) {
+        const b = (hash[i] >> (j * 8)) & 255;
+        result += ((b < 16) ? 0 : '') + b.toString(16);
+      }
+    }
+    return result;
+  }
+  
+  return sha256Fallback(message);
 }
 
 // Check if a value is a password field that should be hashed
@@ -117,15 +258,19 @@ function isPasswordField(category, key, settingData) {
   return settingData && settingData.isPassword === true;
 }
 
-// Hash password if it's a password field, otherwise return original value
+// Process value for transmission
+// Encrypt passwords using project-specific salt to prevent WiFi sniffing
+// The backend stores encrypted password and decrypts only when needed (e.g., for OTA)
 async function processValueForTransmission(category, key, value, settingData) {
   if (isPasswordField(category, key, settingData) && value && value.trim() !== '') {
-    // Only hash non-empty passwords
-    const hashed = await sha256(value);
-    //console.log(`[Security] Hashing password for ${category}.${key}`);
-    return `hashed:${hashed}`; // Prefix to indicate this is a hashed password
+    // Only encrypt if salt is configured (not the placeholder)
+    if (ENCRYPTION_SALT && ENCRYPTION_SALT !== '__ENCRYPTION_SALT__') {
+      const encrypted = encryptPassword(value, ENCRYPTION_SALT);
+      return encrypted;
+    }
+    // No salt configured - transmit plaintext (user choice)
   }
-  return value; // Return original value for non-passwords
+  return value; // Return original value for non-passwords or when encryption disabled
 }
 
 const config = ref({});
@@ -176,6 +321,11 @@ function notify(
   sticky = false,
   id = null
 ) {
+  // Increase duration for errors to make them more readable
+  if (type === "error" && duration < 8000) {
+    duration = 8000; // 8 seconds for error messages
+  }
+  
   if (id == null) id = ++toastCounter;
   const existing = toasts.value.find((t) => t.id === id);
   if (existing) {
@@ -232,7 +382,10 @@ async function loadSettings() {
       console.warn(`[Frontend] Content-Length mismatch! Header: ${contentLength}, Actual: ${text.length}`);
     }
     
-    const data = JSON.parse(text);
+    // Clean the response text from potential control characters
+    const cleanedText = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+    
+    const data = JSON.parse(cleanedText);
     config.value = data.config || data;
     refreshKey.value++;
     
@@ -242,11 +395,15 @@ async function loadSettings() {
   } catch (e) {
     console.error("[Frontend] loadSettings error:", e);
     if (e.name === 'AbortError') {
-      notify("Connection timeout: Could not load settings", "error");
+      notify("Connection timeout: Could not load settings", "error", 8000);
     } else if (e.message.includes('Content-Length')) {
-      notify("Server response error: Data transmission interrupted", "error");
+      notify("Server response error: Data transmission interrupted", "error", 8000);
+    } else if (e instanceof SyntaxError && e.message.includes('JSON')) {
+      // JSON parsing error - provide more helpful message
+      notify("JSON parsing error. Please check if password contains special characters.", "error", 10000);
+      console.error("[Frontend] JSON parsing failed. Response preview:", text.substring(0, 500));
     } else {
-      notify("Fehler: " + e.message, "error");
+      notify("Fehler: " + e.message, "error", 8000);
     }
   }
 }

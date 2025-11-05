@@ -50,9 +50,23 @@ async function buildHeader() {
   if (!jsFile) {
     throw new Error('cannot find JS file in assets directory!');
   }
-  const jsContent = stripBlockComments(
+  let jsContent = stripBlockComments(
     fs.readFileSync(path.join(assetsDir, jsFile), 'utf8')
   );
+  
+  // Replace __ENCRYPTION_SALT__ placeholder with actual salt from environment
+  const encryptionSalt = process.env.CM_ENCRYPTION_SALT || process.env.ENCRYPTION_SALT || '__ENCRYPTION_SALT__';
+  if (encryptionSalt && encryptionSalt !== '__ENCRYPTION_SALT__') {
+    // Escape special regex characters in the salt for safe replacement
+    const saltPattern = /__ENCRYPTION_SALT__/g;
+    jsContent = jsContent.replace(saltPattern, encryptionSalt);
+    console.log(`[webui_to_header] Injected encryption salt (length: ${encryptionSalt.length})`);
+  } else {
+    console.log('[webui_to_header] No encryption salt provided - passwords will be transmitted in plaintext.');
+    console.log('[webui_to_header] To enable encryption, create src/salt.h in your project with:');
+    console.log('[webui_to_header]   #define ENCRYPTION_SALT "your-unique-salt"');
+  }
+  
   // Inline JS (only first module script tag). Using function form prevents special replacement patterns.
   indexHtml = indexHtml.replace(
     /<script[^>]*src="[^"]+"[^>]*><\/script>/,

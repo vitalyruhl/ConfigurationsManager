@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.7.4 (2025.11.05)
+> Version 2.7.5 (2025.11.05)
 
 > Breaking changes in v2.7.x
 >
@@ -35,6 +35,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - ⚡ Flash firmware directly from the web UI (password-protected HTTP OTA)
 - 🪄 Dynamic visibility of settings via `showIf` lambda (e.g. hide static IP fields while DHCP enabled)
 - 🔒 Password masking & selective exposure
+- 🔐 **Password encryption** - XOR-based encryption for HTTP transmission (prevents WiFi packet sniffing)
 - 🎨 Live-Values - two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
 - 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
 - 📡 AP Mode fallback / captive portal style entry
@@ -50,6 +51,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 | Settings & OptionGroup                    | `docs/SETTINGS.md`      |
 | Runtime Providers & Alarms                | `docs/RUNTIME.md`       |
 | Smart WiFi Roaming                        | `docs/SMART_ROAMING.md` |
+| Password Encryption Security              | `docs/SECURITY.md`      |
 | Styling (per-field metadata)              | `docs/STYLING.md`       |
 | Theming (global CSS + disabling metadata) | `docs/THEMING.md`       |
 | Feature Flags (compile-time switches)     | `docs/FEATURE_FLAGS.md` |
@@ -186,6 +188,70 @@ You can use the `setup_dependencies.py` script in the tools folder to install al
 **Version Compatibility:**
 - Vite 7.1.12 (used in this project) requires Node.js 18.0.0+
 - If you encounter build errors, ensure your Node.js version: `node --version` (should show v18.x.x or higher)
+
+## Password Encryption (New in 2.7.5)
+
+ConfigurationsManager now includes XOR-based password encryption for HTTP transmission:
+
+### Setup (Simple - One File!)
+
+**Step 1: Copy the salt configuration file**
+
+Copy `src/salt.h` from the library to your project's `src/` folder:
+
+```bash
+# Copy from library installation
+cp .pio/libdeps/your_env/ESP32\ Configuration\ Manager/src/salt.h src/
+```
+
+**Step 2: Customize your salt**
+
+Edit `src/salt.h` in your project and change the default salt:
+
+```cpp
+#pragma once
+
+// Change this to a unique random string for your project!
+#define ENCRYPTION_SALT "xK9#mP2$nQ7@wR5*zL3^vB8&cF4!hD6"
+```
+
+**Step 3: Add to .gitignore (Important!)**
+
+Add `src/salt.h` to your `.gitignore` to keep it out of version control:
+
+```
+src/salt.h
+```
+
+**Step 4: Use normally**
+
+No code changes needed! Encryption is automatically enabled:
+
+```cpp
+void setup() {
+    ConfigManagerClass cfg;
+    
+    // Encryption is automatically initialized from src/salt.h
+    Config<String> otaPassword(ConfigOptions<String>{
+        .key = "ota_pwd",
+        .category = "OTA",
+        .defaultValue = "admin123",
+        .name = "OTA Password",
+        .isPassword = true
+    });
+    
+    cfg.addSetting(&otaPassword);
+    cfg.startWebServer("MyNetwork", "password");
+}
+```
+
+**Key Points:**
+- 🔐 Passwords encrypted during HTTP transmission (prevents WiFi packet sniffing)
+- 💾 Passwords stored in **plaintext** on ESP32 (usable for OTA, MQTT, etc.)
+- 🔑 One file (`src/salt.h`) configures both WebUI and ESP32
+- 🔒 Keep `salt.h` out of git for security
+- 🔑 Use a unique salt per project (minimum 16 characters recommended)
+- 📖 See [docs/SECURITY.md](docs/SECURITY.md) for detailed information
 
 ## Examples
 
@@ -626,6 +692,7 @@ pio run -e usb -t upload # Re-upload firmware
 - **2.7.1-2**: Bugfixes for smart generation of the index.html from project - move devDependencies to dependencies, refactor the precompile_wrapper.py.
 - **2.7.3**: Fixed critical bug where `CM_ENABLE_RUNTIME_META` was incorrectly dependent on `CM_ENABLE_SYSTEM_PROVIDER`, causing runtime metadata to be disabled when system provider was turned off. Runtime metadata is now always enabled for proper WebUI functionality.
 - **2.7.4**: **Major improvement:** Tools folder is now included in the library package! No more manual copying required - reference the precompile script directly from the library installation path: `extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py`. Updated all documentation to reflect the simplified setup process.
+- **2.7.5**: **Security improvement:** Added XOR-based password encryption for HTTP transmission. Passwords are encrypted during transmission between the WebUI and ESP32 to prevent casual WiFi packet sniffing (storage remains plaintext on ESP32). New, simple setup via a single `src/salt.h` file that configures both WebUI and firmware. See docs/SECURITY.md for details.
 
 ## Smart WiFi Roaming Feature
 
