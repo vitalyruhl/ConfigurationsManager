@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "2.7.2",
+  "version": "2.7.3",
   "keywords": "esp32, configuration, wifi, web-server, ota",
   "description": "Robust configuration management system with web interface for ESP32 and ota support.",
   "repository": {
@@ -15,6 +15,29 @@
   ],
   "frameworks": "arduino",
   "platforms": "espressif32",
+  "export": {
+    "include": [
+      "src/*",
+      "tools/*",
+      "examples/*",
+      "webui/index.html",
+      "webui/vite.config.mjs",
+      "webui/package.json",
+      "webui/package-lock.json",
+      "webui/src/*",
+      "webui/public/*",
+      "webui/*.json",
+      "README.md",
+      "library.json"
+    ],
+    "exclude": [
+      "webui/node_modules",
+      "webui/dist",
+      ".vscode",
+      ".idea",
+      "*.code-workspace"
+    ]
+  },
   "dependencies": [
     {
       "name": "ArduinoJson",
