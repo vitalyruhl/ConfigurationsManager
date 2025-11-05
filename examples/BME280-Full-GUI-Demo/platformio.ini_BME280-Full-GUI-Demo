@@ -44,6 +44,7 @@ lib_deps =
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
+	vitaly.ruhl/ESP32 Configuration Manager@^2.7.3
 test_ignore = src/main.cpp
 extra_scripts = pre:tools/precompile_wrapper.py
 
@@ -90,6 +91,7 @@ lib_deps =
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
+	vitaly.ruhl/ESP32 Configuration Manager@^2.7.3
 test_ignore = src/main.cpp
 extra_scripts = pre:tools/precompile_wrapper.py
 ;;test-esp
