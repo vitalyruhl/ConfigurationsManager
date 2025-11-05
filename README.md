@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.7.0 (2025.11.01)
+> Version 2.7.4 (2025.11.05)
 
 > Breaking changes in v2.7.x
 >
@@ -73,21 +73,32 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 
 **1. Install the library** (see above)
 
-**2. Copy required tools to your project:**
-   ```bash
-   # Copy the entire tools folder from examples to your project root
-   cp -r .pio/libdeps/your_env/ESP32ConfigManager/examples/tools ./tools
+**2. Configure `platformio.ini`:**
+   ```ini
+   [env:usb]
+   platform = espressif32
+   board = your_board
+   framework = arduino
+   
+   build_unflags = -std=gnu++11
+   build_flags =
+       -std=gnu++17
+       -DCM_EMBED_WEBUI=1
+       # Add other feature flags as needed
+   
+   # Use the precompile script from the library (no copying required!)
+   extra_scripts = pre:.pio/libdeps/usb/ESP32 Configuration Manager/tools/precompile_wrapper.py
+   
+   lib_deps =
+       vitaly.ruhl/ESP32 Configuration Manager@^2.7.4
+       bblanchon/ArduinoJson@^7.4.1
+       esphome/ESPAsyncWebServer-esphome@^3.2.2
+       esphome/AsyncTCP-esphome@^2.0.3
    ```
-   Or manually copy: `examples/tools/` → `your_project/tools/`
+   
+   > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini_example_min` for a complete example.
 
-**3. Configure `platformio.ini`:**
-   - Copy the example from `examples/example_min/platformio.ini_example_min`
-   - Key requirements: 
-     - `build_unflags = -std=gnu++11`
-     - `build_flags = ... -std=gnu++17 -DCM_EMBED_WEBUI=1 ...`
-     - `extra_scripts = pre:tools/precompile_wrapper.py`
-
-**4. Install dependencies:**
+**3. Install dependencies:**
    ```bash
    pip install intelhex
    # Node.js 18+ REQUIRED (for Vite 7.x web UI build)
@@ -99,24 +110,26 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
    python --version # Recommended v3.10 or higher
    ```
 
-**5. Copy example code:**
+**4. Copy example code:**
    - Use `examples/example_min/main.cpp_example_min` as starting point
    - See other examples for advanced features
 
 ## Setup Requirements
 
-### Required Files Setup
+### Build Tools (Included in Library)
 
-**⚠️ IMPORTANT: Copy the `tools/` folder to your project root!**
+**✅ No manual copying required!** The build tools are now included in the library package.
 
-Before you can use this library, you **must** copy the entire `tools/` folder from `examples/tools/` to your project's root directory. This folder contains:
+The precompile wrapper script is automatically available at:
+```
+.pio/libdeps/<your_env>/ESP32 Configuration Manager/tools/precompile_wrapper.py
+```
 
-- `precompile_wrapper.py` - Builds and optimizes the Vue.js web interface
-- `webui_to_header.js` - Converts the built web UI into a compressed C++ header file
-- `setup_dependencies.py` - Automated dependency installer (optional helper)
-
-**Why is this required?**
-Without these scripts in your project, the library will use a pre-compiled, non-optimized web UI that wastes flash memory. The precompile wrapper optimizes and compresses the web interface specifically for your build configuration, significantly reducing flash usage.
+This script:
+- Builds and optimizes the Vue.js web interface
+- Compresses the web UI specifically for your enabled feature flags
+- Significantly reduces flash usage compared to a generic pre-compiled version
+- Automatically runs before each build via `extra_scripts` in your `platformio.ini`
 
 ### PlatformIO Configuration
 
@@ -135,14 +148,18 @@ build_flags =
     -DCM_EMBED_WEBUI=1                # Enable embedded web UI
     # Add other CM_ENABLE_* flags as needed (see docs/FEATURE_FLAGS.md)
 
-extra_scripts = pre:tools/precompile_wrapper.py  # Build web UI (required!)
+# Reference the precompile script directly from the library (no manual copying!)
+extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
 
 lib_deps =
+    vitaly.ruhl/ESP32 Configuration Manager@^2.7.4
     bblanchon/ArduinoJson@^7.4.1
     esphome/ESPAsyncWebServer-esphome@^3.2.2
     esphome/AsyncTCP-esphome@^2.0.3
 ```
 
+> **Important:** Replace `your_env` in the `extra_scripts` path with your actual environment name (e.g., `usb`, `ota`).
+> 
 > **📋 See complete examples in `examples/example_min/platformio.ini_example_min`**
 
 ### Dependencies
@@ -532,9 +549,13 @@ pio run -e ota -t upload --upload-port 192.168.2.126
 - Check: `python --version`
 - Install intelhex: `pip install intelhex`
 
-**"Cannot find tools/precompile_wrapper.py":**
-- Copy the entire `tools/` folder from `examples/tools/` to your project root
-- Verify `extra_scripts = pre:tools/precompile_wrapper.py` in your `platformio.ini`
+**"Cannot find precompile_wrapper.py" or script errors:**
+- Verify the library is installed: Check `.pio/libdeps/your_env/ESP32 Configuration Manager/`
+- Update `extra_scripts` path in your `platformio.ini`:
+  ```ini
+  extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
+  ```
+- Replace `your_env` with your actual environment name (e.g., `usb`, `ota`)
 
 **Web UI not building or old version showing:**
 ```bash
@@ -603,6 +624,8 @@ pio run -e usb -t upload # Re-upload firmware
 - **2.6.2**: some Bugfixes
 - **2.7.0**: Refactoring from one big ConfigManager class into multiple classes for better maintainability. Added **Smart WiFi Roaming** feature to automatically switch to stronger APs in mesh networks based on configurable signal strength thresholds. Refactor Runtime Provider into its own class. Improved logging messages and added more detailed status updates. (breaking changes!) note: Settings page now requires password authentication (default: "cf")
 - **2.7.1-2**: Bugfixes for smart generation of the index.html from project - move devDependencies to dependencies, refactor the precompile_wrapper.py.
+- **2.7.3**: Fixed critical bug where `CM_ENABLE_RUNTIME_META` was incorrectly dependent on `CM_ENABLE_SYSTEM_PROVIDER`, causing runtime metadata to be disabled when system provider was turned off. Runtime metadata is now always enabled for proper WebUI functionality.
+- **2.7.4**: **Major improvement:** Tools folder is now included in the library package! No more manual copying required - reference the precompile script directly from the library installation path: `extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py`. Updated all documentation to reflect the simplified setup process.
 
 ## Smart WiFi Roaming Feature
 

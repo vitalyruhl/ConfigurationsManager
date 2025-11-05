@@ -1,6 +1,10 @@
 # Feature Flags (Build-Time)
 
-> **⚠️ Prerequisites:** Before using feature flags, ensure you have copied the `tools/` folder from `examples/tools/` to your project root and configured `extra_scripts = pre:tools/precompile_wrapper.py` in your `platformio.ini`. See the main README for setup instructions.
+> **⚠️ Prerequisites:** Ensure you have configured the precompile script in your `platformio.ini`:
+> ```ini
+> extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
+> ```
+> Replace `your_env` with your environment name (e.g., `usb`, `ota`). See the main README for complete setup instructions.
 
 This project exposes many optional features that you can enable/disable at compile time to trim flash/RAM and reduce the embedded web UI size. Flags are passed via PlatformIO `build_flags` using `-D<FLAG>=0/1`.
 

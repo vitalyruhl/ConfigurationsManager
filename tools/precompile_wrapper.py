@@ -20,12 +20,17 @@ except Exception:
     print("[precompile_wrapper] SCons environment not available, running in standalone mode")
     SCONS_AVAILABLE = False
 
+# Ensure logs are flushed immediately
+def log(message):
+    print(message)
+    sys.stdout.flush()
+
 def main():
     if not SCONS_AVAILABLE:
         print("[precompile_wrapper] Starting precompile wrapper...")
     
     # Get the project directory
-    project_dir = Path(__file__).parent.parent
+    project_dir = Path(os.getcwd())
     
     if not SCONS_AVAILABLE:
         print(f"[precompile_wrapper] Project directory: {project_dir}")
@@ -92,7 +97,7 @@ def main():
                         rhs = parts[1]
                         tokens.extend(rhs.strip().split())
                     continue
-                if collecting and s and not line.startswith(('\t', ' ', ';', '#')) and '=' in line:
+                if collecting and s and not line.startswith(('	', ' ', ';', '#')) and '=' in line:
                     collecting = False
                 if collecting:
                     if s and not s.startswith((';', '#')):
@@ -128,11 +133,11 @@ def main():
                         continue
                     if capture:
                         # Stop on next config key
-                        if s and not raw.startswith(('\t', ' ', ';', '#')) and '=' in raw:
+                        if s and not raw.startswith(('	', ' ', ';', '#')) and '=' in raw:
                             capture = False
                         # Collect even commented absolute paths for convenience
                         cand = s.lstrip(';').strip()
-                        if cand and (':' in cand or cand.startswith('\\\\')):
+                        if cand and (':' in cand or cand.startswith('\\')):
                             p = Path(cand)
                             if p.exists() and p.is_dir():
                                 paths.append(p)
@@ -219,17 +224,12 @@ def main():
         os.chdir(str(lib_path))
         print(f"[precompile_wrapper] Changed CWD to: {os.getcwd()}")
         print(f"[precompile_wrapper] Running: {sys.executable} {precompile_script}")
-        # If published package lacks webui sources, try to hydrate from a local lib path
+        
+        # Always try to ensure webui sources are available
         try:
-            has_sources = _ensure_webui_sources(lib_path)
+            _ensure_webui_sources(lib_path)
         except Exception as e_copy:
             print(f"[precompile_wrapper] Note: could not ensure webui sources: {e_copy}")
-            has_sources = False
-
-        if not has_sources:
-            # Do not invoke precompile script; keep packaged header as-is
-            print("[precompile_wrapper] Skipping precompile since webui sources are unavailable.")
-            return
 
         # Ensure header generator is available where library expects it (lib/tools)
         try:
@@ -265,6 +265,36 @@ def main():
         except Exception as e:
             print(f"[precompile_wrapper] Warning: could not purge node_modules: {e}")
 
+        # Ensure node_modules exists before proceeding
+        webui_dir = lib_path / 'webui'
+        node_modules_dir = webui_dir / 'node_modules'
+
+        log("[precompile_wrapper] Debug: Checking if SCons environment is available...")
+        if SCONS_AVAILABLE:
+            log("[precompile_wrapper] SCons environment detected.")
+        else:
+            log("[precompile_wrapper] SCons environment not detected. Running in standalone mode.")
+
+        log(f"[precompile_wrapper] Current working directory: {os.getcwd()}")
+        log(f"[precompile_wrapper] Environment variables: {os.environ}")
+
+        # Debugging library path
+        log(f"[precompile_wrapper] Calculated library path: {lib_path}")
+        if not lib_path.exists():
+            log(f"[precompile_wrapper] Library path does not exist: {lib_path}")
+
+        # Debugging precompile script path
+        log(f"[precompile_wrapper] Expected precompile script path: {precompile_script}")
+        if not precompile_script.exists():
+            log(f"[precompile_wrapper] Precompile script does not exist: {precompile_script}")
+
+        # Debugging node_modules check
+        log(f"[precompile_wrapper] Checking if node_modules exists at: {node_modules_dir}")
+        if not node_modules_dir.exists():
+            log("[precompile_wrapper] node_modules folder is missing. npm install will be attempted.")
+        else:
+            log("[precompile_wrapper] node_modules folder exists. Skipping npm install.")
+
         result = subprocess.run([sys.executable, str(precompile_script)], 
                                 capture_output=False, 
                                 text=True,
@@ -280,5 +310,9 @@ def main():
     finally:
         os.chdir(original_cwd)
 
-if __name__ == "__main__":
+# Catch any unhandled exceptions
+try:
     main()
+except Exception as e:
+    log(f"[precompile_wrapper] Unhandled exception: {e}")
+    sys.exit(1)
