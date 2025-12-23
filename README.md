@@ -744,4 +744,4 @@ See `docs/SMART_ROAMING.md` for complete documentation and optimization guides.
 
 ### known Issues
 
-- please see the todo-errors.md file in docs folder.
+- please see the TODO.md file in docs folder.
