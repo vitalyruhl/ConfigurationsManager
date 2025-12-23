@@ -50,6 +50,14 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Memory/flash safety: After changes to WebUI/HTML content or large strings, verify binary size and memory behavior (heap/PSRAM) to avoid runtime instability on ESP32.
   - Settings migration: Any change to the settings structure must be backwards-compatible (defensive defaults) and should include a migration/versioning strategy to prevent OTA updates from breaking existing devices.
 
+- Versioning Guidelines:
+  - Single source of truth: The project version is defined in library.json. Do not introduce additional independent version numbers.
+  - Keep consumers in sync: When the version changes, update any displayed/served versions (e.g. the firmware /version endpoint and the WebUI package version) to match library.json.
+  - SemVer bump rules (MAJOR.MINOR.PATCH):
+    - PATCH: Bugfix only, no breaking changes, no new settings required.
+    - MINOR: New backwards-compatible features, new settings with safe defaults, additive API.
+    - MAJOR: Breaking changes (API, settings schema without seamless migration, behavior changes that require user action), or removed/deprecated features.
+
 - File Organization Guidelines:
   - PowerShell scripts for automation preferred, Python only if necessary
   - ALL documentation and development notes go in /docs/ directory
