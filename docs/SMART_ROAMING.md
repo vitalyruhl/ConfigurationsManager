@@ -213,8 +213,8 @@ Smart Roaming is implemented directly in the ConfigManager WiFi subsystem:
 
 See the examples directory for complete implementations:
 
-- `main.cpp_example_min`: Basic setup with default Smart Roaming
-- `main.cpp_example_bme280`: Advanced setup with custom roaming configuration
+- `examples/example_min/src/main.cpp`: Basic setup with default Smart Roaming
+- `examples/bme280/src/main.cpp`: Advanced setup with custom roaming configuration
 
 ## Version History
 

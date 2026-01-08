@@ -6,6 +6,8 @@
   - Each example now builds via its own `platformio.ini` and `src/main.cpp`
   - Local dev uses `lib_deps = file://../..`
   - `library.json` export excludes `**/.pio/**` to avoid recursive local installs on Windows
+  - Each example uses `[platformio] build_dir` + `libdeps_dir` outside the repo to prevent `.pio` folders under `examples/`
+  - Verified builds: `pio run -d examples/publish -e usb`, `example_min`, `bme280`, `BME280-Full-GUI-Demo`
 
 ### High Priority Bugs (Prio 1)
 

@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.7.5 (2025.11.05)
+> Version 2.7.6 (2025.11.05)
 
 > Breaking changes in v2.7.x
 >
@@ -39,8 +39,8 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - 🎨 Live-Values - two theming paths: per‑field JSON style metadata or global `/user_theme.css` override
 - 🛎️ Per‑setting callbacks (`cb` or `setCallback`) on value changes
 - 📡 AP Mode fallback / captive portal style entry
-- � **Smart WiFi Roaming** - Automatic switching to stronger access points in mesh networks
-- �🔴 Live runtime values (`/runtime.json`) (you can make your own Web-Interface by design the Vue 3 embedded Project)
+- Smart WiFi Roaming - Automatic switching to stronger access points in mesh networks
+- Live runtime values (`/runtime.json`) (you can make your own Web-Interface by design the Vue 3 embedded Project)
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
@@ -92,13 +92,13 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
    extra_scripts = pre:.pio/libdeps/usb/ESP32 Configuration Manager/tools/precompile_wrapper.py
    
    lib_deps =
-       vitaly.ruhl/ESP32 Configuration Manager@^2.7.4
+       vitaly.ruhl/ESP32 Configuration Manager@^2.7.6
        bblanchon/ArduinoJson@^7.4.1
        esphome/ESPAsyncWebServer-esphome@^3.2.2
        esphome/AsyncTCP-esphome@^2.0.3
    ```
    
-   > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini_example_min` for a complete example.
+   > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini` for a complete example.
 
 **3. Install dependencies:**
    ```bash
@@ -112,9 +112,9 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
    python --version # Recommended v3.10 or higher
    ```
 
-**4. Copy example code:**
-   - Use `examples/example_min/main.cpp_example_min` as starting point
-   - See other examples for advanced features
+**4. Use the examples as reference:**
+    - The examples in `examples/` are standalone PlatformIO projects (`platformio.ini` + `src/main.cpp`).
+    - Start with `examples/example_min/src/main.cpp` and adapt as needed.
 
 ## Setup Requirements
 
@@ -154,7 +154,7 @@ build_flags =
 extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^2.7.4
+    vitaly.ruhl/ESP32 Configuration Manager@^2.7.6
     bblanchon/ArduinoJson@^7.4.1
     esphome/ESPAsyncWebServer-esphome@^3.2.2
     esphome/AsyncTCP-esphome@^2.0.3
@@ -162,7 +162,7 @@ lib_deps =
 
 > **Important:** Replace `your_env` in the `extra_scripts` path with your actual environment name (e.g., `usb`, `ota`).
 > 
-> **📋 See complete examples in `examples/example_min/platformio.ini_example_min`**
+> **📋 See complete examples in `examples/example_min/platformio.ini`**
 
 ### Dependencies
 
@@ -257,11 +257,28 @@ void setup() {
 
 > Example files live in the `examples/` directory:
 
-Only v2.7.x examples are kept:
+Only v2.7.x examples are kept.
 
-- `main.cpp_example_min` – Minimal WiFi + runtime provider + WebSocket push + OTA.
-- [BME280 Example light](examples/bme280/main.cpp_bme280)
-- [Full featured demo with all UI controls + BME280 sensor + runtime + alarms + OTA](examples/BME280-Full-GUI-Demo/main.cpp_BME280-Full-GUI-Demo)
+Each example is a standalone PlatformIO project:
+
+- [examples/example_min](examples/example_min) - minimal demo
+- [examples/bme280](examples/bme280) - BME280 (light)
+- [examples/BME280-Full-GUI-Demo](examples/BME280-Full-GUI-Demo) - full feature demo
+- [examples/publish](examples/publish) - build-only smoke example
+
+Build an example:
+
+```bash
+pio run -d examples/bme280 -e usb
+```
+
+Upload (USB example):
+
+```bash
+pio run -d examples/bme280 -e usb -t upload --upload-port COM5
+```
+
+Note (Windows): these example projects set `[platformio] build_dir` and `libdeps_dir` outside the repo to prevent recursive local installs when using `lib_deps = file://../..`.
 
 
 
@@ -360,13 +377,13 @@ void setup()
     // nesseasary settings for webserver and wifi
     if (wifiSettings.wifiSsid.get().length() == 0)
     {
-        Serial.printf("⚠️ SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
+        Serial.printf("[WARNING] SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
         cfg.startAccessPoint();
     }
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        Serial.printf("🖥️  AP Mode! \n");
+        Serial.println("[INFO] AP Mode");
         return; // Skip webserver setup in AP mode
     }
 
@@ -393,7 +410,7 @@ void setup()
         // OTA setup (always call if feature compiled in & user enabled; handleOTA will defer until WiFi is up)
         cfg.setupOTA("esp32", "otapassword123");
     }
-    Serial.printf("🖥️ Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[INFO] Webserver running at: %s\n", WiFi.localIP().toString().c_str());
 }
 
 void loop()
@@ -407,12 +424,16 @@ void loop()
     //reconnect if wifi is lost
     if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_AP)
     {
-        Serial.println("⚠️ WiFi lost, reconnecting...");
+        Serial.println("[WARNING] WiFi lost, reconnecting...");
         cfg.reconnectWifi();
         delay(1500); // wait for wifi connection a bit
         cfg.setupOTA("esp32", "otapassword123");
     }
 
+    delay(updateInterval.get());
+}
+
+```
 
 > Breaking changes in v2.7.x
 >
@@ -421,7 +442,6 @@ void loop()
 > - Some APIs have been moved into dedicated manager classes (use `getWiFiManager()`, `getWebManager()`, etc.)
 > - ConfigOptions field rename: `keyName` → `key`, `prettyName` → `name`, `prettyCat` → `categoryPretty`
 > - If you are upgrading from < 2.7, check your code for WiFi management calls and update accordingly
-    delay(updateInterval.get());
 - **FRITZ!Box Mesh networks** with multiple repeaters
 - **Enterprise WiFi** with multiple access points
 - **Home mesh systems** where devices get "stuck" to distant APs
@@ -436,8 +456,6 @@ void loop()
 
     // ... continue with WiFi setup ...
 }
-```
-
 ### Default Settings
 
 | Parameter       | Default Value | Description                                        |
