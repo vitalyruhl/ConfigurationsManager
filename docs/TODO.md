@@ -2,6 +2,13 @@
 
 ## Current Issues to Fix
 
+- **[CHORE] Convert examples to standalone PlatformIO projects** [COMPLETED]
+  - Each example now builds via its own `platformio.ini` and `src/main.cpp`
+  - Local dev uses `lib_deps = file://../..`
+  - `library.json` export excludes `**/.pio/**` to avoid recursive local installs on Windows
+  - Each example uses `[platformio] build_dir` + `libdeps_dir` outside the repo to prevent `.pio` folders under `examples/`
+  - Verified builds: `pio run -d examples/publish -e usb`, `example_min`, `bme280`, `BME280-Full-GUI-Demo`
+
 ### High Priority Bugs (Prio 1)
 
 - ~~**[Bug] Save failed System.OTA Password: can't access property "digest", crypto.subtle is undefined**~~ [COMPLETED] **FIXED** - Improved password transmission security. Passwords are now transmitted as JSON with both the actual password and its SHA-256 hash: `{"password":"ota1234","hash":"954de57..."}`. This prevents casual WiFi packet sniffing (better than no security) while allowing the ESP32 to store and use the actual password. The hash is computed on the client side with a fallback for non-HTTPS contexts. Passwords now display correctly in the GUI (shows "ota1234" not the hash) and work properly with OTA and other features.
