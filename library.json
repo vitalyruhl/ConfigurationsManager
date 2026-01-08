@@ -37,6 +37,14 @@
       "webui/runtime_meta_min.json"
     ],
     "exclude": [
+      ".pio",
+      ".pio/**",
+      "**/.pio",
+      "**/.pio/**",
+      "**/.pioenvs",
+      "**/.pioenvs/**",
+      "**/.piolibdeps",
+      "**/.piolibdeps/**",
       "webui/node_modules",
       ".vscode",
       ".idea",

@@ -33,7 +33,7 @@
 #define APP_NAME "CM-BME280-Full-GUI-Demo"
 #define BUTTON_PIN_AP_MODE 13
 
-// ⚠️ Warning ⚠️
+// [WARNING] Warning
 // ESP32 has a limitation of 15 characters for the key name.
 // The key name is built from the category and the key name (<category>_<key>).
 // The category is limited to 13 characters, the key name to 1 character.
@@ -521,11 +521,11 @@ void setup()
 
     // Show correct IP address depending on WiFi mode
     if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
-        Serial.printf("🖥️ Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
+        Serial.printf("[INFO] Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
     } else if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("🖥️ Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
+        Serial.printf("[INFO] Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
     } else {
-        Serial.println("🖥️ Webserver running (IP not available)");
+        Serial.println("[INFO] Webserver running (IP not available)");
     }
 
     Serial.println("Configuration printout:");

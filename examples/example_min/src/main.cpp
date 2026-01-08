@@ -124,11 +124,11 @@ void setup()
 
     // Show correct IP address depending on WiFi mode
     if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
-        Serial.printf("🖥️ Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
+        Serial.printf("[INFO] Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
     } else if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("🖥️ Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
+        Serial.printf("[INFO] Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
     } else {
-        Serial.println("🖥️ Webserver running (IP not available)");
+        Serial.println("[INFO] Webserver running (IP not available)");
     }
 }
 
