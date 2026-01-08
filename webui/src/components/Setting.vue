@@ -37,7 +37,7 @@
           @click="togglePasswordVisibility"
           :title="showPassword ? 'Hide password' : 'Show password'"
         >
-          {{ showPassword ? '🙈' : '👁' }}
+          {{ showPassword ? 'Hide' : 'Show' }}
         </button>
         <input
           v-else-if="type === 'number'"

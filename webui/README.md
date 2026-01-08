@@ -17,7 +17,14 @@ This folder contains the Vue 3 project for the ESP32 configuration web interface
 
 ## Build for ESP32
 
-Normally you don't need to run anything here manually. The PlatformIO prebuild script (`tools/preCompile_script.py`) will:
+Normally you don't need to run anything here manually.
+
+Starting with v3.0.0 the library no longer requires PlatformIO `extra_scripts` to build.
+
+If you are developing the WebUI, you can rebuild the embedded header manually from the repository root (requires Node.js):
+
+- Build WebUI: `npm install && npm run build` (run inside `webui/`)
+- Generate embedded header: `node tools/webui_to_header.js`
 
 - Install dependencies if missing
 - Build the Vue app with the right feature flags

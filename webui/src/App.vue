@@ -53,7 +53,7 @@
             @click="showSettingsPassword = !showSettingsPassword"
             :title="showSettingsPassword ? 'Hide password' : 'Show password'"
           >
-            {{ showSettingsPassword ? '🙈' : '👁️' }}
+            {{ showSettingsPassword ? 'Hide' : 'Show' }}
           </button>
         </div>
         <div class="modal-buttons">
@@ -103,9 +103,9 @@ import { ref, onMounted, provide, nextTick } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
-// Encryption salt - replaced at compile time from build flags
+// Encryption salt placeholder (replaced during WebUI packaging for firmware)
 // This is unique per project and makes simple sniffing difficult
-const ENCRYPTION_SALT = "__ENCRYPTION_SALT__"; // Will be replaced by build script
+const ENCRYPTION_SALT = "__ENCRYPTION_SALT__";
 
 // Simple XOR-based encryption with salt
 // Not cryptographically strong, but makes WiFi sniffing difficult for casual attackers

@@ -27,7 +27,7 @@
             @click="showOtaPassword = !showOtaPassword"
             :title="showOtaPassword ? 'Hide password' : 'Show password'"
           >
-            {{ showOtaPassword ? '🙈' : '👁️' }}
+            {{ showOtaPassword ? 'Hide' : 'Show' }}
           </button>
         </div>
         <div class="modal-actions">
@@ -1641,7 +1641,7 @@ label.switch input:checked + .slider:before {
   border-radius: 4px;
 }
 
-/* Boolean dot alarm styling - fallback when CM_ENABLE_STYLE_RULES=0 */
+/* Boolean dot alarm styling - fallback when style rules are disabled */
 .bd.bd--alarm {
   background-color: #e74c3c !important;
   animation: alarm-pulse 1.5s ease-in-out infinite;

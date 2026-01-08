@@ -2,6 +2,10 @@
 
 ## Current Issues to Fix
 
+- **[CURRENT] v3.0.0 cleanup: remove feature flags & pre/post scripts**
+  - Goal: Consumer builds without `CM_ENABLE_*` flags and without PlatformIO `extra_scripts`
+  - Only logging remains configurable
+
 - **[CHORE] Convert examples to standalone PlatformIO projects** [COMPLETED]
   - Each example now builds via its own `platformio.ini` and `src/main.cpp`
   - Local dev uses `lib_deps = file://../..`
@@ -15,7 +19,9 @@
 
 ### Medium Priority Bugs (Prio 5)
 
-- **[Bug] From project, if i set [\t-DCM_ENABLE_USER_CSS=0 and -DCM_ENABLE_STYLE_RULES=0] the styling injection is stil there**
+- **[Bug] From project, if i set [\t-DCM_ENABLE_USER_CSS=0 and -DCM_ENABLE_STYLE_RULES=0] the styling injection is stil there** [OBSOLETE in v3.0.0]
+
+  - v3.0.0 removes these feature flags and always enables theming/styling.
 
 ### Low Priority Bugs/Features
 

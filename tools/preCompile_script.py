@@ -151,20 +151,20 @@ def sliders_enabled_combined() -> bool:
 	# Backward compatibility: either int or float
 	return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
 
-# Evaluate embed flag now that helpers are loaded
-EMBED_WEBUI = flag_enabled('CM_EMBED_WEBUI')
+# v3.0.0: feature build flags removed. Always build the embedded WebUI with all runtime controls enabled.
+EMBED_WEBUI = True
 
-# Map firmware flags to frontend env vars (use combined flag)
-sliders_on = sliders_enabled_combined()
-state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
-buttons_on = flag_enabled('CM_ENABLE_RUNTIME_BUTTONS')
-checkboxes_on = flag_enabled('CM_ENABLE_RUNTIME_CHECKBOXES')
-num_inputs_on = flag_enabled('CM_ENABLE_RUNTIME_NUMBER_INPUTS') or True  # default to True when flag missing
+# Map firmware features to frontend env vars (fixed defaults)
+sliders_on = True
+state_btn_on = True
+buttons_on = True
+checkboxes_on = True
+num_inputs_on = True
 feature_env = {
-	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
-	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1' if sliders_on else '0',
-	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1' if state_btn_on else '0',
-	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
+	'VITE_ENABLE_WS_PUSH': '1',
+	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1',
+	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1',
+	'VITE_ENABLE_SYSTEM_PROVIDER': '1',
 }
 
 print(f"[extra_script] Flags: embed_webui={EMBED_WEBUI} sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")

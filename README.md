@@ -1,13 +1,12 @@
 # ConfigurationsManager for ESP32
 
-> Version 2.7.6 (2025.11.05)
+> Version 3.0.0 (2026.01.08)
 
-> Breaking changes in v2.7.x
+> Breaking changes in v3.0.0
 >
-> - Introduced modular architecture with separate WiFi, Web, OTA, and Runtime managers
-> - Added integrated Smart WiFi Roaming feature for automatic access point switching
-> - Some APIs have been moved into dedicated manager classes (use `getWiFiManager()`, `getWebManager()`, etc.)
-> - If you are upgrading from < 2.7, check your code for WiFi management calls and update accordingly
+> - Removed most build-time feature flags (`CM_ENABLE_*`, `CM_EMBED_WEBUI`, etc.)
+> - No PlatformIO `extra_scripts` required anymore (embedded WebUI is included in `src/html_content.*`)
+> - Only logging remains configurable: `CM_ENABLE_LOGGING`, `CM_ENABLE_VERBOSE_LOGGING`
 
 ## Overview
 
@@ -54,14 +53,14 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 | Password Encryption Security              | `docs/SECURITY.md`      |
 | Styling (per-field metadata)              | `docs/STYLING.md`       |
 | Theming (global CSS + disabling metadata) | `docs/THEMING.md`       |
-| Feature Flags (compile-time switches)     | `docs/FEATURE_FLAGS.md` |
+| Build Options (v3 change note)            | `docs/FEATURE_FLAGS.md` |
 
 ## Requirements
 
 - **ESP32 development board** (ESP32, ESP32-S2, ESP32-S3, ESP32-C3)
 - **PlatformIO** (preferred) or Arduino IDE (Arduino IDE not tested!)
-- **Node.js 18.0.0+** (required for Vite 7.x web UI build)
-- **Python 3.8+** (recommended: 3.10+)
+- **Node.js 18.0.0+** (only if you want to rebuild the WebUI)
+- **Python 3.8+** (optional; only used by legacy tooling)
 - Add `-std=gnu++17` (and remove default gnu++11) in `platformio.ini`
 
 ## Installation
@@ -84,33 +83,22 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
    
    build_unflags = -std=gnu++11
    build_flags =
+       -Wno-deprecated-declarations
        -std=gnu++17
-       -DCM_EMBED_WEBUI=1
-       # Add other feature flags as needed
-   
-   # Use the precompile script from the library (no copying required!)
-   extra_scripts = pre:.pio/libdeps/usb/ESP32 Configuration Manager/tools/precompile_wrapper.py
+       ; Optional logging switches:
+       ; -DCM_ENABLE_LOGGING=1
+       ; -DCM_ENABLE_VERBOSE_LOGGING=0
    
    lib_deps =
-       vitaly.ruhl/ESP32 Configuration Manager@^2.7.6
-       bblanchon/ArduinoJson@^7.4.1
-       esphome/ESPAsyncWebServer-esphome@^3.2.2
-       esphome/AsyncTCP-esphome@^2.0.3
+       vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
    ```
    
    > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini` for a complete example.
 
-**3. Install dependencies:**
-   ```bash
-   pip install intelhex
-   # Node.js 18+ REQUIRED (for Vite 7.x web UI build)
-   # Python 3.8+ (recommended: 3.10+)
-   ```
-   **⚠️ Check your versions:**
-   ```bash
-   node --version   # Must be v18.0.0 or higher!
-   python --version # Recommended v3.10 or higher
-   ```
+**3. Dependencies (optional):**
+
+- For normal firmware builds you don't need Node.js/Python.
+- Only required if you want to rebuild the WebUI (see `webui/README.md`).
 
 **4. Use the examples as reference:**
     - The examples in `examples/` are standalone PlatformIO projects (`platformio.ini` + `src/main.cpp`).
@@ -118,24 +106,17 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
 
 ## Setup Requirements
 
-### Build Tools (Included in Library)
+### v3.0.0: No prebuild scripts
 
-**✅ No manual copying required!** The build tools are now included in the library package.
+v3.0.0 ships the embedded WebUI directly in the library (`src/html_content.*`).
 
-The precompile wrapper script is automatically available at:
-```
-.pio/libdeps/<your_env>/ESP32 Configuration Manager/tools/precompile_wrapper.py
-```
-
-This script:
-- Builds and optimizes the Vue.js web interface
-- Compresses the web UI specifically for your enabled feature flags
-- Significantly reduces flash usage compared to a generic pre-compiled version
-- Automatically runs before each build via `extra_scripts` in your `platformio.ini`
+- No `extra_scripts` is required.
+- No `CM_ENABLE_*` list is required.
+- Only optional logging flags exist.
 
 ### PlatformIO Configuration
 
-Your `platformio.ini` **must** include these settings:
+Your `platformio.ini` should include these settings:
 
 ```ini
 [env:your_env]
@@ -147,47 +128,20 @@ build_unflags = -std=gnu++11          # Remove old C++ standard (required!)
 build_flags =
     -Wno-deprecated-declarations      # Suppress ArduinoJson warnings
     -std=gnu++17                      # Enable C++17 features (required!)
-    -DCM_EMBED_WEBUI=1                # Enable embedded web UI
-    # Add other CM_ENABLE_* flags as needed (see docs/FEATURE_FLAGS.md)
-
-# Reference the precompile script directly from the library (no manual copying!)
-extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
+    ; Optional logging switches:
+    ; -DCM_ENABLE_LOGGING=1
+    ; -DCM_ENABLE_VERBOSE_LOGGING=0
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^2.7.6
-    bblanchon/ArduinoJson@^7.4.1
-    esphome/ESPAsyncWebServer-esphome@^3.2.2
-    esphome/AsyncTCP-esphome@^2.0.3
+    vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
 ```
 
-> **Important:** Replace `your_env` in the `extra_scripts` path with your actual environment name (e.g., `usb`, `ota`).
-> 
 > **📋 See complete examples in `examples/example_min/platformio.ini`**
 
 ### Dependencies
 
-Before using the precompile wrapper script, ensure you have the following installed:
-
-**Python Dependencies:**
-
-1. **Python 3.8+** - Minimum Python 3.8 required
-   - **⚠️ Recommended: Python 3.10+ or newer** for full compatibility with Vite 7.x build tools
-   - Python 3.13 is fully supported (tested and working)
-2. **Required Python packages**: Install with `pip install intelhex`
-
-**Node.js Dependencies:**
-
-- **Node.js 18.0.0 or higher** (includes npm) - **REQUIRED for Vite 7.x**
-  - **⚠️ Node.js 16 and below are NOT supported!**
-  - Recommended: Node.js 18 LTS or Node.js 20 LTS
-  - The precompile script builds a Vue 3 + Vite 7.x web interface
-
-**Automated Setup:**
-You can use the `setup_dependencies.py` script in the tools folder to install all dependencies automatically.
-
-**Version Compatibility:**
-- Vite 7.1.12 (used in this project) requires Node.js 18.0.0+
-- If you encounter build errors, ensure your Node.js version: `node --version` (should show v18.x.x or higher)
+- Firmware build: no extra dependencies.
+- WebUI development: see `webui/README.md`.
 
 ## Password Encryption (New in 2.7.5)
 
@@ -387,9 +341,8 @@ void setup()
         return; // Skip webserver setup in AP mode
     }
 
-        // Enable built-in System provider (RSSI, freeHeap, optional loop avg) before starting the web server
-        // Requires CM_ENABLE_SYSTEM_PROVIDER=1 at compile time
-        cfg.enableBuiltinSystemProvider();
+    // Enable built-in System provider (RSSI, freeHeap, optional loop avg) before starting the web server
+    cfg.enableBuiltinSystemProvider();
 
     if (wifiSettings.useDhcp.get())
     {
@@ -505,36 +458,19 @@ build_flags =
 	-DUNIT_TEST
 	-Wno-deprecated-declarations
 	-std=gnu++17
-	-DCM_EMBED_WEBUI=1
-	-DCM_ENABLE_WS_PUSH=1
-	-DCM_ENABLE_SYSTEM_PROVIDER=1
-	-DCM_ENABLE_OTA=1
-	-DCM_ENABLE_RUNTIME_BUTTONS=1
-	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
-	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
-	-DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1
-	-DCM_ENABLE_RUNTIME_ALARMS=1
-	-DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
-	-DCM_ENABLE_STYLE_RULES=1
-	-DCM_ENABLE_USER_CSS=1
 	-DCM_ENABLE_LOGGING=1
 	-DCM_ENABLE_VERBOSE_LOGGING=0
 	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 
 lib_deps =
-	bblanchon/ArduinoJson@^7.4.1
-	esphome/ESPAsyncWebServer-esphome@^3.2.2
-	esphome/AsyncTCP-esphome@^2.0.3
+    vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
 test_ignore = src/main.cpp
-extra_scripts = pre:tools/precompile_wrapper.py
 
-;use this in Your own projects to have a precompile script
-;copy the tools/precompile_wrapper.py to your project
-;extra_scripts = pre:tools/precompile_wrapper.py
+; v3.0.0: no extra_scripts required
 
 
 
@@ -549,28 +485,12 @@ build_flags =
 	-DUNIT_TEST
 	-Wno-deprecated-declarations
 	-std=gnu++17
-	-DCM_EMBED_WEBUI=1
-	-DCM_ENABLE_WS_PUSH=1
-	-DCM_ENABLE_SYSTEM_PROVIDER=1
-	-DCM_ENABLE_OTA=1
-	-DCM_ENABLE_RUNTIME_BUTTONS=1
-	-DCM_ENABLE_RUNTIME_CHECKBOXES=1
-	-DCM_ENABLE_RUNTIME_STATE_BUTTONS=1
-	-DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1
-	-DCM_ENABLE_RUNTIME_ALARMS=1
-	-DCM_ENABLE_RUNTIME_NUMBER_INPUTS=1
-	-DCM_ENABLE_STYLE_RULES=1
-	-DCM_ENABLE_USER_CSS=1
 	-DCM_ENABLE_LOGGING=1
 	-DCM_ENABLE_VERBOSE_LOGGING=0
 	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
-	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
-	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 lib_deps =
-	bblanchon/ArduinoJson@^7.4.1
-	esphome/ESPAsyncWebServer-esphome@^3.2.2
-	esphome/AsyncTCP-esphome@^2.0.3
+    vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
@@ -580,7 +500,7 @@ test_ignore = src/main.cpp
 upload_port = 192.168.2.126
 upload_flags = --auth=ota
 
-extra_scripts = pre:tools/precompile_wrapper.py
+; v3.0.0: no extra_scripts required
 ```
 
 ## Flash Firmware via Web UI
@@ -594,7 +514,7 @@ The embedded single-page app now exposes a `Flash` action beside the `Settings` 
 
 The backend remains fully asynchronous (`ESPAsyncWebServer`)—the new `/ota_update` handler streams chunks into the `Update` API while still performing password checks. HTTP uploads are rejected when OTA is disabled, the password is missing/incorrect, or the upload fails integrity checks.
 
-Note: The runtime JSON includes system-level OTA flags used by the WebUI to enable the Flash button and show status. Specifically, `runtime.system.allowOTA` is true when OTA is enabled on the device (HTTP endpoint ready), and `runtime.system.otaActive` is true after `ArduinoOTA.begin()` has run (informational). Both are available only when compiled with `-DCM_ENABLE_OTA=1`.
+Note: The runtime JSON includes system-level OTA flags used by the WebUI to enable the Flash button and show status. Specifically, `runtime.system.allowOTA` is true when OTA is enabled on the device (HTTP endpoint ready), and `runtime.system.otaActive` is true after `ArduinoOTA.begin()` has run (informational).
 
 ### Async Build & Live Values
 
@@ -622,24 +542,7 @@ pio run -e ota -t upload --upload-port 192.168.2.126
 
 ### Build Issues
 
-**"Vite build failed" or "ERR_UNSUPPORTED_ESM_URL_SCHEME":**
-- Ensure you have **Node.js 18.0.0 or higher** installed
-- Check: `node --version` (must be v18.x.x or higher)
-- Vite 7.x does NOT work with Node.js 16 or older
-- Update Node.js: Download from [nodejs.org](https://nodejs.org/)
-
-**"Python version incompatibility" or module import errors:**
-- Ensure you have **Python 3.8+** (recommended: 3.10+)
-- Check: `python --version`
-- Install intelhex: `pip install intelhex`
-
-**"Cannot find precompile_wrapper.py" or script errors:**
-- Verify the library is installed: Check `.pio/libdeps/your_env/ESP32 Configuration Manager/`
-- Update `extra_scripts` path in your `platformio.ini`:
-  ```ini
-  extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
-  ```
-- Replace `your_env` with your actual environment name (e.g., `usb`, `ota`)
+v3.0.0 builds without PlatformIO prebuild scripts. If you are developing the WebUI, see `webui/README.md`.
 
 **Web UI not building or old version showing:**
 ```bash
