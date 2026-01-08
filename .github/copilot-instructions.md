@@ -25,6 +25,8 @@ you are my coding assistant. Follow the instructions in this file carefully when
     - fix/<short-topic> (bug fix)
     - chore/<short-topic> (maintenance/refactor/tooling)
     - docs/<short-topic> (documentation only)
+  - exceptions:
+    - index.html.gz will be generated always on build, can be ignored for clan baseline purposes
 
 - Code Style: (Important: follow these rules strictly)
   - All code comments in English only
