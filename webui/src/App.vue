@@ -196,8 +196,10 @@ async function authenticateSettings(password, opts = {}) {
 
 async function fetchStoredPassword(category, key) {
   if (!isSettingsAuthTokenValid()) {
-    const autoRes = await authenticateSettings("", { silent: true, timeoutMs: 1500 });
-    if (!autoRes.ok) throw new Error("Not authenticated");
+    // Do not auto-auth with an empty password.
+    settingsAuthenticated.value = false;
+    showSettingsAuth.value = true;
+    throw new Error("Not authenticated");
   }
   const r = await fetch(
     `/config/password?category=${rURIComp(category)}&key=${rURIComp(key)}`,
@@ -278,14 +280,19 @@ async function loadSettings() {
     }
     
     // Check content-length header vs actual response
+    // Check content-length header vs actual response (compare bytes, not JS string length)
     const contentLength = r.headers.get('content-length');
     //console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
-    
+
     const text = await r.text();
-    //console.log(`[Frontend] config.json - Actual response length: ${text.length}`);
-    
-    if (contentLength && parseInt(contentLength) !== text.length) {
-      console.warn(`[Frontend] Content-Length mismatch! Header: ${contentLength}, Actual: ${text.length}`);
+    if (contentLength) {
+      const headerBytes = parseInt(contentLength, 10);
+      const actualBytes = (typeof TextEncoder !== 'undefined')
+        ? new TextEncoder().encode(text).length
+        : text.length;
+      if (Number.isFinite(headerBytes) && headerBytes !== actualBytes) {
+        console.warn(`[Frontend] Content-Length mismatch (bytes)! Header: ${headerBytes}, Actual: ${actualBytes}`);
+      }
     }
     
     // Clean the response text from potential control characters
@@ -375,11 +382,12 @@ async function checkLiveContent() {
   }
 }
 async function switchToSettings() {
-  // If token is valid (or no password is set), allow immediate access.
+  // If token is valid, allow immediate access.
   if (isSettingsAuthTokenValid()) {
     settingsAuthenticated.value = true;
+    showSettingsAuth.value = false;
     activeTab.value = "settings";
-    loadSettings();
+    await loadSettings();
     return;
   }
 
@@ -390,14 +398,7 @@ async function switchToSettings() {
     settingsPasswordInput.value?.focus();
   }, 100);
 
-  // Try auto-auth with empty password in background (works only when no settings password is configured).
-  const autoRes = await authenticateSettings("", { silent: true, timeoutMs: 800 });
-  if (autoRes.ok) {
-    showSettingsAuth.value = false;
-    activeTab.value = "settings";
-    loadSettings();
-    notify("Settings unlocked", "success");
-  }
+  // Do not auto-auth with empty password (would generate 403 noise on protected setups).
 }
 
 async function confirmSettingsAuth() {
@@ -649,15 +650,12 @@ async function waitForFlashReady(timeoutMs = 2000) {
 async function startFlash() {
   // If settings are protected, require auth before starting OTA flash
   if (!isSettingsAuthTokenValid()) {
-    const autoOk = await authenticateSettings("");
-    if (!autoOk) {
-      pendingFlashStart.value = true;
-      showSettingsAuth.value = true;
-      setTimeout(() => {
-        settingsPasswordInput.value?.focus();
-      }, 100);
-      return;
-    }
+    pendingFlashStart.value = true;
+    showSettingsAuth.value = true;
+    setTimeout(() => {
+      settingsPasswordInput.value?.focus();
+    }, 100);
+    return;
   }
 
   // Ensure RuntimeDashboard is mounted (only on 'live' tab)

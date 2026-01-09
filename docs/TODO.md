@@ -6,6 +6,9 @@
   - Goal: Consumer builds without `CM_ENABLE_*` flags and without PlatformIO `extra_scripts`
   - Only logging remains configurable
 
+- **[CURRENT] v3 stabilization & roadmap**
+  - Tracked in `docs/todo_v3.md`
+
 - **[CHORE] Convert examples to standalone PlatformIO projects** [COMPLETED]
   - Each example now builds via its own `platformio.ini` and `src/main.cpp`
   - Local dev uses `lib_deps = file://../..`

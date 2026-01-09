@@ -714,7 +714,7 @@ void setupGUI()
     // GUI Boolean example (shows connection status)
     static bool connectionStatus = false;
     Serial.println("[GUI] Defining runtime bool: status.connected");
-    ConfigManager.defineRuntimeBool("status", "connected", "Connection Status", false, 1);
+    ConfigManager.defineRuntimeBool("Connection", "connected", "Connection Status", false, 1);
 
     // GUI Boolean alarm example (registered in runtime alarm system)
     Serial.println("[GUI] Defining runtime alarm: alerts.overheat");
@@ -830,6 +830,7 @@ bool SetupStartWebServer()
         {
             Serial.println("[MAIN] startWebServer: DHCP enabled");
             ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
         }
         else
         {
@@ -851,6 +852,7 @@ bool SetupStartWebServer()
             }
 
             ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
+            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
         }
     }
 

@@ -541,162 +541,142 @@ void ConfigManagerWeb::setupAPIRoutes() {
     });
 
     // Bulk apply endpoint - /config/apply_all (applies all settings to memory only)
-    server->on("/config/apply_all", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            request->_tempObject = new String();
-        },
-        nullptr, // upload handler
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                for (size_t i = 0; i < len; i++) {
-                    *body += (char)data[i];
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/apply_all", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            WEB_LOG("[Web] Processing /config/apply_all");
+
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
+
+            bool allSuccess = true;
+            int totalApplied = 0;
+
+            JsonObject root = json.as<JsonObject>();
+            for (JsonPair categoryPair : root) {
+                const String category = categoryPair.key().c_str();
+                if (!categoryPair.value().is<JsonObject>()) {
+                    allSuccess = false;
+                    continue;
                 }
 
-                if (index + len == total) {
-                    WEB_LOG("[Web] Processing /config/apply_all");
+                JsonObject categoryObj = categoryPair.value().as<JsonObject>();
+                for (JsonPair settingPair : categoryObj) {
+                    const String key = settingPair.key().c_str();
+                    const JsonVariant v = settingPair.value();
 
-                    // Parse JSON body containing all settings
-                    DynamicJsonDocument doc(4096);
-                    DeserializationError error = deserializeJson(doc, *body);
-
-                    if (error) {
-                        WEB_LOG("[Web] JSON parse error in apply_all: %s", error.c_str());
-                        request->send(400, "application/json",
-                                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
-                        delete body;
-                        request->_tempObject = nullptr;
-                        return;
-                    }
-
-                    bool allSuccess = true;
-                    int totalApplied = 0;
-
-                    // Iterate through categories
-                    for (JsonPair categoryPair : doc.as<JsonObject>()) {
-                        String category = categoryPair.key().c_str();
-                        JsonObject categoryObj = categoryPair.value().as<JsonObject>();
-
-                        // Iterate through settings in category
-                        for (JsonPair settingPair : categoryObj) {
-                            String key = settingPair.key().c_str();
-                            String value;
-
-                            // Convert value to string
-                            if (settingPair.value().is<String>()) {
-                                value = settingPair.value().as<String>();
-                            } else if (settingPair.value().is<bool>()) {
-                                value = settingPair.value().as<bool>() ? "true" : "false";
-                            } else if (settingPair.value().is<int>()) {
-                                value = String(settingPair.value().as<int>());
-                            } else if (settingPair.value().is<float>()) {
-                                value = String(settingPair.value().as<float>(), 6);
-                            }
-
-                            // Apply setting (memory only)
-                            if (settingApplyCallback && settingApplyCallback(category, key, value)) {
-                                totalApplied++;
-                                WEB_LOG("[Web] Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            } else {
-                                allSuccess = false;
-                                WEB_LOG("[Web] Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            }
-                        }
-                    }
-
-                    // Send response
-                    if (allSuccess && totalApplied > 0) {
-                        String response = "{\"status\":\"ok\",\"action\":\"apply_all\",\"applied\":" + String(totalApplied) + "}";
-                        request->send(200, "application/json", response);
+                    String value;
+                    if (v.is<const char*>()) {
+                        value = v.as<String>();
+                    } else if (v.is<bool>()) {
+                        value = v.as<bool>() ? "true" : "false";
+                    } else if (v.is<int>()) {
+                        value = String(v.as<int>());
+                    } else if (v.is<float>()) {
+                        value = String(v.as<float>(), 6);
                     } else {
-                        String response = "{\"status\":\"error\",\"action\":\"apply_all\",\"applied\":" + String(totalApplied) + "}";
-                        request->send(400, "application/json", response);
+                        serializeJson(v, value);
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
+                    if (settingApplyCallback && settingApplyCallback(category, key, value)) {
+                        totalApplied++;
+                        WEB_LOG("[Web] Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    } else {
+                        allSuccess = false;
+                        WEB_LOG("[Web] Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    }
                 }
             }
+
+            if (allSuccess && totalApplied > 0) {
+                const String payload = String("{\"status\":\"ok\",\"action\":\"apply_all\",\"applied\":") + String(totalApplied) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                const String payload = String("{\"status\":\"error\",\"action\":\"apply_all\",\"applied\":") + String(totalApplied) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            }
         });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
 
     // Bulk save endpoint - /config/save_all (saves all settings to flash)
-    server->on("/config/save_all", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            request->_tempObject = new String();
-        },
-        nullptr, // upload handler
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                for (size_t i = 0; i < len; i++) {
-                    *body += (char)data[i];
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/save_all", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            WEB_LOG("[Web] Processing /config/save_all");
+
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
+
+            bool allSuccess = true;
+            int totalSaved = 0;
+
+            JsonObject root = json.as<JsonObject>();
+            for (JsonPair categoryPair : root) {
+                const String category = categoryPair.key().c_str();
+                if (!categoryPair.value().is<JsonObject>()) {
+                    allSuccess = false;
+                    continue;
                 }
 
-                if (index + len == total) {
-                    WEB_LOG("[Web] Processing /config/save_all");
+                JsonObject categoryObj = categoryPair.value().as<JsonObject>();
+                for (JsonPair settingPair : categoryObj) {
+                    const String key = settingPair.key().c_str();
+                    const JsonVariant v = settingPair.value();
 
-                    // Parse JSON body containing all settings
-                    DynamicJsonDocument doc(4096);
-                    DeserializationError error = deserializeJson(doc, *body);
-
-                    if (error) {
-                        WEB_LOG("[Web] JSON parse error in save_all: %s", error.c_str());
-                        request->send(400, "application/json",
-                                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
-                        delete body;
-                        request->_tempObject = nullptr;
-                        return;
-                    }
-
-                    bool allSuccess = true;
-                    int totalSaved = 0;
-
-                    // Iterate through categories
-                    for (JsonPair categoryPair : doc.as<JsonObject>()) {
-                        String category = categoryPair.key().c_str();
-                        JsonObject categoryObj = categoryPair.value().as<JsonObject>();
-
-                        // Iterate through settings in category
-                        for (JsonPair settingPair : categoryObj) {
-                            String key = settingPair.key().c_str();
-                            String value;
-
-                            // Convert value to string
-                            if (settingPair.value().is<String>()) {
-                                value = settingPair.value().as<String>();
-                            } else if (settingPair.value().is<bool>()) {
-                                value = settingPair.value().as<bool>() ? "true" : "false";
-                            } else if (settingPair.value().is<int>()) {
-                                value = String(settingPair.value().as<int>());
-                            } else if (settingPair.value().is<float>()) {
-                                value = String(settingPair.value().as<float>(), 6);
-                            }
-
-                            // Save setting (memory + flash)
-                            if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
-                                totalSaved++;
-                                WEB_LOG("[Web] Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            } else {
-                                allSuccess = false;
-                                WEB_LOG("[Web] Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            }
-                        }
-                    }
-
-                    // Send response
-                    if (allSuccess && totalSaved > 0) {
-                        String response = "{\"status\":\"ok\",\"action\":\"save_all\",\"saved\":" + String(totalSaved) + "}";
-                        request->send(200, "application/json", response);
+                    String value;
+                    if (v.is<const char*>()) {
+                        value = v.as<String>();
+                    } else if (v.is<bool>()) {
+                        value = v.as<bool>() ? "true" : "false";
+                    } else if (v.is<int>()) {
+                        value = String(v.as<int>());
+                    } else if (v.is<float>()) {
+                        value = String(v.as<float>(), 6);
                     } else {
-                        String response = "{\"status\":\"error\",\"action\":\"save_all\",\"saved\":" + String(totalSaved) + "}";
-                        request->send(400, "application/json", response);
+                        serializeJson(v, value);
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
+                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                        totalSaved++;
+                        WEB_LOG("[Web] Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    } else {
+                        allSuccess = false;
+                        WEB_LOG("[Web] Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    }
                 }
             }
+
+            if (allSuccess && totalSaved > 0) {
+                const String payload = String("{\"status\":\"ok\",\"action\":\"save_all\",\"saved\":") + String(totalSaved) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                const String payload = String("{\"status\":\"error\",\"action\":\"save_all\",\"saved\":") + String(totalSaved) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            }
         });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
 
     // Reset to defaults
     server->on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {

@@ -173,6 +173,7 @@ bool SetupStartWebServer()
         {
             Serial.println("[MAIN] startWebServer: DHCP enabled");
             ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
+            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.wifiRebootTimeoutMin.get());
         }
         else
         {
@@ -194,6 +195,7 @@ bool SetupStartWebServer()
             }
 
             ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
+            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.wifiRebootTimeoutMin.get());
         }
     }
 
