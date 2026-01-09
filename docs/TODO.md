@@ -2,9 +2,10 @@
 
 ## Current Issues to Fix
 
-- **[CURRENT] v3.0.0 cleanup: remove feature flags & pre/post scripts**
+- **[COMPLETED] v3.0.0 cleanup: remove feature flags & pre/post scripts**
   - Goal: Consumer builds without `CM_ENABLE_*` flags and without PlatformIO `extra_scripts`
   - Only logging remains configurable
+  - Examples cleaned up (no committed secrets, minimal skeleton example)
 
 - **[CURRENT] v3 stabilization & roadmap**
   - Tracked in `docs/todo_v3.md`

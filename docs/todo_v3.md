@@ -2,10 +2,15 @@
 
 Stand: 2026-01-09
 
-## [CURRENT] Stabilisierung (Bugfixes)
-- Apply all / Save all: End-to-end testen (UI -> Firmware -> Persistenz) inkl. Browser Reload.
+## [COMPLETED] v3.0.0 Stabilisierung
+- Apply all / Save all: End-to-end getestet (UI -> Firmware -> Persistenz) inkl. Browser Reload.
+- Config Endpoints: robustes JSON Parsing für `/config/auth`, `/config/save`, `/config/apply_all`, `/config/save_all`.
+- Password Security: `/config.json` maskiert Passwörter; Reveal nur nach erfolgreicher Auth via Token-Header.
+- OTA: stabilisiert durch sofortigen Reboot am OTA-Ende (Workaround für lwIP assert).
+- Examples: Secrets entfernt; `example_min` ist ein minimaler GUI-Skeleton (AP Mode wenn SSID leer).
+
+## [CURRENT] v3.1.0 Stabilisierung (Bugfixes)
 - WebSocket: Ursache für Disconnects beim Settings-Laden prüfen (Payload-Größe, Timing, Reconnect-Loop, Memory).
-- Auth Noise: sicherstellen, dass es keine Hintergrund-`/config/auth` Requests mit leerem Passwort mehr gibt.
 - WiFi Reboot: Verhalten dokumentieren (Timeout vs. phased reconnect restart) und im UI klar machen.
 
 ## [NEXT] UI/UX (Settings & Runtime)
