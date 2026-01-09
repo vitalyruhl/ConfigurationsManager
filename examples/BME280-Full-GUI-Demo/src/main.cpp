@@ -19,7 +19,7 @@
 #include "ConfigManager.h"
 // ---------------------------------------------------------------------------------------------------------------------
 
-#include "secret/wifiSecret.h"
+#include "../secret/wifiSecret.h"
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -66,13 +66,16 @@ void cbTestButton();
 // Global theme override test: make all h3 headings orange without underline
 // Served via /user_theme.css and auto-injected by the frontend if present.
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
+
+
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-h3 { color: orange; text-decoration: underline;}
-.rw[data-group="sensors"][data-key="temp"] .lab{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.card h3 { color: orange; text-decoration: underline; font-weight: 900 !Important; font-size: 1.2rem !Important; }
+.rw[data-group="sensors"][data-key="temp"] .rw{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 .rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 .rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
 
+#pragma region Examples
 // minimal Init
 Config<bool> testBool(ConfigOptions<bool>{
     .key = "tbool",
@@ -130,6 +133,8 @@ Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
 //--------------------------------------------------------------------------------------------------------------
 // Example: Using structures for grouped settings
 // SystemSettings configuration (structure example)
+#pragma endregion Examples
+
 struct SystemSettings
 {
     Config<bool> allowOTA;
@@ -248,90 +253,7 @@ struct NTPSettings
 
 NTPSettings ntpSettings; // ntpSettings
 
-//--------------------------------------------------------------------------------------------------------------
-// Declaration as a struct with callback function
-// MQTT Settings
-struct MQTT_Settings
-{
-    Config<int> mqtt_port;
-    Config<String> mqtt_server;
-    Config<String> mqtt_username;
-    Config<String> mqtt_password;
-    Config<String> Publish_Topic;
-    // Derived MQTT topics (no longer persisted): see updateTopics()
-    String topicSetShowerTime;                 // <base>/Settings/SetShowerTime
-    String topicWillShower;                    // <base>/Settings/WillShower
-    Config<bool> mqtt_Settings_SetState;       // payload to turn boiler on
-    String mqtt_publish_YouCanShowerNow_topic; // <base>/YouCanShowerNow (publish)
-    String topic_BoilerEnabled;                // <base>/Settings/BoilerEnabled
-    String topic_OnThreshold;                  // <base>/Settings/OnThreshold
-    String topic_OffThreshold;                 // <base>/Settings/OffThreshold
-    String topic_BoilerTimeMin;                // <base>/Settings/BoilerTimeMin
-    String topic_StopTimerOnTarget;            // <base>/Settings/StopTimerOnTarget
-    String topic_OncePerPeriod;                // <base>/Settings/YouCanShowerOncePerPeriod
-    String topic_YouCanShowerPeriodMin;        // <base>/Settings/YouCanShowerPeriodMin
-    String topicSave;                          // <base>/Settings/Save (subscribe)
-    Config<float> MQTTPublischPeriod;
-    Config<float> MQTTListenPeriod;
-
-    // For dynamic topics based on Publish_Topic
-    String mqtt_publish_AktualState;
-    String mqtt_publish_AktualBoilerTemperature;
-    String mqtt_publish_AktualTimeRemaining_topic;
-
-    MQTT_Settings() : mqtt_port(ConfigOptions<int>{.key = "MQTTTPort", .name = "Port", .category = "MQTT", .defaultValue = 1883}),
-                      mqtt_server(ConfigOptions<String>{.key = "MQTTServer", .name = "Server-IP", .category = "MQTT", .defaultValue = String("192.168.2.3")}),
-                      mqtt_username(ConfigOptions<String>{.key = "MQTTUser", .name = "User", .category = "MQTT", .defaultValue = String("housebattery")}),
-                      mqtt_password(ConfigOptions<String>{.key = "MQTTPass", .name = "Password", .category = "MQTT", .defaultValue = String("mqttsecret"), .showInWeb = true, .isPassword = true}),
-                      Publish_Topic(ConfigOptions<String>{.key = "MQTTTPT", .name = "Publish-Topic", .category = "MQTT", .defaultValue = String("BoilerSaver")}),
-                      MQTTPublischPeriod(ConfigOptions<float>{.key = "MQTTPP", .name = "Publish-Period (s)", .category = "MQTT", .defaultValue = 2.0f}),
-                      MQTTListenPeriod(ConfigOptions<float>{.key = "MQTTLP", .name = "Listen-Period (s)", .category = "MQTT", .defaultValue = 0.5f}),
-                      mqtt_Settings_SetState(ConfigOptions<bool>{.key = "SetSt", .name = "Set-State", .category = "MQTT", .defaultValue = false, .showInWeb = false, .isPassword = false})
-    {
-
-        Publish_Topic.setCallback([this](String newValue)
-                                  { this->updateTopics(); });
-
-        updateTopics(); // Make sure topics are initialized
-    }
-
-    void init()
-    {
-        ConfigManager.addSetting(&mqtt_port);
-        ConfigManager.addSetting(&mqtt_server);
-        ConfigManager.addSetting(&mqtt_username);
-        ConfigManager.addSetting(&mqtt_password);
-        ConfigManager.addSetting(&Publish_Topic);
-        ConfigManager.addSetting(&MQTTPublischPeriod);
-        ConfigManager.addSetting(&MQTTListenPeriod);
-        ConfigManager.addSetting(&mqtt_Settings_SetState);
-    }
-
-    void updateTopics()
-    {
-        String hostname = Publish_Topic.get();
-        mqtt_publish_AktualState = hostname + "/AktualState";                   // show State of Boiler Heating/Save-Mode
-        mqtt_publish_AktualBoilerTemperature = hostname + "/TemperatureBoiler"; // show Temperature of Boiler
-        mqtt_publish_AktualTimeRemaining_topic = hostname + "/TimeRemaining";   // show Time Remaining if Boiler is Heating
-        mqtt_publish_YouCanShowerNow_topic = hostname + "/YouCanShowerNow";     // for notifying that user can shower now
-        // Settings/state topics
-        String sp = hostname + "/Settings";
-        topicWillShower = sp + "/WillShower";
-        topicSetShowerTime = sp + "/SetShowerTime";
-        topicSave = sp + "/Save";
-        topic_BoilerEnabled = sp + "/BoilerEnabled";
-        topic_OnThreshold = sp + "/OnThreshold";
-        topic_OffThreshold = sp + "/OffThreshold";
-        topic_BoilerTimeMin = sp + "/BoilerTimeMin";
-        topic_StopTimerOnTarget = sp + "/StopTimerOnTarget";
-        topic_OncePerPeriod = sp + "/OncePerPeriod";
-        topic_YouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
-
-        // Debug: Print topic lengths to detect potential issues
-        Serial.printf("[MQTT] StopTimerOnTarget topic: [%s] (length: %d)\n", topic_StopTimerOnTarget.c_str(), topic_StopTimerOnTarget.length());
-    }
-};
-MQTT_Settings mqttSettings; // mqttSettings
+#pragma region Temperature-Measurement
 
 //--------------------------------------------------------------------------------------------------------------
 // implement read temperature function and variables to show how to use live values
@@ -361,7 +283,7 @@ float Dewpoint = 0.0;    // current dewpoint in Celsius
 float Humidity = 0.0;    // current humidity in percent
 float Pressure = 0.0;    // current pressure in hPa
 
-struct TempSettings
+struct TempSettings // BME280 Settings
 {
     Config<float> tempCorrection;
     Config<float> humidityCorrection;
@@ -389,6 +311,75 @@ struct TempSettings
 };
 TempSettings tempSettings;
 //-------------------------------------------------------------------------------------------------------------
+
+static float computeDewPoint(float temperatureC, float relHumidityPct)
+{
+    if (isnan(temperatureC) || isnan(relHumidityPct))
+        return NAN;
+    if (relHumidityPct <= 0.0f)
+        relHumidityPct = 0.1f; // Unterlauf abfangen
+    if (relHumidityPct > 100.0f)
+        relHumidityPct = 100.0f; // Clamp
+    const float a = 17.62f;
+    const float b = 243.12f;
+    float rh = relHumidityPct / 100.0f;
+    float gamma = (a * temperatureC) / (b + temperatureC) + log(rh);
+    float dew = (b * gamma) / (a - gamma);
+    return dew;
+}
+
+void readBme280()
+{
+    bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
+    bme280.read();
+
+    temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
+    Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
+    Pressure = bme280.data.pressure;
+
+    Dewpoint = computeDewPoint(temperature, Humidity);
+}
+
+void SetupStartTemperatureMeasuring()
+{
+    Serial.println("[TEMP] Initializing BME280 sensor...");
+
+    // init BME280 for temperature and humidity sensor
+    bme280.setAddress(BME280_ADDRESS, I2C_SDA, I2C_SCL);
+
+    // Add timeout protection for BME280 initialization
+    unsigned long startTime = millis();
+    const unsigned long timeout = 5000; // 5 second timeout
+
+    Serial.println("[TEMP] Starting BME280.begin()...");
+    bool isStatus = false;
+
+    isStatus = bme280.begin(
+        bme280.BME280_STANDBY_0_5,
+        bme280.BME280_FILTER_OFF,
+        bme280.BME280_SPI3_DISABLE,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_OVERSAMPLING_1,
+        bme280.BME280_MODE_NORMAL);
+
+    if (!isStatus)
+    {
+        Serial.println("[TEMP] BME280 not initialized - continuing without temperature sensor");
+    }
+    else
+    {
+        Serial.println("[TEMP] BME280 ready! Starting temperature ticker...");
+        int iv = tempSettings.readIntervalSec.get();
+        if (iv < 2){iv = 2;}
+        temperatureTicker.attach((float)iv, readBme280); // Attach ticker with configured interval
+        readBme280();                                    // Read once at startup
+    }
+
+    Serial.println("[TEMP] Temperature setup completed");
+}
+
+#pragma region Temperature-Measurement
 
 void setup()
 {
@@ -437,20 +428,12 @@ void setup()
     tempSettings.init();      // BME280 temperature sensor settings
     ntpSettings.init();       // NTP time synchronization settings
     wifiSettings.init();      // WiFi connection settings
-    mqttSettings.init();      // MQTT broker settings
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
     ConfigManager.checkSettingsForErrors(); // 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
 
-    try
-    {
-        ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
-    }
-    catch (const std::exception &e)
-    {
-        Serial.println(e.what());
-    }
+    ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
@@ -577,8 +560,6 @@ void loop()
     updateStatusLED();
     delay(10);
 }
-
-
 
 //----------------------------------------
 // GUI SETUP
@@ -715,7 +696,7 @@ void setupGUI()
     // Float slider for temperature offset (Note this is no persistent setting)
     static float tempOffset = 0.0f;
     Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
-    ConfigManager.defineRuntimeFloatSlider("controls", "tempOffset", "Temp Offset", -5.0f, 5.0f, 0.0f, 2, []()
+    ConfigManager.defineRuntimeFloatSlider("controls", "tempOffset", "Temperature Offset", -5.0f, 5.0f, -0.8f, 2, []()
     {
         return tempOffset;
     }, [](float value)
@@ -919,15 +900,8 @@ void onWiFiConnected()
 void onWiFiDisconnected()
 {
     Serial.println("[MAIN] WiFi disconnected! Deactivating services...");
-
     if (tickerActive)
     {
-        // Stop OTA if it should be disabled
-        if (systemSettings.allowOTA.get() == false && ConfigManager.getOTAManager().isInitialized())
-        {
-            // ConfigManager.stopOTA(); // Not needed in new API
-        }
-
         tickerActive = false;
     }
 }
@@ -947,77 +921,11 @@ void onWiFiAPMode()
 // Other FUNCTIONS
 //----------------------------------------
 
-void SetupStartTemperatureMeasuring()
-{
-    Serial.println("[TEMP] Initializing BME280 sensor...");
-
-    // init BME280 for temperature and humidity sensor
-    bme280.setAddress(BME280_ADDRESS, I2C_SDA, I2C_SCL);
-
-    // Add timeout protection for BME280 initialization
-    unsigned long startTime = millis();
-    const unsigned long timeout = 5000; // 5 second timeout
-
-    Serial.println("[TEMP] Starting BME280.begin()...");
-    bool isStatus = false;
-
-    isStatus = bme280.begin(
-        bme280.BME280_STANDBY_0_5,
-        bme280.BME280_FILTER_OFF,
-        bme280.BME280_SPI3_DISABLE,
-        bme280.BME280_OVERSAMPLING_1,
-        bme280.BME280_OVERSAMPLING_1,
-        bme280.BME280_OVERSAMPLING_1,
-        bme280.BME280_MODE_NORMAL);
-
-    if (!isStatus)
-    {
-        Serial.println("[TEMP] BME280 not initialized - continuing without temperature sensor");
-    }
-    else
-    {
-        Serial.println("[TEMP] BME280 ready! Starting temperature ticker...");
-        int iv = tempSettings.readIntervalSec.get();
-        if (iv < 2){iv = 2;}
-        temperatureTicker.attach((float)iv, readBme280); // Attach ticker with configured interval
-        readBme280();                                    // Read once at startup
-    }
-
-    Serial.println("[TEMP] Temperature setup completed");
-}
-
-static float computeDewPoint(float temperatureC, float relHumidityPct)
-{
-    if (isnan(temperatureC) || isnan(relHumidityPct))
-        return NAN;
-    if (relHumidityPct <= 0.0f)
-        relHumidityPct = 0.1f; // Unterlauf abfangen
-    if (relHumidityPct > 100.0f)
-        relHumidityPct = 100.0f; // Clamp
-    const float a = 17.62f;
-    const float b = 243.12f;
-    float rh = relHumidityPct / 100.0f;
-    float gamma = (a * temperatureC) / (b + temperatureC) + log(rh);
-    float dew = (b * gamma) / (a - gamma);
-    return dew;
-}
-
-void readBme280()
-{
-    bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
-    bme280.read();
-
-    temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
-    Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
-    Pressure = bme280.data.pressure;
-
-    Dewpoint = computeDewPoint(temperature, Humidity);
-}
-
 
 #define HEATER_PIN 23       // Example pin for heater relay
 #define FAN_PIN 25          // Example pin for fan relay
 #define LowActiveRelay true // Set to true if relay is active LOW, false if active HIGH
+
 void setHeaterState(bool on)
 {
     pinMode(HEATER_PIN, OUTPUT); // Example pin for heater relay

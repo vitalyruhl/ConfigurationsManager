@@ -23,13 +23,36 @@
       <div class="input-area">
         <input
           v-if="isPassword"
-          type="password"
+          ref="passwordInputEl"
+          :type="passwordVisible ? 'text' : 'password'"
           :placeholder="'***'"
           :value="inputValue"
           @input="onInput($event.target.value)"
           :name="`${category}.${keyName}`"
           data-is-password="1"
         />
+        <button
+          v-if="isPassword"
+          type="button"
+          class="pwd-toggle"
+          :disabled="passwordBusy"
+          @click="togglePasswordVisibility"
+          :title="passwordVisible ? 'Hide password' : 'Show password'"
+          :aria-label="passwordVisible ? 'Hide password' : 'Show password'"
+        >
+          <span v-if="passwordBusy">…</span>
+          <span v-else class="icon" aria-hidden="true">
+            <svg v-if="!passwordVisible" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M4 4l16 16" />
+            </svg>
+          </span>
+        </button>
         <input
           v-else-if="type === 'number'"
           type="number"
@@ -62,7 +85,13 @@
 </template>
 
 <style scoped>
-.setting{margin:15px 0;padding:15px;background:#f8f9fa;border-radius:5px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}.bool-setting{flex-direction:row;align-items:center;justify-content:space-between;gap:1.25rem;max-width:520px}.bool-setting .bool-label{font-weight:600;padding-right:2rem}label{font-weight:600;min-width:70px}.input-area{flex:2;display:flex;align-items:center;gap:.75rem}.input-area input[type=text],.input-area input[type=number],.input-area input[type=password]{flex:1}.password-toggle{background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:0.4rem 0.6rem;cursor:pointer;font-size:1rem;transition:background-color 0.2s;flex-shrink:0}.password-toggle:hover{background:#e9ecef}.password-toggle:active{background:#dee2e6}.actions{display:flex;flex-direction:column;gap:5px;width:100%}.actions button{padding:8px 16px;font-size:14px;border:none;border-radius:4px;cursor:pointer;transition:.3s;width:100%;margin-bottom:5px;box-shadow:0 1px 3px rgba(0,0,0,.12)}.apply-btn{background:#3498db;color:#fff}.save-btn{background:#27ae60;color:#fff}.bool-actions{width:auto;align-items:flex-end}.bool-actions button{width:auto;margin-bottom:0}input,select{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box}
+.setting{margin:15px 0;padding:15px;background:#f8f9fa;border-radius:5px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}.bool-setting{flex-direction:row;align-items:center;justify-content:space-between;gap:1.25rem;max-width:520px}.bool-setting .bool-label{font-weight:600;padding-right:2rem}label{font-weight:600;min-width:70px}.input-area{flex:2;display:flex;align-items:center;gap:.75rem}.input-area input[type=text],.input-area input[type=number],.input-area input[type=password]{flex:1}.pwd-toggle{background:#f8f9fa;border:1px solid #ddd;border-radius:4px;padding:0.4rem 0.6rem;cursor:pointer;font-size:1rem;transition:background-color 0.2s;flex-shrink:0}.pwd-toggle:hover{background:#e9ecef}.pwd-toggle:active{background:#dee2e6}.actions{display:flex;flex-direction:column;gap:5px;width:100%}.actions button{padding:8px 16px;font-size:14px;border:none;border-radius:4px;cursor:pointer;transition:.3s;width:100%;margin-bottom:5px;box-shadow:0 1px 3px rgba(0,0,0,.12)}.apply-btn{background:#3498db;color:#fff}.save-btn{background:#27ae60;color:#fff}.bool-actions{width:auto;align-items:flex-end}.bool-actions button{width:auto;margin-bottom:0}input,select{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box}
+
+/* Password toggle: match Apply button sizing, but slightly darker */
+.input-area .pwd-toggle{padding:8px 12px;font-size:14px;border:none;border-radius:4px;cursor:pointer;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.12);background:#2f86c7;color:#fff;flex-shrink:0;min-width:40px;height:34px;display:flex;align-items:center;justify-content:center}
+.input-area .pwd-toggle:disabled{opacity:.6;cursor:not-allowed}
+.input-area .pwd-toggle:hover:not(:disabled){filter:brightness(.97)}
+.input-area .pwd-toggle .icon{display:flex;align-items:center;justify-content:center}
 
 /* Switch styles for boolean settings */
 .checkbox-wrapper {
@@ -130,7 +159,7 @@ input:checked + .slider:before {
 </style>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, inject } from 'vue';
 
 const props = defineProps({
   category: String,
@@ -140,6 +169,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['apply', 'save']);
+
+const notify = inject('notify', null);
+const fetchStoredPassword = inject('fetchStoredPassword', null);
 
 const displayName =
   props.settingData.displayName || props.keyName;
@@ -166,6 +198,46 @@ function initialValue() {
 }
 
 const inputValue = ref(initialValue());
+const passwordVisible = ref(false);
+const passwordBusy = ref(false);
+const passwordInputEl = ref(null);
+
+function clearRevealedValueMarker() {
+  if (passwordInputEl.value && passwordInputEl.value.dataset) {
+    delete passwordInputEl.value.dataset.revealedValue;
+  }
+}
+
+async function togglePasswordVisibility() {
+  if (!isPassword) return;
+
+  if (passwordVisible.value) {
+    passwordVisible.value = false;
+    inputValue.value = '';
+    clearRevealedValueMarker();
+    return;
+  }
+
+  if (typeof fetchStoredPassword !== 'function') {
+    if (typeof notify === 'function') notify('Password reveal is not available', 'error');
+    return;
+  }
+
+  passwordBusy.value = true;
+  try {
+    const stored = await fetchStoredPassword(props.category, props.keyName);
+    inputValue.value = stored;
+    passwordVisible.value = true;
+    if (passwordInputEl.value && passwordInputEl.value.dataset) {
+      passwordInputEl.value.dataset.revealedValue = String(stored);
+    }
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : 'Failed to reveal password';
+    if (typeof notify === 'function') notify(`Reveal failed: ${msg}`, 'error');
+  } finally {
+    passwordBusy.value = false;
+  }
+}
 
 // Visibility: the server can deliver a resolved showIf as boolean
 const visible = ref(true);
@@ -191,9 +263,15 @@ watch(
     }
     if (isPassword && (!v || v === '***')) {
       inputValue.value = '';
+      passwordVisible.value = false;
+      clearRevealedValueMarker();
       return;
     }
     inputValue.value = v;
+    if (isPassword) {
+      passwordVisible.value = false;
+      clearRevealedValueMarker();
+    }
   }
 );
 

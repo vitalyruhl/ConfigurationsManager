@@ -3,6 +3,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <functional>
+#include <esp_system.h>
 #include "../ConfigManagerConfig.h"
 
 #if CM_EMBED_WEBUI
@@ -41,6 +42,11 @@ private:
     // Settings security
     String settingsPassword;
 
+    // Settings authentication token (in-memory)
+    String settingsAuthToken;
+    uint32_t settingsAuthIssuedAtMs = 0;
+    static constexpr uint32_t SETTINGS_AUTH_TTL_MS = 5UL * 60UL * 1000UL; // 5 minutes
+
     // Helper methods
     void setupStaticRoutes();
     void setupAPIRoutes();
@@ -50,6 +56,10 @@ private:
     void handleJSRequest(AsyncWebServerRequest* request);
     void handleRootRequest(AsyncWebServerRequest* request);
     void handleNotFound(AsyncWebServerRequest* request);
+
+    bool isSettingsAuthRequired() const;
+    bool isSettingsAuthValid(AsyncWebServerRequest* request) const;
+    String issueSettingsAuthToken();
 
     // Utility methods
     String getContentType(const String& path);

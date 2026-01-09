@@ -1713,7 +1713,7 @@ label.switch input:checked + .slider:before {
   box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
 }
 
-.password-toggle {
+.pwd-toggle {
   background: #21262d;
   border: 1px solid #30363d;
   border-radius: 4px;
@@ -1725,7 +1725,7 @@ label.switch input:checked + .slider:before {
   white-space: nowrap;
 }
 
-.password-toggle:hover {
+.pwd-toggle:hover {
   background: #30363d;
   color: #f0f6fc;
 }

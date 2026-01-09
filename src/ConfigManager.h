@@ -500,9 +500,8 @@ public:
 
         if (isPassword)
         {
-            // User requested to remove password safety - always show actual value
-            settingObj["value"] = value;
-            settingObj["actualValue"] = value;
+            // Passwords are masked in config.json. Use /config/password after auth to reveal.
+            settingObj["value"] = "***";
         }
         else
         {
@@ -748,30 +747,14 @@ public:
 
             // System OTA password at boot
             if (containsNoCase(cat, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
-                // Extract current value through JSON view (avoids RTTI/dynamic_cast)
-                DynamicJsonDocument d(256);
-                JsonObject obj = d.to<JsonObject>();
-                s->toJSON(obj);
-
-                String disp = s->getDisplayName();
-                String pwd;
-                if (obj.containsKey(disp)) {
-                    JsonObject so = obj[disp].as<JsonObject>();
-                    if (so.containsKey("actualValue")) {
-                        pwd = so["actualValue"].as<String>();
-                    } else if (so.containsKey("value")) {
-                        if (so["value"].is<const char*>()) {
-                            pwd = so["value"].as<String>();
-                        } else {
-                            // Fallback for non-string serializable values
-                            serializeJson(so["value"], pwd);
-                        }
+                // Password values are masked in JSON; read the actual value directly.
+                if (s->getType() == SettingType::STRING) {
+                    auto *cs = static_cast<Config<String>*>(s);
+                    const String pwd = cs->get();
+                    if (pwd.length() > 0) {
+                        otaManager.setPassword(pwd);
+                        CM_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
                     }
-                }
-
-                if (pwd.length() > 0) {
-                    otaManager.setPassword(pwd);
-                    CM_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
                 }
             }
         }

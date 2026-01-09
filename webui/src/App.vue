@@ -38,21 +38,22 @@
         <p v-if="pendingFlashStart" style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
           Password required to start firmware flash/OTA update
         </p>
-        <div class="password-input-container">
-          <input
-            ref="settingsPasswordInput"
-            v-model="settingsPassword"
-            type="password"
-            placeholder="Enter settings password"
-            @keyup.enter="confirmSettingsAuth"
-            @keyup.escape="cancelSettingsAuth"
-            autocomplete="off"
-          />
-        </div>
-        <div class="modal-buttons">
-          <button @click="cancelSettingsAuth" class="cancel-btn">Cancel</button>
-          <button @click="confirmSettingsAuth" class="confirm-btn">Authenticate</button>
-        </div>
+        <form @submit.prevent="confirmSettingsAuth">
+          <div class="password-input-container">
+            <input
+              ref="settingsPasswordInput"
+              v-model="settingsPassword"
+              type="password"
+              placeholder="Enter settings password"
+              @keyup.escape="cancelSettingsAuth"
+              autocomplete="off"
+            />
+          </div>
+          <div class="modal-buttons">
+            <button type="button" @click="cancelSettingsAuth" class="cancel-btn">Cancel</button>
+            <button type="submit" class="confirm-btn">Authenticate</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -133,22 +134,87 @@ const settingsPassword = ref("");
 const settingsPasswordInput = ref(null);
 const pendingFlashStart = ref(false); // Track if we need to start flash after auth
 
-// Configurable settings password - loaded from backend
-const SETTINGS_PASSWORD = ref(""); // Empty by default
+// Token-based settings auth (issued by POST /config/auth)
+const settingsAuthToken = ref("");
+const settingsAuthTokenExpiresAtMs = ref(0);
+const settingsAuthPasswordRequired = ref(true);
 
-async function loadSettingsPassword() {
+function isSettingsAuthTokenValid() {
+  return (
+    typeof settingsAuthToken.value === "string" &&
+    settingsAuthToken.value.length > 0 &&
+    Date.now() < settingsAuthTokenExpiresAtMs.value
+  );
+}
+
+async function authenticateSettings(password, opts = {}) {
+  const { timeoutMs = 1500, silent = false } = opts;
   try {
-    const response = await fetch("/config/settings_password");
-    if (response.ok) {
-      const data = await response.json();
-      if (data.status === "ok" && data.password !== undefined) {
-        SETTINGS_PASSWORD.value = data.password;
-        // //console.log("[Frontend] Settings password loaded from backend:", data.password === "" ? "(none)" : "(set)");
-      }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+    const r = await fetch("/config/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: String(password || "") }),
+      signal: controller ? controller.signal : undefined,
+    });
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    const json = await r.json().catch(() => ({}));
+    if (r.ok && json.status === "ok" && typeof json.token === "string") {
+      const ttlSec = Number(json.ttlSec || 0);
+      settingsAuthToken.value = json.token;
+      settingsAuthTokenExpiresAtMs.value = Date.now() + Math.max(1, ttlSec) * 1000;
+      settingsAuthenticated.value = true;
+      settingsAuthPasswordRequired.value = false;
+      return { ok: true };
     }
+
+    if (r.status === 401 || r.status === 403) {
+      settingsAuthPasswordRequired.value = true;
+      settingsAuthenticated.value = false;
+      return { ok: false, reason: "unauthorized" };
+    }
+
+    settingsAuthenticated.value = false;
+    if (!silent) {
+      const reason = (json && json.reason) ? String(json.reason) : `http_${r.status}`;
+      notify(`Auth failed: ${reason}`, "error", 8000);
+    }
+    return { ok: false, reason: (json && json.reason) ? String(json.reason) : "unknown" };
   } catch (e) {
-    console.warn("[Frontend] Could not load settings password from backend:", e);
+    settingsAuthenticated.value = false;
+    if (!silent) {
+      const isTimeout = e && (e.name === 'AbortError');
+      notify(isTimeout ? "Auth timeout" : "Auth request failed", "error", 8000);
+    }
+    return { ok: false, reason: (e && e.name === 'AbortError') ? "timeout" : "network" };
   }
+}
+
+async function fetchStoredPassword(category, key) {
+  if (!isSettingsAuthTokenValid()) {
+    const autoRes = await authenticateSettings("", { silent: true, timeoutMs: 1500 });
+    if (!autoRes.ok) throw new Error("Not authenticated");
+  }
+  const r = await fetch(
+    `/config/password?category=${rURIComp(category)}&key=${rURIComp(key)}`,
+    {
+      method: "GET",
+      headers: { "X-Settings-Token": settingsAuthToken.value },
+    }
+  );
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok || json.status !== "ok") {
+    if (r.status === 401 || r.status === 403) {
+      settingsAuthenticated.value = false;
+      showSettingsAuth.value = true;
+    }
+    throw new Error(json.reason || "Failed");
+  }
+  return String(json.value ?? "");
 }
 const opBusy = ref({});
 const rURIComp = encodeURIComponent;
@@ -190,6 +256,7 @@ function updateToast(id, message, type = "info", duration = 2500) {
 provide("notify", notify);
 provide("updateToast", updateToast);
 provide("dismissToast", dismissToast);
+provide("fetchStoredPassword", fetchStoredPassword);
 
 async function loadSettings() {
   try {
@@ -302,56 +369,61 @@ async function checkLiveContent() {
   if (!hasLiveContent.value) {
     if (activeTab.value === 'live') {
       // Auto-switch to settings; auto-auth if no password
-      if (SETTINGS_PASSWORD.value === "" || settingsAuthenticated.value) {
-        settingsAuthenticated.value = true;
-        activeTab.value = 'settings';
-        loadSettings();
-      } else {
-        // prompt for settings auth
-        switchToSettings();
-      }
+      await switchToSettings();
       notify("No live dashboard defined – opening Settings", "info");
     }
   }
 }
-function switchToSettings() {
-  // If no password required, allow immediate access
-  if (SETTINGS_PASSWORD.value === "" || settingsAuthenticated.value) {
-    settingsAuthenticated.value = true; // Mark as authenticated if no password
+async function switchToSettings() {
+  // If token is valid (or no password is set), allow immediate access.
+  if (isSettingsAuthTokenValid()) {
+    settingsAuthenticated.value = true;
     activeTab.value = "settings";
     loadSettings();
-  } else {
-    showSettingsAuth.value = true;
-    // Focus password input after modal appears
-    setTimeout(() => {
-      settingsPasswordInput.value?.focus();
-    }, 100);
+    return;
+  }
+
+  // Show modal immediately (avoid UI delay on slow WiFi/requests)
+  showSettingsAuth.value = true;
+  // Focus password input after modal appears
+  setTimeout(() => {
+    settingsPasswordInput.value?.focus();
+  }, 100);
+
+  // Try auto-auth with empty password in background (works only when no settings password is configured).
+  const autoRes = await authenticateSettings("", { silent: true, timeoutMs: 800 });
+  if (autoRes.ok) {
+    showSettingsAuth.value = false;
+    activeTab.value = "settings";
+    loadSettings();
+    notify("Settings unlocked", "success");
   }
 }
 
-function confirmSettingsAuth() {
-  // If no password is set on backend, allow immediate access
-  if (SETTINGS_PASSWORD.value === "" || settingsPassword.value === SETTINGS_PASSWORD.value) {
-    settingsAuthenticated.value = true;
-    showSettingsAuth.value = false;
-    settingsPassword.value = ""; // Clear password for security
-    
-    // Check if we need to start flash after authentication
-    if (pendingFlashStart.value) {
-      pendingFlashStart.value = false;
-      notify("Access granted - Starting OTA flash...", "success");
-      runtimeDashboard.value?.startFlash();
-    } else {
-      // Normal settings access
-      activeTab.value = "settings";
-      loadSettings();
-      notify(SETTINGS_PASSWORD.value === "" ? "Settings unlocked" : "Settings access granted", "success");
-    }
-  } else {
-    notify("Invalid password", "error");
-    settingsPassword.value = ""; // Clear wrong password
+async function confirmSettingsAuth() {
+  const res = await authenticateSettings(settingsPassword.value, { timeoutMs: 3000 });
+  if (!res.ok) {
+    notify(res.reason === 'unauthorized' ? "Invalid password" : `Auth failed: ${res.reason}`, "error");
+    settingsPassword.value = "";
     settingsPasswordInput.value?.focus();
+    return;
   }
+
+  showSettingsAuth.value = false;
+  settingsPassword.value = ""; // Clear password for security
+
+  // Check if we need to start flash after authentication
+  if (pendingFlashStart.value) {
+    pendingFlashStart.value = false;
+    notify("Access granted - Starting OTA flash...", "success");
+    runtimeDashboard.value?.startFlash();
+    return;
+  }
+
+  // Normal settings access
+  activeTab.value = "settings";
+  loadSettings();
+  notify(settingsAuthPasswordRequired.value ? "Settings access granted" : "Settings unlocked", "success");
 }
 
 function cancelSettingsAuth() {
@@ -395,6 +467,14 @@ async function applySingle(category, key, value) {
       updateToast(tid, `Apply skipped ${opKey}: No new password entered`, "error");
       return;
     }
+    if (isPasswordField(category, key, settingData)) {
+      const inputEl = collectSettingsInputs().find((i) => i.name === `${category}.${key}`);
+      const revealedValue = inputEl && inputEl.dataset ? inputEl.dataset.revealedValue : undefined;
+      if (revealedValue !== undefined && String(value) === String(revealedValue)) {
+        updateToast(tid, `Apply skipped ${opKey}: Password unchanged`, "error");
+        return;
+      }
+    }
     
     const r = await fetch(
       `/config/apply?category=${rURIComp(category)}&key=${rURIComp(key)}`,
@@ -428,6 +508,14 @@ async function saveSingle(category, key, value) {
     if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
       updateToast(tid, `Save skipped ${opKey}: No new password entered`, "error");
       return;
+    }
+    if (isPasswordField(category, key, settingData)) {
+      const inputEl = collectSettingsInputs().find((i) => i.name === `${category}.${key}`);
+      const revealedValue = inputEl && inputEl.dataset ? inputEl.dataset.revealedValue : undefined;
+      if (revealedValue !== undefined && String(value) === String(revealedValue)) {
+        updateToast(tid, `Save skipped ${opKey}: Password unchanged`, "error");
+        return;
+      }
     }
     
     const r = await fetch(
@@ -468,7 +556,7 @@ async function saveAll() {
     if (!all[cat]) all[cat] = {};
     if (
       input.dataset.isPassword === "1" &&
-      (!input.value || input.value === "***")
+      (!input.value || input.value === "***" || (input.dataset.revealedValue !== undefined && input.value === input.dataset.revealedValue))
     ) {
       // Skip placeholder or empty password fields
       return;
@@ -500,6 +588,13 @@ async function applyAll() {
   collectSettingsInputs().forEach((input) => {
     const [cat, key] = input.name.split(".");
     if (!all[cat]) all[cat] = {};
+    if (
+      input.dataset.isPassword === "1" &&
+      (!input.value || input.value === "***" || (input.dataset.revealedValue !== undefined && input.value === input.dataset.revealedValue))
+    ) {
+      // Skip placeholder/empty/unchanged password fields
+      return;
+    }
     let v = input.type === "checkbox" ? input.checked : input.value;
     all[cat][key] = v;
   });
@@ -552,6 +647,19 @@ async function waitForFlashReady(timeoutMs = 2000) {
 }
 
 async function startFlash() {
+  // If settings are protected, require auth before starting OTA flash
+  if (!isSettingsAuthTokenValid()) {
+    const autoOk = await authenticateSettings("");
+    if (!autoOk) {
+      pendingFlashStart.value = true;
+      showSettingsAuth.value = true;
+      setTimeout(() => {
+        settingsPasswordInput.value?.focus();
+      }, 100);
+      return;
+    }
+  }
+
   // Ensure RuntimeDashboard is mounted (only on 'live' tab)
   if (activeTab.value !== "live") {
     activeTab.value = "live";
@@ -570,7 +678,6 @@ function handleCanFlashChange(v) {
 }
 onMounted(() => {
   loadUserTheme();
-  loadSettingsPassword();
   loadSettings();
   injectVersion();
   checkLiveContent();
@@ -578,7 +685,7 @@ onMounted(() => {
 </script>
 <style scoped>
 #mainHeader {
-  color: #3498db;
+  color: #034875;
   margin: 0.2rem 0 0;
   border-bottom: 2px solid #3498db;
   padding-bottom: 0.2rem;
@@ -759,7 +866,7 @@ onMounted(() => {
   box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
 }
 
-.password-toggle {
+.pwd-toggle {
   background: #21262d;
   border: 1px solid #30363d;
   border-radius: 4px;
@@ -771,7 +878,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.password-toggle:hover {
+.pwd-toggle:hover {
   background: #30363d;
   color: #f0f6fc;
 }
