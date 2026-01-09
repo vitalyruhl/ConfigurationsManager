@@ -1,4 +1,4 @@
 <template></template>
 <script setup>
-// disabled by feature flag at build time
+// Legacy disabled-variant template (kept for compatibility)
 </script>

@@ -2,6 +2,14 @@
 
 ## Current Issues to Fix
 
+- **[COMPLETED] v3.0.0 cleanup: remove feature flags & pre/post scripts**
+  - Goal: Consumer builds without `CM_ENABLE_*` flags and without PlatformIO `extra_scripts`
+  - Only logging remains configurable
+  - Examples cleaned up (no committed secrets, minimal skeleton example)
+
+- **[CURRENT] v3 stabilization & roadmap**
+  - Tracked in `docs/todo_v3.md`
+
 - **[CHORE] Convert examples to standalone PlatformIO projects** [COMPLETED]
   - Each example now builds via its own `platformio.ini` and `src/main.cpp`
   - Local dev uses `lib_deps = file://../..`
@@ -11,11 +19,12 @@
 
 ### High Priority Bugs (Prio 1)
 
-- ~~**[Bug] Save failed System.OTA Password: can't access property "digest", crypto.subtle is undefined**~~ [COMPLETED] **FIXED** - Improved password transmission security. Passwords are now transmitted as JSON with both the actual password and its SHA-256 hash: `{"password":"ota1234","hash":"954de57..."}`. This prevents casual WiFi packet sniffing (better than no security) while allowing the ESP32 to store and use the actual password. The hash is computed on the client side with a fallback for non-HTTPS contexts. Passwords now display correctly in the GUI (shows "ota1234" not the hash) and work properly with OTA and other features.
 
 ### Medium Priority Bugs (Prio 5)
 
-- **[Bug] From project, if i set [\t-DCM_ENABLE_USER_CSS=0 and -DCM_ENABLE_STYLE_RULES=0] the styling injection is stil there**
+- **[Bug] From project, if i set [\t-DCM_ENABLE_USER_CSS=0 and -DCM_ENABLE_STYLE_RULES=0] the styling injection is stil there** [OBSOLETE in v3.0.0]
+
+  - v3.0.0 removes these feature flags and always enables theming/styling.
 
 ### Low Priority Bugs/Features
 

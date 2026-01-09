@@ -1,61 +1,20 @@
-# Feature Flags (Build-Time)
+# Feature Flags / Build Options
 
-> **⚠️ Prerequisites:** Ensure you have configured the precompile script in your `platformio.ini`:
-> ```ini
-> extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py
-> ```
-> Replace `your_env` with your environment name (e.g., `usb`, `ota`). See the main README for complete setup instructions.
+## v3.0.0 change
 
-This project exposes many optional features that you can enable/disable at compile time to trim flash/RAM and reduce the embedded web UI size. Flags are passed via PlatformIO `build_flags` using `-D<FLAG>=0/1`.
+Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*` build flags or PlatformIO `extra_scripts` to build.
 
-Why build flags?
+- WebUI, OTA, runtime controls, WebSocket push, theming/styling are compiled in by default.
+- **Only logging remains configurable**:
+  - `CM_ENABLE_LOGGING` (default: `1`)
+  - `CM_ENABLE_VERBOSE_LOGGING` (default: `0`)
 
-- Keep your sketch clean and portable
-- Different environments (USB/OTA) can use different feature sets
-- The extra build script uses these flags to prune the frontend bundle for real space savings
+If your project still defines removed flags (like `CM_ENABLE_OTA`, `CM_EMBED_WEBUI`, etc.), the build will fail with a clear `#error` message so you can remove them.
 
-How to set flags
+## Historical (v2.x)
 
-- Edit `platformio.ini` under each `[env:*]` → `build_flags`
-- Example (commonly enabled):
-  - `-DCM_ENABLE_OTA=1`
-  - `-DCM_ENABLE_WS_PUSH=1`
-  - `-DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1`
-- Turn a feature off by setting `=0`
-
-Core flags
-
-- CM_EMBED_WEBUI: Embed the Vue SPA into flash (HTML/CSS/JS)
-- CM_ENABLE_OTA: Enable OTA HTTP endpoint and web Flash button
-- CM_ENABLE_WS_PUSH: Enable WebSocket push for live runtime updates
-- CM_ENABLE_SYSTEM_PROVIDER: Show system card (uptime, heap, RSSI)
-- CM_ENABLE_RUNTIME_ANALOG_SLIDERS: Enable analog (numeric) sliders in Runtime view
-- CM_ENABLE_RUNTIME_NUMBER_INPUTS: Enable manual numeric input fields (with Set button) in Runtime view
-- CM_ENABLE_RUNTIME_BUTTONS / CM_ENABLE_RUNTIME_STATE_BUTTONS / CM_ENABLE_RUNTIME_CHECKBOXES: UI controls
-- CM_ENABLE_RUNTIME_ALARMS: Cross-field and per-field alarm support
-- CM_ENABLE_STYLE_RULES: Per-field style overrides through metadata
-- CM_ENABLE_USER_CSS: Serve and auto-inject optional `/user_theme.css`
-- CM_ENABLE_LOGGING / CM_ENABLE_VERBOSE_LOGGING: Serial logging controls
-
-Defaults in this repo
-
-- The example environments enable most features by default (some may be toggled for demonstration). Adjust as needed for your firmware size and use case.
-
-Frontend pruning and compression
-
-- The extra build step reads your flags and:
-  - Exposes them to the Vite build (so dead code is dropped)
-  - Stubs certain components when disabled
-  - Compresses the generated `index.html` to `index.html.gz`
-
-Notes
-
-- Changing flags triggers a full frontend rebuild automatically.
-- **DEPRECATED:** `CM_ENABLE_RUNTIME_INT_SLIDERS` and `CM_ENABLE_RUNTIME_FLOAT_SLIDERS` are deprecated as of v2.7.0. Use `CM_ENABLE_RUNTIME_ANALOG_SLIDERS=1` instead for both int and float sliders.
-- **DEPRECATED:** The `DCM_` prefix is deprecated. Use `CM_` prefix for all flags.
-- For deeper control, see `webui/vite.config.mjs` and `tools/preCompile_script.py`.
-
-Migration note: In some earlier notes the prefix `DCM_` was used—current flags use the `CM_` prefix.
+In v2.x this library supported many feature flags and used an extra build step to prune and rebuild the embedded WebUI per flag set.
+The information below is kept for reference only.
 
 ## Flash size impact by flags (v2.6.x)
 

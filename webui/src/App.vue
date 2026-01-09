@@ -38,28 +38,22 @@
         <p v-if="pendingFlashStart" style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
           Password required to start firmware flash/OTA update
         </p>
-        <div class="password-input-container">
-          <input
-            ref="settingsPasswordInput"
-            v-model="settingsPassword"
-            :type="showSettingsPassword ? 'text' : 'password'"
-            placeholder="Enter settings password"
-            @keyup.enter="confirmSettingsAuth"
-            @keyup.escape="cancelSettingsAuth"
-            autocomplete="off"
-          />
-          <button
-            class="password-toggle"
-            @click="showSettingsPassword = !showSettingsPassword"
-            :title="showSettingsPassword ? 'Hide password' : 'Show password'"
-          >
-            {{ showSettingsPassword ? '🙈' : '👁️' }}
-          </button>
-        </div>
-        <div class="modal-buttons">
-          <button @click="cancelSettingsAuth" class="cancel-btn">Cancel</button>
-          <button @click="confirmSettingsAuth" class="confirm-btn">Authenticate</button>
-        </div>
+        <form @submit.prevent="confirmSettingsAuth">
+          <div class="password-input-container">
+            <input
+              ref="settingsPasswordInput"
+              v-model="settingsPassword"
+              type="password"
+              placeholder="Enter settings password"
+              @keyup.escape="cancelSettingsAuth"
+              autocomplete="off"
+            />
+          </div>
+          <div class="modal-buttons">
+            <button type="button" @click="cancelSettingsAuth" class="cancel-btn">Cancel</button>
+            <button type="submit" class="confirm-btn">Authenticate</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -103,154 +97,8 @@ import { ref, onMounted, provide, nextTick } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
-// Encryption salt - replaced at compile time from build flags
-// This is unique per project and makes simple sniffing difficult
-const ENCRYPTION_SALT = "__ENCRYPTION_SALT__"; // Will be replaced by build script
-
-// Simple XOR-based encryption with salt
-// Not cryptographically strong, but makes WiFi sniffing difficult for casual attackers
-function encryptPassword(password, salt) {
-  if (!password || !salt) return password;
-  
-  const saltBytes = new TextEncoder().encode(salt);
-  const pwdBytes = new TextEncoder().encode(password);
-  const encrypted = new Uint8Array(pwdBytes.length);
-  
-  for (let i = 0; i < pwdBytes.length; i++) {
-    // XOR with salt bytes (repeating)
-    encrypted[i] = pwdBytes[i] ^ saltBytes[i % saltBytes.length];
-  }
-  
-  // Convert to hex
-  return Array.from(encrypted)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function decryptPassword(encrypted, salt) {
-  if (!encrypted || !salt || encrypted.length % 2 !== 0) return encrypted;
-  
-  try {
-    const saltBytes = new TextEncoder().encode(salt);
-    const encryptedBytes = new Uint8Array(encrypted.length / 2);
-    
-    // Convert hex to bytes
-    for (let i = 0; i < encrypted.length; i += 2) {
-      encryptedBytes[i / 2] = parseInt(encrypted.substr(i, 2), 16);
-    }
-    
-    // XOR decrypt
-    const decrypted = new Uint8Array(encryptedBytes.length);
-    for (let i = 0; i < encryptedBytes.length; i++) {
-      decrypted[i] = encryptedBytes[i] ^ saltBytes[i % saltBytes.length];
-    }
-    
-    return new TextDecoder().decode(decrypted);
-  } catch (e) {
-    console.warn('[Security] Decryption failed:', e);
-    return encrypted; // Return as-is if decryption fails
-  }
-}
-
-// Simple SHA-256 implementation (kept for potential future use)
-// Fallback for non-secure contexts (HTTP) using a pure JS implementation
-async function sha256(message) {
-  // Check if crypto.subtle is available (HTTPS or localhost only)
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    try {
-      const msgBuffer = new TextEncoder().encode(message);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      return hashHex;
-    } catch (e) {
-      console.warn('[Security] crypto.subtle failed, using fallback:', e);
-    }
-  }
-  
-  // Fallback: Pure JavaScript SHA-256 implementation for HTTP contexts
-  // Based on https://geraintluff.github.io/sha256/ (public domain)
-  function sha256Fallback(ascii) {
-    function rightRotate(value, amount) {
-      return (value >>> amount) | (value << (32 - amount));
-    }
-    
-    const mathPow = Math.pow;
-    const maxWord = mathPow(2, 32);
-    const lengthProperty = 'length';
-    let i, j;
-    let result = '';
-    
-    const words = [];
-    const asciiBitLength = ascii[lengthProperty] * 8;
-    
-    let hash = sha256Fallback.h = sha256Fallback.h || [];
-    const k = sha256Fallback.k = sha256Fallback.k || [];
-    let primeCounter = k[lengthProperty];
-    
-    const isComposite = {};
-    for (let candidate = 2; primeCounter < 64; candidate++) {
-      if (!isComposite[candidate]) {
-        for (i = 0; i < 313; i += candidate) {
-          isComposite[i] = candidate;
-        }
-        hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
-        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
-      }
-    }
-    
-    ascii += '\x80';
-    while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
-    for (i = 0; i < ascii[lengthProperty]; i++) {
-      j = ascii.charCodeAt(i);
-      if (j >> 8) return;
-      words[i >> 2] |= j << ((3 - i) % 4) * 8;
-    }
-    words[words[lengthProperty]] = ((asciiBitLength / maxWord) | 0);
-    words[words[lengthProperty]] = (asciiBitLength);
-    
-    for (j = 0; j < words[lengthProperty];) {
-      const w = words.slice(j, j += 16);
-      const oldHash = hash;
-      hash = hash.slice(0, 8);
-      
-      for (i = 0; i < 64; i++) {
-        const w15 = w[i - 15], w2 = w[i - 2];
-        
-        const a = hash[0], e = hash[4];
-        const temp1 = hash[7]
-          + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
-          + ((e & hash[5]) ^ ((~e) & hash[6]))
-          + k[i]
-          + (w[i] = (i < 16) ? w[i] : (
-              w[i - 16]
-              + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
-              + w[i - 7]
-              + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
-            ) | 0
-          );
-        const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
-          + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
-        
-        hash = [(temp1 + temp2) | 0].concat(hash);
-        hash[4] = (hash[4] + temp1) | 0;
-      }
-      
-      for (i = 0; i < 8; i++) {
-        hash[i] = (hash[i] + oldHash[i]) | 0;
-      }
-    }
-    
-    for (i = 0; i < 8; i++) {
-      for (j = 3; j + 1; j--) {
-        const b = (hash[i] >> (j * 8)) & 255;
-        result += ((b < 16) ? 0 : '') + b.toString(16);
-      }
-    }
-    return result;
-  }
-  
-  return sha256Fallback(message);
+function isUnsetPasswordValue(value) {
+  return value === undefined || value === null || value === '' || value === '***';
 }
 
 // Check if a value is a password field that should be encrypted
@@ -262,23 +110,8 @@ function isPasswordField(category, key, settingData) {
   return k.includes('pass') || dn.includes('pass');
 }
 
-// Process value for transmission
-// Encrypt passwords using project-specific salt to prevent WiFi sniffing
-// IMPORTANT: Always keep the encryption branch present at bundle time.
-// Do NOT guard by comparing to the placeholder string here, otherwise
-// the bundler may optimize it away before our post-build salt injection.
-// The placeholder will be replaced in the built JS by the header generator.
 async function processValueForTransmission(category, key, value, settingData) {
-  if (isPasswordField(category, key, settingData) && value && value.trim() !== '') {
-    try {
-      const encrypted = encryptPassword(value, ENCRYPTION_SALT);
-      return encrypted;
-    } catch (e) {
-      console.warn('[Security] Password encryption failed, sending plaintext:', e);
-      // Fall through to return plaintext if encryption fails
-    }
-  }
-  return value; // Return original value for non-passwords
+  return value;
 }
 
 const config = ref({});
@@ -298,26 +131,92 @@ const hasLiveContent = ref(true);
 const showSettingsAuth = ref(false);
 const settingsAuthenticated = ref(false);
 const settingsPassword = ref("");
-const showSettingsPassword = ref(false);
 const settingsPasswordInput = ref(null);
 const pendingFlashStart = ref(false); // Track if we need to start flash after auth
 
-// Configurable settings password - loaded from backend
-const SETTINGS_PASSWORD = ref(""); // Empty by default
+// Token-based settings auth (issued by POST /config/auth)
+const settingsAuthToken = ref("");
+const settingsAuthTokenExpiresAtMs = ref(0);
+const settingsAuthPasswordRequired = ref(true);
 
-async function loadSettingsPassword() {
+function isSettingsAuthTokenValid() {
+  return (
+    typeof settingsAuthToken.value === "string" &&
+    settingsAuthToken.value.length > 0 &&
+    Date.now() < settingsAuthTokenExpiresAtMs.value
+  );
+}
+
+async function authenticateSettings(password, opts = {}) {
+  const { timeoutMs = 1500, silent = false } = opts;
   try {
-    const response = await fetch("/config/settings_password");
-    if (response.ok) {
-      const data = await response.json();
-      if (data.status === "ok" && data.password !== undefined) {
-        SETTINGS_PASSWORD.value = data.password;
-        // //console.log("[Frontend] Settings password loaded from backend:", data.password === "" ? "(none)" : "(set)");
-      }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+    const r = await fetch("/config/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: String(password || "") }),
+      signal: controller ? controller.signal : undefined,
+    });
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    const json = await r.json().catch(() => ({}));
+    if (r.ok && json.status === "ok" && typeof json.token === "string") {
+      const ttlSec = Number(json.ttlSec || 0);
+      settingsAuthToken.value = json.token;
+      settingsAuthTokenExpiresAtMs.value = Date.now() + Math.max(1, ttlSec) * 1000;
+      settingsAuthenticated.value = true;
+      settingsAuthPasswordRequired.value = false;
+      return { ok: true };
     }
+
+    if (r.status === 401 || r.status === 403) {
+      settingsAuthPasswordRequired.value = true;
+      settingsAuthenticated.value = false;
+      return { ok: false, reason: "unauthorized" };
+    }
+
+    settingsAuthenticated.value = false;
+    if (!silent) {
+      const reason = (json && json.reason) ? String(json.reason) : `http_${r.status}`;
+      notify(`Auth failed: ${reason}`, "error", 8000);
+    }
+    return { ok: false, reason: (json && json.reason) ? String(json.reason) : "unknown" };
   } catch (e) {
-    console.warn("[Frontend] Could not load settings password from backend:", e);
+    settingsAuthenticated.value = false;
+    if (!silent) {
+      const isTimeout = e && (e.name === 'AbortError');
+      notify(isTimeout ? "Auth timeout" : "Auth request failed", "error", 8000);
+    }
+    return { ok: false, reason: (e && e.name === 'AbortError') ? "timeout" : "network" };
   }
+}
+
+async function fetchStoredPassword(category, key) {
+  if (!isSettingsAuthTokenValid()) {
+    // Do not auto-auth with an empty password.
+    settingsAuthenticated.value = false;
+    showSettingsAuth.value = true;
+    throw new Error("Not authenticated");
+  }
+  const r = await fetch(
+    `/config/password?category=${rURIComp(category)}&key=${rURIComp(key)}`,
+    {
+      method: "GET",
+      headers: { "X-Settings-Token": settingsAuthToken.value },
+    }
+  );
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok || json.status !== "ok") {
+    if (r.status === 401 || r.status === 403) {
+      settingsAuthenticated.value = false;
+      showSettingsAuth.value = true;
+    }
+    throw new Error(json.reason || "Failed");
+  }
+  return String(json.value ?? "");
 }
 const opBusy = ref({});
 const rURIComp = encodeURIComponent;
@@ -359,6 +258,7 @@ function updateToast(id, message, type = "info", duration = 2500) {
 provide("notify", notify);
 provide("updateToast", updateToast);
 provide("dismissToast", dismissToast);
+provide("fetchStoredPassword", fetchStoredPassword);
 
 async function loadSettings() {
   try {
@@ -380,14 +280,19 @@ async function loadSettings() {
     }
     
     // Check content-length header vs actual response
+    // Check content-length header vs actual response (compare bytes, not JS string length)
     const contentLength = r.headers.get('content-length');
     //console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
-    
+
     const text = await r.text();
-    //console.log(`[Frontend] config.json - Actual response length: ${text.length}`);
-    
-    if (contentLength && parseInt(contentLength) !== text.length) {
-      console.warn(`[Frontend] Content-Length mismatch! Header: ${contentLength}, Actual: ${text.length}`);
+    if (contentLength) {
+      const headerBytes = parseInt(contentLength, 10);
+      const actualBytes = (typeof TextEncoder !== 'undefined')
+        ? new TextEncoder().encode(text).length
+        : text.length;
+      if (Number.isFinite(headerBytes) && headerBytes !== actualBytes) {
+        console.warn(`[Frontend] Content-Length mismatch (bytes)! Header: ${headerBytes}, Actual: ${actualBytes}`);
+      }
     }
     
     // Clean the response text from potential control characters
@@ -471,62 +376,60 @@ async function checkLiveContent() {
   if (!hasLiveContent.value) {
     if (activeTab.value === 'live') {
       // Auto-switch to settings; auto-auth if no password
-      if (SETTINGS_PASSWORD.value === "" || settingsAuthenticated.value) {
-        settingsAuthenticated.value = true;
-        activeTab.value = 'settings';
-        loadSettings();
-      } else {
-        // prompt for settings auth
-        switchToSettings();
-      }
+      await switchToSettings();
       notify("No live dashboard defined – opening Settings", "info");
     }
   }
 }
-function switchToSettings() {
-  // If no password required, allow immediate access
-  if (SETTINGS_PASSWORD.value === "" || settingsAuthenticated.value) {
-    settingsAuthenticated.value = true; // Mark as authenticated if no password
-    activeTab.value = "settings";
-    loadSettings();
-  } else {
-    showSettingsAuth.value = true;
-    // Focus password input after modal appears
-    setTimeout(() => {
-      settingsPasswordInput.value?.focus();
-    }, 100);
-  }
-}
-
-function confirmSettingsAuth() {
-  // If no password is set on backend, allow immediate access
-  if (SETTINGS_PASSWORD.value === "" || settingsPassword.value === SETTINGS_PASSWORD.value) {
+async function switchToSettings() {
+  // If token is valid, allow immediate access.
+  if (isSettingsAuthTokenValid()) {
     settingsAuthenticated.value = true;
     showSettingsAuth.value = false;
-    settingsPassword.value = ""; // Clear password for security
-    
-    // Check if we need to start flash after authentication
-    if (pendingFlashStart.value) {
-      pendingFlashStart.value = false;
-      notify("Access granted - Starting OTA flash...", "success");
-      runtimeDashboard.value?.startFlash();
-    } else {
-      // Normal settings access
-      activeTab.value = "settings";
-      loadSettings();
-      notify(SETTINGS_PASSWORD.value === "" ? "Settings unlocked" : "Settings access granted", "success");
-    }
-  } else {
-    notify("Invalid password", "error");
-    settingsPassword.value = ""; // Clear wrong password
-    settingsPasswordInput.value?.focus();
+    activeTab.value = "settings";
+    await loadSettings();
+    return;
   }
+
+  // Show modal immediately (avoid UI delay on slow WiFi/requests)
+  showSettingsAuth.value = true;
+  // Focus password input after modal appears
+  setTimeout(() => {
+    settingsPasswordInput.value?.focus();
+  }, 100);
+
+  // Do not auto-auth with empty password (would generate 403 noise on protected setups).
+}
+
+async function confirmSettingsAuth() {
+  const res = await authenticateSettings(settingsPassword.value, { timeoutMs: 3000 });
+  if (!res.ok) {
+    notify(res.reason === 'unauthorized' ? "Invalid password" : `Auth failed: ${res.reason}`, "error");
+    settingsPassword.value = "";
+    settingsPasswordInput.value?.focus();
+    return;
+  }
+
+  showSettingsAuth.value = false;
+  settingsPassword.value = ""; // Clear password for security
+
+  // Check if we need to start flash after authentication
+  if (pendingFlashStart.value) {
+    pendingFlashStart.value = false;
+    notify("Access granted - Starting OTA flash...", "success");
+    runtimeDashboard.value?.startFlash();
+    return;
+  }
+
+  // Normal settings access
+  activeTab.value = "settings";
+  loadSettings();
+  notify(settingsAuthPasswordRequired.value ? "Settings access granted" : "Settings unlocked", "success");
 }
 
 function cancelSettingsAuth() {
   showSettingsAuth.value = false;
   settingsPassword.value = "";
-  showSettingsPassword.value = false;
   pendingFlashStart.value = false; // Clear any pending flash start
   activeTab.value = "live"; // Stay on live tab
 }
@@ -561,16 +464,25 @@ async function applySingle(category, key, value) {
   try {
     // Get setting metadata to check if this is a password field
     const settingData = config.value[category] && config.value[category][key];
-    
-    // Process value (hash if password, otherwise use as-is)
-    const processedValue = await processValueForTransmission(category, key, value, settingData);
+    if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
+      updateToast(tid, `Apply skipped ${opKey}: No new password entered`, "error");
+      return;
+    }
+    if (isPasswordField(category, key, settingData)) {
+      const inputEl = collectSettingsInputs().find((i) => i.name === `${category}.${key}`);
+      const revealedValue = inputEl && inputEl.dataset ? inputEl.dataset.revealedValue : undefined;
+      if (revealedValue !== undefined && String(value) === String(revealedValue)) {
+        updateToast(tid, `Apply skipped ${opKey}: Password unchanged`, "error");
+        return;
+      }
+    }
     
     const r = await fetch(
       `/config/apply?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: processedValue }),
+        body: JSON.stringify({ value }),
       }
     );
     const json = await r.json().catch(() => ({}));
@@ -594,16 +506,25 @@ async function saveSingle(category, key, value) {
     
     // Get setting metadata to check if this is a password field
     const settingData = config.value[category] && config.value[category][key];
-    
-    // Process value (hash if password, otherwise use as-is)
-    const processedValue = await processValueForTransmission(category, key, value, settingData);
+    if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
+      updateToast(tid, `Save skipped ${opKey}: No new password entered`, "error");
+      return;
+    }
+    if (isPasswordField(category, key, settingData)) {
+      const inputEl = collectSettingsInputs().find((i) => i.name === `${category}.${key}`);
+      const revealedValue = inputEl && inputEl.dataset ? inputEl.dataset.revealedValue : undefined;
+      if (revealedValue !== undefined && String(value) === String(revealedValue)) {
+        updateToast(tid, `Save skipped ${opKey}: Password unchanged`, "error");
+        return;
+      }
+    }
     
     const r = await fetch(
       `/config/save?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: processedValue }),
+        body: JSON.stringify({ value }),
         signal: controller.signal
       }
     );
@@ -636,20 +557,12 @@ async function saveAll() {
     if (!all[cat]) all[cat] = {};
     if (
       input.dataset.isPassword === "1" &&
-      (!input.value || input.value === "***")
+      (!input.value || input.value === "***" || (input.dataset.revealedValue !== undefined && input.value === input.dataset.revealedValue))
     ) {
       // Skip placeholder or empty password fields
       return;
     }
     let v = input.type === "checkbox" ? input.checked : input.value;
-    // Encrypt password fields in bulk actions as well
-    if (input.dataset.isPassword === "1" && typeof v === 'string' && v.trim() !== '') {
-      try {
-        v = encryptPassword(v, ENCRYPTION_SALT);
-      } catch (e) {
-        console.warn('[Security] Password encryption (saveAll) failed, sending plaintext:', e);
-      }
-    }
     all[cat][key] = v;
   });
   refreshing.value = true;
@@ -676,14 +589,14 @@ async function applyAll() {
   collectSettingsInputs().forEach((input) => {
     const [cat, key] = input.name.split(".");
     if (!all[cat]) all[cat] = {};
-    let v = input.type === "checkbox" ? input.checked : input.value;
-    if (input.dataset.isPassword === "1" && typeof v === 'string' && v.trim() !== '') {
-      try {
-        v = encryptPassword(v, ENCRYPTION_SALT);
-      } catch (e) {
-        console.warn('[Security] Password encryption (applyAll) failed, sending plaintext:', e);
-      }
+    if (
+      input.dataset.isPassword === "1" &&
+      (!input.value || input.value === "***" || (input.dataset.revealedValue !== undefined && input.value === input.dataset.revealedValue))
+    ) {
+      // Skip placeholder/empty/unchanged password fields
+      return;
     }
+    let v = input.type === "checkbox" ? input.checked : input.value;
     all[cat][key] = v;
   });
   refreshing.value = true;
@@ -735,6 +648,16 @@ async function waitForFlashReady(timeoutMs = 2000) {
 }
 
 async function startFlash() {
+  // If settings are protected, require auth before starting OTA flash
+  if (!isSettingsAuthTokenValid()) {
+    pendingFlashStart.value = true;
+    showSettingsAuth.value = true;
+    setTimeout(() => {
+      settingsPasswordInput.value?.focus();
+    }, 100);
+    return;
+  }
+
   // Ensure RuntimeDashboard is mounted (only on 'live' tab)
   if (activeTab.value !== "live") {
     activeTab.value = "live";
@@ -753,7 +676,6 @@ function handleCanFlashChange(v) {
 }
 onMounted(() => {
   loadUserTheme();
-  loadSettingsPassword();
   loadSettings();
   injectVersion();
   checkLiveContent();
@@ -761,7 +683,7 @@ onMounted(() => {
 </script>
 <style scoped>
 #mainHeader {
-  color: #3498db;
+  color: #034875;
   margin: 0.2rem 0 0;
   border-bottom: 2px solid #3498db;
   padding-bottom: 0.2rem;
@@ -942,7 +864,7 @@ onMounted(() => {
   box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
 }
 
-.password-toggle {
+.pwd-toggle {
   background: #21262d;
   border: 1px solid #30363d;
   border-radius: 4px;
@@ -954,7 +876,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.password-toggle:hover {
+.pwd-toggle:hover {
   background: #30363d;
   color: #f0f6fc;
 }

@@ -16,9 +16,6 @@
 
 #include "ConfigManagerConfig.h"
 
-// Password encryption salt (user can override by copying salt.h to their project)
-#include "salt.h"
-
 // Modular components
 #include "wifi/WiFiManager.h"
 #include "web/WebServer.h"
@@ -37,7 +34,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "2.7.6" // Synced to library.json
+#define CONFIGMANAGER_VERSION "3.0.0" // Synced to library.json
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
@@ -503,9 +500,8 @@ public:
 
         if (isPassword)
         {
-            // User requested to remove password safety - always show actual value
-            settingObj["value"] = value;
-            settingObj["actualValue"] = value;
+            // Passwords are masked in config.json. Use /config/password after auth to reveal.
+            settingObj["value"] = "***";
         }
         else
         {
@@ -751,30 +747,14 @@ public:
 
             // System OTA password at boot
             if (containsNoCase(cat, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
-                // Extract current value through JSON view (avoids RTTI/dynamic_cast)
-                DynamicJsonDocument d(256);
-                JsonObject obj = d.to<JsonObject>();
-                s->toJSON(obj);
-
-                String disp = s->getDisplayName();
-                String pwd;
-                if (obj.containsKey(disp)) {
-                    JsonObject so = obj[disp].as<JsonObject>();
-                    if (so.containsKey("actualValue")) {
-                        pwd = so["actualValue"].as<String>();
-                    } else if (so.containsKey("value")) {
-                        if (so["value"].is<const char*>()) {
-                            pwd = so["value"].as<String>();
-                        } else {
-                            // Fallback for non-string serializable values
-                            serializeJson(so["value"], pwd);
-                        }
+                // Password values are masked in JSON; read the actual value directly.
+                if (s->getType() == SettingType::STRING) {
+                    auto *cs = static_cast<Config<String>*>(s);
+                    const String pwd = cs->get();
+                    if (pwd.length() > 0) {
+                        otaManager.setPassword(pwd);
+                        CM_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
                     }
-                }
-
-                if (pwd.length() > 0) {
-                    otaManager.setPassword(pwd);
-                    CM_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
                 }
             }
         }
@@ -980,25 +960,10 @@ public:
         CM_LOG("[I] Settings password configured");
     }
     
-    // Password encryption salt for XOR encryption
-    // Automatically loads from src/salt.h if not explicitly set
-    void initializeEncryption()
-    {
-        #ifdef ENCRYPTION_SALT
-            webManager.setEncryptionSalt(ENCRYPTION_SALT);
-            CM_LOG("[I] Encryption salt loaded from salt.h (length: %d)", String(ENCRYPTION_SALT).length());
-        #else
-            CM_LOG("[W] No ENCRYPTION_SALT defined - passwords will be transmitted in plaintext");
-        #endif
-    }
-
     // WiFi management - NON-BLOCKING!
     void startWebServer(const String &ssid, const String &password)
     {
         CM_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
-
-        // Initialize encryption from salt.h
-        initializeEncryption();
 
         // Start WiFi connection non-blocking
         wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout

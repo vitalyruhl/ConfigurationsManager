@@ -2,6 +2,8 @@
 #include "../ConfigManager.h"
 #include "../settings.h"
 
+#include <AsyncJson.h>
+
 // Logging support
 #if CM_ENABLE_LOGGING
 extern std::function<void(const char*)> ConfigManagerClass_logger;
@@ -231,30 +233,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     WEB_LOG("[Web] Parsed: category='%s', key='%s', value='%s'",
                             category.c_str(), key.c_str(), value.c_str());
 
-                    // Handle encrypted password transmission
-                    // Passwords are sent as encrypted hex string using XOR with project-specific salt
-                    // This prevents casual WiFi sniffing while allowing the ESP32 to decrypt and use the password
+                    // Passwords are transmitted in plaintext over HTTP.
                     String finalValue = value;
-                    
-                    // Check if value looks like encrypted hex (even length, only hex chars)
-                    bool isHex = (value.length() > 0 && value.length() % 2 == 0);
-                    if (isHex) {
-                        for (size_t i = 0; i < value.length(); i++) {
-                            char c = value[i];
-                            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-                                isHex = false;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // If it looks like hex and we have a salt, try to decrypt
-                    if (isHex && !encryptionSalt.isEmpty()) {
-                        String decrypted = decryptPassword(value, encryptionSalt);
-                        WEB_LOG("[Web] Decrypted password (encrypted length: %d, decrypted length: %d)", 
-                                value.length(), decrypted.length());
-                        finalValue = decrypted;
-                    }
                     
                     if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
                         request->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -380,28 +360,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                 WEB_LOG("[Web] Extracted value: '%s'", value.c_str());
 
-                // Handle encrypted password transmission
+                // Passwords are transmitted in plaintext over HTTP.
                 String finalValue = value;
-                
-                // Check if value looks like encrypted hex
-                bool isHex = (value.length() > 0 && value.length() % 2 == 0);
-                if (isHex) {
-                    for (size_t i = 0; i < value.length(); i++) {
-                        char c = value[i];
-                        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-                            isHex = false;
-                            break;
-                        }
-                    }
-                }
-                
-                // If it looks like hex and we have a salt, try to decrypt
-                if (isHex && !encryptionSalt.isEmpty()) {
-                    String decrypted = decryptPassword(value, encryptionSalt);
-                    WEB_LOG("[Web] Decrypted password for apply (encrypted length: %d, decrypted length: %d)", 
-                            value.length(), decrypted.length());
-                    finalValue = decrypted;
-                }
                 
                 // Call apply callback (memory only, no flash save)
                 if (settingApplyCallback && settingApplyCallback(category, key, finalValue)) {
@@ -419,136 +379,159 @@ void ConfigManagerWeb::setupAPIRoutes() {
         });
 
     // Settings save endpoint - /config/save (saves individual setting to flash)
-    server->on("/config/save", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            // Setup CORS headers
-            AsyncWebServerResponse* response = nullptr;
-            Serial.println("[WebServer] /config/save request received");
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/save", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            WEB_LOG("[WebServer] /config/save request received");
 
-            // Extract category and key from URL parameters
-            String category = request->hasParam("category") ? request->getParam("category")->value() : "";
-            String key = request->hasParam("key") ? request->getParam("key")->value() : "";
-
+            const String category = request->hasParam("category") ? request->getParam("category")->value() : "";
+            const String key = request->hasParam("key") ? request->getParam("key")->value() : "";
             if (category.isEmpty() || key.isEmpty()) {
                 WEB_LOG("[Web] Missing URL params for /config/save");
-                request->send(400, "application/json",
-                            "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"missing_params\"}");
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"missing_params\"}");
+                enableCORS(response);
+                request->send(response);
                 return;
             }
 
-            // Get body content (will be available in body handler)
-            request->_tempObject = new String();
-        },
-        nullptr, // upload handler
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            // Body handler for /config/save
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                for (size_t i = 0; i < len; i++) {
-                    *body += (char)data[i];
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
+
+            JsonObject obj = json.as<JsonObject>();
+            String value;
+            if (obj.containsKey("value")) {
+                JsonVariant v = obj["value"];
+                if (v.is<const char*>()) {
+                    value = v.as<String>();
+                } else if (v.is<bool>()) {
+                    value = v.as<bool>() ? "true" : "false";
+                } else if (v.is<int>()) {
+                    value = String(v.as<int>());
+                } else if (v.is<float>()) {
+                    value = String(v.as<float>(), 6);
+                } else {
+                    serializeJson(v, value);
                 }
+            } else {
+                // Backwards-compatible fallback
+                value = "";
+            }
 
-                if (index + len == total) {
-                    Serial.printf("[WebServer] /config/save body complete (%u bytes)\n", (unsigned)total);
-                    // Body complete, process the request
-                    String category = request->hasParam("category") ? request->getParam("category")->value() : "";
-                    String key = request->hasParam("key") ? request->getParam("key")->value() : "";
+            WEB_LOG("[Web] Processing /config/save: category='%s', key='%s'", category.c_str(), key.c_str());
+            WEB_LOG("[Web] Extracted value for save: '%s'", value.c_str());
 
-                    WEB_LOG("[Web] Processing /config/save: category='%s', key='%s'",
-                           category.c_str(), key.c_str());
-                    WEB_LOG("[Web] Body content: '%s'", body->c_str());
+            // Passwords are transmitted in plaintext over HTTP.
+            const String finalValue = value;
 
-                    String value;
-
-                    // Parse JSON body to extract value
-                    DynamicJsonDocument doc(256);
-                    DeserializationError error = deserializeJson(doc, *body);
-                    if (!error && doc.containsKey("value")) {
-                        if (doc["value"].is<String>()) {
-                            value = doc["value"].as<String>();
-                        } else if (doc["value"].is<bool>()) {
-                            value = doc["value"].as<bool>() ? "true" : "false";
-                        } else if (doc["value"].is<int>()) {
-                            value = String(doc["value"].as<int>());
-                        } else if (doc["value"].is<float>()) {
-                            value = String(doc["value"].as<float>(), 6);
-                        }
-                    } else {
-                        // Fallback: use entire body as value
-                        value = *body;
-                    }
-
-                    WEB_LOG("[Web] Extracted value for save: '%s'", value.c_str());
-
-                    // Handle encrypted password transmission
-                    String finalValue = value;
-                    
-                    // Check if value looks like encrypted hex
-                    bool isHex = (value.length() > 0 && value.length() % 2 == 0);
-                    if (isHex) {
-                        for (size_t i = 0; i < value.length(); i++) {
-                            char c = value[i];
-                            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-                                isHex = false;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // If it looks like hex and we have a salt, try to decrypt
-                    if (isHex && !encryptionSalt.isEmpty()) {
-                        String decrypted = decryptPassword(value, encryptionSalt);
-                        WEB_LOG("[Web] Decrypted password for save (encrypted length: %d, decrypted length: %d)", 
-                                value.length(), decrypted.length());
-                        finalValue = decrypted;
-                    }
-                    
-                    // Call update callback (this also saves to flash in updateSetting)
-                    if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
-                        String response = "{\"status\":\"ok\",\"action\":\"save\",\"category\":\"" +
-                                        category + "\",\"key\":\"" + key + "\"}";
-                        request->send(200, "application/json", response);
-                    } else {
-                        request->send(400, "application/json",
-                                    "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"update_failed\"}");
-                    }
-
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+            if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
+                const String payload = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"") +
+                    category + "\",\"key\":\"" + key + "\"}";
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"update_failed\"}");
+                enableCORS(response);
+                request->send(response);
             }
         });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
+
+    // Settings authentication endpoint - /config/auth
+    // Issues a short-lived token required for password reveal.
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/auth", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            WEB_LOG("[WebServer] /config/auth request received");
+
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
+
+            JsonObject obj = json.as<JsonObject>();
+            const String provided = obj.containsKey("password") ? obj["password"].as<String>() : String("");
+            const bool required = isSettingsAuthRequired();
+            const bool match = (!required) || (provided == settingsPassword);
+            WEB_LOG("[Web] /config/auth required=%s providedLen=%d configuredLen=%d match=%s",
+                required ? "true" : "false",
+                (int)provided.length(),
+                (int)settingsPassword.length(),
+                match ? "true" : "false");
+
+            if (match) {
+                const String token = issueSettingsAuthToken();
+                DynamicJsonDocument out(256);
+                out["status"] = "ok";
+                out["token"] = token;
+                out["ttlSec"] = (int)(SETTINGS_AUTH_TTL_MS / 1000UL);
+                String resp;
+                serializeJson(out, resp);
+
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                AsyncWebServerResponse* response = request->beginResponse(403, "application/json", "{\"status\":\"error\",\"reason\":\"unauthorized\"}");
+                enableCORS(response);
+                request->send(response);
+            }
+        });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
 
     // Password fetch endpoint - /config/password (returns actual password value)
+    // Requires a valid auth token returned by /config/auth.
     server->on("/config/password", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        String category = request->hasParam("category") ? request->getParam("category")->value() : "";
-        String key = request->hasParam("key") ? request->getParam("key")->value() : "";
-
-        if (category.isEmpty() || key.isEmpty()) {
-            request->send(400, "application/json",
-                        "{\"status\":\"error\",\"reason\":\"missing_params\"}");
+        if (!isSettingsAuthValid(request)) {
+            request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"unauthorized\"}");
             return;
         }
 
-        // Get the actual password value from the config
-        if (configJsonProvider) {
-            String configJson = configJsonProvider();
-            DynamicJsonDocument doc(8192);
-            DeserializationError error = deserializeJson(doc, configJson);
+        const String category = request->hasParam("category") ? request->getParam("category")->value() : "";
+        const String key = request->hasParam("key") ? request->getParam("key")->value() : "";
 
-            if (!error && doc.containsKey(category) && doc[category].containsKey(key)) {
-                JsonObject setting = doc[category][key];
-                if (setting.containsKey("actualValue")) {
-                    // Return the actual password value
-                    String response = "{\"status\":\"ok\",\"value\":\"" + setting["actualValue"].as<String>() + "\"}";
-                    request->send(200, "application/json", response);
-                    return;
-                }
-            }
+        if (category.isEmpty() || key.isEmpty()) {
+            request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}");
+            return;
         }
 
-        // Fallback - return empty value
-        request->send(200, "application/json", "{\"status\":\"ok\",\"value\":\"\"}");
+        if (!configManager) {
+            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"not_initialized\"}");
+            return;
+        }
+
+        BaseSetting* s = configManager->findSetting(category, key);
+        if (!s || !s->isSecret()) {
+            request->send(404, "application/json", "{\"status\":\"error\",\"reason\":\"not_found\"}");
+            return;
+        }
+
+        if (s->getType() != SettingType::STRING) {
+            request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"not_string_password\"}");
+            return;
+        }
+
+        auto* cs = static_cast<Config<String>*>(s);
+
+        DynamicJsonDocument out(512);
+        out["status"] = "ok";
+        out["value"] = cs->get();
+        String resp;
+        serializeJson(out, resp);
+        request->send(200, "application/json", resp);
     });
 
     // Settings password endpoint - /config/settings_password (returns settings password for frontend auth)
@@ -558,162 +541,142 @@ void ConfigManagerWeb::setupAPIRoutes() {
     });
 
     // Bulk apply endpoint - /config/apply_all (applies all settings to memory only)
-    server->on("/config/apply_all", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            request->_tempObject = new String();
-        },
-        nullptr, // upload handler
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                for (size_t i = 0; i < len; i++) {
-                    *body += (char)data[i];
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/apply_all", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            WEB_LOG("[Web] Processing /config/apply_all");
+
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
+
+            bool allSuccess = true;
+            int totalApplied = 0;
+
+            JsonObject root = json.as<JsonObject>();
+            for (JsonPair categoryPair : root) {
+                const String category = categoryPair.key().c_str();
+                if (!categoryPair.value().is<JsonObject>()) {
+                    allSuccess = false;
+                    continue;
                 }
 
-                if (index + len == total) {
-                    WEB_LOG("[Web] Processing /config/apply_all");
+                JsonObject categoryObj = categoryPair.value().as<JsonObject>();
+                for (JsonPair settingPair : categoryObj) {
+                    const String key = settingPair.key().c_str();
+                    const JsonVariant v = settingPair.value();
 
-                    // Parse JSON body containing all settings
-                    DynamicJsonDocument doc(4096);
-                    DeserializationError error = deserializeJson(doc, *body);
-
-                    if (error) {
-                        WEB_LOG("[Web] JSON parse error in apply_all: %s", error.c_str());
-                        request->send(400, "application/json",
-                                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
-                        delete body;
-                        request->_tempObject = nullptr;
-                        return;
-                    }
-
-                    bool allSuccess = true;
-                    int totalApplied = 0;
-
-                    // Iterate through categories
-                    for (JsonPair categoryPair : doc.as<JsonObject>()) {
-                        String category = categoryPair.key().c_str();
-                        JsonObject categoryObj = categoryPair.value().as<JsonObject>();
-
-                        // Iterate through settings in category
-                        for (JsonPair settingPair : categoryObj) {
-                            String key = settingPair.key().c_str();
-                            String value;
-
-                            // Convert value to string
-                            if (settingPair.value().is<String>()) {
-                                value = settingPair.value().as<String>();
-                            } else if (settingPair.value().is<bool>()) {
-                                value = settingPair.value().as<bool>() ? "true" : "false";
-                            } else if (settingPair.value().is<int>()) {
-                                value = String(settingPair.value().as<int>());
-                            } else if (settingPair.value().is<float>()) {
-                                value = String(settingPair.value().as<float>(), 6);
-                            }
-
-                            // Apply setting (memory only)
-                            if (settingApplyCallback && settingApplyCallback(category, key, value)) {
-                                totalApplied++;
-                                WEB_LOG("[Web] Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            } else {
-                                allSuccess = false;
-                                WEB_LOG("[Web] Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            }
-                        }
-                    }
-
-                    // Send response
-                    if (allSuccess && totalApplied > 0) {
-                        String response = "{\"status\":\"ok\",\"action\":\"apply_all\",\"applied\":" + String(totalApplied) + "}";
-                        request->send(200, "application/json", response);
+                    String value;
+                    if (v.is<const char*>()) {
+                        value = v.as<String>();
+                    } else if (v.is<bool>()) {
+                        value = v.as<bool>() ? "true" : "false";
+                    } else if (v.is<int>()) {
+                        value = String(v.as<int>());
+                    } else if (v.is<float>()) {
+                        value = String(v.as<float>(), 6);
                     } else {
-                        String response = "{\"status\":\"error\",\"action\":\"apply_all\",\"applied\":" + String(totalApplied) + "}";
-                        request->send(400, "application/json", response);
+                        serializeJson(v, value);
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
+                    if (settingApplyCallback && settingApplyCallback(category, key, value)) {
+                        totalApplied++;
+                        WEB_LOG("[Web] Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    } else {
+                        allSuccess = false;
+                        WEB_LOG("[Web] Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    }
                 }
             }
+
+            if (allSuccess && totalApplied > 0) {
+                const String payload = String("{\"status\":\"ok\",\"action\":\"apply_all\",\"applied\":") + String(totalApplied) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                const String payload = String("{\"status\":\"error\",\"action\":\"apply_all\",\"applied\":") + String(totalApplied) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            }
         });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
 
     // Bulk save endpoint - /config/save_all (saves all settings to flash)
-    server->on("/config/save_all", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            request->_tempObject = new String();
-        },
-        nullptr, // upload handler
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                for (size_t i = 0; i < len; i++) {
-                    *body += (char)data[i];
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/save_all", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            WEB_LOG("[Web] Processing /config/save_all");
+
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
+
+            bool allSuccess = true;
+            int totalSaved = 0;
+
+            JsonObject root = json.as<JsonObject>();
+            for (JsonPair categoryPair : root) {
+                const String category = categoryPair.key().c_str();
+                if (!categoryPair.value().is<JsonObject>()) {
+                    allSuccess = false;
+                    continue;
                 }
 
-                if (index + len == total) {
-                    WEB_LOG("[Web] Processing /config/save_all");
+                JsonObject categoryObj = categoryPair.value().as<JsonObject>();
+                for (JsonPair settingPair : categoryObj) {
+                    const String key = settingPair.key().c_str();
+                    const JsonVariant v = settingPair.value();
 
-                    // Parse JSON body containing all settings
-                    DynamicJsonDocument doc(4096);
-                    DeserializationError error = deserializeJson(doc, *body);
-
-                    if (error) {
-                        WEB_LOG("[Web] JSON parse error in save_all: %s", error.c_str());
-                        request->send(400, "application/json",
-                                    "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
-                        delete body;
-                        request->_tempObject = nullptr;
-                        return;
-                    }
-
-                    bool allSuccess = true;
-                    int totalSaved = 0;
-
-                    // Iterate through categories
-                    for (JsonPair categoryPair : doc.as<JsonObject>()) {
-                        String category = categoryPair.key().c_str();
-                        JsonObject categoryObj = categoryPair.value().as<JsonObject>();
-
-                        // Iterate through settings in category
-                        for (JsonPair settingPair : categoryObj) {
-                            String key = settingPair.key().c_str();
-                            String value;
-
-                            // Convert value to string
-                            if (settingPair.value().is<String>()) {
-                                value = settingPair.value().as<String>();
-                            } else if (settingPair.value().is<bool>()) {
-                                value = settingPair.value().as<bool>() ? "true" : "false";
-                            } else if (settingPair.value().is<int>()) {
-                                value = String(settingPair.value().as<int>());
-                            } else if (settingPair.value().is<float>()) {
-                                value = String(settingPair.value().as<float>(), 6);
-                            }
-
-                            // Save setting (memory + flash)
-                            if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
-                                totalSaved++;
-                                WEB_LOG("[Web] Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            } else {
-                                allSuccess = false;
-                                WEB_LOG("[Web] Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
-                            }
-                        }
-                    }
-
-                    // Send response
-                    if (allSuccess && totalSaved > 0) {
-                        String response = "{\"status\":\"ok\",\"action\":\"save_all\",\"saved\":" + String(totalSaved) + "}";
-                        request->send(200, "application/json", response);
+                    String value;
+                    if (v.is<const char*>()) {
+                        value = v.as<String>();
+                    } else if (v.is<bool>()) {
+                        value = v.as<bool>() ? "true" : "false";
+                    } else if (v.is<int>()) {
+                        value = String(v.as<int>());
+                    } else if (v.is<float>()) {
+                        value = String(v.as<float>(), 6);
                     } else {
-                        String response = "{\"status\":\"error\",\"action\":\"save_all\",\"saved\":" + String(totalSaved) + "}";
-                        request->send(400, "application/json", response);
+                        serializeJson(v, value);
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
+                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                        totalSaved++;
+                        WEB_LOG("[Web] Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    } else {
+                        allSuccess = false;
+                        WEB_LOG("[Web] Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                    }
                 }
             }
+
+            if (allSuccess && totalSaved > 0) {
+                const String payload = String("{\"status\":\"ok\",\"action\":\"save_all\",\"saved\":") + String(totalSaved) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                const String payload = String("{\"status\":\"error\",\"action\":\"save_all\",\"saved\":") + String(totalSaved) + "}";
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            }
         });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
 
     // Reset to defaults
     server->on("/config/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
@@ -795,7 +758,7 @@ void ConfigManagerWeb::addCustomRoute(const char* path, WebRequestMethodComposit
 void ConfigManagerWeb::enableCORS(AsyncWebServerResponse* response) {
     response->addHeader("Access-Control-Allow-Origin", "*");
     response->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    response->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    response->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Settings-Token");
 }
 
 void ConfigManagerWeb::enableCORSForAll(bool enable) {
@@ -1193,59 +1156,43 @@ void ConfigManagerWeb::setSettingsPassword(const String& password) {
     WEB_LOG("[Web] Settings password configured (length: %d)", password.length());
 }
 
-void ConfigManagerWeb::setEncryptionSalt(const String& salt) {
-    encryptionSalt = salt;
-    WEB_LOG("[Web] Encryption salt configured (length: %d)", salt.length());
+bool ConfigManagerWeb::isSettingsAuthRequired() const {
+    return settingsPassword.length() > 0;
 }
 
-// XOR-based password encryption matching JavaScript implementation
-String ConfigManagerWeb::encryptPassword(const String& password, const String& salt) {
-    if (password.isEmpty() || salt.isEmpty()) {
-        return password;
-    }
-    
-    String result;
-    result.reserve(password.length() * 2); // Each byte becomes 2 hex chars
-    
-    for (size_t i = 0; i < password.length(); i++) {
-        uint8_t pwdByte = (uint8_t)password[i];
-        uint8_t saltByte = (uint8_t)salt[i % salt.length()];
-        uint8_t encrypted = pwdByte ^ saltByte;
-        
-        // Convert to hex (2 chars)
-        char hex[3];
-        sprintf(hex, "%02x", encrypted);
-        result += hex;
-    }
-    
-    return result;
+String ConfigManagerWeb::issueSettingsAuthToken() {
+    // 128-bit token encoded as hex
+    uint32_t r0 = esp_random();
+    uint32_t r1 = esp_random();
+    uint32_t r2 = esp_random();
+    uint32_t r3 = esp_random();
+    char buf[33];
+    snprintf(buf, sizeof(buf), "%08lx%08lx%08lx%08lx",
+             (unsigned long)r0, (unsigned long)r1, (unsigned long)r2, (unsigned long)r3);
+    settingsAuthToken = String(buf);
+    settingsAuthIssuedAtMs = millis();
+    WEB_LOG("[Web] Settings auth token issued (ttl=%lus)", (unsigned long)(SETTINGS_AUTH_TTL_MS / 1000UL));
+    return settingsAuthToken;
 }
 
-// XOR-based password decryption matching JavaScript implementation
-String ConfigManagerWeb::decryptPassword(const String& encryptedHex, const String& salt) {
-    if (encryptedHex.isEmpty() || salt.isEmpty()) {
-        return encryptedHex;
+bool ConfigManagerWeb::isSettingsAuthValid(AsyncWebServerRequest* request) const {
+    if (!isSettingsAuthRequired()) {
+        return true;
     }
-    
-    // Check if it's valid hex (even length, only hex chars)
-    if (encryptedHex.length() % 2 != 0) {
-        return encryptedHex; // Not encrypted, return as-is
+
+    if (settingsAuthToken.isEmpty()) {
+        return false;
     }
-    
-    String result;
-    result.reserve(encryptedHex.length() / 2);
-    
-    for (size_t i = 0; i < encryptedHex.length(); i += 2) {
-        // Parse 2 hex chars to byte
-        char hexByte[3] = {encryptedHex[i], encryptedHex[i+1], '\0'};
-        uint8_t encrypted = (uint8_t)strtol(hexByte, nullptr, 16);
-        
-        // XOR with salt
-        uint8_t saltByte = (uint8_t)salt[(i/2) % salt.length()];
-        uint8_t decrypted = encrypted ^ saltByte;
-        
-        result += (char)decrypted;
+
+    const uint32_t age = (uint32_t)(millis() - settingsAuthIssuedAtMs);
+    if (age > SETTINGS_AUTH_TTL_MS) {
+        return false;
     }
-    
-    return result;
+
+    if (!request || !request->hasHeader("X-Settings-Token")) {
+        return false;
+    }
+    const String token = request->getHeader("X-Settings-Token")->value();
+    return token == settingsAuthToken;
 }
+

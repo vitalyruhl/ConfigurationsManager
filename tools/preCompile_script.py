@@ -151,20 +151,20 @@ def sliders_enabled_combined() -> bool:
 	# Backward compatibility: either int or float
 	return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
 
-# Evaluate embed flag now that helpers are loaded
-EMBED_WEBUI = flag_enabled('CM_EMBED_WEBUI')
+# v3.0.0: feature build flags removed. Always build the embedded WebUI with all runtime controls enabled.
+EMBED_WEBUI = True
 
-# Map firmware flags to frontend env vars (use combined flag)
-sliders_on = sliders_enabled_combined()
-state_btn_on = flag_enabled('CM_ENABLE_RUNTIME_STATE_BUTTONS')
-buttons_on = flag_enabled('CM_ENABLE_RUNTIME_BUTTONS')
-checkboxes_on = flag_enabled('CM_ENABLE_RUNTIME_CHECKBOXES')
-num_inputs_on = flag_enabled('CM_ENABLE_RUNTIME_NUMBER_INPUTS') or True  # default to True when flag missing
+# Map firmware features to frontend env vars (fixed defaults)
+sliders_on = True
+state_btn_on = True
+buttons_on = True
+checkboxes_on = True
+num_inputs_on = True
 feature_env = {
-	'VITE_ENABLE_WS_PUSH': '1' if flag_enabled('CM_ENABLE_WS_PUSH') else '0',
-	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1' if sliders_on else '0',
-	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1' if state_btn_on else '0',
-	'VITE_ENABLE_SYSTEM_PROVIDER': '1' if flag_enabled('CM_ENABLE_SYSTEM_PROVIDER') else '0',
+	'VITE_ENABLE_WS_PUSH': '1',
+	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1',
+	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1',
+	'VITE_ENABLE_SYSTEM_PROVIDER': '1',
 }
 
 print(f"[extra_script] Flags: embed_webui={EMBED_WEBUI} sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")
@@ -224,41 +224,8 @@ if EMBED_WEBUI:
 	# Prepare environment
 	env_vars = os.environ.copy()
 	env_vars.update(feature_env)
-	
-	# Extract ENCRYPTION_SALT from src/salt.h file
-	encryption_salt = None
-	
-	# Method 1: Try to read from project's src/salt.h
-	try:
-		project_dir = Path(os.environ.get('PROJECT_DIR', os.getcwd()))
-		salt_file = project_dir / 'src' / 'salt.h'
-		if salt_file.exists():
-			content = salt_file.read_text(encoding='utf-8', errors='ignore')
-			# Look for #define ENCRYPTION_SALT "value"
-			match = re.search(r'#define\s+ENCRYPTION_SALT\s+"([^"]+)"', content)
-			if match:
-				encryption_salt = match.group(1)
-				print(f"[extra_script] Found ENCRYPTION_SALT in project src/salt.h (length: {len(encryption_salt)})")
-	except Exception as e:
-		print(f"[extra_script] Note: Could not read project src/salt.h: {e}")
-	
-	# Method 2: Try to read from library's src/salt.h (fallback)
-	if not encryption_salt:
-		try:
-			lib_salt_file = Path('src') / 'salt.h'
-			if lib_salt_file.exists():
-				content = lib_salt_file.read_text(encoding='utf-8', errors='ignore')
-				match = re.search(r'#define\s+ENCRYPTION_SALT\s+"([^"]+)"', content)
-				if match:
-					encryption_salt = match.group(1)
-					print(f"[extra_script] Using default ENCRYPTION_SALT from library (length: {len(encryption_salt)})")
-		except Exception as e:
-			print(f"[extra_script] Note: Could not read library src/salt.h: {e}")
-	
-	if encryption_salt:
-		env_vars['CM_ENCRYPTION_SALT'] = str(encryption_salt)
-	else:
-		print("[extra_script] No ENCRYPTION_SALT found - passwords will be transmitted in plaintext.")
+
+	# Passwords are transmitted in plaintext over HTTP in v3.0.0.
 
 	# 1. Build Vue app with feature env
 	subprocess.run([npm_cmd, 'run', 'build'], cwd='webui', check=True, env=env_vars)
@@ -282,7 +249,7 @@ if EMBED_WEBUI:
 		generator = root_dir / 'tools' / 'webui_to_header.js'
 		if not generator.exists():
 			raise FileNotFoundError(f"Header generator not found at {generator}")
-		# Pass environment variables (including CM_ENCRYPTION_SALT) to header generator
+		# Pass environment variables (feature flags etc.) to header generator
 		subprocess.run([node_exe, str(generator)], cwd=str(root_dir), check=True, env=env_vars)
 	except Exception as e:
 		raise RuntimeError(f"Failed to run webui_to_header.js: {e}")

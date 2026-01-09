@@ -1,69 +1,92 @@
 #pragma once
 
-// Feature toggle defaults for ConfigManager. Override by defining macros before including ConfigManager.h.
+// v3.0.0: Feature build flags were removed to simplify integration.
+// The library now provides a single default feature set (WebUI, OTA, runtime controls, styling).
+// Only logging remains configurable via build flags.
 
-
-#ifndef CM_EMBED_WEBUI // Enable embedded web UI (HTML/CSS/JS) in binary
-#define CM_EMBED_WEBUI 1 //default: enabled
+// --- Removed flags (error if a project still defines them) ---
+#ifdef CM_EMBED_WEBUI
+#error "CM_EMBED_WEBUI was removed in v3.0.0. WebUI is always embedded."
 #endif
-
-#ifndef CM_ENABLE_RUNTIME_CHECKBOXES // Enable runtime checkboxes (two-state toggles styled as android switches)
-#define CM_ENABLE_RUNTIME_CHECKBOXES 1 //default: enabled
+#ifdef CM_ENABLE_RUNTIME_CHECKBOXES
+#error "CM_ENABLE_RUNTIME_CHECKBOXES was removed in v3.0.0. Runtime checkboxes are always enabled."
 #endif
-#ifndef CM_ENABLE_RUNTIME_BUTTONS // Enable runtime buttons
-#define CM_ENABLE_RUNTIME_BUTTONS 1 //default: enabled
+#ifdef CM_ENABLE_RUNTIME_BUTTONS
+#error "CM_ENABLE_RUNTIME_BUTTONS was removed in v3.0.0. Runtime buttons are always enabled."
 #endif
-#ifndef CM_ENABLE_RUNTIME_STATE_BUTTONS // Enable runtime state buttons (ON/OFF with 2 states)
-#define CM_ENABLE_RUNTIME_STATE_BUTTONS 1 //default: enabled
+#ifdef CM_ENABLE_RUNTIME_STATE_BUTTONS
+#error "CM_ENABLE_RUNTIME_STATE_BUTTONS was removed in v3.0.0. Runtime state buttons are always enabled."
 #endif
-#ifndef CM_ENABLE_RUNTIME_INT_SLIDERS // Enable runtime integer sliders
-#define CM_ENABLE_RUNTIME_INT_SLIDERS 1 //default: enabled
+#ifdef CM_ENABLE_RUNTIME_INT_SLIDERS
+#error "CM_ENABLE_RUNTIME_INT_SLIDERS was removed in v3.0.0. Use the default runtime controls."
 #endif
-#ifndef CM_ENABLE_RUNTIME_FLOAT_SLIDERS // Enable runtime float sliders
-#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 1 //default: enabled
+#ifdef CM_ENABLE_RUNTIME_FLOAT_SLIDERS
+#error "CM_ENABLE_RUNTIME_FLOAT_SLIDERS was removed in v3.0.0. Use the default runtime controls."
 #endif
-#ifndef CM_ENABLE_RUNTIME_NUMBER_INPUTS
-#define CM_ENABLE_RUNTIME_NUMBER_INPUTS 0 // default: disabled
+#ifdef CM_ENABLE_RUNTIME_ANALOG_SLIDERS
+#error "CM_ENABLE_RUNTIME_ANALOG_SLIDERS was removed in v3.0.0. Runtime sliders are always enabled."
 #endif
-// New combined flag: analog (numeric) sliders (int or float). Prefer this one in builds.
-#ifndef CM_ENABLE_RUNTIME_ANALOG_SLIDERS
-#define CM_ENABLE_RUNTIME_ANALOG_SLIDERS (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_FLOAT_SLIDERS)
+#ifdef CM_ENABLE_RUNTIME_NUMBER_INPUTS
+#error "CM_ENABLE_RUNTIME_NUMBER_INPUTS was removed in v3.0.0. Runtime number inputs are always enabled."
 #endif
-#ifndef CM_ENABLE_RUNTIME_ALARMS // Enable runtime alarms (thresholds, color coding)
-#define CM_ENABLE_RUNTIME_ALARMS 0  //default: disabled
+#ifdef CM_ENABLE_RUNTIME_ALARMS
+#error "CM_ENABLE_RUNTIME_ALARMS was removed in v3.0.0. Runtime alarms are always enabled."
 #endif
-#ifndef CM_ENABLE_RUNTIME_META // Enable generation of runtime metadata consumed by the web UI (/runtime_meta.json)
-#define CM_ENABLE_RUNTIME_META (CM_EMBED_WEBUI || CM_ENABLE_SYSTEM_PROVIDER)
+#ifdef CM_ENABLE_RUNTIME_META
+#error "CM_ENABLE_RUNTIME_META was removed in v3.0.0. Runtime metadata is always enabled."
 #endif
-#ifndef CM_ENABLE_SYSTEM_PROVIDER // Enable system info runtime provider card (heap, uptime, etc.)
-#define CM_ENABLE_SYSTEM_PROVIDER 1 //default: enabled
+#ifdef CM_ENABLE_SYSTEM_PROVIDER
+#error "CM_ENABLE_SYSTEM_PROVIDER was removed in v3.0.0. System provider is always enabled."
 #endif
-#ifndef CM_ENABLE_SYSTEM_TIME // Expose current date-time in system provider
-#define CM_ENABLE_SYSTEM_TIME 1 // default: enabled (can be disabled via build flag)
+#ifdef CM_ENABLE_SYSTEM_TIME
+#error "CM_ENABLE_SYSTEM_TIME was removed in v3.0.0. System time support is always enabled."
 #endif
-#ifndef CM_ENABLE_WS_PUSH // Enable WebSocket push of runtime JSON updates (if runtime controls or alarms are enabled, this is auto-enabled)
-#define CM_ENABLE_WS_PUSH 1 //default: enabled
+#ifdef CM_ENABLE_WS_PUSH
+#error "CM_ENABLE_WS_PUSH was removed in v3.0.0. WebSocket push is always enabled."
 #endif
-#ifndef CM_ENABLE_STYLE_RULES //only style rules over .set("background", "#000") etc.
-#define CM_ENABLE_STYLE_RULES 0
+#ifdef CM_ENABLE_STYLE_RULES
+#error "CM_ENABLE_STYLE_RULES was removed in v3.0.0. Styling is always enabled."
 #endif
-#ifndef CM_ENABLE_USER_CSS // Enable user CSS support (you can overload all CSS served by the frontend via cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);)
-#define CM_ENABLE_USER_CSS 0
+#ifdef CM_ENABLE_USER_CSS
+#error "CM_ENABLE_USER_CSS was removed in v3.0.0. User CSS support is always enabled."
 #endif
-#ifndef CM_ENABLE_THEMING //disable both theming and user CSS for simplicity
-#define CM_ENABLE_THEMING (CM_ENABLE_STYLE_RULES || CM_ENABLE_USER_CSS)
+#ifdef CM_ENABLE_THEMING
+#error "CM_ENABLE_THEMING was removed in v3.0.0. Theming is always enabled."
 #endif
-
-#ifndef CM_ENABLE_OTA // Enable OTA update functionality
-#define CM_ENABLE_OTA 1 //default: enabled
-#endif
-
-#ifndef CM_ENABLE_LOGGING // Enable logging via callback function (setLogger)
-#define CM_ENABLE_LOGGING 1 //default: enabled
+#ifdef CM_ENABLE_OTA
+#error "CM_ENABLE_OTA was removed in v3.0.0. OTA is always enabled."
 #endif
 
-#ifndef CM_ENABLE_VERBOSE_LOGGING // Enable verbose logging (more detailed messages)
-#define CM_ENABLE_VERBOSE_LOGGING 0 //default: disabled
+// --- Fixed defaults (not configurable anymore) ---
+#define CM_EMBED_WEBUI 1
+#define CM_ENABLE_RUNTIME_CHECKBOXES 1
+#define CM_ENABLE_RUNTIME_BUTTONS 1
+#define CM_ENABLE_RUNTIME_STATE_BUTTONS 1
+
+// Deprecated flags kept as constants to keep the existing C++ code structure intact.
+#define CM_ENABLE_RUNTIME_INT_SLIDERS 0
+#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0
+#define CM_ENABLE_RUNTIME_ANALOG_SLIDERS 1
+
+#define CM_ENABLE_RUNTIME_NUMBER_INPUTS 1
+#define CM_ENABLE_RUNTIME_ALARMS 1
+#define CM_ENABLE_SYSTEM_PROVIDER 1
+#define CM_ENABLE_SYSTEM_TIME 1
+#define CM_ENABLE_WS_PUSH 1
+#define CM_ENABLE_STYLE_RULES 1
+#define CM_ENABLE_USER_CSS 1
+#define CM_ENABLE_THEMING 1
+#define CM_ENABLE_RUNTIME_META 1
+
+#define CM_ENABLE_OTA 1
+
+// --- Logging flags (still configurable) ---
+#ifndef CM_ENABLE_LOGGING
+#define CM_ENABLE_LOGGING 1
+#endif
+
+#ifndef CM_ENABLE_VERBOSE_LOGGING
+#define CM_ENABLE_VERBOSE_LOGGING 0
 #endif
 // ---------------------------------------------------------------------------------------------------------------------
 // Dynamic visibility is always enabled - legacy code removal completed

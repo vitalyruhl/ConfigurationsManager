@@ -12,7 +12,7 @@
 #define BME280_ADDRESS 0x76
 #endif
 
-#define VERSION "V2.7.0" // 2025.11.02
+#define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-BME280-Demo"
 
 // I2C pins for the BME280 sensor

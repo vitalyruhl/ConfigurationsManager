@@ -60,6 +60,14 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
 
         ArduinoOTA.onEnd([this]() {
             OTA_LOG("[OTA] Update complete");
+            // Some ESP32/LwIP combinations can hit a TCP assert shortly after OTA completes.
+            // Reboot immediately after a successful update to leave the network stack in a clean state.
+            OTA_LOG("[OTA] Rebooting after OTA...");
+            if (rebootCallback) {
+                rebootCallback();
+            } else {
+                ESP.restart();
+            }
         });
 
         ArduinoOTA.onProgress([this](unsigned int progress, unsigned int total) {

@@ -16,19 +16,11 @@
           <input
             ref="passwordInput"
             v-model="otaPassword"
-            :type="showOtaPassword ? 'text' : 'password'"
+            type="password"
             placeholder="Enter OTA password"
             @keyup.enter="confirmPasswordInput"
             @keyup.escape="cancelPasswordInput"
           />
-          <button 
-            type="button" 
-            class="password-toggle"
-            @click="showOtaPassword = !showOtaPassword"
-            :title="showOtaPassword ? 'Hide password' : 'Show password'"
-          >
-            {{ showOtaPassword ? '🙈' : '👁️' }}
-          </button>
         </div>
         <div class="modal-actions">
           <button @click="cancelPasswordInput" class="cancel-btn">Cancel</button>
@@ -301,7 +293,6 @@ const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & no
 // OTA Password Modal
 const showPasswordModal = ref(false);
 const otaPassword = ref('');
-const showOtaPassword = ref(false);
 const passwordInput = ref(null);
 const pendingOtaFile = ref(null);
 const savedOtaPassword = ref('');
@@ -1641,7 +1632,7 @@ label.switch input:checked + .slider:before {
   border-radius: 4px;
 }
 
-/* Boolean dot alarm styling - fallback when CM_ENABLE_STYLE_RULES=0 */
+/* Boolean dot alarm styling - fallback when style rules are disabled */
 .bd.bd--alarm {
   background-color: #e74c3c !important;
   animation: alarm-pulse 1.5s ease-in-out infinite;
@@ -1722,7 +1713,7 @@ label.switch input:checked + .slider:before {
   box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
 }
 
-.password-toggle {
+.pwd-toggle {
   background: #21262d;
   border: 1px solid #30363d;
   border-radius: 4px;
@@ -1734,7 +1725,7 @@ label.switch input:checked + .slider:before {
   white-space: nowrap;
 }
 
-.password-toggle:hover {
+.pwd-toggle:hover {
   background: #30363d;
   color: #f0f6fc;
 }
