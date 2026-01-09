@@ -19,7 +19,9 @@
 #include "ConfigManager.h"
 // ---------------------------------------------------------------------------------------------------------------------
 
-#include "../secret/wifiSecret.h"
+// Demo defaults (do not store real credentials in repo)
+static const char SETTINGS_PASSWORD[] = "cm";
+static const char OTA_PASSWORD[] = "ota";
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -253,7 +255,7 @@ struct NTPSettings
 
 NTPSettings ntpSettings; // ntpSettings
 
-#pragma region Temperature-Measurement
+// region Temperature-Measurement
 
 //--------------------------------------------------------------------------------------------------------------
 // implement read temperature function and variables to show how to use live values
@@ -379,7 +381,7 @@ void SetupStartTemperatureMeasuring()
     Serial.println("[TEMP] Temperature setup completed");
 }
 
-#pragma region Temperature-Measurement
+// end region Temperature-Measurement
 
 void setup()
 {
@@ -404,7 +406,8 @@ void setup()
     //-----------------------------------------------------------------
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
+    // Optional demo: global CSS override
+    // ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
     ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
@@ -446,7 +449,7 @@ void setup()
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure WiFi AP MAC filtering/priority (example - customize as needed)
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
+    // ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
@@ -454,26 +457,28 @@ void setup()
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // set wifi settings if not set yet from my secret folder
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
-        Serial.println("-------------------------------------------------------------");
-        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
-        Serial.println("-------------------------------------------------------------");
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-        wifiSettings.staticIp.set(MY_WIFI_IP);
-        wifiSettings.useDhcp.set(false);
-        ConfigManager.saveAll();
-        delay(1000); // Small delay
-    }
+    // if (wifiSettings.wifiSsid.get().isEmpty())
+    // {
+    //     Serial.println("-------------------------------------------------------------");
+    //     Serial.println("SETUP: *** SSID is empty, setting My values *** ");
+    //     Serial.println("-------------------------------------------------------------");
+    //     wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+    //     wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+    //     wifiSettings.staticIp.set(MY_WIFI_IP);
+    //     wifiSettings.useDhcp.set(false);
+    //     ConfigManager.saveAll();
+    //     delay(1000); // Small delay
+    // }
 
-    // TEMPORARY: Add WiFi debug information
+    // Debug information (only with verbose logging enabled)
+#if CM_ENABLE_VERBOSE_LOGGING
     Serial.println("[DEBUG] Current WiFi settings:");
     Serial.printf("  SSID: '%s' (length: %d)\n", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length());
     Serial.printf("  Password: %s (length: %d)\n", wifiSettings.wifiPassword.get().isEmpty() ? "'[empty]'" : "'[set]'", wifiSettings.wifiPassword.get().length());
     Serial.printf("  DHCP: %s\n", wifiSettings.useDhcp.get() ? "enabled" : "disabled");
     Serial.printf("  WiFi Status: %d\n", WiFi.status());
     Serial.printf("  WiFi Mode: %d\n", WiFi.getMode());
+#endif
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for AP mode button AFTER setting WiFi credentials
@@ -516,12 +521,7 @@ void setup()
 
     Serial.println("\nSetup completed successfully!");
 
-    // Test setting changes
-    systemSettings.version.set(VERSION); // Update version on device
-    testBool.set(false);
-    updateInterval.set(15);
-    ConfigManager.saveAll();
-    delay(300);
+    // NOTE: Avoid auto-modifying and persisting settings in examples.
 
     Serial.println("\n[MAIN] Setup completed successfully! Starting main loop...");
     Serial.println("=================================================================");

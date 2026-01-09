@@ -1,29 +1,21 @@
 #include <Arduino.h>
 #include "ConfigManager.h"
 #include <WiFi.h>
-#include <esp_wifi.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
 
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Minimal-Demo"
 
 
-//--------------------------------------------------------------------
-// Forward declarations of functions
 bool SetupStartWebServer();
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
 
-// Global objects and variables
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
-//--------------------------------------------------------------------------------------------------------------
-// nessesary Settings, you dont need to make them, but they are needed for the ConfigManager to work properly
-
-// You can put your wifi settings here in defaultValues, if project is not public. Or you can put it in your secret folder, like me.
-#include "secret/wifiSecret.h" // Include your WiFi credentials here
+// Minimal skeleton: do not hardcode WiFi credentials in code.
+// Leave SSID empty to start in AP mode and configure via Web UI.
+static const char SETTINGS_PASSWORD[] = "cm";
 
 struct WiFi_Settings // wifiSettings
 {
@@ -73,85 +65,28 @@ void setup()
 {
     Serial.begin(115200);
 
-    //-----------------------------------------------------------------
-    // Set logger callback
     ConfigManagerClass::setLogger([](const char *msg)
         {
             Serial.print("[ConfigManager] ");
             Serial.println(msg);
         });
 
-    //-----------------------------------------------------------------
-    // Set APP information and global CSS override
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    // ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
-    // ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
-    //----------------------------------------------------------------------------------------------------------------------------------
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others, i need it for testing
-    //----------------------------------------------------------------------------------------------------------------------------------
-    //register your Settings here
-    wifiSettings.init();      // WiFi connection settings
-    //----------------------------------------------------------------------------------------------------------------------------------
+    ConfigManager.enableBuiltinSystemProvider();
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
 
-    ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
+    wifiSettings.init();
+    ConfigManager.loadAll();
 
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
-    ConfigManager.enableSmartRoaming(true);            // Re-enabled now that WiFi stack is fixed
-    ConfigManager.setRoamingImprovement(10);           // Require 10 dBm improvement
-
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // set wifi settings if not set yet from my secret folder (its a behavior to easy testing, but you can set it also in AP-Mode)
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
-        Serial.println("-------------------------------------------------------------");
-        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
-        Serial.println("-------------------------------------------------------------");
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-        ConfigManager.saveAll();
-        delay(1000); // Small delay
-    }
-
-    // perform the wifi connection
     SetupStartWebServer();
-
-   // Enhanced WebSocket configuration
-    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-    ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
-    ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
-
-    // Show correct IP address depending on WiFi mode
-    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
-        Serial.printf("[INFO] Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
-    } else if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("[INFO] Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
-    } else {
-        Serial.println("[INFO] Webserver running (IP not available)");
-    }
 }
 
 void loop()
 {
-
-    //-------------------------------------------------------------------------------------------------------------
-    // for working with the ConfigManager nessesary in loop
-    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
-    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
-    ConfigManager.handleClient(); // Handle web server client requests
-    ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
-    ConfigManager.handleOTA();           // Handle OTA updates
-    ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
-    //-------------------------------------------------------------------------------------------------------------
-
-
-    static unsigned long lastLoopLog = 0;
-    if (millis() - lastLoopLog > 60000) { // Every 60 seconds
-        lastLoopLog = millis();
-        Serial.printf("[MAIN] Loop running, WiFi status: %d, heap: %d\n", WiFi.status(), ESP.getFreeHeap());
-    }
-
+    ConfigManager.updateLoopTiming();
+    ConfigManager.getWiFiManager().update();
+    ConfigManager.handleClient();
 }
 
 //----------------------------------------
@@ -160,67 +95,63 @@ void loop()
 
 bool SetupStartWebServer()
 {
-    Serial.println("[MAIN] Starting Webserver...!");
+    const String ssid = wifiSettings.wifiSsid.get();
+    const String password = wifiSettings.wifiPassword.get();
 
-    if (WiFi.getMode() == WIFI_AP)
+    if (ssid.isEmpty())
     {
-        return false; // Skip in AP mode
+        ConfigManager.startAccessPoint();
+        Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
+        return false;
     }
 
-    if (WiFi.status() != WL_CONNECTED)
+    if (wifiSettings.useDhcp.get())
     {
-        if (wifiSettings.useDhcp.get())
+        ConfigManager.startWebServer(ssid, password);
+    }
+    else
+    {
+        IPAddress staticIP, gateway, subnet, dns1, dns2;
+        if (!staticIP.fromString(wifiSettings.staticIp.get()))
         {
-            Serial.println("[MAIN] startWebServer: DHCP enabled");
-            ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.wifiRebootTimeoutMin.get());
+            Serial.println("[ERROR] Invalid static IP");
+            ConfigManager.startWebServer(ssid, password);
+            return true;
         }
-        else
+        if (!gateway.fromString(wifiSettings.gateway.get()))
         {
-            Serial.println("[MAIN] startWebServer: DHCP disabled - using static IP");
-            IPAddress staticIP, gateway, subnet, dns1, dns2;
-            staticIP.fromString(wifiSettings.staticIp.get());
-            gateway.fromString(wifiSettings.gateway.get());
-            subnet.fromString(wifiSettings.subnet.get());
-
-            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
-            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
-            if (!dnsPrimaryStr.isEmpty())
-            {
-                dns1.fromString(dnsPrimaryStr);
-            }
-            if (!dnsSecondaryStr.isEmpty())
-            {
-                dns2.fromString(dnsSecondaryStr);
-            }
-
-            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
-            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.wifiRebootTimeoutMin.get());
+            Serial.println("[ERROR] Invalid gateway");
+            ConfigManager.startWebServer(ssid, password);
+            return true;
         }
+        if (!subnet.fromString(wifiSettings.subnet.get()))
+        {
+            Serial.println("[ERROR] Invalid subnet");
+            ConfigManager.startWebServer(ssid, password);
+            return true;
+        }
+
+        const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
+        const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
+        if (!dnsPrimaryStr.isEmpty())
+        {
+            dns1.fromString(dnsPrimaryStr);
+        }
+        if (!dnsSecondaryStr.isEmpty())
+        {
+            dns2.fromString(dnsSecondaryStr);
+        }
+
+        ConfigManager.startWebServer(staticIP, gateway, subnet, ssid, password, dns1, dns2);
     }
 
-    return true; // Webserver setup completed
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.wifiRebootTimeoutMin.get());
+    return true;
 }
 
 void onWiFiConnected()
 {
-    Serial.println("[MAIN] WiFi connected! Activating services...");
-
-    // Ensure ArduinoOTA is initialized once WiFi is connected and OTA is allowed
-    // This runs on every (re)connection to guarantee espota responds
-    if (!ConfigManager.getOTAManager().isInitialized())
-    {
-        ConfigManager.setupOTA(APP_NAME, "ota"); // Use default password for simplicity
-    }
-
-    // Show correct IP address when connected
-    Serial.printf("\n\n[MAIN] Webserver running at: %s (Connected)\n", WiFi.localIP().toString().c_str());
-    Serial.printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI());
-    Serial.printf("[MAIN] WLAN-Strength is: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak"));
-
-    String bssid = WiFi.BSSIDstr();
-    Serial.printf("[MAIN] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
-    Serial.printf("[MAIN] Local MAC: %s\n\n", WiFi.macAddress().c_str());
+    Serial.printf("[INFO] Station Mode: http://%s\n", WiFi.localIP().toString().c_str());
 }
 
 
@@ -228,10 +159,10 @@ void onWiFiConnected()
 
 void onWiFiDisconnected()
 {
-    Serial.println("[MAIN] WiFi disconnected!");
+    Serial.println("[ERROR] WiFi disconnected");
 }
 
 void onWiFiAPMode()
 {
-    Serial.println("[MAIN] WiFi in AP mode");
+    Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
 }
