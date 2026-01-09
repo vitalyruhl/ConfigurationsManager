@@ -42,19 +42,12 @@
           <input
             ref="settingsPasswordInput"
             v-model="settingsPassword"
-            :type="showSettingsPassword ? 'text' : 'password'"
+            type="password"
             placeholder="Enter settings password"
             @keyup.enter="confirmSettingsAuth"
             @keyup.escape="cancelSettingsAuth"
             autocomplete="off"
           />
-          <button
-            class="password-toggle"
-            @click="showSettingsPassword = !showSettingsPassword"
-            :title="showSettingsPassword ? 'Hide password' : 'Show password'"
-          >
-            {{ showSettingsPassword ? 'Hide' : 'Show' }}
-          </button>
         </div>
         <div class="modal-buttons">
           <button @click="cancelSettingsAuth" class="cancel-btn">Cancel</button>
@@ -103,154 +96,8 @@ import { ref, onMounted, provide, nextTick } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
-// Encryption salt placeholder (replaced during WebUI packaging for firmware)
-// This is unique per project and makes simple sniffing difficult
-const ENCRYPTION_SALT = "__ENCRYPTION_SALT__";
-
-// Simple XOR-based encryption with salt
-// Not cryptographically strong, but makes WiFi sniffing difficult for casual attackers
-function encryptPassword(password, salt) {
-  if (!password || !salt) return password;
-  
-  const saltBytes = new TextEncoder().encode(salt);
-  const pwdBytes = new TextEncoder().encode(password);
-  const encrypted = new Uint8Array(pwdBytes.length);
-  
-  for (let i = 0; i < pwdBytes.length; i++) {
-    // XOR with salt bytes (repeating)
-    encrypted[i] = pwdBytes[i] ^ saltBytes[i % saltBytes.length];
-  }
-  
-  // Convert to hex
-  return Array.from(encrypted)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function decryptPassword(encrypted, salt) {
-  if (!encrypted || !salt || encrypted.length % 2 !== 0) return encrypted;
-  
-  try {
-    const saltBytes = new TextEncoder().encode(salt);
-    const encryptedBytes = new Uint8Array(encrypted.length / 2);
-    
-    // Convert hex to bytes
-    for (let i = 0; i < encrypted.length; i += 2) {
-      encryptedBytes[i / 2] = parseInt(encrypted.substr(i, 2), 16);
-    }
-    
-    // XOR decrypt
-    const decrypted = new Uint8Array(encryptedBytes.length);
-    for (let i = 0; i < encryptedBytes.length; i++) {
-      decrypted[i] = encryptedBytes[i] ^ saltBytes[i % saltBytes.length];
-    }
-    
-    return new TextDecoder().decode(decrypted);
-  } catch (e) {
-    console.warn('[Security] Decryption failed:', e);
-    return encrypted; // Return as-is if decryption fails
-  }
-}
-
-// Simple SHA-256 implementation (kept for potential future use)
-// Fallback for non-secure contexts (HTTP) using a pure JS implementation
-async function sha256(message) {
-  // Check if crypto.subtle is available (HTTPS or localhost only)
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    try {
-      const msgBuffer = new TextEncoder().encode(message);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      return hashHex;
-    } catch (e) {
-      console.warn('[Security] crypto.subtle failed, using fallback:', e);
-    }
-  }
-  
-  // Fallback: Pure JavaScript SHA-256 implementation for HTTP contexts
-  // Based on https://geraintluff.github.io/sha256/ (public domain)
-  function sha256Fallback(ascii) {
-    function rightRotate(value, amount) {
-      return (value >>> amount) | (value << (32 - amount));
-    }
-    
-    const mathPow = Math.pow;
-    const maxWord = mathPow(2, 32);
-    const lengthProperty = 'length';
-    let i, j;
-    let result = '';
-    
-    const words = [];
-    const asciiBitLength = ascii[lengthProperty] * 8;
-    
-    let hash = sha256Fallback.h = sha256Fallback.h || [];
-    const k = sha256Fallback.k = sha256Fallback.k || [];
-    let primeCounter = k[lengthProperty];
-    
-    const isComposite = {};
-    for (let candidate = 2; primeCounter < 64; candidate++) {
-      if (!isComposite[candidate]) {
-        for (i = 0; i < 313; i += candidate) {
-          isComposite[i] = candidate;
-        }
-        hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
-        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
-      }
-    }
-    
-    ascii += '\x80';
-    while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
-    for (i = 0; i < ascii[lengthProperty]; i++) {
-      j = ascii.charCodeAt(i);
-      if (j >> 8) return;
-      words[i >> 2] |= j << ((3 - i) % 4) * 8;
-    }
-    words[words[lengthProperty]] = ((asciiBitLength / maxWord) | 0);
-    words[words[lengthProperty]] = (asciiBitLength);
-    
-    for (j = 0; j < words[lengthProperty];) {
-      const w = words.slice(j, j += 16);
-      const oldHash = hash;
-      hash = hash.slice(0, 8);
-      
-      for (i = 0; i < 64; i++) {
-        const w15 = w[i - 15], w2 = w[i - 2];
-        
-        const a = hash[0], e = hash[4];
-        const temp1 = hash[7]
-          + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
-          + ((e & hash[5]) ^ ((~e) & hash[6]))
-          + k[i]
-          + (w[i] = (i < 16) ? w[i] : (
-              w[i - 16]
-              + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
-              + w[i - 7]
-              + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
-            ) | 0
-          );
-        const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
-          + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
-        
-        hash = [(temp1 + temp2) | 0].concat(hash);
-        hash[4] = (hash[4] + temp1) | 0;
-      }
-      
-      for (i = 0; i < 8; i++) {
-        hash[i] = (hash[i] + oldHash[i]) | 0;
-      }
-    }
-    
-    for (i = 0; i < 8; i++) {
-      for (j = 3; j + 1; j--) {
-        const b = (hash[i] >> (j * 8)) & 255;
-        result += ((b < 16) ? 0 : '') + b.toString(16);
-      }
-    }
-    return result;
-  }
-  
-  return sha256Fallback(message);
+function isUnsetPasswordValue(value) {
+  return value === undefined || value === null || value === '' || value === '***';
 }
 
 // Check if a value is a password field that should be encrypted
@@ -262,23 +109,8 @@ function isPasswordField(category, key, settingData) {
   return k.includes('pass') || dn.includes('pass');
 }
 
-// Process value for transmission
-// Encrypt passwords using project-specific salt to prevent WiFi sniffing
-// IMPORTANT: Always keep the encryption branch present at bundle time.
-// Do NOT guard by comparing to the placeholder string here, otherwise
-// the bundler may optimize it away before our post-build salt injection.
-// The placeholder will be replaced in the built JS by the header generator.
 async function processValueForTransmission(category, key, value, settingData) {
-  if (isPasswordField(category, key, settingData) && value && value.trim() !== '') {
-    try {
-      const encrypted = encryptPassword(value, ENCRYPTION_SALT);
-      return encrypted;
-    } catch (e) {
-      console.warn('[Security] Password encryption failed, sending plaintext:', e);
-      // Fall through to return plaintext if encryption fails
-    }
-  }
-  return value; // Return original value for non-passwords
+  return value;
 }
 
 const config = ref({});
@@ -298,7 +130,6 @@ const hasLiveContent = ref(true);
 const showSettingsAuth = ref(false);
 const settingsAuthenticated = ref(false);
 const settingsPassword = ref("");
-const showSettingsPassword = ref(false);
 const settingsPasswordInput = ref(null);
 const pendingFlashStart = ref(false); // Track if we need to start flash after auth
 
@@ -526,7 +357,6 @@ function confirmSettingsAuth() {
 function cancelSettingsAuth() {
   showSettingsAuth.value = false;
   settingsPassword.value = "";
-  showSettingsPassword.value = false;
   pendingFlashStart.value = false; // Clear any pending flash start
   activeTab.value = "live"; // Stay on live tab
 }
@@ -561,16 +391,17 @@ async function applySingle(category, key, value) {
   try {
     // Get setting metadata to check if this is a password field
     const settingData = config.value[category] && config.value[category][key];
-    
-    // Process value (hash if password, otherwise use as-is)
-    const processedValue = await processValueForTransmission(category, key, value, settingData);
+    if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
+      updateToast(tid, `Apply skipped ${opKey}: No new password entered`, "error");
+      return;
+    }
     
     const r = await fetch(
       `/config/apply?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: processedValue }),
+        body: JSON.stringify({ value }),
       }
     );
     const json = await r.json().catch(() => ({}));
@@ -594,16 +425,17 @@ async function saveSingle(category, key, value) {
     
     // Get setting metadata to check if this is a password field
     const settingData = config.value[category] && config.value[category][key];
-    
-    // Process value (hash if password, otherwise use as-is)
-    const processedValue = await processValueForTransmission(category, key, value, settingData);
+    if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
+      updateToast(tid, `Save skipped ${opKey}: No new password entered`, "error");
+      return;
+    }
     
     const r = await fetch(
       `/config/save?category=${rURIComp(category)}&key=${rURIComp(key)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: processedValue }),
+        body: JSON.stringify({ value }),
         signal: controller.signal
       }
     );
@@ -642,14 +474,6 @@ async function saveAll() {
       return;
     }
     let v = input.type === "checkbox" ? input.checked : input.value;
-    // Encrypt password fields in bulk actions as well
-    if (input.dataset.isPassword === "1" && typeof v === 'string' && v.trim() !== '') {
-      try {
-        v = encryptPassword(v, ENCRYPTION_SALT);
-      } catch (e) {
-        console.warn('[Security] Password encryption (saveAll) failed, sending plaintext:', e);
-      }
-    }
     all[cat][key] = v;
   });
   refreshing.value = true;
@@ -677,13 +501,6 @@ async function applyAll() {
     const [cat, key] = input.name.split(".");
     if (!all[cat]) all[cat] = {};
     let v = input.type === "checkbox" ? input.checked : input.value;
-    if (input.dataset.isPassword === "1" && typeof v === 'string' && v.trim() !== '') {
-      try {
-        v = encryptPassword(v, ENCRYPTION_SALT);
-      } catch (e) {
-        console.warn('[Security] Password encryption (applyAll) failed, sending plaintext:', e);
-      }
-    }
     all[cat][key] = v;
   });
   refreshing.value = true;

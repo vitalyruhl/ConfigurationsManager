@@ -23,22 +23,13 @@
       <div class="input-area">
         <input
           v-if="isPassword"
-          :type="showPassword ? 'text' : 'password'"
+          type="password"
           :placeholder="'***'"
           :value="inputValue"
           @input="onInput($event.target.value)"
           :name="`${category}.${keyName}`"
           data-is-password="1"
         />
-        <button
-          v-if="isPassword"
-          type="button"
-          class="password-toggle"
-          @click="togglePasswordVisibility"
-          :title="showPassword ? 'Hide password' : 'Show password'"
-        >
-          {{ showPassword ? 'Hide' : 'Show' }}
-        </button>
         <input
           v-else-if="type === 'number'"
           type="number"
@@ -176,10 +167,6 @@ function initialValue() {
 
 const inputValue = ref(initialValue());
 
-// Password visibility toggle
-const showPassword = ref(false);
-const actualPasswordValue = ref('');
-
 // Visibility: the server can deliver a resolved showIf as boolean
 const visible = ref(true);
 
@@ -198,7 +185,15 @@ if (
 watch(
   () => props.settingData.value,
   (v) => {
-    inputValue.value = type === 'boolean' ? !!v : v;
+    if (type === 'boolean') {
+      inputValue.value = !!v;
+      return;
+    }
+    if (isPassword && (!v || v === '***')) {
+      inputValue.value = '';
+      return;
+    }
+    inputValue.value = v;
   }
 );
 
@@ -209,30 +204,5 @@ function onInput(val) {
 function onCheckboxChange(checked) {
   inputValue.value = checked;
   emit('apply', props.keyName, inputValue.value);
-}
-
-async function togglePasswordVisibility() {
-  if (!showPassword.value) {
-    // Showing password - fetch actual value from server
-    try {
-      const response = await fetch(`/config/password?category=${encodeURIComponent(props.category)}&key=${encodeURIComponent(props.keyName)}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.value) {
-          actualPasswordValue.value = data.value;
-          inputValue.value = data.value;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch password value:', e);
-      // Fallback to current input value
-    }
-  } else {
-    // Hiding password - reset to placeholder if empty
-    if (!inputValue.value || inputValue.value === actualPasswordValue.value) {
-      inputValue.value = '';
-    }
-  }
-  showPassword.value = !showPassword.value;
 }
 </script>

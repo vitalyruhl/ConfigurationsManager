@@ -5,7 +5,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-#define VERSION "V2.7.0" // 2025.11.02
+#define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Minimal-Demo"
 
 

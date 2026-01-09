@@ -15,7 +15,6 @@
 
 ### High Priority Bugs (Prio 1)
 
-- ~~**[Bug] Save failed System.OTA Password: can't access property "digest", crypto.subtle is undefined**~~ [COMPLETED] **FIXED** - Improved password transmission security. Passwords are now transmitted as JSON with both the actual password and its SHA-256 hash: `{"password":"ota1234","hash":"954de57..."}`. This prevents casual WiFi packet sniffing (better than no security) while allowing the ESP32 to store and use the actual password. The hash is computed on the client side with a fallback for non-HTTPS contexts. Passwords now display correctly in the GUI (shows "ota1234" not the hash) and work properly with OTA and other features.
 
 ### Medium Priority Bugs (Prio 5)
 

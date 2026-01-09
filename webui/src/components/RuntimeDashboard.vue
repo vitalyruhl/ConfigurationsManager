@@ -16,19 +16,11 @@
           <input
             ref="passwordInput"
             v-model="otaPassword"
-            :type="showOtaPassword ? 'text' : 'password'"
+            type="password"
             placeholder="Enter OTA password"
             @keyup.enter="confirmPasswordInput"
             @keyup.escape="cancelPasswordInput"
           />
-          <button 
-            type="button" 
-            class="password-toggle"
-            @click="showOtaPassword = !showOtaPassword"
-            :title="showOtaPassword ? 'Hide password' : 'Show password'"
-          >
-            {{ showOtaPassword ? 'Hide' : 'Show' }}
-          </button>
         </div>
         <div class="modal-actions">
           <button @click="cancelPasswordInput" class="cancel-btn">Cancel</button>
@@ -301,7 +293,6 @@ const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & no
 // OTA Password Modal
 const showPasswordModal = ref(false);
 const otaPassword = ref('');
-const showOtaPassword = ref(false);
 const passwordInput = ref(null);
 const pendingOtaFile = ref(null);
 const savedOtaPassword = ref('');

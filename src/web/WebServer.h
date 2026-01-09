@@ -40,9 +40,6 @@ private:
 
     // Settings security
     String settingsPassword;
-    
-    // Password encryption
-    String encryptionSalt;
 
     // Helper methods
     void setupStaticRoutes();
@@ -91,11 +88,6 @@ public:
     // CORS and security
     void enableCORSForAll(bool enable = true);
     void setSettingsPassword(const String& password);
-    
-    // Password encryption
-    void setEncryptionSalt(const String& salt);
-    static String encryptPassword(const String& password, const String& salt);
-    static String decryptPassword(const String& encryptedHex, const String& salt);
 
     // Development and debugging
 #ifdef development
