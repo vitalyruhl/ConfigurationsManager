@@ -35,7 +35,7 @@ def get_library_version():
     """Read version from library.json"""
     library_json = Path("library.json")
     if not library_json.exists():
-        print("❌ Error: library.json not found!")
+        print("[ERROR] library.json not found!")
         sys.exit(1)
     
     with open(library_json, 'r', encoding='utf-8') as f:
@@ -43,7 +43,7 @@ def get_library_version():
     
     version = data.get("version")
     if not version:
-        print("❌ Error: No version found in library.json!")
+        print("[ERROR] No version found in library.json!")
         sys.exit(1)
     
     return version
@@ -53,7 +53,7 @@ def get_latest_changelog():
     """Extract the latest version changelog from README.md"""
     readme = Path("README.md")
     if not readme.exists():
-        print("❌ Error: README.md not found!")
+        print("[ERROR] README.md not found!")
         sys.exit(1)
     
     with open(readme, 'r', encoding='utf-8') as f:
@@ -62,7 +62,7 @@ def get_latest_changelog():
     # Find the Version History section
     version_section = re.search(r'## Version History\n\n(.+?)(?=\n##|\Z)', content, re.DOTALL)
     if not version_section:
-        print("❌ Error: Version History section not found in README.md!")
+        print("[ERROR] Version History section not found in README.md!")
         sys.exit(1)
     
     history_text = version_section.group(1)
@@ -73,7 +73,7 @@ def get_latest_changelog():
                             history_text, re.MULTILINE | re.DOTALL)
     
     if not all_entries:
-        print("❌ Error: No version entries found in Version History!")
+        print("[ERROR] No version entries found in Version History!")
         sys.exit(1)
     
     # The LAST entry in the list is the most recent (newest at bottom of list in README)
@@ -97,47 +97,47 @@ def main():
     
     # Get version from library.json
     lib_version = get_library_version()
-    print(f"📦 Library version: {lib_version}")
+    print(f"[INFO] Library version: {lib_version}")
     
     # Get latest changelog from README
     readme_version, changelog = get_latest_changelog()
-    print(f"📝 README latest version: {readme_version}")
-    print(f"📋 Changelog: {changelog[:100]}..." if len(changelog) > 100 else f"📋 Changelog: {changelog}")
+    print(f"[INFO] README latest version: {readme_version}")
+    print(f"[INFO] Changelog: {changelog[:100]}..." if len(changelog) > 100 else f"[INFO] Changelog: {changelog}")
     print()
     
     # Verify versions match
     if lib_version != readme_version:
-        print(f"⚠️  Warning: Version mismatch!")
+        print("[WARNING] Version mismatch!")
         print(f"   library.json: {lib_version}")
         print(f"   README.md:    {readme_version}")
         response = input("Continue anyway? (y/N): ")
         if response.lower() != 'y':
-            print("❌ Aborted by user")
+            print("[ERROR] Aborted by user")
             sys.exit(1)
     
     # Check for uncommitted changes
     has_changes = check_git_status()
     if not has_changes:
-        print("ℹ️  No uncommitted changes detected")
+        print("[INFO] No uncommitted changes detected")
         response = input("Continue with git operations anyway? (y/N): ")
         if response.lower() != 'y':
-            print("⏭️  Skipping git operations, proceeding to publish...")
+            print("[INFO] Skipping git operations, proceeding to publish...")
             skip_git = True
         else:
             skip_git = False
     else:
-        print("✅ Uncommitted changes detected")
+        print("[INFO] Uncommitted changes detected")
         skip_git = False
     
     # Prepare commit message
     commit_message = f"Release v{lib_version}: {changelog}"
     print()
-    print("📝 Commit message:")
+    print("[INFO] Commit message:")
     print(f"   {commit_message}")
     print()
     
     # Confirm before proceeding
-    print("🚀 Ready to publish:")
+    print("[INFO] Ready to publish:")
     print(f"   - Version: {lib_version}")
     print(f"   - Git tag: v{lib_version}")
     if not skip_git:
@@ -146,7 +146,7 @@ def main():
     print()
     response = input("Proceed? (y/N): ")
     if response.lower() != 'y':
-        print("❌ Aborted by user")
+        print("[ERROR] Aborted by user")
         sys.exit(1)
     
     print()
@@ -158,56 +158,56 @@ def main():
     # Git operations
     if not skip_git:
         # Step 1: Git add
-        print("📥 Step 1: Adding all changes to git...")
+        print("[INFO] Step 1: Adding all changes to git...")
         if not run_command("git add ."):
-            print("❌ Git add failed!")
+            print("[ERROR] Git add failed!")
             sys.exit(1)
-        print("✅ Changes added\n")
+        print("[SUCCESS] Changes added\n")
         
         # Step 2: Git commit
-        print("💾 Step 2: Committing changes...")
+        print("[INFO] Step 2: Committing changes...")
         # Escape quotes in commit message
         safe_message = commit_message.replace('"', '\\"')
         if not run_command(f'git commit -m "{safe_message}"', check=False):
-            print("⚠️  Commit failed (may be no changes to commit)")
+            print("[WARNING] Commit failed (may be no changes to commit)")
         else:
-            print("✅ Changes committed\n")
+            print("[SUCCESS] Changes committed\n")
         
         # Step 3: Create git tag
-        print(f"🏷️  Step 3: Creating git tag v{lib_version}...")
+        print(f"[INFO] Step 3: Creating git tag v{lib_version}...")
         if not run_command(f'git tag -a v{lib_version} -m "Version {lib_version}"', check=False):
-            print("⚠️  Tag creation failed (may already exist)")
+            print("[WARNING] Tag creation failed (may already exist)")
         else:
-            print("✅ Tag created\n")
+            print("[SUCCESS] Tag created\n")
         
         # Step 4: Push to remote
-        print("⬆️  Step 4: Pushing to remote repository...")
+        print("[INFO] Step 4: Pushing to remote repository...")
         if not run_command("git push", check=False):
-            print("⚠️  Push failed")
+            print("[WARNING] Push failed")
         else:
-            print("✅ Pushed to remote\n")
+            print("[SUCCESS] Pushed to remote\n")
         
-        print("⬆️  Step 5: Pushing tags...")
+        print("[INFO] Step 5: Pushing tags...")
         if not run_command("git push --tags", check=False):
-            print("⚠️  Tag push failed")
+            print("[WARNING] Tag push failed")
         else:
-            print("✅ Tags pushed\n")
+            print("[SUCCESS] Tags pushed\n")
     
     # Step 6: Publish to PlatformIO
-    print("📤 Step 6: Publishing to PlatformIO registry...")
-    print("⏳ This may take a while depending on your connection and package size...")
+    print("[INFO] Step 6: Publishing to PlatformIO registry...")
+    print("[INFO] This may take a while depending on your connection and package size...")
     print()
     
     if not run_command("pio pkg publish ."):
-        print("❌ PlatformIO publish failed!")
+        print("[ERROR] PlatformIO publish failed!")
         sys.exit(1)
     
     print()
     print("=" * 80)
-    print("✅ PUBLISH COMPLETE!")
+    print("[SUCCESS] PUBLISH COMPLETE!")
     print("=" * 80)
     print()
-    print(f"🎉 Version {lib_version} has been published successfully!")
+    print(f"[SUCCESS] Version {lib_version} has been published successfully!")
     print()
     print("Next steps:")
     print("  - Check your email for PlatformIO registry processing confirmation")
@@ -220,10 +220,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n❌ Aborted by user (Ctrl+C)")
+        print("\n\n[ERROR] Aborted by user (Ctrl+C)")
         sys.exit(1)
     except Exception as e:
-        print(f"\n\n❌ Unexpected error: {e}")
+        print(f"\n\n[ERROR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
