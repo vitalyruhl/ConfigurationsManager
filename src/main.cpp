@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "ConfigManager.h"
 
-#ifndef UNIT_TEST
+#ifndef PIO_UNIT_TESTING
 void setup(){
 
 }
