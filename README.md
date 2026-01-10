@@ -147,7 +147,8 @@ lib_deps =
 - Password values are **masked** in the WebUI (shown as `***`).
 - When you **set or change** a password in the WebUI, it is transmitted to the ESP32 **in cleartext over HTTP**.
 
-If you need transport security, you must provide it externally (e.g. trusted WiFi only, VPN, or a TLS reverse proxy).
+ConfigurationsManager currently serves the Web UI and API over plain HTTP only (no on-device HTTPS server).
+If you need transport security, provide it externally (e.g. trusted WiFi only, VPN, or a TLS reverse proxy that terminates HTTPS).
 
 ## Examples
 
