@@ -689,21 +689,7 @@ void setupGUI()
         Serial.printf("[ADJUST] Value: %d\n", value);
     };
 
-    Serial.println("[GUI] Defining runtime int slider: controls.adjust");
-    ConfigManager.defineRuntimeIntSlider(
-        "controls",
-        "adjust",
-        "Adjustment",
-        -10,
-        10,
-        0,
-        getAdjustValue,
-        setAdjustValue,
-        "",
-        "steps",
-        23
-    );
-
+    
     Serial.println("[GUI] Defining runtime int value: controls.adjustValue");
     ConfigManager.defineRuntimeIntValue(
         "controls",
@@ -714,7 +700,22 @@ void setupGUI()
         0,
         getAdjustValue,
         setAdjustValue,
-        "",
+        "Unit",
+        "steps",
+        23
+    );
+
+    Serial.println("[GUI] Defining runtime int slider: controls.adjust");
+    ConfigManager.defineRuntimeIntSlider(
+        "controls",
+        "adjust",
+        "Adjustment",
+        -10,
+        10,
+        0,
+        getAdjustValue,
+        setAdjustValue,
+        "UNIT",
         "steps",
         24
     );
@@ -736,8 +737,8 @@ void setupGUI()
             tempSettings.tempCorrection.set(value);
             Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
         },
-        "",
         "°C",
+        "",
         25
     );
 
@@ -759,6 +760,9 @@ void setupGUI()
     {
         // Connection status (also shown in Alerts card)
         data["connected"] = WiFi.status() == WL_CONNECTED;
+
+        // Runtime alarm status (registered via defineRuntimeAlarm)
+        data["overheat"] = CRM().isRuntimeAlarmActive("alerts.overheat");
 
         // Dewpoint risk alarm: temperature is within risk window of dewpoint
         bool dewpointRisk = false;
@@ -786,6 +790,18 @@ void setupGUI()
     connectedMeta.order = 29;
     connectedMeta.isBool = true;
     CRM().addRuntimeMeta(connectedMeta);
+
+    Serial.println("[GUI] Adding meta: alerts.overheat");
+    RuntimeFieldMeta overheatMeta;
+    overheatMeta.group = "alerts";
+    overheatMeta.key = "overheat";
+    overheatMeta.label = "Overheat Warning";
+    overheatMeta.order = 28;
+    overheatMeta.isBool = true;
+    overheatMeta.hasAlarm = true;
+    overheatMeta.alarmWhenTrue = true;
+    overheatMeta.boolAlarmValue = true;
+    CRM().addRuntimeMeta(overheatMeta);
 
     Serial.println("[GUI] Adding meta: alerts.dewpoint_risk");
     RuntimeFieldMeta dewpointRiskMeta;

@@ -297,7 +297,7 @@ const passwordInput = ref(null);
 const pendingOtaFile = ref(null);
 const savedOtaPassword = ref('');
 
-const builtinSystemHiddenFields = new Set(["loopAvg"]);
+const builtinSystemHiddenFields = new Set(["loopAvg", "otaActive"]);
 
 let pollTimer = null;
 let ws = null;
@@ -1058,7 +1058,7 @@ function capitalize(s) {
 function formatValue(val, meta) {
   if (val == null) return "";
   if (typeof val === "number") {
-    if (meta && typeof meta.precision === "number" && !Number.isInteger(val)) {
+    if (meta && typeof meta.precision === "number" && Number.isFinite(val)) {
       try {
         return val.toFixed(meta.precision);
       } catch (e) {

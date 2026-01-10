@@ -1,6 +1,6 @@
 <template>
   <div class="rw sl" :data-group="group" :data-key="field.key">
-    <span class="lab">{{ field.label }}</span>
+    <span class="lab">{{ field.label }}<span v-if="field.unit"> [{{ field.unit }}]</span></span>
     <span class="val sw">
       <input
         class="num-input"
@@ -78,3 +78,26 @@ function commit(){
   emit('commit', { group: props.group, field: props.field, value: currentValue.value });
 }
 </script>
+
+<style scoped>
+.sw {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.sb {
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #0a4;
+  cursor: pointer;
+  background: #0b5;
+  color: #fff;
+}
+
+.sb:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+</style>
