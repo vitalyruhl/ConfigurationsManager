@@ -1127,6 +1127,117 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             }
         });
 #endif
+
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+    // Runtime int value input endpoint
+    server->on("/runtime_action/int_input", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+
+            if (request->hasParam("group") && request->hasParam("key") && request->hasParam("value")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                String valueStr = request->getParam("value")->value();
+                int value = valueStr.toInt();
+
+                configManager->getRuntimeManager().handleIntInputChange(group, key, value);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+
+                    if (!error && doc.containsKey("group") && doc.containsKey("key") && doc.containsKey("value")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        int value = doc["value"].as<int>();
+
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleIntInputChange(group, key, value);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+
+    // Runtime float value input endpoint
+    server->on("/runtime_action/float_input", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            if (!configManager) {
+                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                return;
+            }
+
+            if (request->hasParam("group") && request->hasParam("key") && request->hasParam("value")) {
+                String group = request->getParam("group")->value();
+                String key = request->getParam("key")->value();
+                String valueStr = request->getParam("value")->value();
+                valueStr.replace(",", ".");
+                float value = valueStr.toFloat();
+
+                configManager->getRuntimeManager().handleFloatInputChange(group, key, value);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+
+            request->_tempObject = new String();
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (request->_tempObject) {
+                String* body = static_cast<String*>(request->_tempObject);
+                for (size_t i = 0; i < len; i++) {
+                    *body += (char)data[i];
+                }
+
+                if (index + len == total) {
+                    DynamicJsonDocument doc(256);
+                    DeserializationError error = deserializeJson(doc, *body);
+
+                    if (!error && doc.containsKey("group") && doc.containsKey("key") && doc.containsKey("value")) {
+                        String group = doc["group"].as<String>();
+                        String key = doc["key"].as<String>();
+                        float value = doc["value"].as<float>();
+
+                        if (configManager) {
+                            configManager->getRuntimeManager().handleFloatInputChange(group, key, value);
+                            request->send(200, "application/json", "{\"status\":\"ok\"}");
+                        } else {
+                            request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");
+                        }
+                    } else {
+                        request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
+                    }
+
+                    delete body;
+                    request->_tempObject = nullptr;
+                }
+            }
+        });
+#endif
 }
 
 String ConfigManagerWeb::getContentType(const String& path) {

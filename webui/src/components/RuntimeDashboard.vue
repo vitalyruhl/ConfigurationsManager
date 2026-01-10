@@ -915,6 +915,28 @@ async function sendInt(group, f, val) {
   }
 }
 
+async function sendIntInput(group, f, val) {
+  try {
+    const r = await fetch(
+      `/runtime_action/int_input?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${val}`,
+      {
+        method: "POST",
+      }
+    );
+    if (!r.ok) {
+      notifySafe(`Set failed: ${f.key}`, "error");
+    } else {
+      if (!runtime.value[group]) runtime.value[group] = {};
+      runtime.value[group][f.key] = val;
+      notifySafe(`${f.key}=${val}`, "success", 1200);
+    }
+  } catch (e) {
+    notifySafe(`Set error ${f.key}: ${e.message}`, "error");
+  }
+}
+
 async function handleSliderCommit({ group, field, value }) {
   if (field.isFloatSlider) {
     await sendFloat(group, field, value);
@@ -948,11 +970,35 @@ async function sendFloat(group, f, val) {
   }
 }
 
+async function sendFloatInput(group, f, val) {
+  try {
+    const normalizedVal = String(val).replace(',', '.');
+
+    const r = await fetch(
+      `/runtime_action/float_input?group=${rURIComp(group)}&key=${rURIComp(
+        f.key
+      )}&value=${normalizedVal}`,
+      {
+        method: "POST",
+      }
+    );
+    if (!r.ok) {
+      notifySafe(`Set failed: ${f.key}`, "error");
+    } else {
+      if (!runtime.value[group]) runtime.value[group] = {};
+      runtime.value[group][f.key] = parseFloat(normalizedVal);
+      notifySafe(`${f.key}=${normalizedVal}`, "success", 1200);
+    }
+  } catch (e) {
+    notifySafe(`Set error ${f.key}: ${e.message}`, "error");
+  }
+}
+
 async function handleInputCommit({ group, field, value }) {
   if (field.isFloatInput) {
-    await sendFloat(group, field, value);
+    await sendFloatInput(group, field, value);
   } else {
-    await sendInt(group, field, value);
+    await sendIntInput(group, field, value);
   }
 }
 

@@ -34,6 +34,8 @@ struct RuntimeFieldMeta {
     bool isStateButton = false;
     bool isIntSlider = false;
     bool isFloatSlider = false;
+    bool isIntInput = false;
+    bool isFloatInput = false;
     bool hasAlarm = false;
     bool alarmWhenTrue = false;
     bool boolAlarmValue = false;
@@ -118,6 +120,32 @@ struct RuntimeFloatSlider {
 };
 #endif
 
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+struct RuntimeIntInput {
+    String group;
+    String key;
+    std::function<int()> getter;
+    std::function<void(int)> setter;
+    int minV;
+    int maxV;
+
+    RuntimeIntInput(const String& g, const String& k, std::function<int()> get, std::function<void(int)> set, int min, int max)
+        : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
+};
+
+struct RuntimeFloatInput {
+    String group;
+    String key;
+    std::function<float()> getter;
+    std::function<void(float)> setter;
+    float minV;
+    float maxV;
+
+    RuntimeFloatInput(const String& g, const String& k, std::function<float()> get, std::function<void(float)> set, float min, float max)
+        : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
+};
+#endif
+
 #if CM_ENABLE_RUNTIME_ALARMS
 struct RuntimeAlarm {
     String name;
@@ -159,6 +187,11 @@ private:
 
 #if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     std::vector<RuntimeFloatSlider> runtimeFloatSliders;
+#endif
+
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+    std::vector<RuntimeIntInput> runtimeIntInputs;
+    std::vector<RuntimeFloatInput> runtimeFloatInputs;
 #endif
 
 #if CM_ENABLE_RUNTIME_ALARMS
@@ -298,5 +331,25 @@ public:
 #else
     void defineRuntimeFloatSlider(const String&, const String&, const String&, float, float, float, int, std::function<float()>, std::function<void(float)>, const String& = String(), const String& = String(), int = 100) {}
     void handleFloatSliderChange(const String&, const String&, float) {}
+#endif
+
+    // Numeric value inputs (separate from sliders)
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+    void defineRuntimeIntValue(const String& group, const String& key, const String& label,
+                               int minValue, int maxValue, int initValue,
+                               std::function<int()> getter, std::function<void(int)> setter,
+                               const String& unit = String(), const String& card = String(), int order = 100);
+    void handleIntInputChange(const String& group, const String& key, int value);
+
+    void defineRuntimeFloatValue(const String& group, const String& key, const String& label,
+                                 float minValue, float maxValue, float initValue, int precision,
+                                 std::function<float()> getter, std::function<void(float)> setter,
+                                 const String& unit = String(), const String& card = String(), int order = 100);
+    void handleFloatInputChange(const String& group, const String& key, float value);
+#else
+    void defineRuntimeIntValue(const String&, const String&, const String&, int, int, int, std::function<int()>, std::function<void(int)>, const String& = String(), const String& = String(), int = 100) {}
+    void handleIntInputChange(const String&, const String&, int) {}
+    void defineRuntimeFloatValue(const String&, const String&, const String&, float, float, float, int, std::function<float()>, std::function<void(float)>, const String& = String(), const String& = String(), int = 100) {}
+    void handleFloatInputChange(const String&, const String&, float) {}
 #endif
 };
