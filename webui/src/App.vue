@@ -113,7 +113,7 @@
         </template>
         <template v-else>
           <Category
-            v-for="(settings, category) in config"
+            v-for="([category, settings]) in orderedSettingsCategories"
             :key="category + '_' + refreshKey"
             :category="category"
             :settings="settings"
@@ -166,6 +166,43 @@ const config = ref({});
 const refreshKey = ref(0);
 const version = ref("");
 const refreshing = ref(false);
+
+function resolveCategoryLabel(categoryKey, settingsObj) {
+  if (
+    settingsObj &&
+    typeof settingsObj === 'object' &&
+    Object.prototype.hasOwnProperty.call(settingsObj, 'categoryPretty') &&
+    typeof settingsObj.categoryPretty === 'string' &&
+    settingsObj.categoryPretty.trim().length
+  ) {
+    return settingsObj.categoryPretty;
+  }
+  if (settingsObj && typeof settingsObj === 'object') {
+    for (const key in settingsObj) {
+      if (key === 'categoryPretty') continue;
+      const sd = settingsObj[key];
+      if (sd && typeof sd === 'object' && typeof sd.categoryPretty === 'string' && sd.categoryPretty.trim().length) {
+        return sd.categoryPretty;
+      }
+    }
+  }
+  return categoryKey;
+}
+
+const orderedSettingsCategories = computed(() => {
+  const cfg = config.value;
+  const entries = Object.entries(cfg || {});
+  entries.sort((a, b) => {
+    const aKey = a[0];
+    const bKey = b[0];
+    const aLabel = resolveCategoryLabel(aKey, a[1]);
+    const bLabel = resolveCategoryLabel(bKey, b[1]);
+    const labelCmp = String(aLabel).localeCompare(String(bLabel));
+    if (labelCmp !== 0) return labelCmp;
+    return String(aKey).localeCompare(String(bKey));
+  });
+  return entries;
+});
 const activeTab = ref("live");
 const runtimeDashboard = ref(null);
 const canFlash = ref(false);
@@ -191,40 +228,14 @@ const settingsAuthPasswordRequired = ref(true);
 const settingsViewMode = ref('list');
 const selectedSettingsCategory = ref('');
 
-function resolveCategoryLabel(categoryKey, settingsObj) {
-  if (
-    settingsObj &&
-    typeof settingsObj === 'object' &&
-    Object.prototype.hasOwnProperty.call(settingsObj, 'categoryPretty') &&
-    typeof settingsObj.categoryPretty === 'string' &&
-    settingsObj.categoryPretty.trim().length
-  ) {
-    return settingsObj.categoryPretty;
-  }
-  if (settingsObj && typeof settingsObj === 'object') {
-    for (const key in settingsObj) {
-      if (key === 'categoryPretty') continue;
-      const sd = settingsObj[key];
-      if (sd && typeof sd === 'object' && typeof sd.categoryPretty === 'string' && sd.categoryPretty.trim().length) {
-        return sd.categoryPretty;
-      }
-    }
-  }
-  return categoryKey;
-}
-
 const settingsCategories = computed(() => {
-  const out = [];
-  const cfg = config.value;
-  if (!cfg || typeof cfg !== 'object') return out;
-  for (const [categoryKey, settingsObj] of Object.entries(cfg)) {
-    out.push({
+  return (orderedSettingsCategories.value || []).map(([categoryKey, settingsObj]) => {
+    return {
       key: categoryKey,
       label: resolveCategoryLabel(categoryKey, settingsObj),
       settings: settingsObj,
-    });
-  }
-  return out;
+    };
+  });
 });
 
 watch(
