@@ -683,27 +683,63 @@ void setupGUI()
 
     // Integer slider for adjustments (Note this is no persistent setting)
     static int adjustValue = 0;
-    Serial.println("[GUI] Defining runtime int slider: controls.adjust");
-    ConfigManager.defineRuntimeIntSlider("controls", "adjust", "Adjustment", -10, 10, 0, []()
-    {
-        return adjustValue;
-    }, [](int value)
-    {
+    auto getAdjustValue = []() -> int { return adjustValue; };
+    auto setAdjustValue = [](int value) {
         adjustValue = value;
         Serial.printf("[ADJUST] Value: %d\n", value);
-    }, "", "steps", 23);
+    };
 
-    // Float slider for temperature offset (Note this is no persistent setting)
-    static float tempOffset = 0.0f;
+    Serial.println("[GUI] Defining runtime int slider: controls.adjust");
+    ConfigManager.defineRuntimeIntSlider(
+        "controls",
+        "adjust",
+        "Adjustment",
+        -10,
+        10,
+        0,
+        getAdjustValue,
+        setAdjustValue,
+        "",
+        "steps",
+        23
+    );
+
+    Serial.println("[GUI] Defining runtime int value: controls.adjustValue");
+    ConfigManager.defineRuntimeIntValue(
+        "controls",
+        "adjustValue",
+        "Adjustment Value",
+        -10,
+        10,
+        0,
+        getAdjustValue,
+        setAdjustValue,
+        "",
+        "steps",
+        24
+    );
+
+    // Float slider synchronized with the Temp setting (Temp.TCO)
     Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
-    ConfigManager.defineRuntimeFloatSlider("controls", "tempOffset", "Temperature Offset", -5.0f, 5.0f, -0.8f, 2, []()
-    {
-        return tempOffset;
-    }, [](float value)
-    {
-        tempOffset = value;
-        Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
-    }, "", "°C", 24);
+    ConfigManager.defineRuntimeFloatSlider(
+        "controls",
+        "tempOffset",
+        "Temperature Offset",
+        -5.0f,
+        5.0f,
+        tempSettings.tempCorrection.get(),
+        2,
+        []() {
+            return tempSettings.tempCorrection.get();
+        },
+        [](float value) {
+            tempSettings.tempCorrection.set(value);
+            Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
+        },
+        "",
+        "°C",
+        25
+    );
 
     // Additional runtime fields as recommended
     // Sensor range field for demonstration

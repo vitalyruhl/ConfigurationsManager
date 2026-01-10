@@ -39,7 +39,33 @@ function reset(){ local.value = original.value; }
 </script>
 
 <style scoped>
-.rw { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:.5rem; }
+.rw {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.25rem;
+  padding: 2px 0 1px;
+}
+.rw .lab {
+  font-weight: 500;
+  padding-right: 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rw .val {
+  text-align: right;
+  min-width: 2.2rem;
+  font-variant-numeric: tabular-nums;
+}
+.rw .un {
+  padding-left: 0.35rem;
+  min-width: 1.6rem;
+  text-align: left;
+  font-size: 0.7rem;
+}
 .sl-ctrl { grid-template-columns: 1fr; }
 .sl-actions { grid-template-columns: 1fr auto 1fr; }
 .sl-gap{ height:.25rem; }
