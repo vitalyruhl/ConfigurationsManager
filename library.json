@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "keywords": "esp32, configuration, wifi, web-server, ota",
   "description": "Robust configuration management system with web interface for ESP32 and ota support.",
   "repository": {

@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 3.0.0 (2026.01.08)
+> Version 3.1.0 (2026.01.10)
 
 > Breaking changes in v3.0.0
 >
@@ -89,7 +89,7 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
        ; -DCM_ENABLE_VERBOSE_LOGGING=0
    
    lib_deps =
-       vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
+       vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
    ```
    
    > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini` for a complete example.
@@ -132,7 +132,7 @@ build_flags =
     ; -DCM_ENABLE_VERBOSE_LOGGING=0
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
+    vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
 ```
 
 > **📋 See complete examples in `examples/example_min/platformio.ini`**
@@ -142,7 +142,7 @@ lib_deps =
 - Firmware build: no extra dependencies.
 - WebUI development: see `webui/README.md`.
 
-## Security Notice (v3.0.0)
+## Security Notice (v3.1.0)
 
 - Password values are **masked** in the WebUI (shown as `***`).
 - When you **set or change** a password in the WebUI, it is transmitted to the ESP32 **in cleartext over HTTP**.
@@ -405,7 +405,7 @@ build_flags =
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
+    vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
@@ -431,7 +431,7 @@ build_flags =
 	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.0.0
+    vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
@@ -556,6 +556,8 @@ pio run -e usb -t upload # Re-upload firmware
 - **2.7.4**: **Major improvement:** Tools folder is now included in the library package! No more manual copying required - reference the precompile script directly from the library installation path: `extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py`. Updated all documentation to reflect the simplified setup process.
 - **2.7.5**: Added XOR-based password encryption for HTTP transmission (removed again in v3.0.0).
 - **2.7.6**: Minor bugfixes and documentation updates.
+- **3.0.0**: v3 release: removed most build-time feature flags, embedded WebUI committed, docs reorganized.
+- **3.1.0**: v3 stabilization: runtime/UI improvements, ordering fixes in Settings/Live views, WebSocket/OTA fixes.
 
 ## Smart WiFi Roaming Feature
 
