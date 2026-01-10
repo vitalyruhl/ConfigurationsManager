@@ -1009,7 +1009,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
         });
 #endif
 
-#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     // Runtime int slider change endpoint
     server->on("/runtime_action/int_slider", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -1067,7 +1067,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
         });
 #endif
 
-#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     // Runtime float slider change endpoint
     server->on("/runtime_action/float_slider", HTTP_POST,
         [this](AsyncWebServerRequest* request) {

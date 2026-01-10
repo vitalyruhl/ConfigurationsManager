@@ -998,6 +998,13 @@ public:
         otaManager.begin(this);
         runtimeManager.begin(this);
 
+    #if CM_ENABLE_WS_PUSH
+        // Register WebSocket handler early (before server->begin()) so the WebUI can connect to /ws.
+        // Periodic push still requires calling handleWebsocketPush() in loop(), unless you only want
+        // the initial push-on-connect payload.
+        enableWebSocketPush();
+    #endif
+
         CM_LOG("[I] ConfigManager modules initialized - WiFi connecting in background");
     }
 
@@ -1035,6 +1042,11 @@ public:
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
+
+    #if CM_ENABLE_WS_PUSH
+        // Register WebSocket handler early (before server->begin()) so the WebUI can connect to /ws.
+        enableWebSocketPush();
+    #endif
     }
 
     void startAccessPoint(const String &apSSID = "", const String &apPassword = "")
@@ -1063,6 +1075,13 @@ public:
         wifiManager.startAccessPoint(ssid, apPassword);
 
         webManager.begin(this);
+
+    #if CM_ENABLE_WS_PUSH
+        // In AP mode, routes are defined immediately and server->begin() is called inside defineAllRoutes().
+        // Register the WebSocket handler before that so /ws is available.
+        enableWebSocketPush();
+    #endif
+
         webManager.defineAllRoutes();
         otaManager.begin(this);
         otaManager.setupWebRoutes(webManager.getServer());

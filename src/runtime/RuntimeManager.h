@@ -90,7 +90,7 @@ struct RuntimeStateButton {
 };
 #endif
 
-#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 struct RuntimeIntSlider {
     String group;
     String key;
@@ -104,7 +104,7 @@ struct RuntimeIntSlider {
 };
 #endif
 
-#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 struct RuntimeFloatSlider {
     String group;
     String key;
@@ -153,11 +153,11 @@ private:
     std::vector<RuntimeStateButton> runtimeStateButtons;
 #endif
 
-#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     std::vector<RuntimeIntSlider> runtimeIntSliders;
 #endif
 
-#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     std::vector<RuntimeFloatSlider> runtimeFloatSliders;
 #endif
 
@@ -278,7 +278,7 @@ public:
     void handleStateButtonToggle(const String&, const String&) {}
 #endif
 
-#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     void defineRuntimeIntSlider(const String& group, const String& key, const String& label,
                               int minValue, int maxValue, int initValue,
                               std::function<int()> getter, std::function<void(int)> setter,
@@ -289,7 +289,7 @@ public:
     void handleIntSliderChange(const String&, const String&, int) {}
 #endif
 
-#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     void defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
                                 float minValue, float maxValue, float initValue, int precision,
                                 std::function<float()> getter, std::function<void(float)> setter,

@@ -129,7 +129,7 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         }
 #endif
 
-#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
         for (auto& slider : runtimeIntSliders) {
             if (slider.group == prov.name && slider.getter) {
                 slot[slider.key] = slider.getter();
@@ -137,7 +137,7 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         }
 #endif
 
-#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
         for (auto& slider : runtimeFloatSliders) {
             if (slider.group == prov.name && slider.getter) {
                 slot[slider.key] = slider.getter();
@@ -683,7 +683,7 @@ void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const St
 }
 #endif
 
-#if (CM_ENABLE_RUNTIME_INT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const String& key, const String& label,
                                                  int minValue, int maxValue, int initValue,
                                                  std::function<int()> getter, std::function<void(int)> setter,
@@ -721,7 +721,7 @@ void ConfigManagerRuntime::handleIntSliderChange(const String& group, const Stri
 }
 #endif
 
-#if (CM_ENABLE_RUNTIME_FLOAT_SLIDERS || CM_ENABLE_RUNTIME_ANALOG_SLIDERS)
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
                                                    float minValue, float maxValue, float initValue, int precision,
                                                    std::function<float()> getter, std::function<void(float)> setter,

@@ -63,9 +63,6 @@
 #define CM_ENABLE_RUNTIME_BUTTONS 1
 #define CM_ENABLE_RUNTIME_STATE_BUTTONS 1
 
-// Deprecated flags kept as constants to keep the existing C++ code structure intact.
-#define CM_ENABLE_RUNTIME_INT_SLIDERS 0
-#define CM_ENABLE_RUNTIME_FLOAT_SLIDERS 0
 #define CM_ENABLE_RUNTIME_ANALOG_SLIDERS 1
 
 #define CM_ENABLE_RUNTIME_NUMBER_INPUTS 1
