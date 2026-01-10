@@ -189,6 +189,12 @@ function resolveCategoryLabel(categoryKey, settingsObj) {
   return categoryKey;
 }
 
+function normalizeCategoryToken(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 const orderedSettingsCategories = computed(() => {
   const cfg = config.value;
   const entries = Object.entries(cfg || {});
@@ -197,6 +203,20 @@ const orderedSettingsCategories = computed(() => {
     const bKey = b[0];
     const aLabel = resolveCategoryLabel(aKey, a[1]);
     const bLabel = resolveCategoryLabel(bKey, b[1]);
+
+    // Prefer a fixed ordering for the most important categories.
+    const priorityOrder = {
+      wifi: 0,
+      system: 1,
+      buttons: 2,
+      ntp: 3,
+    };
+    const aToken = normalizeCategoryToken(aLabel) || normalizeCategoryToken(aKey);
+    const bToken = normalizeCategoryToken(bLabel) || normalizeCategoryToken(bKey);
+    const aPrio = Object.prototype.hasOwnProperty.call(priorityOrder, aToken) ? priorityOrder[aToken] : Number.POSITIVE_INFINITY;
+    const bPrio = Object.prototype.hasOwnProperty.call(priorityOrder, bToken) ? priorityOrder[bToken] : Number.POSITIVE_INFINITY;
+    if (aPrio !== bPrio) return aPrio - bPrio;
+
     const labelCmp = String(aLabel).localeCompare(String(bLabel));
     if (labelCmp !== 0) return labelCmp;
     return String(aKey).localeCompare(String(bKey));
