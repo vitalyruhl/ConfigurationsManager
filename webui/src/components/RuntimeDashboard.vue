@@ -299,6 +299,12 @@ const savedOtaPassword = ref('');
 
 const builtinSystemHiddenFields = new Set(["loopAvg", "otaActive"]);
 
+function normalizeGroupToken(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
@@ -312,6 +318,25 @@ const displayRuntimeGroups = computed(() => {
   const visible = runtimeGroups.value.filter((group) => groupHasVisibleContent(group));
   // Stable group ordering: prefer metadata order (min field order), then title
   visible.sort((a, b) => {
+    // Prefer a fixed ordering for the most important cards.
+    const priorityOrder = {
+      alerts: 0,
+      sensors: 1,
+      control: 2,
+      controls: 2,
+      controll: 2,
+      system: 3,
+    };
+    const aToken = normalizeGroupToken(a?.name || a?.title);
+    const bToken = normalizeGroupToken(b?.name || b?.title);
+    const aPrio = Object.prototype.hasOwnProperty.call(priorityOrder, aToken)
+      ? priorityOrder[aToken]
+      : Number.POSITIVE_INFINITY;
+    const bPrio = Object.prototype.hasOwnProperty.call(priorityOrder, bToken)
+      ? priorityOrder[bToken]
+      : Number.POSITIVE_INFINITY;
+    if (aPrio !== bPrio) return aPrio - bPrio;
+
     const aFields = Array.isArray(a?.fields) ? a.fields : [];
     const bFields = Array.isArray(b?.fields) ? b.fields : [];
     const aOrder = aFields.reduce((min, f) => {
