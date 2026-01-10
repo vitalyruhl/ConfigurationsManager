@@ -407,7 +407,7 @@ void setup()
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     // Optional demo: global CSS override
-    // ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
     ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
@@ -449,7 +449,7 @@ void setup()
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure WiFi AP MAC filtering/priority (example - customize as needed)
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    // ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // check for reset button on startup (but not AP mode button yet)
@@ -711,11 +711,6 @@ void setupGUI()
     Serial.println("[GUI] Defining runtime field: sensors.range");
     ConfigManager.defineRuntimeField("sensors", "range", "Sensor Range", "V", 0.0, 5.0);
 
-    // GUI Boolean example (shows connection status)
-    static bool connectionStatus = false;
-    Serial.println("[GUI] Defining runtime bool: status.connected");
-    ConfigManager.defineRuntimeBool("Connection", "connected", "Connection Status", false, 1);
-
     // GUI Boolean alarm example (registered in runtime alarm system)
     Serial.println("[GUI] Defining runtime alarm: alerts.overheat");
     ConfigManager.defineRuntimeAlarm("alerts", "overheat", "Overheat Warning", []() {
@@ -726,6 +721,9 @@ void setupGUI()
     Serial.println("[GUI] Adding runtime provider: alerts");
     CRM().addRuntimeProvider("alerts", [](JsonObject &data)
     {
+        // Connection status (also shown in Alerts card)
+        data["connected"] = WiFi.status() == WL_CONNECTED;
+
         // Dewpoint risk alarm: temperature is within risk window of dewpoint
         bool dewpointRisk = false;
         if (!isnan(temperature) && !isnan(Dewpoint)) {
@@ -743,6 +741,15 @@ void setupGUI()
         data["dewpoint_risk"] = dewpointRisk;
         data["temp_low"] = tempLow;
     });
+
+    Serial.println("[GUI] Adding meta: alerts.connected");
+    RuntimeFieldMeta connectedMeta;
+    connectedMeta.group = "alerts";
+    connectedMeta.key = "connected";
+    connectedMeta.label = "Connected";
+    connectedMeta.order = 29;
+    connectedMeta.isBool = true;
+    CRM().addRuntimeMeta(connectedMeta);
 
     Serial.println("[GUI] Adding meta: alerts.dewpoint_risk");
     RuntimeFieldMeta dewpointRiskMeta;
