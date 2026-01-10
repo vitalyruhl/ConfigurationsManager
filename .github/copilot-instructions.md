@@ -9,6 +9,9 @@ you are my coding assistant. Follow the instructions in this file carefully when
 
 - Semi-automatic Workflow Guidelines:
   - Confirm-before-write: If requirements are ambiguous or the change impacts multiple subsystems/files, ask 1-3 precise clarifying questions (or propose 2-3 options) before editing files.
+  - One side-branch at a time: Do not work on more than one side-branch simultaneously.
+  - Step-by-step workflow: Implement changes incrementally in small steps: fix -> verify -> commit -> continue.
+  - Do not revert user edits unless asked: If the user made changes (even unrelated to the current branch/topic), do not roll them back unless the user explicitly requests it.
   - Autonomy levels:
     - Level A (safe): Read-only actions (search, read, analyze) can be done immediately.
     - Level B (normal): Small, clearly scoped changes (1-2 files, obvious fix) can be implemented immediately.
