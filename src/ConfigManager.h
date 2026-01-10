@@ -1170,6 +1170,20 @@ public:
         runtimeManager.defineRuntimeFloatSlider(group, key, label, minValue, maxValue, initValue, precision, getter, setter, unit, card, order);
     }
 
+    void defineRuntimeIntValue(const String& group, const String& key, const String& label,
+                               int minValue, int maxValue, int initValue,
+                               std::function<int()> getter, std::function<void(int)> setter,
+                               const String& unit = String(), const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeIntValue(group, key, label, minValue, maxValue, initValue, getter, setter, unit, card, order);
+    }
+
+    void defineRuntimeFloatValue(const String& group, const String& key, const String& label,
+                                 float minValue, float maxValue, float initValue, int precision,
+                                 std::function<float()> getter, std::function<void(float)> setter,
+                                 const String& unit = String(), const String& card = String(), int order = 100) {
+        runtimeManager.defineRuntimeFloatValue(group, key, label, minValue, maxValue, initValue, precision, getter, setter, unit, card, order);
+    }
+
     void defineRuntimeStateButton(const String &category, const String &key, const String &name, std::function<bool()> getter, std::function<void(bool)> setter)
     {
         runtimeManager.defineRuntimeStateButton(category, key, name, getter, setter);

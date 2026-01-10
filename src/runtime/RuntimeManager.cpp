@@ -144,6 +144,20 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
             }
         }
 #endif
+
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+        for (auto& input : runtimeIntInputs) {
+            if (input.group == prov.name && input.getter) {
+                slot[input.key] = input.getter();
+            }
+        }
+
+        for (auto& input : runtimeFloatInputs) {
+            if (input.group == prov.name && input.getter) {
+                slot[input.key] = input.getter();
+            }
+        }
+#endif
     }
 
 #if CM_ENABLE_RUNTIME_ALARMS
@@ -207,11 +221,25 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             o["isIntSlider"] = true;
             o["min"] = m.intMin;
             o["max"] = m.intMax;
+            o["init"] = m.intInit;
         }
         if (m.isFloatSlider) {
             o["isFloatSlider"] = true;
             o["min"] = m.floatMin;
             o["max"] = m.floatMax;
+            o["init"] = m.floatInit;
+        }
+        if (m.isIntInput) {
+            o["isIntInput"] = true;
+            o["min"] = m.intMin;
+            o["max"] = m.intMax;
+            o["init"] = m.intInit;
+        }
+        if (m.isFloatInput) {
+            o["isFloatInput"] = true;
+            o["min"] = m.floatMin;
+            o["max"] = m.floatMax;
+            o["init"] = m.floatInit;
         }
         if (m.hasAlarm) o["hasAlarm"] = true;
         if (m.alarmWhenTrue) o["alarmWhenTrue"] = true;
@@ -237,6 +265,80 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     return out;
 #endif
 }
+
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const String& key, const String& label,
+                                                 int minValue, int maxValue, int initValue,
+                                                 std::function<int()> getter, std::function<void(int)> setter,
+                                                 const String& unit, const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isIntInput = true;
+    meta.intMin = minValue;
+    meta.intMax = maxValue;
+    meta.intInit = initValue;
+    meta.unit = unit;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+
+    runtimeIntInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("[RT] Added int input: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::handleIntInputChange(const String& group, const String& key, int value) {
+    for (auto& input : runtimeIntInputs) {
+        if (input.group == group && input.key == key) {
+            if (input.setter) {
+                int clampedValue = max(input.minV, min(input.maxV, value));
+                input.setter(clampedValue);
+                RUNTIME_LOG("[RT] Int input changed: %s.%s = %d", group.c_str(), key.c_str(), clampedValue);
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[RT] Int input not found: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::defineRuntimeFloatValue(const String& group, const String& key, const String& label,
+                                                   float minValue, float maxValue, float initValue, int precision,
+                                                   std::function<float()> getter, std::function<void(float)> setter,
+                                                   const String& unit, const String& card, int order) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isFloatInput = true;
+    meta.floatMin = minValue;
+    meta.floatMax = maxValue;
+    meta.floatInit = initValue;
+    meta.precision = precision;
+    meta.floatPrecision = precision;
+    meta.unit = unit;
+    meta.order = order;
+    meta.card = card;
+    addRuntimeMeta(meta);
+
+    runtimeFloatInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("[RT] Added float input: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::handleFloatInputChange(const String& group, const String& key, float value) {
+    for (auto& input : runtimeFloatInputs) {
+        if (input.group == group && input.key == key) {
+            if (input.setter) {
+                float clampedValue = max(input.minV, min(input.maxV, value));
+                input.setter(clampedValue);
+                RUNTIME_LOG("[RT] Float input changed: %s.%s = %.2f", group.c_str(), key.c_str(), clampedValue);
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[RT] Float input not found: %s.%s", group.c_str(), key.c_str());
+}
+#endif
 
 #if CM_ENABLE_SYSTEM_PROVIDER
 

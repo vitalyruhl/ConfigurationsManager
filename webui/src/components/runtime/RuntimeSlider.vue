@@ -8,9 +8,6 @@
   <div class="rw sl-ctrl">
     <input type="range" :min="min" :max="max" :step="step" v-model.number="local" />
   </div>
-  <div class="rw sl-num">
-    <input type="number" :min="min" :max="max" :step="step" v-model.number="local" @keyup.enter="commit" />
-  </div>
   <div class="rw sl-actions">
     <span></span>
     <div class="btns">
@@ -44,11 +41,9 @@ function reset(){ local.value = original.value; }
 <style scoped>
 .rw { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:.5rem; }
 .sl-ctrl { grid-template-columns: 1fr; }
-.sl-num { grid-template-columns: 1fr; }
 .sl-actions { grid-template-columns: 1fr auto 1fr; }
 .sl-gap{ height:.25rem; }
 input[type="range"]{ width:100%; }
-input[type="number"]{ width:8rem; justify-self:end; }
 .btns{ display:flex; gap:.5rem; }
 .btn{ padding:.25rem .6rem; border-radius:.4rem; border:1px solid #888; cursor:pointer; }
 .btn:disabled{ opacity:.6; cursor:not-allowed; }
