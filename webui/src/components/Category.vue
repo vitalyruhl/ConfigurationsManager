@@ -1,7 +1,7 @@
 <template>
   <div class="category">
     <h2>{{ prettyName }}</h2>
-    <template v-for="(settingData, key) in filteredSettings" :key="key">
+    <template v-for="[key, settingData] in sortedSettings" :key="key">
       <Setting
         v-if="shouldShow(settingData)"
         :category="category"
@@ -31,6 +31,25 @@ const filteredSettings = computed(() => {
   return Object.fromEntries(
     Object.entries(props.settings).filter(([key, val]) => key !== 'categoryPretty')
   );
+});
+
+const sortedSettings = computed(() => {
+  const entries = Object.entries(filteredSettings.value || {});
+  entries.sort((a, b) => {
+    const aKey = a[0];
+    const bKey = b[0];
+    const aData = a[1] || {};
+    const bData = b[1] || {};
+    const aOrder = typeof aData.sortOrder === 'number' ? aData.sortOrder : 1000;
+    const bOrder = typeof bData.sortOrder === 'number' ? bData.sortOrder : 1000;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    const aName = String(aData.displayName || aData.name || aKey);
+    const bName = String(bData.displayName || bData.name || bKey);
+    const nameCmp = aName.localeCompare(bName);
+    if (nameCmp !== 0) return nameCmp;
+    return aKey.localeCompare(bKey);
+  });
+  return entries;
 });
 function shouldShow(settingData){
   // Firmware can provide dynamic visibility via showIfResolved or showIf; fallback to always true
