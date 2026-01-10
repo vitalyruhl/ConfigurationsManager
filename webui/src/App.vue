@@ -64,16 +64,64 @@
       @can-flash-change="handleCanFlashChange"
     />
     <section v-else-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
+      <div class="settings-view-mode">
+        <button
+          class="svm-btn"
+          :class="{ active: settingsViewMode === 'list' }"
+          type="button"
+          @click="settingsViewMode = 'list'"
+        >
+          List
+        </button>
+        <button
+          class="svm-btn"
+          :class="{ active: settingsViewMode === 'tabs' }"
+          type="button"
+          @click="settingsViewMode = 'tabs'"
+        >
+          Tabs
+        </button>
+      </div>
+
+      <div v-if="settingsViewMode === 'tabs'" class="category-tabs" role="tablist" aria-label="Settings categories">
+        <button
+          v-for="c in settingsCategories"
+          :key="c.key"
+          class="cat-tab"
+          :class="{ active: selectedSettingsCategory === c.key }"
+          type="button"
+          role="tab"
+          :aria-selected="selectedSettingsCategory === c.key"
+          @click="selectedSettingsCategory = c.key"
+        >
+          {{ c.label }}
+        </button>
+      </div>
+
       <div id="settingsContainer" :key="refreshKey">
-        <Category
-          v-for="(settings, category) in config"
-          :key="category + '_' + refreshKey"
-          :category="category"
-          :settings="settings"
-          :busy-map="opBusy"
-          @apply-single="applySingle"
-          @save-single="saveSingle"
-        />
+        <template v-if="settingsViewMode === 'tabs'">
+          <Category
+            v-for="c in settingsCategories"
+            v-show="c.key === selectedSettingsCategory"
+            :key="c.key + '_' + refreshKey"
+            :category="c.key"
+            :settings="c.settings"
+            :busy-map="opBusy"
+            @apply-single="applySingle"
+            @save-single="saveSingle"
+          />
+        </template>
+        <template v-else>
+          <Category
+            v-for="(settings, category) in config"
+            :key="category + '_' + refreshKey"
+            :category="category"
+            :settings="settings"
+            :busy-map="opBusy"
+            @apply-single="applySingle"
+            @save-single="saveSingle"
+          />
+        </template>
       </div>
       <div class="action-buttons">
         <button @click="applyAll" class="apply-btn" :disabled="refreshing">
@@ -93,7 +141,7 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted, provide, nextTick } from "vue";
+import { ref, onMounted, provide, nextTick, computed, watch } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
@@ -138,6 +186,57 @@ const pendingFlashStart = ref(false); // Track if we need to start flash after a
 const settingsAuthToken = ref("");
 const settingsAuthTokenExpiresAtMs = ref(0);
 const settingsAuthPasswordRequired = ref(true);
+
+// Settings view display mode: list vs tabbed categories
+const settingsViewMode = ref('list');
+const selectedSettingsCategory = ref('');
+
+function resolveCategoryLabel(categoryKey, settingsObj) {
+  if (
+    settingsObj &&
+    typeof settingsObj === 'object' &&
+    Object.prototype.hasOwnProperty.call(settingsObj, 'categoryPretty') &&
+    typeof settingsObj.categoryPretty === 'string' &&
+    settingsObj.categoryPretty.trim().length
+  ) {
+    return settingsObj.categoryPretty;
+  }
+  if (settingsObj && typeof settingsObj === 'object') {
+    for (const key in settingsObj) {
+      if (key === 'categoryPretty') continue;
+      const sd = settingsObj[key];
+      if (sd && typeof sd === 'object' && typeof sd.categoryPretty === 'string' && sd.categoryPretty.trim().length) {
+        return sd.categoryPretty;
+      }
+    }
+  }
+  return categoryKey;
+}
+
+const settingsCategories = computed(() => {
+  const out = [];
+  const cfg = config.value;
+  if (!cfg || typeof cfg !== 'object') return out;
+  for (const [categoryKey, settingsObj] of Object.entries(cfg)) {
+    out.push({
+      key: categoryKey,
+      label: resolveCategoryLabel(categoryKey, settingsObj),
+      settings: settingsObj,
+    });
+  }
+  return out;
+});
+
+watch(
+  [() => settingsViewMode.value, () => settingsCategories.value],
+  () => {
+    if (settingsViewMode.value !== 'tabs') return;
+    if (settingsCategories.value.length === 0) return;
+    const exists = settingsCategories.value.some((c) => c.key === selectedSettingsCategory.value);
+    if (!exists) selectedSettingsCategory.value = settingsCategories.value[0].key;
+  },
+  { immediate: true }
+);
 
 function isSettingsAuthTokenValid() {
   return (
@@ -724,6 +823,55 @@ onMounted(() => {
 }
 .settings-view {
   padding: 1rem 0 2rem;
+}
+
+.settings-view-mode {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0 10px;
+}
+
+.svm-btn {
+  background: slategray;
+  color: #f5f5f5;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.svm-btn.active {
+  background: darkorange;
+  color: #fff;
+}
+
+.category-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0 10px 0.75rem;
+  margin: 0 0 0.25rem;
+}
+
+.cat-tab {
+  flex: 0 0 auto;
+  background: slategray;
+  color: #f5f5f5;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.cat-tab.active {
+  background: darkorange;
+  color: #fff;
 }
 .action-buttons {
   display: flex;
