@@ -9,14 +9,14 @@ Stand: 2026-01-09
 - OTA: stabilisiert durch sofortigen Reboot am OTA-Ende (Workaround für lwIP assert).
 - Examples: Secrets entfernt; `example_min` ist ein minimaler GUI-Skeleton (AP Mode wenn SSID leer).
 
-## [CURRENT] v3.1.0 Stabilisierung (Bugfixes)
+## [COMPLETED] v3.1.0 Stabilisierung (Bugfixes)
 - WebSocket: Ursache für Disconnects beim Settings-Laden prüfen (Payload-Größe, Timing, Reconnect-Loop, Memory).
 - WiFi Reboot: Verhalten dokumentieren (Timeout vs. phased reconnect restart) und im UI klar machen.
 
-## [NEXT] UI/UX (Settings & Runtime)
-- Analog: separate Eingabe (NumberInput) vs Slider; Slider-Current-Value Styling anpassen.
+## [CURRENT] UI/UX (Settings & Runtime)
 - GUI Display Mode Toggle: “Current” (Karten) vs “Categories” (Map/Listenansicht).
 - `order`/Sortierung: Metadaten für Live-Cards und Settings-Kategorien (stable ordering).
+- Analog: separate Eingabe (NumberInput) vs Slider; Slider-Current-Value Styling anpassen.
 
 ## [NEXT] Architektur / API
 - Settings-Auth: Legacy-Endpoint `/config/settings_password` entfernen oder hart deaktivieren.
