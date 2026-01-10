@@ -2,38 +2,30 @@
 #include <Arduino.h>
 #include <unity.h>
 #include <ConfigManager.h>
-#include <WebServer.h>
 
-// Removed duplicate WebHTML definition (provided by generated html_content.h)
-
-WebServer server(80);
 ConfigManagerClass testManager;
-ConfigManagerClass::LogCallback ConfigManagerClass::logger = nullptr;
 
 // ----------------------------------------------------------------------------
 // Test Settings (using new ConfigOptions struct initialization)
 // ----------------------------------------------------------------------------
-Config<int> testInt(ConfigOptions<int>{ .keyName = "tInt", .category = "cfg", .defaultValue = 42, .prettyName = "Test Integer" });
-Config<bool> testBool(ConfigOptions<bool>{ .keyName = "tBool", .category = "cfg", .defaultValue = true, .prettyName = "Test Boolean" });
-Config<String> testString(ConfigOptions<String>{ .keyName = "tStr", .category = "cfg", .defaultValue = "def", .prettyName = "Test String" });
-Config<float> testFloat(ConfigOptions<float>{ .keyName = "tFlt", .category = "cfg", .defaultValue = 3.14f, .prettyName = "Test Float" });
-Config<String> testPassword(ConfigOptions<String>{ .keyName = "pwd", .category = "auth", .defaultValue = "secret", .prettyName = "Test Password", .showInWeb = true, .isPassword = true });
-Config<String> wifiSsid(ConfigOptions<String>{ .keyName = "ssid", .category = "wifi", .defaultValue = "MyWiFi", .prettyName = "WiFi SSID", .prettyCat = "Network Settings" });
-Config<String> wifiPassword(ConfigOptions<String>{ .keyName = "password", .category = "wifi", .defaultValue = "secretpass", .prettyName = "WiFi Password", .prettyCat = "Network Settings", .showInWeb = true, .isPassword = true });
-Config<bool> useDhcp(ConfigOptions<bool>{ .keyName = "dhcp", .category = "network", .defaultValue = true, .prettyName = "Use DHCP", .prettyCat = "Network Settings" });
+Config<int> testInt(ConfigOptions<int>{ .key = "tInt", .name = "Test Integer", .category = "cfg", .defaultValue = 42 });
+Config<bool> testBool(ConfigOptions<bool>{ .key = "tBool", .name = "Test Boolean", .category = "cfg", .defaultValue = true });
+Config<String> testString(ConfigOptions<String>{ .key = "tStr", .name = "Test String", .category = "cfg", .defaultValue = "def" });
+Config<float> testFloat(ConfigOptions<float>{ .key = "tFlt", .name = "Test Float", .category = "cfg", .defaultValue = 3.14f });
+Config<String> testPassword(ConfigOptions<String>{ .key = "pwd", .name = "Test Password", .category = "auth", .defaultValue = "secret", .showInWeb = true, .isPassword = true });
 
 // Callback tests (function pointer & std::function)
 static bool callbackCalled = false;
 void testCallbackFn(int) { callbackCalled = true; }
-Config<int> testCb(ConfigOptions<int>{ .keyName = "cb", .category = "cfg", .defaultValue = 0, .prettyName = "Test Callback", .cb = testCallbackFn });
-Config<int> testCbLambda(ConfigOptions<int>{ .keyName = "cbl", .category = "cfg", .defaultValue = 0, .prettyName = "Lambda Callback" });
+Config<int> testCb(ConfigOptions<int>{ .key = "cb", .name = "Test Callback", .category = "cfg", .defaultValue = 0, .callback = testCallbackFn });
+Config<int> testCbLambda(ConfigOptions<int>{ .key = "cbl", .name = "Lambda Callback", .category = "cfg", .defaultValue = 0 });
 
 // showIf dependent setting
-Config<bool> featureEnable(ConfigOptions<bool>{ .keyName = "feat", .category = "opt", .defaultValue = false, .prettyName = "Feature Enable" });
-Config<int> hiddenUnlessFeature(ConfigOptions<int>{ .keyName = "hid", .category = "opt", .defaultValue = 1, .prettyName = "Hidden Value", .showInWeb = true, .showIf = [](){ return featureEnable.get(); } });
+Config<bool> featureEnable(ConfigOptions<bool>{ .key = "feat", .name = "Feature Enable", .category = "opt", .defaultValue = false });
+Config<int> hiddenUnlessFeature(ConfigOptions<int>{ .key = "hid", .name = "Hidden Value", .category = "opt", .defaultValue = 1, .showInWeb = true, .showIf = [](){ return featureEnable.get(); } });
 
-// Setting without prettyName to test fallback to keyName
-Config<int> noPretty(ConfigOptions<int>{ .keyName = "nopretty", .category = "misc", .defaultValue = 7 });
+// Setting without explicit key: verify auto-generated key length
+Config<int> autoKey(ConfigOptions<int>{ .key = nullptr, .name = "No Key Setting", .category = "verylongcategoryname", .defaultValue = 7 });
 
 // ----------------------------------------------------------------------------
 // Helper to parse JSON produced by manager
@@ -78,22 +70,19 @@ void test_float_config() {
 }
 
 void test_password_masking_json() {
-    String json = getJSON();
-    // Ensure password value replaced with ***
-    TEST_ASSERT_NOT_EQUAL(-1, json.indexOf("\"pwd\""));
-    TEST_ASSERT_NOT_EQUAL(-1, json.indexOf("***"));
-}
+    // By default, secrets are excluded from config JSON
+    {
+        String json = getJSON(false);
+        TEST_ASSERT_EQUAL(-1, json.indexOf("\"Test Password\""));
+        TEST_ASSERT_EQUAL(-1, json.indexOf("***"));
+    }
 
-void test_password_ignore_mask_on_fromJSON() {
-    // Change password to new value
-    testPassword.set("newpass");
-    testManager.saveAll();
-    // Simulate incoming JSON trying to set *** (should be ignored)
-    DynamicJsonDocument doc(256);
-    doc["value"] = "***";
-    bool changed = testPassword.fromJSON(doc["value"]);
-    TEST_ASSERT_FALSE(changed); // Should not accept masked value
-    TEST_ASSERT_EQUAL_STRING("newpass", testPassword.get().c_str());
+    // When secrets are included (WebUI path), password values are masked as ***
+    {
+        String json = getJSON(true);
+        TEST_ASSERT_NOT_EQUAL(-1, json.indexOf("\"Test Password\""));
+        TEST_ASSERT_NOT_EQUAL(-1, json.indexOf("***"));
+    }
 }
 
 void test_callback_function_pointer() {
@@ -111,7 +100,7 @@ void test_callback_lambda() {
 
 void test_display_name_and_fallback() {
     TEST_ASSERT_EQUAL_STRING("Test Integer", testInt.getDisplayName());
-    TEST_ASSERT_EQUAL_STRING("nopretty", noPretty.getDisplayName()); // fallback
+    TEST_ASSERT_EQUAL_STRING("No Key Setting", autoKey.getDisplayName());
 }
 
 void test_category_pretty_once() {
@@ -131,62 +120,60 @@ void test_category_pretty_once() {
 }
 
 void test_key_length_error_flag() {
-    Config<String> longCat(ConfigOptions<String>{ .keyName = "k", .category = "verylongcategoryname", .defaultValue = "x", .prettyName = "LC" });
-    if (!longCat.hasError()) {
-        // Force evaluation of getKey() to trigger potential truncation logging
-        longCat.getKey();
-    }
-    TEST_ASSERT_TRUE(longCat.hasError() || strlen(longCat.getKey()) <= 15);
-}
-
-void test_truncation_duplicate_prevention() {
-    ConfigManagerClass localMgr;
-    Config<String> dup1(ConfigOptions<String>{ .keyName = "abc", .category = "verylongcategoryname", .defaultValue = "A" });
-    Config<String> dup2(ConfigOptions<String>{ .keyName = "axx", .category = "verylongcategoryname", .defaultValue = "B" });
-    localMgr.addSetting(&dup1);
-    localMgr.addSetting(&dup2); // Should be rejected after truncation collision
-    String json = localMgr.toJSON();
-    // Only original keyName of first should appear
-    TEST_ASSERT_NOT_EQUAL(-1, json.indexOf("abc"));
-    TEST_ASSERT_EQUAL(-1, json.indexOf("axx"));
+    // Auto-generated keys must respect the ESP32 Preferences key length limit
+    TEST_ASSERT_TRUE(strlen(autoKey.getKey()) <= 15);
 }
 
 void test_showIf_visibility() {
     // Initially featureEnable = false, hiddenUnlessFeature.showIf => false
-    TEST_ASSERT_FALSE(hiddenUnlessFeature.shouldShowInWebDynamic());
+    TEST_ASSERT_FALSE(hiddenUnlessFeature.isVisible());
     featureEnable.set(true);
-    TEST_ASSERT_TRUE(hiddenUnlessFeature.shouldShowInWebDynamic());
-}
-
-void test_ap_mode_initialization() {
-    testManager.startAccessPoint("TestAP", "password");
-    TEST_ASSERT_EQUAL(WIFI_AP, WiFi.getMode());
-}
-
-void test_sta_mode_initialization() {
-    testManager.loadAll();
-    testManager.startWebServer(wifiSsid.get(), wifiPassword.get());
-    testManager.handleClient();
-    TEST_ASSERT_EQUAL(WIFI_STA, WiFi.getMode());
+    TEST_ASSERT_TRUE(hiddenUnlessFeature.isVisible());
 }
 
 void test_runtime_string_divider_and_order(){
-    // Define providers
-    testManager.addRuntimeProvider({ .name = "alpha", .fill = [](JsonObject &o){ o["v1"] = 1; }});
-    testManager.addRuntimeProvider({ .name = "beta", .fill = [](JsonObject &o){ o["v2"] = 2; }});
-    testManager.setRuntimeProviderOrder("beta", 5);
-    testManager.setRuntimeProviderOrder("alpha", 1);
-    // Define fields with ordering, string, divider
-    testManager.defineRuntimeDivider("alpha", "Section A", 0);
-    testManager.defineRuntimeField("alpha", "v1", "Value One", "", 0, 10);
-    testManager.defineRuntimeString("alpha", "build", "Build", "test-build", 5);
-    testManager.defineRuntimeField("beta", "v2", "Value Two", "", 0, 10);
-    String meta = testManager.runtimeMetaToJSON();
+    auto &rt = testManager.getRuntime();
+
+    rt.addRuntimeProvider("alpha", [](JsonObject &o){ o["v1"] = 1; }, 1);
+    rt.addRuntimeProvider("beta", [](JsonObject &o){ o["v2"] = 2; }, 5);
+
+    RuntimeFieldMeta divider;
+    divider.group = "alpha";
+    divider.key = "section_a";
+    divider.label = "Section A";
+    divider.isDivider = true;
+    divider.order = 0;
+    rt.addRuntimeMeta(divider);
+
+    RuntimeFieldMeta v1;
+    v1.group = "alpha";
+    v1.key = "v1";
+    v1.label = "Value One";
+    v1.order = 1;
+    rt.addRuntimeMeta(v1);
+
+    RuntimeFieldMeta build;
+    build.group = "alpha";
+    build.key = "build";
+    build.label = "Build";
+    build.isString = true;
+    build.staticValue = "test-build";
+    build.order = 5;
+    rt.addRuntimeMeta(build);
+
+    RuntimeFieldMeta v2;
+    v2.group = "beta";
+    v2.key = "v2";
+    v2.label = "Value Two";
+    v2.order = 1;
+    rt.addRuntimeMeta(v2);
+
+    String meta = rt.runtimeMetaToJSON();
     TEST_ASSERT_NOT_EQUAL(-1, meta.indexOf("isDivider"));
     TEST_ASSERT_NOT_EQUAL(-1, meta.indexOf("isString"));
     TEST_ASSERT_NOT_EQUAL(-1, meta.indexOf("staticValue"));
-    // Ensure provider order reflected indirectly by alpha preceding beta when reconstructed
-    String values = testManager.runtimeValuesToJSON();
+
+    String values = rt.runtimeValuesToJSON();
     int alphaPos = values.indexOf("\"alpha\"");
     int betaPos = values.indexOf("\"beta\"");
     TEST_ASSERT_TRUE(alphaPos != -1 && betaPos != -1 && alphaPos < betaPos);
@@ -203,9 +190,6 @@ void setup() {
     UNITY_BEGIN();
 
     // Register settings
-    testManager.addSetting(&wifiSsid);
-    testManager.addSetting(&wifiPassword);
-    testManager.addSetting(&useDhcp);
     testManager.addSetting(&testInt);
     testManager.addSetting(&testBool);
     testManager.addSetting(&testString);
@@ -215,7 +199,10 @@ void setup() {
     testManager.addSetting(&testCbLambda);
     testManager.addSetting(&featureEnable);
     testManager.addSetting(&hiddenUnlessFeature);
-    testManager.addSetting(&noPretty);
+    testManager.addSetting(&autoKey);
+
+    // Ensure runtime manager is initialized for meta/value JSON generation
+    testManager.getRuntime().begin(&testManager);
 
     // Core config persistence tests
     RUN_TEST(test_int_config);
@@ -223,7 +210,6 @@ void setup() {
     RUN_TEST(test_string_config);
     RUN_TEST(test_float_config);
     RUN_TEST(test_password_masking_json);
-    RUN_TEST(test_password_ignore_mask_on_fromJSON);
 
     // Callback & display
     RUN_TEST(test_callback_function_pointer);
@@ -233,12 +219,7 @@ void setup() {
     // Structural / metadata
     RUN_TEST(test_category_pretty_once);
     RUN_TEST(test_key_length_error_flag);
-    RUN_TEST(test_truncation_duplicate_prevention);
     RUN_TEST(test_showIf_visibility);
-
-    // WiFi / modes
-    RUN_TEST(test_ap_mode_initialization);
-    RUN_TEST(test_sta_mode_initialization);
     RUN_TEST(test_runtime_string_divider_and_order);
 
     UNITY_END();

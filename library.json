@@ -46,6 +46,7 @@
       "**/.piolibdeps",
       "**/.piolibdeps/**",
       "webui/node_modules",
+      "src/main.cpp",
       ".vscode",
       ".idea",
       "*.code-workspace"
