@@ -24,8 +24,6 @@
   - Currently always "ESP32 Configuration"; should be configurable via `.setAppName(APP_NAME)` or a dedicated `.setTitle`.
 - **[Bug] Settings password prompt when password is unset**
   - If `cfg.setSettingsPassword(SETTINGS_PASSWORD);` is not set, no password should be requested.
-- **[Bug] Tab mode: apply-all/save-all not working**
-  - Works only in card mode.
 - **[Tooling] VS Code include error for `#include <BME280_I2C.h>`**
 
 ### Medium Priority Bugs/Features (Prio 5)
