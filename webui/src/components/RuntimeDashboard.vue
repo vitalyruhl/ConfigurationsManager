@@ -324,6 +324,21 @@ const displayRuntimeGroups = computed(() => {
     const aToken = normalizeGroupToken(a?.name || a?.title);
     const bToken = normalizeGroupToken(b?.name || b?.title);
 
+    // Prefer the runtime.json key insertion order (firmware provider order) when available.
+    // This keeps card order aligned with ConfigManagerRuntime provider orders.
+    const runtimeOrder = (() => {
+      const r = runtime.value && typeof runtime.value === 'object' ? runtime.value : {};
+      const keys = Object.keys(r)
+        .filter((k) => k !== 'uptime')
+        .filter((k) => r && r[k] && typeof r[k] === 'object' && !Array.isArray(r[k]));
+      const map = new Map();
+      let idx = 0;
+      for (const k of keys) {
+        map.set(normalizeGroupToken(k), idx++);
+      }
+      return map;
+    })();
+
     function hasSystemOrderOverride(fields) {
       // Allow overriding the default "system last" behavior without firmware changes:
       // any negative order value will move system back into ordered sorting.
@@ -340,6 +355,12 @@ const displayRuntimeGroups = computed(() => {
     // Default: system group always last.
     if (!aSystemOverride && aToken === 'system' && bToken !== 'system') return 1;
     if (!bSystemOverride && bToken === 'system' && aToken !== 'system') return -1;
+
+    const aRuntimePos = runtimeOrder.has(aToken) ? runtimeOrder.get(aToken) : null;
+    const bRuntimePos = runtimeOrder.has(bToken) ? runtimeOrder.get(bToken) : null;
+    if (aRuntimePos !== null && bRuntimePos !== null && aRuntimePos !== bRuntimePos) {
+      return aRuntimePos - bRuntimePos;
+    }
 
     function computeGroupOrder(groupToken, fields) {
       let minOrder = 1000;
