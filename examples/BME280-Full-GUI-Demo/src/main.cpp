@@ -455,47 +455,9 @@ void setup()
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // check for reset button on startup (but not AP mode button yet)
     SetupCheckForResetButton();
-
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // Optional: set WiFi defaults from locally defined build macros.
-    // These macros must NOT be committed to the repo (private credentials).
-    // Define them e.g. via build flags or a local secret header.
-#if defined(MY_WIFI_SSID) && defined(MY_WIFI_PASSWORD)
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
-        Serial.println("[SETUP] WiFi SSID is empty; applying MY_WIFI_* defaults");
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-
-#if defined(MY_WIFI_IP)
-        wifiSettings.staticIp.set(MY_WIFI_IP);
-        wifiSettings.useDhcp.set(false);
-#endif
-
-        // Intentionally not persisting these values by default.
-        // If you want to persist them, uncomment the next line.
-        // ConfigManager.saveAll();
-    }
-#else
-    // No MY_WIFI_* defaults compiled in -> configure via WebUI.
-#endif
-
-    // Debug information (only with verbose logging enabled)
-#if CM_ENABLE_VERBOSE_LOGGING
-    Serial.println("[DEBUG] Current WiFi settings:");
-    Serial.printf("  SSID: '%s' (length: %d)\n", wifiSettings.wifiSsid.get().c_str(), wifiSettings.wifiSsid.get().length());
-    Serial.printf("  Password: %s (length: %d)\n", wifiSettings.wifiPassword.get().isEmpty() ? "'[empty]'" : "'[set]'", wifiSettings.wifiPassword.get().length());
-    Serial.printf("  DHCP: %s\n", wifiSettings.useDhcp.get() ? "enabled" : "disabled");
-    Serial.printf("  WiFi Status: %d\n", WiFi.status());
-    Serial.printf("  WiFi Mode: %d\n", WiFi.getMode());
-#endif
-
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // check for AP mode button AFTER setting WiFi credentials
-    SetupCheckForAPModeButton();
+    
+    SetupCheckForAPModeButton(); // check for AP mode button AFTER setting WiFi credentials
 
     // perform the wifi connection
     bool startedInStationMode = SetupStartWebServer();
@@ -854,21 +816,28 @@ void setupGUI()
     // #endregion Alarms
 
 
-    // #region test injection in System Card
-        Serial.println("[GUI] Adding runtime provider: system.test");
-        CRM().addRuntimeProvider("system.test", [](JsonObject &data)
-        {
-            data["testValue"] = 42;
-        }, 99);
-
-        Serial.println("[GUI] Adding meta: system.test.testValue");
-        RuntimeFieldMeta testValueMeta;
-        testValueMeta.group = "system.test";
-        testValueMeta.key = "testValue";
-        testValueMeta.label = "Test Value";
-        testValueMeta.order = 99;
-        CRM().addRuntimeMeta(testValueMeta);
-    // #endregion test injection in System Card
+    // #region test injection example (do not override built-in system provider)
+    // NOTE: Do NOT register a custom runtime provider named "system".
+    // It will override the built-in System provider (enabled via ConfigManager.enableBuiltinSystemProvider())
+    // and you will lose the default fields (RSSI/IP/Gateway/DateTime/etc.).
+    //
+    // If you want to add test data, use a separate group/card like "system_test".
+    // If you really need to inject into the System card, the runtime engine needs provider chaining/merging.
+    //
+    // Serial.println("[GUI] Adding runtime provider: system_test");
+    // CRM().addRuntimeProvider("system_test", [](JsonObject &data)
+    // {
+    //     data["testValue"] = 42;
+    // }, 99);
+    //
+    // Serial.println("[GUI] Adding meta: system_test.testValue");
+    // RuntimeFieldMeta testValueMeta;
+    // testValueMeta.group = "system_test";
+    // testValueMeta.key = "testValue";
+    // testValueMeta.label = "Test Value";
+    // testValueMeta.order = 99;
+    // CRM().addRuntimeMeta(testValueMeta);
+    // #endregion test injection example
 
 
     Serial.println("[GUI] setupGUI() end");

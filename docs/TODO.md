@@ -20,6 +20,10 @@
 ### High Priority Bugs (Prio 1)
 
 - **[Bug] Live-view cards are not sorted by `order`**
+- **[Bug/Design] Custom runtime provider named `system` overrides built-in System provider**
+  - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
+  - Expected: allow adding extra fields without losing default System fields.
+  - Options: provider chaining/merging for identical groups, or a dedicated API to extend the built-in System provider.
 - **[Bug] Browser tab title is not configurable**
   - Currently always "ESP32 Configuration"; should be configurable via `.setAppName(APP_NAME)` or a dedicated `.setTitle`.
 - **[Bug] Settings password prompt when password is unset**
