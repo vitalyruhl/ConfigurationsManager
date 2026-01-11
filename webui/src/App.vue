@@ -19,6 +19,13 @@
         Flash
       </button>
     </div>
+    <div v-if="showHttpOnlyHint" class="http-only-hint" role="note" aria-label="HTTP only hint">
+      <div class="http-only-hint__text">
+        This device does not support HTTPS. Use
+        <a class="http-only-hint__link" :href="httpOnlyHintUrl">{{ httpOnlyHintUrl }}</a>
+      </div>
+      <button class="http-only-hint__dismiss" type="button" @click="dismissHttpOnlyHint">Dismiss</button>
+    </div>
     <div class="toast-wrapper">
       <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
         <span class="toast-msg">{{ t.message }}</span>
@@ -229,6 +236,10 @@ const canFlash = ref(false);
 const toasts = ref([]); // {id,message,type,sticky,ts}
 let toastCounter = 0;
 
+const showHttpOnlyHint = ref(false);
+const httpOnlyHintUrl = ref('');
+const HTTP_ONLY_HINT_STORAGE_KEY = 'cm.dismiss.httpOnlyHint.v1';
+
 // Detect if there is any live UI content available
 const hasLiveContent = ref(true);
 
@@ -389,6 +400,49 @@ provide("notify", notify);
 provide("updateToast", updateToast);
 provide("dismissToast", dismissToast);
 provide("fetchStoredPassword", fetchStoredPassword);
+
+function isPrivateIpv4(hostname) {
+  const m = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/.exec(hostname);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  const c = Number(m[3]);
+  const d = Number(m[4]);
+  if ([a, b, c, d].some((x) => Number.isNaN(x) || x < 0 || x > 255)) return false;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function shouldShowHttpOnlyHint() {
+  try {
+    if (localStorage.getItem(HTTP_ONLY_HINT_STORAGE_KEY) === '1') return false;
+  } catch {
+    // Ignore storage access errors
+  }
+
+  const hostname = window.location.hostname || '';
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return false;
+
+  // If the page is loaded via HTTPS (e.g., reverse proxy), still show the hint.
+  if (window.location.protocol === 'https:') return true;
+
+  // Otherwise show only for typical device-like hosts (private IPv4 / .local).
+  if (isPrivateIpv4(hostname)) return true;
+  if (hostname.toLowerCase().endsWith('.local')) return true;
+
+  return false;
+}
+
+function dismissHttpOnlyHint() {
+  showHttpOnlyHint.value = false;
+  try {
+    localStorage.setItem(HTTP_ONLY_HINT_STORAGE_KEY, '1');
+  } catch {
+    // Ignore storage access errors
+  }
+}
 
 async function loadSettings() {
   try {
@@ -823,6 +877,10 @@ function handleCanFlashChange(v) {
   canFlash.value = !!v;
 }
 onMounted(() => {
+  if (shouldShowHttpOnlyHint()) {
+    httpOnlyHintUrl.value = `http://${window.location.host}/`;
+    showHttpOnlyHint.value = true;
+  }
   loadUserTheme();
   loadSettings();
   injectVersion();
@@ -846,6 +904,41 @@ onMounted(() => {
   gap: 0.5rem;
   justify-content: center;
   margin: 1rem 0;
+}
+
+.http-only-hint {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin: -0.5rem 10px 0.75rem;
+  padding: 10px 12px;
+  background: #fff3cd;
+  border: 1px solid #ffe69c;
+  border-radius: 8px;
+  color: #6b4a00;
+  font-size: 0.9rem;
+}
+
+.http-only-hint__text {
+  line-height: 1.3;
+}
+
+.http-only-hint__link {
+  margin-left: 6px;
+  color: #034875;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.http-only-hint__dismiss {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: inherit;
+  font-weight: 600;
 }
 .tabs button {
   background: slategray;
