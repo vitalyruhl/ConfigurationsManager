@@ -1,34 +1,55 @@
 # TODO / Errors / Ideas
 
-## Current Issues to Fix
+## Current Focus
 
-- **[COMPLETED] v3.0.0 cleanup: remove feature flags & pre/post scripts**
-  - Goal: Consumer builds without `CM_ENABLE_*` flags and without PlatformIO `extra_scripts`
-  - Only logging remains configurable
-  - Examples cleaned up (no committed secrets, minimal skeleton example)
-
-- **[CURRENT] v3 stabilization & roadmap**
-  - Tracked in `docs/todo_v3.md`
-
-- **[CHORE] Convert examples to standalone PlatformIO projects** [COMPLETED]
-  - Each example now builds via its own `platformio.ini` and `src/main.cpp`
-  - Local dev uses `lib_deps = file://../..`
-  - `library.json` export excludes `**/.pio/**` to avoid recursive local installs on Windows
-  - Each example uses `[platformio] build_dir` + `libdeps_dir` outside the repo to prevent `.pio` folders under `examples/`
-  - Verified builds: `pio run -d examples/publish -e usb`, `example_min`, `bme280`, `BME280-Full-GUI-Demo`
+### v3 stabilization & roadmap
+- As of: 2026-01-09
+- UI/UX (Settings & Runtime)
+  - GUI display mode toggle: “Current” (cards) vs “Categories” (map/list view).
+  - `order` / sorting: metadata for live cards and settings categories (stable ordering).
+  - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
+- Architecture / API
+  - Library does not include the docs folder.
+  - Settings auth: remove or hard-disable legacy endpoint `/config/settings_password`.
+  - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
+  - Settings schema versioning/migration (when new fields/structure are introduced).
+- Test & CI
+  - Minimal: unit/integration test for auth + password reveal + bulk save/apply.
+  - PlatformIO CI: build matrix for at least one ESP32 env + WebUI build step.
 
 ### High Priority Bugs (Prio 1)
 
+- **[Bug] Live-view cards are not sorted by `order`**
+- **[Bug] Browser tab title is not configurable**
+  - Currently always "ESP32 Configuration"; should be configurable via `.setAppName(APP_NAME)` or a dedicated `.setTitle`.
+- **[Bug] Settings password prompt when password is unset**
+  - If `cfg.setSettingsPassword(SETTINGS_PASSWORD);` is not set, no password should be requested.
+- **[Bug] Tab mode: apply-all/save-all not working**
+  - Works only in card mode.
+- **[Tooling] VS Code include error for `#include <BME280_I2C.h>`**
 
-### Medium Priority Bugs (Prio 5)
+### Medium Priority Bugs/Features (Prio 5)
 
-- **[Bug] From project, if i set [\t-DCM_ENABLE_USER_CSS=0 and -DCM_ENABLE_STYLE_RULES=0] the styling injection is stil there** [OBSOLETE in v3.0.0]
+- **[FEATURE] Failover Wifi native support**
 
-  - v3.0.0 removes these feature flags and always enables theming/styling.
+### Low Priority Bugs/Features (Prio 10)
 
-### Low Priority Bugs/Features
+- **[FEATURE] Card layout/grid improvement**
+  - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
 
-- **[FEATURE] Automated component testing** (Prio 10)
+- **[FEATURE] v3 follow-ups**
+  - Add divider (hr-like) in full demo.
+  - Add something into the system card (full demo).
+  - Extract modules that can be imported separately:
+    - Logger: split into 3 extras (serial, MQTT, display)
+      - Check logger or GUI extra tab.
+      - Display logger: ensure buffer is cleared even when nothing is sent to the display.
+      - Check where the latest version is (solarinverter project or boilerSaver).
+    - MQTT manager (got it from solarinverter project = latest version)
+  - Copy the current ones into the dev-info folder.
+  - Check whether there are other modules that can be extracted.
+
+- **[FEATURE] Automated component testing**
 
   - Create script that checks component on/off flags
   - Ensure compilation succeeds for all flag combinations
@@ -36,6 +57,4 @@
 
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
 
-- **[FEATURE] if there are more cards, the card brocken down is under the longest card from above. It looks not fine -> remake the grid to be more flexible (Prio 10)**
 
-- **[FEATURE] Failover Wifi native support** (Prio 5)
