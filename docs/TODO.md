@@ -34,7 +34,7 @@
 
 - **[FEATURE] Card layout/grid improvement**
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
-
+- consolidate the Version-History before v3.0.0 into less detailed summary
 - **[FEATURE] v3 follow-ups**
   - Add divider (hr-like) in full demo.
   - Add something into the system card (full demo).

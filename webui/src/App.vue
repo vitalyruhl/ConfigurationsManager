@@ -202,6 +202,21 @@ function normalizeCategoryToken(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function resolveCategoryOrder(settingsObj) {
+  if (!settingsObj || typeof settingsObj !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(settingsObj, 'categoryOrder') && typeof settingsObj.categoryOrder === 'number') {
+    return settingsObj.categoryOrder;
+  }
+  for (const key in settingsObj) {
+    if (key === 'categoryPretty' || key === 'categoryOrder') continue;
+    const sd = settingsObj[key];
+    if (sd && typeof sd === 'object' && typeof sd.categoryOrder === 'number') {
+      return sd.categoryOrder;
+    }
+  }
+  return undefined;
+}
+
 const orderedSettingsCategories = computed(() => {
   const cfg = config.value;
   const entries = Object.entries(cfg || {});
@@ -211,15 +226,29 @@ const orderedSettingsCategories = computed(() => {
     const aLabel = resolveCategoryLabel(aKey, a[1]);
     const bLabel = resolveCategoryLabel(bKey, b[1]);
 
+    // Optional override via metadata
+    const aOrder = resolveCategoryOrder(a[1]);
+    const bOrder = resolveCategoryOrder(b[1]);
+    if (typeof aOrder === 'number' && typeof bOrder === 'number' && aOrder !== bOrder) return aOrder - bOrder;
+    if (typeof aOrder === 'number' && typeof bOrder !== 'number') return -1;
+    if (typeof bOrder === 'number' && typeof aOrder !== 'number') return 1;
+
     // Prefer a fixed ordering for the most important categories.
     const priorityOrder = {
       wifi: 0,
-      system: 1,
       buttons: 2,
       ntp: 3,
+      system: 1000,
     };
     const aToken = normalizeCategoryToken(aLabel) || normalizeCategoryToken(aKey);
     const bToken = normalizeCategoryToken(bLabel) || normalizeCategoryToken(bKey);
+
+    // Default: push "system" behind everything else unless categoryOrder is explicitly set.
+    if (typeof aOrder !== 'number' && typeof bOrder !== 'number') {
+      if (aToken === 'system' && bToken !== 'system') return 1;
+      if (bToken === 'system' && aToken !== 'system') return -1;
+    }
+
     const aPrio = Object.prototype.hasOwnProperty.call(priorityOrder, aToken) ? priorityOrder[aToken] : Number.POSITIVE_INFINITY;
     const bPrio = Object.prototype.hasOwnProperty.call(priorityOrder, bToken) ? priorityOrder[bToken] : Number.POSITIVE_INFINITY;
     if (aPrio !== bPrio) return aPrio - bPrio;
@@ -422,17 +451,10 @@ function shouldShowHttpOnlyHint() {
     // Ignore storage access errors
   }
 
-  const hostname = window.location.hostname || '';
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return false;
-
-  // If the page is loaded via HTTPS (e.g., reverse proxy), still show the hint.
-  if (window.location.protocol === 'https:') return true;
-
-  // Otherwise show only for typical device-like hosts (private IPv4 / .local).
-  if (isPrivateIpv4(hostname)) return true;
-  if (hostname.toLowerCase().endsWith('.local')) return true;
-
-  return false;
+  // Only show when the UI is actually loaded via HTTPS (e.g. reverse proxy).
+  // If the browser auto-upgrades to HTTPS and the device can't serve it, the page won't load
+  // and we can't show any hint here.
+  return window.location.protocol === 'https:';
 }
 
 function dismissHttpOnlyHint() {

@@ -581,7 +581,7 @@ void setupGUI()
         data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place
         data["dew"] = roundf(Dewpoint * 10.0f) / 10.0f;        // 1 decimal place
         data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
-    });
+    },2);
 
     // Define sensor display fields using addRuntimeMeta
     Serial.println("[GUI] Adding meta: sensors.temp");
@@ -635,7 +635,7 @@ void setupGUI()
     rangeMeta.order = 14;
     CRM().addRuntimeMeta(rangeMeta);
 
-    // Add status provider for connection status
+    // Add status provider for connection status directly in runtime provider (injected)
     Serial.println("[GUI] Adding runtime provider: status");
     CRM().addRuntimeProvider("status", [](JsonObject &data)
     {
@@ -647,7 +647,7 @@ void setupGUI()
     CRM().addRuntimeProvider("controls", [](JsonObject &data)
     {
         // Optionally expose control states
-    });
+    },3);
 
     // Example button
     Serial.println("[GUI] Defining runtime button: controls.testBtn");
@@ -681,6 +681,16 @@ void setupGUI()
         Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
     }, false, "", 22);
 
+    // Divider between discrete controls (buttons/toggles) and analog controls
+    Serial.println("[GUI] Adding meta divider: controls.analogDivider");
+    RuntimeFieldMeta analogDividerMeta;
+    analogDividerMeta.group = "controls";
+    analogDividerMeta.key = "analogDivider";
+    analogDividerMeta.label = "Analog";
+    analogDividerMeta.isDivider = true;
+    analogDividerMeta.order = 23;
+    CRM().addRuntimeMeta(analogDividerMeta);
+
     // Integer slider for adjustments (Note this is no persistent setting)
     static int adjustValue = 0;
     auto getAdjustValue = []() -> int { return adjustValue; };
@@ -702,7 +712,7 @@ void setupGUI()
         setAdjustValue,
         "Unit",
         "steps",
-        23
+        24
     );
 
     Serial.println("[GUI] Defining runtime int slider: controls.adjust");
@@ -717,7 +727,7 @@ void setupGUI()
         setAdjustValue,
         "UNIT",
         "steps",
-        24
+        25
     );
 
     // Float slider synchronized with the Temp setting (Temp.TCO)
@@ -739,7 +749,7 @@ void setupGUI()
         },
         "°C",
         "",
-        25
+        26
     );
 
     // Additional runtime fields as recommended
@@ -780,7 +790,7 @@ void setupGUI()
 
         data["dewpoint_risk"] = dewpointRisk;
         data["temp_low"] = tempLow;
-    });
+    },1);
 
     Serial.println("[GUI] Adding meta: alerts.connected");
     RuntimeFieldMeta connectedMeta;

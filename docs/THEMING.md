@@ -14,6 +14,10 @@ You can use either layer alone or mix them.
 const char userTheme[] PROGMEM = R"CSS(
 .rw[data-type="bool"] .val { display:none; }
 .rw[data-group="sensors"][data-key="temp"][data-state="alarm"] .val { color:#ff2222; font-weight:700; }
+.card h3 { color: orange; text-decoration: underline; font-weight: 900 !Important; font-size: 1.2rem !Important; }
+.rw[data-group="sensors"][data-key="temp"] .rw{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
 
 // 2. Register before startWebServer

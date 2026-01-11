@@ -320,31 +320,50 @@ const displayRuntimeGroups = computed(() => {
   visible.sort((a, b) => {
     const aFields = Array.isArray(a?.fields) ? a.fields : [];
     const bFields = Array.isArray(b?.fields) ? b.fields : [];
-    const aOrder = aFields.reduce((min, f) => {
-      const o = (f && typeof f.order === 'number') ? f.order : 1000;
-      return Math.min(min, o);
-    }, 1000);
-    const bOrder = bFields.reduce((min, f) => {
-      const o = (f && typeof f.order === 'number') ? f.order : 1000;
-      return Math.min(min, o);
-    }, 1000);
 
-    const aHasOrder = aOrder < 1000;
-    const bHasOrder = bOrder < 1000;
-    if (aHasOrder && bHasOrder && aOrder !== bOrder) return aOrder - bOrder;
-    if (aHasOrder !== bHasOrder) return aHasOrder ? -1 : 1;
+    function computeGroupOrder(groupToken, fields) {
+      let minOrder = 1000;
+      let hasAnyOrderNumber = false;
+      let hasNonZeroOrder = false;
+
+      for (const f of fields) {
+        if (!f || typeof f.order !== 'number') continue;
+        hasAnyOrderNumber = true;
+        minOrder = Math.min(minOrder, f.order);
+        if (f.order !== 0) hasNonZeroOrder = true;
+      }
+
+      // Special-case: most runtime fields default to order=0.
+      // For the "system" group this caused it to jump to the front.
+      // Default it to 1000 (last) unless a non-zero order is explicitly set.
+      if (groupToken === 'system' && !hasNonZeroOrder) {
+        return { hasOrder: false, order: 1000 };
+      }
+
+      const hasOrder = hasAnyOrderNumber && minOrder < 1000;
+      return { hasOrder, order: minOrder };
+    }
+
+    const aToken = normalizeGroupToken(a?.name || a?.title);
+    const bToken = normalizeGroupToken(b?.name || b?.title);
+    const aMeta = computeGroupOrder(aToken, aFields);
+    const bMeta = computeGroupOrder(bToken, bFields);
+
+    if (aMeta.hasOrder && bMeta.hasOrder && aMeta.order !== bMeta.order) return aMeta.order - bMeta.order;
+    if (aMeta.hasOrder !== bMeta.hasOrder) return aMeta.hasOrder ? -1 : 1;
 
     // Fallback ordering for groups without any explicit order.
+    // If there is no explicit ordering, push "system" behind everything else.
+    if (aToken === 'system' && bToken !== 'system') return 1;
+    if (bToken === 'system' && aToken !== 'system') return -1;
+
     const priorityOrder = {
       alerts: 0,
       sensors: 1,
       control: 2,
       controls: 2,
       controll: 2,
-      system: 3,
     };
-    const aToken = normalizeGroupToken(a?.name || a?.title);
-    const bToken = normalizeGroupToken(b?.name || b?.title);
     const aPrio = Object.prototype.hasOwnProperty.call(priorityOrder, aToken)
       ? priorityOrder[aToken]
       : Number.POSITIVE_INFINITY;
