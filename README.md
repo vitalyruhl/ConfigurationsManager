@@ -89,7 +89,7 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
        ; -DCM_ENABLE_VERBOSE_LOGGING=0
    
    lib_deps =
-       vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
+       vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
    ```
    
    > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini` for a complete example.
@@ -132,7 +132,7 @@ build_flags =
     ; -DCM_ENABLE_VERBOSE_LOGGING=0
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
+    vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
 ```
 
 > **📋 See complete examples in `examples/example_min/platformio.ini`**
@@ -405,7 +405,7 @@ build_flags =
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
+    vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
@@ -431,7 +431,7 @@ build_flags =
 	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.1.0
+    vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
