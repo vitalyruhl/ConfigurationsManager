@@ -152,6 +152,8 @@ import { ref, onMounted, provide, nextTick, computed, watch } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
+import { dbg } from "./utils/debug";
+
 function isUnsetPasswordValue(value) {
   return value === undefined || value === null || value === '' || value === '***';
 }
@@ -468,7 +470,7 @@ function dismissHttpOnlyHint() {
 
 async function loadSettings() {
   try {
-    //console.log("[Frontend] Starting loadSettings...");
+    dbg("[Frontend] Starting loadSettings...");
     
     // Firefox-compatible timeout implementation
     const fetchPromise = fetch("/config.json");
@@ -478,8 +480,8 @@ async function loadSettings() {
     
     const r = await Promise.race([fetchPromise, timeoutPromise]);
     
-    //console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
-    //console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
+    dbg(`[Frontend] Response status: ${r.status} ${r.statusText}`);
+    dbg(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
     
     if (!r.ok) {
       throw new Error(`HTTP ${r.status}: ${r.statusText}`);
@@ -488,7 +490,7 @@ async function loadSettings() {
     // Check content-length header vs actual response
     // Check content-length header vs actual response (compare bytes, not JS string length)
     const contentLength = r.headers.get('content-length');
-    //console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
+    dbg(`[Frontend] config.json - Content-Length: ${contentLength}`);
 
     const text = await r.text();
     if (contentLength) {
@@ -508,7 +510,7 @@ async function loadSettings() {
     config.value = data.config || data;
     refreshKey.value++;
     
-    //console.log("[Frontend] config.json loaded successfully");
+    dbg("[Frontend] config.json loaded successfully");
     // Re-evaluate live content availability after config loads
     checkLiveContent();
   } catch (e) {

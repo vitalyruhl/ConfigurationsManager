@@ -268,6 +268,8 @@ import RuntimeNumberInput from "./runtime/RuntimeNumberInput.vue";
 import RuntimeSlider from "./runtime/RuntimeSlider.vue";
 import RuntimeStateButton from "./runtime/RuntimeStateButton.vue";
 
+import { dbg } from "../utils/debug";
+
 const props = defineProps({
   config: {
     type: Object,
@@ -446,11 +448,11 @@ const hasVisibleAlarm = computed(() => {
 // - Enable when probe says enabled (200) OR runtime.system.otaActive === true
 // - Ignore config/meta for enabling to avoid stale states; only use config to pre-disable when explicitly false
 const canFlash = computed(() => {
-  //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
+  dbg('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
   
   // Probe is authoritative when negative
   if (otaEndpointAvailable.value === false) {
-    //console.log('[canFlash] Disabled by probe');
+    dbg('[canFlash] Disabled by probe');
     return false;
   }
 
@@ -461,14 +463,14 @@ const canFlash = computed(() => {
       Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
     ) {
       const result = !!runtime.value.system.otaActive && !flashing.value;
-      //console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
+      dbg('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
       return result;
     }
   } catch (e) {}
 
   // If endpoint probe succeeded, enable
   if (otaEndpointAvailable.value === true) {
-    //console.log('[canFlash] Enabled by probe success');
+    dbg('[canFlash] Enabled by probe success');
     return !flashing.value;
   }
 
@@ -481,12 +483,12 @@ const canFlash = computed(() => {
     typeof systemConfig.OTAEn.value !== "undefined" &&
     !systemConfig.OTAEn.value
   ) {
-    //console.log('[canFlash] Disabled by config');
+    dbg('[canFlash] Disabled by config');
     return false;
   }
 
   // Default: disabled until we know
-  //console.log('[canFlash] Disabled by default (waiting for probe)');
+  dbg('[canFlash] Disabled by default (waiting for probe)');
   return false;
 });
 
