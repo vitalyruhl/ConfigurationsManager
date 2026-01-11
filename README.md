@@ -596,8 +596,6 @@ See `docs/SMART_ROAMING.md` for complete documentation and optimization guides.
 ### Planned
 
 - HTTPS Support (original async lib does not support HTTPS)
-- add optional order number for categories to show on webinterface
-- add optional description for settings to show on webinterface as tooltip
 - add reset to default for single settings
 
 ### maybe in future
