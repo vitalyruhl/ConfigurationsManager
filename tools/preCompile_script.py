@@ -151,83 +151,28 @@ def sliders_enabled_combined() -> bool:
 	# Backward compatibility: either int or float
 	return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
 
-# v3.0.0: feature build flags removed. Always build the embedded WebUI with all runtime controls enabled.
-EMBED_WEBUI = True
+# Advanced-only: rebuild and embed WebUI only when explicitly enabled.
+# Default library consumption must NOT require Node.js or npm.
+REBUILD_WEBUI = flag_enabled('CM_WEBUI_REBUILD') or (os.environ.get('CM_WEBUI_REBUILD', '').strip() == '1')
 
-# Map firmware features to frontend env vars (fixed defaults)
-sliders_on = True
-state_btn_on = True
-buttons_on = True
-checkboxes_on = True
-num_inputs_on = True
-feature_env = {
-	'VITE_ENABLE_WS_PUSH': '1',
-	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1',
-	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1',
-	'VITE_ENABLE_SYSTEM_PROVIDER': '1',
-}
+# WebUI debug/logging (build-time). Default OFF in the committed embedded UI.
+UI_DEBUG = flag_enabled('CM_ENABLE_VERBOSE_LOGGING') or flag_enabled('CM_WEBUI_DEBUG')
 
-print(f"[extra_script] Flags: embed_webui={EMBED_WEBUI} sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")
+print(f"[extra_script] WebUI rebuild: {REBUILD_WEBUI} (UI debug: {UI_DEBUG})")
 
-def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabled: bool):
-	"""Copy either the enabled or disabled template to the target component path."""
-	target = Path(webui_path) / target_rel
-	src = Path(webui_path) / (enabled_rel if enabled else disabled_rel)
-	if not src.exists():
-		raise FileNotFoundError(f"Missing template: {src}")
-	target.write_text(src.read_text(encoding='utf-8'), encoding='utf-8')
+if not REBUILD_WEBUI:
+	print("[extra_script] CM_WEBUI_REBUILD not set -> Skipping webui build and header generation.")
+	# Nothing to do.
 
-if EMBED_WEBUI:
-	# Select appropriate component variants based on flags
-	select_component(
-		'src/components/runtime/RuntimeSlider.vue',
-		'src/components/runtime/templates/RuntimeSlider.enabled.vue',
-		'src/components/runtime/templates/RuntimeSlider.disabled.vue',
-		feature_env['VITE_ENABLE_RUNTIME_ANALOG_SLIDERS'] == '1'
-	)
-
-	select_component(
-		'src/components/runtime/RuntimeStateButton.vue',
-		'src/components/runtime/templates/RuntimeStateButton.enabled.vue',
-		'src/components/runtime/templates/RuntimeStateButton.disabled.vue',
-		feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '1'
-	)
-
-	# Action button
-	select_component(
-		'src/components/runtime/RuntimeActionButton.vue',
-		'src/components/runtime/templates/RuntimeActionButton.enabled.vue',
-		'src/components/runtime/templates/RuntimeActionButton.disabled.vue',
-		buttons_on
-	)
-
-	# Checkbox
-	select_component(
-		'src/components/runtime/RuntimeCheckbox.vue',
-		'src/components/runtime/templates/RuntimeCheckbox.enabled.vue',
-		'src/components/runtime/templates/RuntimeCheckbox.disabled.vue',
-		checkboxes_on
-	)
-
-	# Number input (optional pruning, enabled by flag default)
-	select_component(
-		'src/components/runtime/RuntimeNumberInput.vue',
-		'src/components/runtime/templates/RuntimeNumberInput.enabled.vue',
-		'src/components/runtime/templates/RuntimeNumberInput.disabled.vue',
-		num_inputs_on
-	)
-
-if EMBED_WEBUI:
-	# Ensure node modules present only when embedding
+else:
+	# Ensure node modules present only when rebuilding.
 	subprocess.run([npm_cmd, 'install'], cwd=webui_path, check=True)
 
-	# Prepare environment
+	# Prepare environment for Vite build.
 	env_vars = os.environ.copy()
-	env_vars.update(feature_env)
+	env_vars['VITE_CM_DEBUG'] = '1' if UI_DEBUG else '0'
 
-	# Passwords are transmitted in plaintext over HTTP in v3.0.0.
-
-	# 1. Build Vue app with feature env
+	# 1. Build Vue app
 	subprocess.run([npm_cmd, 'run', 'build'], cwd='webui', check=True, env=env_vars)
 
 	# 1b. Gzip compress dist/index.html to reduce flash footprint before header conversion
@@ -238,7 +183,7 @@ if EMBED_WEBUI:
 		with gzip.open(gz_path, 'wb', compresslevel=9) as gz:
 			gz.write(raw)
 
-	# 2. Generate header from built assets (invoke the moved generator in tools/)
+	# 2. Generate header from built assets
 	try:
 		# Determine project root: prefer PlatformIO env, else current working directory
 		if env is not None:
@@ -249,15 +194,9 @@ if EMBED_WEBUI:
 		generator = root_dir / 'tools' / 'webui_to_header.js'
 		if not generator.exists():
 			raise FileNotFoundError(f"Header generator not found at {generator}")
-		# Pass environment variables (feature flags etc.) to header generator
 		subprocess.run([node_exe, str(generator)], cwd=str(root_dir), check=True, env=env_vars)
 	except Exception as e:
 		raise RuntimeError(f"Failed to run webui_to_header.js: {e}")
-else:
-	# Skipping WebUI build and header generation (external UI mode)
-	print("[extra_script] CM_EMBED_WEBUI=0 -> Skipping webui build and header generation.")
-	# Overwrite header with a tiny stub to avoid accidentally keeping old embedded content
-	header_path = Path('src') / 'html_content.h'
 	stub = (
 		"#pragma once\n"
 		"#include <pgmspace.h>\n\n"
