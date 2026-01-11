@@ -321,6 +321,26 @@ const displayRuntimeGroups = computed(() => {
     const aFields = Array.isArray(a?.fields) ? a.fields : [];
     const bFields = Array.isArray(b?.fields) ? b.fields : [];
 
+    const aToken = normalizeGroupToken(a?.name || a?.title);
+    const bToken = normalizeGroupToken(b?.name || b?.title);
+
+    function hasSystemOrderOverride(fields) {
+      // Allow overriding the default "system last" behavior without firmware changes:
+      // any negative order value will move system back into ordered sorting.
+      for (const f of fields) {
+        if (!f || typeof f.order !== 'number') continue;
+        if (f.order < 0) return true;
+      }
+      return false;
+    }
+
+    const aSystemOverride = aToken === 'system' && hasSystemOrderOverride(aFields);
+    const bSystemOverride = bToken === 'system' && hasSystemOrderOverride(bFields);
+
+    // Default: system group always last.
+    if (!aSystemOverride && aToken === 'system' && bToken !== 'system') return 1;
+    if (!bSystemOverride && bToken === 'system' && aToken !== 'system') return -1;
+
     function computeGroupOrder(groupToken, fields) {
       let minOrder = 1000;
       let hasAnyOrderNumber = false;
@@ -343,9 +363,6 @@ const displayRuntimeGroups = computed(() => {
       const hasOrder = hasAnyOrderNumber && minOrder < 1000;
       return { hasOrder, order: minOrder };
     }
-
-    const aToken = normalizeGroupToken(a?.name || a?.title);
-    const bToken = normalizeGroupToken(b?.name || b?.title);
     const aMeta = computeGroupOrder(aToken, aFields);
     const bMeta = computeGroupOrder(bToken, bFields);
 
@@ -353,10 +370,6 @@ const displayRuntimeGroups = computed(() => {
     if (aMeta.hasOrder !== bMeta.hasOrder) return aMeta.hasOrder ? -1 : 1;
 
     // Fallback ordering for groups without any explicit order.
-    // If there is no explicit ordering, push "system" behind everything else.
-    if (aToken === 'system' && bToken !== 'system') return 1;
-    if (bToken === 'system' && aToken !== 'system') return -1;
-
     const priorityOrder = {
       alerts: 0,
       sensors: 1,
