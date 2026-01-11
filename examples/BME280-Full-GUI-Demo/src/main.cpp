@@ -77,7 +77,7 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
 
-#pragma region Examples
+// #region Examples
 // minimal Init
 Config<bool> testBool(ConfigOptions<bool>{
     .key = "tbool",
@@ -135,7 +135,9 @@ Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
 //--------------------------------------------------------------------------------------------------------------
 // Example: Using structures for grouped settings
 // SystemSettings configuration (structure example)
-#pragma endregion Examples
+// #endregion Examples
+
+// #region Structured Settings (System/WiFi/NTP)
 
 struct SystemSettings
 {
@@ -255,7 +257,9 @@ struct NTPSettings
 
 NTPSettings ntpSettings; // ntpSettings
 
-// region Temperature-Measurement
+// #endregion Structured Settings (System/WiFi/NTP)
+
+// #region Temperature Measurement
 
 //--------------------------------------------------------------------------------------------------------------
 // implement read temperature function and variables to show how to use live values
@@ -381,7 +385,7 @@ void SetupStartTemperatureMeasuring()
     Serial.println("[TEMP] Temperature setup completed");
 }
 
-// end region Temperature-Measurement
+// #endregion Temperature Measurement
 
 void setup()
 {
@@ -456,19 +460,28 @@ void setup()
     SetupCheckForResetButton();
 
     //----------------------------------------------------------------------------------------------------------------------------------
-    // set wifi settings if not set yet from my secret folder
-    // if (wifiSettings.wifiSsid.get().isEmpty())
-    // {
-    //     Serial.println("-------------------------------------------------------------");
-    //     Serial.println("SETUP: *** SSID is empty, setting My values *** ");
-    //     Serial.println("-------------------------------------------------------------");
-    //     wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-    //     wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-    //     wifiSettings.staticIp.set(MY_WIFI_IP);
-    //     wifiSettings.useDhcp.set(false);
-    //     ConfigManager.saveAll();
-    //     delay(1000); // Small delay
-    // }
+    // Optional: set WiFi defaults from locally defined build macros.
+    // These macros must NOT be committed to the repo (private credentials).
+    // Define them e.g. via build flags or a local secret header.
+#if defined(MY_WIFI_SSID) && defined(MY_WIFI_PASSWORD)
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+        Serial.println("[SETUP] WiFi SSID is empty; applying MY_WIFI_* defaults");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+
+#if defined(MY_WIFI_IP)
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+        wifiSettings.useDhcp.set(false);
+#endif
+
+        // Intentionally not persisting these values by default.
+        // If you want to persist them, uncomment the next line.
+        // ConfigManager.saveAll();
+    }
+#else
+    // No MY_WIFI_* defaults compiled in -> configure via WebUI.
+#endif
 
     // Debug information (only with verbose logging enabled)
 #if CM_ENABLE_VERBOSE_LOGGING
@@ -568,274 +581,295 @@ void loop()
 void setupGUI()
 {
     Serial.println("[GUI] setupGUI() start");
-    //-----------------------------------------------------------------
-    // BME280 Sensor Display with Runtime Providers
-    //-----------------------------------------------------------------
+    // #region BME280 Sensor Display with Runtime Providers
 
-    // Register sensor runtime provider for BME280 data
-    Serial.println("[GUI] Adding runtime provider: sensors");
-    CRM().addRuntimeProvider("sensors", [](JsonObject &data)
-    {
-        // Apply precision to sensor values to reduce JSON size
-        data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
-        data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place
-        data["dew"] = roundf(Dewpoint * 10.0f) / 10.0f;        // 1 decimal place
-        data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
-    },2);
+        // Register sensor runtime provider for BME280 data
+        Serial.println("[GUI] Adding runtime provider: sensors");
+        CRM().addRuntimeProvider("sensors", [](JsonObject &data)
+        {
+            // Apply precision to sensor values to reduce JSON size
+            data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
+            data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place
+            data["dew"] = roundf(Dewpoint * 10.0f) / 10.0f;        // 1 decimal place
+            data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
+        },2);
 
-    // Define sensor display fields using addRuntimeMeta
-    Serial.println("[GUI] Adding meta: sensors.temp");
-    RuntimeFieldMeta tempMeta;
-    tempMeta.group = "sensors";
-    tempMeta.key = "temp";
-    tempMeta.label = "Temperature";
-    tempMeta.unit = "°C";
-    tempMeta.precision = 1;
-    tempMeta.order = 10;
-    CRM().addRuntimeMeta(tempMeta);
+        // Define sensor display fields using addRuntimeMeta
+        Serial.println("[GUI] Adding meta: sensors.temp");
+        RuntimeFieldMeta tempMeta;
+        tempMeta.group = "sensors";
+        tempMeta.key = "temp";
+        tempMeta.label = "Temperature";
+        tempMeta.unit = "°C";
+        tempMeta.precision = 1;
+        tempMeta.order = 10;
+        CRM().addRuntimeMeta(tempMeta);
 
-    Serial.println("[GUI] Adding meta: sensors.hum");
-    RuntimeFieldMeta humMeta;
-    humMeta.group = "sensors";
-    humMeta.key = "hum";
-    humMeta.label = "Humidity";
-    humMeta.unit = "%";
-    humMeta.precision = 1;
-    humMeta.order = 11;
-    CRM().addRuntimeMeta(humMeta);
+        Serial.println("[GUI] Adding meta: sensors.hum");
+        RuntimeFieldMeta humMeta;
+        humMeta.group = "sensors";
+        humMeta.key = "hum";
+        humMeta.label = "Humidity";
+        humMeta.unit = "%";
+        humMeta.precision = 1;
+        humMeta.order = 11;
+        CRM().addRuntimeMeta(humMeta);
 
-    Serial.println("[GUI] Adding meta: sensors.dew");
-    RuntimeFieldMeta dewMeta;
-    dewMeta.group = "sensors";
-    dewMeta.key = "dew";
-    dewMeta.label = "Dewpoint";
-    dewMeta.unit = "°C";
-    dewMeta.precision = 1;
-    dewMeta.order = 12;
-    CRM().addRuntimeMeta(dewMeta);
+        Serial.println("[GUI] Adding meta: sensors.dew");
+        RuntimeFieldMeta dewMeta;
+        dewMeta.group = "sensors";
+        dewMeta.key = "dew";
+        dewMeta.label = "Dewpoint";
+        dewMeta.unit = "°C";
+        dewMeta.precision = 1;
+        dewMeta.order = 12;
+        CRM().addRuntimeMeta(dewMeta);
 
-    Serial.println("[GUI] Adding meta: sensors.pressure");
-    RuntimeFieldMeta pressureMeta;
-    pressureMeta.group = "sensors";
-    pressureMeta.key = "pressure";
-    pressureMeta.label = "Pressure";
-    pressureMeta.unit = "hPa";
-    pressureMeta.precision = 1;
-    pressureMeta.order = 13;
-    CRM().addRuntimeMeta(pressureMeta);
+        Serial.println("[GUI] Adding meta: sensors.pressure");
+        RuntimeFieldMeta pressureMeta;
+        pressureMeta.group = "sensors";
+        pressureMeta.key = "pressure";
+        pressureMeta.label = "Pressure";
+        pressureMeta.unit = "hPa";
+        pressureMeta.precision = 1;
+        pressureMeta.order = 13;
+        CRM().addRuntimeMeta(pressureMeta);
 
-    // Add runtime provider for sensor range field
-    Serial.println("[GUI] Adding meta: sensors.range");
-    RuntimeFieldMeta rangeMeta;
-    rangeMeta.group = "sensors";
-    rangeMeta.key = "range";
-    rangeMeta.label = "Sensor Range";
-    rangeMeta.unit = "V";
-    rangeMeta.precision = 1;
-    rangeMeta.order = 14;
-    CRM().addRuntimeMeta(rangeMeta);
+        // Add runtime provider for sensor range field
+        Serial.println("[GUI] Adding meta: sensors.range");
+        RuntimeFieldMeta rangeMeta;
+        rangeMeta.group = "sensors";
+        rangeMeta.key = "range";
+        rangeMeta.label = "Sensor Range";
+        rangeMeta.unit = "V";
+        rangeMeta.precision = 1;
+        rangeMeta.order = 14;
+        CRM().addRuntimeMeta(rangeMeta);
+    // #endregion BME280 Sensor Display with Runtime Providers
 
-    // Add status provider for connection status directly in runtime provider (injected)
-    Serial.println("[GUI] Adding runtime provider: status");
-    CRM().addRuntimeProvider("status", [](JsonObject &data)
-    {
-        data["connected"] = WiFi.status() == WL_CONNECTED;
-    });
+    // #region Controls Card with Buttons, Toggles, and Sliders
+        // Add interactive controls provider
+        Serial.println("[GUI] Adding runtime provider: controls");
+        CRM().addRuntimeProvider("controls", [](JsonObject &data)
+        {
+            // Optionally expose control states
+        },3);
 
-    // Add interactive controls provider
-    Serial.println("[GUI] Adding runtime provider: controls");
-    CRM().addRuntimeProvider("controls", [](JsonObject &data)
-    {
-        // Optionally expose control states
-    },3);
+        // Example button
+        Serial.println("[GUI] Defining runtime button: controls.testBtn");
+        ConfigManager.defineRuntimeButton("controls", "testBtn", "Test Button", []()
+        {
+            cbTestButton();
+        }, "", 20);
 
-    // Example button
-    Serial.println("[GUI] Defining runtime button: controls.testBtn");
-    ConfigManager.defineRuntimeButton("controls", "testBtn", "Test Button", []()
-    {
-        cbTestButton();
-    }, "", 20);
+        // Example toggle slider
+        static bool heaterState = false;
+        Serial.println("[GUI] Defining runtime checkbox: controls.heater");
+        ConfigManager.defineRuntimeCheckbox("controls", "heater", "Heater", []()
+        {
+            return heaterState;
+        }, [](bool state)
+        {
+            heaterState = state;
+            setHeaterState(state);
+        }, "", 21);
 
-    // Example toggle slider
-    static bool heaterState = false;
-    Serial.println("[GUI] Defining runtime checkbox: controls.heater");
-    ConfigManager.defineRuntimeCheckbox("controls", "heater", "Heater", []()
-    {
-        return heaterState;
-    }, [](bool state)
-    {
-        heaterState = state;
-        setHeaterState(state);
-    }, "", 21);
+        // Example state button (toggle with visual feedback)
+        static bool fanState = false;
+        Serial.println("[GUI] Defining runtime state button: controls.fan");
+        ConfigManager.defineRuntimeStateButton("controls", "fan", "Fan", []()
+        {
+            return fanState;
+        }, [](bool state)
+        {
+            fanState = state;
+            setFanState(state);
+            Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
+        }, false, "", 22);
 
-    // Example state button (toggle with visual feedback)
-    static bool fanState = false;
-    Serial.println("[GUI] Defining runtime state button: controls.fan");
-    ConfigManager.defineRuntimeStateButton("controls", "fan", "Fan", []()
-    {
-        return fanState;
-    }, [](bool state)
-    {
-        fanState = state;
-        setFanState(state);
-        Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
-    }, false, "", 22);
+        // Divider between discrete controls (buttons/toggles) and analog controls
+        Serial.println("[GUI] Adding meta divider: controls.analogDivider");
+        RuntimeFieldMeta analogDividerMeta;
+        analogDividerMeta.group = "controls";
+        analogDividerMeta.key = "analogDivider";
+        analogDividerMeta.label = "Analog";
+        analogDividerMeta.isDivider = true;
+        analogDividerMeta.order = 23;
+        CRM().addRuntimeMeta(analogDividerMeta);
 
-    // Divider between discrete controls (buttons/toggles) and analog controls
-    Serial.println("[GUI] Adding meta divider: controls.analogDivider");
-    RuntimeFieldMeta analogDividerMeta;
-    analogDividerMeta.group = "controls";
-    analogDividerMeta.key = "analogDivider";
-    analogDividerMeta.label = "Analog";
-    analogDividerMeta.isDivider = true;
-    analogDividerMeta.order = 23;
-    CRM().addRuntimeMeta(analogDividerMeta);
+        // Integer slider for adjustments (Note this is no persistent setting)
+        static int adjustValue = 0;
+        auto getAdjustValue = []() -> int { return adjustValue; };
+        auto setAdjustValue = [](int value) {
+            adjustValue = value;
+            Serial.printf("[ADJUST] Value: %d\n", value);
+        };
 
-    // Integer slider for adjustments (Note this is no persistent setting)
-    static int adjustValue = 0;
-    auto getAdjustValue = []() -> int { return adjustValue; };
-    auto setAdjustValue = [](int value) {
-        adjustValue = value;
-        Serial.printf("[ADJUST] Value: %d\n", value);
-    };
 
-    
-    Serial.println("[GUI] Defining runtime int value: controls.adjustValue");
-    ConfigManager.defineRuntimeIntValue(
-        "controls",
-        "adjustValue",
-        "Adjustment Value",
-        -10,
-        10,
-        0,
-        getAdjustValue,
-        setAdjustValue,
-        "Unit",
-        "steps",
-        24
-    );
+        Serial.println("[GUI] Defining runtime int value: controls.adjustValue");
+        ConfigManager.defineRuntimeIntValue(
+            "controls",
+            "adjustValue",
+            "Adjustment Value",
+            -10,
+            10,
+            0,
+            getAdjustValue,
+            setAdjustValue,
+            "Unit",
+            "steps",
+            24
+        );
 
-    Serial.println("[GUI] Defining runtime int slider: controls.adjust");
-    ConfigManager.defineRuntimeIntSlider(
-        "controls",
-        "adjust",
-        "Adjustment",
-        -10,
-        10,
-        0,
-        getAdjustValue,
-        setAdjustValue,
-        "UNIT",
-        "steps",
-        25
-    );
+        // Divider between analog value and slider controls
+        Serial.println("[GUI] Adding meta divider: controls.analogDivider2");
+        RuntimeFieldMeta analogDividerMeta2;
+        analogDividerMeta2.group = "controls";
+        analogDividerMeta2.key = "analogDivider2";
+        analogDividerMeta2.label = "Analog";
+        analogDividerMeta2.isDivider = true;
+        analogDividerMeta2.order = 24;
+        CRM().addRuntimeMeta(analogDividerMeta2);
 
-    // Float slider synchronized with the Temp setting (Temp.TCO)
-    Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
-    ConfigManager.defineRuntimeFloatSlider(
-        "controls",
-        "tempOffset",
-        "Temperature Offset",
-        -5.0f,
-        5.0f,
-        tempSettings.tempCorrection.get(),
-        2,
-        []() {
-            return tempSettings.tempCorrection.get();
-        },
-        [](float value) {
-            tempSettings.tempCorrection.set(value);
-            Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
-        },
-        "°C",
-        "",
-        26
-    );
+        Serial.println("[GUI] Defining runtime int slider: controls.adjust");
+        ConfigManager.defineRuntimeIntSlider(
+            "controls",
+            "adjust",
+            "Adjustment",
+            -10,
+            10,
+            0,
+            getAdjustValue,
+            setAdjustValue,
+            "UNIT",
+            "steps",
+            25
+        );
 
-    // Additional runtime fields as recommended
-    // Sensor range field for demonstration
-    static float sensorRange = 3.3f;
-    Serial.println("[GUI] Defining runtime field: sensors.range");
-    ConfigManager.defineRuntimeField("sensors", "range", "Sensor Range", "V", 0.0, 5.0);
+        // Float slider synchronized with the Temp setting (Temp.TCO)
+        Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
+        ConfigManager.defineRuntimeFloatSlider(
+            "controls",
+            "tempOffset",
+            "Temperature Offset",
+            -5.0f,
+            5.0f,
+            tempSettings.tempCorrection.get(),
+            2,
+            []() {
+                return tempSettings.tempCorrection.get();
+            },
+            [](float value) {
+                tempSettings.tempCorrection.set(value);
+                Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
+            },
+            "°C",
+            "",
+            26
+        );
 
-    // GUI Boolean alarm example (registered in runtime alarm system)
-    Serial.println("[GUI] Defining runtime alarm: alerts.overheat");
-    ConfigManager.defineRuntimeAlarm("alerts", "overheat", "Overheat Warning", []() {
-        return temperature > 40.0; // Trigger at 40°C for demo
-    });
+    // #endregion Controls Card with Buttons, Toggles, and Sliders
 
-    // Alert status display using addRuntimeMeta for boolean values (separate from runtime alarm system)
-    Serial.println("[GUI] Adding runtime provider: alerts");
-    CRM().addRuntimeProvider("alerts", [](JsonObject &data)
-    {
-        // Connection status (also shown in Alerts card)
-        data["connected"] = WiFi.status() == WL_CONNECTED;
 
-        // Runtime alarm status (registered via defineRuntimeAlarm)
-        data["overheat"] = CRM().isRuntimeAlarmActive("alerts.overheat");
+    // #region Alarms
+   
+        // GUI Boolean alarm example (registered in runtime alarm system)
+        Serial.println("[GUI] Defining runtime alarm: alerts.overheat");
+        ConfigManager.defineRuntimeAlarm("alerts", "overheat", "Overheat Warning", []() {
+            return temperature > 40.0; // Trigger at 40°C for demo
+        });
 
-        // Dewpoint risk alarm: temperature is within risk window of dewpoint
-        bool dewpointRisk = false;
-        if (!isnan(temperature) && !isnan(Dewpoint)) {
-            float riskWindow = tempSettings.dewpointRiskWindow.get(); // Default 1.5°C
-            float tempDelta = temperature - Dewpoint;
-            dewpointRisk = (tempDelta <= riskWindow) && (tempDelta >= 0);
-        }
+        // Alert status display using addRuntimeMeta for boolean values (separate from runtime alarm system)
+        Serial.println("[GUI] Adding runtime provider: alerts");
+        CRM().addRuntimeProvider("alerts", [](JsonObject &data)
+        {
+            // Connection status (also shown in Alerts card)
+            data["connected"] = WiFi.status() == WL_CONNECTED;
 
-        // Low temperature alarm: temperature below 10°C
-        bool tempLow = false;
-        if (!isnan(temperature)) {
-            tempLow = temperature < 10.0f;
-        }
+            // Runtime alarm status (registered via defineRuntimeAlarm)
+            data["overheat"] = CRM().isRuntimeAlarmActive("alerts.overheat");
 
-        data["dewpoint_risk"] = dewpointRisk;
-        data["temp_low"] = tempLow;
-    },1);
+            // Dewpoint risk alarm: temperature is within risk window of dewpoint
+            bool dewpointRisk = false;
+            if (!isnan(temperature) && !isnan(Dewpoint)) {
+                float riskWindow = tempSettings.dewpointRiskWindow.get(); // Default 1.5°C
+                float tempDelta = temperature - Dewpoint;
+                dewpointRisk = (tempDelta <= riskWindow) && (tempDelta >= 0);
+            }
 
-    Serial.println("[GUI] Adding meta: alerts.connected");
-    RuntimeFieldMeta connectedMeta;
-    connectedMeta.group = "alerts";
-    connectedMeta.key = "connected";
-    connectedMeta.label = "Connected";
-    connectedMeta.order = 29;
-    connectedMeta.isBool = true;
-    CRM().addRuntimeMeta(connectedMeta);
+            // Low temperature alarm: temperature below 10°C
+            bool tempLow = false;
+            if (!isnan(temperature)) {
+                tempLow = temperature < 10.0f;
+            }
 
-    Serial.println("[GUI] Adding meta: alerts.overheat");
-    RuntimeFieldMeta overheatMeta;
-    overheatMeta.group = "alerts";
-    overheatMeta.key = "overheat";
-    overheatMeta.label = "Overheat Warning";
-    overheatMeta.order = 28;
-    overheatMeta.isBool = true;
-    overheatMeta.hasAlarm = true;
-    overheatMeta.alarmWhenTrue = true;
-    overheatMeta.boolAlarmValue = true;
-    CRM().addRuntimeMeta(overheatMeta);
+            data["dewpoint_risk"] = dewpointRisk;
+            data["temp_low"] = tempLow;
+        },1);
 
-    Serial.println("[GUI] Adding meta: alerts.dewpoint_risk");
-    RuntimeFieldMeta dewpointRiskMeta;
-    dewpointRiskMeta.group = "alerts";
-    dewpointRiskMeta.key = "dewpoint_risk";
-    dewpointRiskMeta.label = "Condensation Risk";
-    dewpointRiskMeta.order = 30;
-    dewpointRiskMeta.isBool = true;
-    dewpointRiskMeta.hasAlarm = true;
-    dewpointRiskMeta.alarmWhenTrue = true;
-    dewpointRiskMeta.boolAlarmValue = true; // highlight when true
-    CRM().addRuntimeMeta(dewpointRiskMeta);
+        Serial.println("[GUI] Adding meta: alerts.connected");
+        RuntimeFieldMeta connectedMeta;
+        connectedMeta.group = "alerts";
+        connectedMeta.key = "connected";
+        connectedMeta.label = "Connected";
+        connectedMeta.order = 29;
+        connectedMeta.isBool = true;
+        CRM().addRuntimeMeta(connectedMeta);
 
-    Serial.println("[GUI] Adding meta: alerts.temp_low");
-    RuntimeFieldMeta tempLowMeta;
-    tempLowMeta.group = "alerts";
-    tempLowMeta.key = "temp_low";
-    tempLowMeta.label = "Low Temperature Alert";
-    tempLowMeta.order = 31;
-    tempLowMeta.isBool = true;
-    tempLowMeta.hasAlarm = true;
-    tempLowMeta.alarmWhenTrue = true;
-    tempLowMeta.boolAlarmValue = true; // highlight when true
-    CRM().addRuntimeMeta(tempLowMeta);
+        Serial.println("[GUI] Adding meta: alerts.overheat");
+        RuntimeFieldMeta overheatMeta;
+        overheatMeta.group = "alerts";
+        overheatMeta.key = "overheat";
+        overheatMeta.label = "Overheat Warning";
+        overheatMeta.order = 28;
+        overheatMeta.isBool = true;
+        overheatMeta.hasAlarm = true;
+        overheatMeta.alarmWhenTrue = true;
+        overheatMeta.boolAlarmValue = true;
+        CRM().addRuntimeMeta(overheatMeta);
+
+        Serial.println("[GUI] Adding meta: alerts.dewpoint_risk");
+        RuntimeFieldMeta dewpointRiskMeta;
+        dewpointRiskMeta.group = "alerts";
+        dewpointRiskMeta.key = "dewpoint_risk";
+        dewpointRiskMeta.label = "Condensation Risk";
+        dewpointRiskMeta.order = 30;
+        dewpointRiskMeta.isBool = true;
+        dewpointRiskMeta.hasAlarm = true;
+        dewpointRiskMeta.alarmWhenTrue = true;
+        dewpointRiskMeta.boolAlarmValue = true; // highlight when true
+        CRM().addRuntimeMeta(dewpointRiskMeta);
+
+        Serial.println("[GUI] Adding meta: alerts.temp_low");
+        RuntimeFieldMeta tempLowMeta;
+        tempLowMeta.group = "alerts";
+        tempLowMeta.key = "temp_low";
+        tempLowMeta.label = "Low Temperature Alert";
+        tempLowMeta.order = 31;
+        tempLowMeta.isBool = true;
+        tempLowMeta.hasAlarm = true;
+        tempLowMeta.alarmWhenTrue = true;
+        tempLowMeta.boolAlarmValue = true; // highlight when true
+        CRM().addRuntimeMeta(tempLowMeta);
+    // #endregion Alarms
+
+
+    // #region test injection in System Card
+        Serial.println("[GUI] Adding runtime provider: system.test");
+        CRM().addRuntimeProvider("system.test", [](JsonObject &data)
+        {
+            data["testValue"] = 42;
+        }, 99);
+
+        Serial.println("[GUI] Adding meta: system.test.testValue");
+        RuntimeFieldMeta testValueMeta;
+        testValueMeta.group = "system.test";
+        testValueMeta.key = "testValue";
+        testValueMeta.label = "Test Value";
+        testValueMeta.order = 99;
+        CRM().addRuntimeMeta(testValueMeta);
+    // #endregion test injection in System Card
+
 
     Serial.println("[GUI] setupGUI() end");
 }
