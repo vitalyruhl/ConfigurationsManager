@@ -521,6 +521,16 @@ async function switchToSettings() {
     return;
   }
 
+  // Try a silent auth probe with an empty password.
+  // This enables password-less setups without prompting the user.
+  const probe = await authenticateSettings("", { timeoutMs: 1500, silent: true });
+  if (probe.ok) {
+    showSettingsAuth.value = false;
+    activeTab.value = "settings";
+    await loadSettings();
+    return;
+  }
+
   // Show modal immediately (avoid UI delay on slow WiFi/requests)
   showSettingsAuth.value = true;
   // Focus password input after modal appears
@@ -567,9 +577,17 @@ async function injectVersion() {
   try {
     const r = await fetch("/version");
     if (!r.ok) throw new Error("Version fetch failed");
-    version.value = String(await r.text());
+    const raw = String(await r.text()).trim();
+    version.value = raw;
+
+    // Use app name from /version as the browser tab title.
+    // Expected format: "<appName> <semver>" (appName can be configured via setAppName()).
+    const m = raw.match(/^(.*)\s+(\d+\.\d+\.\d+(?:[-+].*)?)$/);
+    const appTitle = (m && m[1]) ? String(m[1]).trim() : raw;
+    document.title = appTitle && appTitle.length ? appTitle : "ESP32 Configuration";
   } catch (e) {
     version.value = "";
+    document.title = "ESP32 Configuration";
   }
 }
 async function loadUserTheme() {

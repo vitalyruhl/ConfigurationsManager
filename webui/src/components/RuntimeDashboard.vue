@@ -318,7 +318,23 @@ const displayRuntimeGroups = computed(() => {
   const visible = runtimeGroups.value.filter((group) => groupHasVisibleContent(group));
   // Stable group ordering: prefer metadata order (min field order), then title
   visible.sort((a, b) => {
-    // Prefer a fixed ordering for the most important cards.
+    const aFields = Array.isArray(a?.fields) ? a.fields : [];
+    const bFields = Array.isArray(b?.fields) ? b.fields : [];
+    const aOrder = aFields.reduce((min, f) => {
+      const o = (f && typeof f.order === 'number') ? f.order : 1000;
+      return Math.min(min, o);
+    }, 1000);
+    const bOrder = bFields.reduce((min, f) => {
+      const o = (f && typeof f.order === 'number') ? f.order : 1000;
+      return Math.min(min, o);
+    }, 1000);
+
+    const aHasOrder = aOrder < 1000;
+    const bHasOrder = bOrder < 1000;
+    if (aHasOrder && bHasOrder && aOrder !== bOrder) return aOrder - bOrder;
+    if (aHasOrder !== bHasOrder) return aHasOrder ? -1 : 1;
+
+    // Fallback ordering for groups without any explicit order.
     const priorityOrder = {
       alerts: 0,
       sensors: 1,
@@ -337,17 +353,6 @@ const displayRuntimeGroups = computed(() => {
       : Number.POSITIVE_INFINITY;
     if (aPrio !== bPrio) return aPrio - bPrio;
 
-    const aFields = Array.isArray(a?.fields) ? a.fields : [];
-    const bFields = Array.isArray(b?.fields) ? b.fields : [];
-    const aOrder = aFields.reduce((min, f) => {
-      const o = (f && typeof f.order === 'number') ? f.order : 1000;
-      return Math.min(min, o);
-    }, 1000);
-    const bOrder = bFields.reduce((min, f) => {
-      const o = (f && typeof f.order === 'number') ? f.order : 1000;
-      return Math.min(min, o);
-    }, 1000);
-    if (aOrder !== bOrder) return aOrder - bOrder;
     const aTitle = String(a?.title || a?.name || '');
     const bTitle = String(b?.title || b?.name || '');
     const titleCmp = aTitle.localeCompare(bTitle);

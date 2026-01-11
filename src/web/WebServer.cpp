@@ -534,10 +534,16 @@ void ConfigManagerWeb::setupAPIRoutes() {
         request->send(200, "application/json", resp);
     });
 
-    // Settings password endpoint - /config/settings_password (returns settings password for frontend auth)
+    // Legacy endpoint (deprecated): /config/settings_password
+    // Never return the configured password.
     server->on("/config/settings_password", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        String response = "{\"status\":\"ok\",\"password\":\"" + settingsPassword + "\"}";
-        request->send(200, "application/json", response);
+        AsyncWebServerResponse* response = request->beginResponse(
+            410,
+            "application/json",
+            "{\"status\":\"error\",\"reason\":\"deprecated\"}"
+        );
+        enableCORS(response);
+        request->send(response);
     });
 
     // Bulk apply endpoint - /config/apply_all (applies all settings to memory only)

@@ -7,6 +7,7 @@
           <input 
             type="checkbox" 
             :checked="inputValue" 
+            :name="`${category}.${keyName}`"
             @change="onCheckboxChange($event.target.checked)"
           />
           <span class="slider round"></span>
