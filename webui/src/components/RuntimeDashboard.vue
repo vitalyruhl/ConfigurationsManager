@@ -332,28 +332,29 @@ const rURIComp = encodeURIComponent;
 
 const displayRuntimeGroups = computed(() => {
   const visible = runtimeGroups.value.filter((group) => groupHasVisibleContent(group));
-  // Stable group ordering: prefer metadata order (min field order), then title
+  // Stable group ordering:
+  // 1) Prefer runtime.json key insertion order (firmware provider order)
+  // 2) Fallback: metadata-derived order for cards not present in runtime.json (e.g. extra cards)
+  // 3) Final fallback: heuristics + title
+  const runtimeOrder = (() => {
+    const r = runtime.value && typeof runtime.value === 'object' ? runtime.value : {};
+    const keys = Object.keys(r)
+      .filter((k) => k !== 'uptime')
+      .filter((k) => r && r[k] && typeof r[k] === 'object' && !Array.isArray(r[k]));
+    const map = new Map();
+    let idx = 0;
+    for (const k of keys) {
+      map.set(normalizeGroupToken(k), idx++);
+    }
+    return map;
+  })();
+
   visible.sort((a, b) => {
     const aFields = Array.isArray(a?.fields) ? a.fields : [];
     const bFields = Array.isArray(b?.fields) ? b.fields : [];
 
     const aToken = normalizeGroupToken(a?.name || a?.title);
     const bToken = normalizeGroupToken(b?.name || b?.title);
-
-    // Prefer the runtime.json key insertion order (firmware provider order) when available.
-    // This keeps card order aligned with ConfigManagerRuntime provider orders.
-    const runtimeOrder = (() => {
-      const r = runtime.value && typeof runtime.value === 'object' ? runtime.value : {};
-      const keys = Object.keys(r)
-        .filter((k) => k !== 'uptime')
-        .filter((k) => r && r[k] && typeof r[k] === 'object' && !Array.isArray(r[k]));
-      const map = new Map();
-      let idx = 0;
-      for (const k of keys) {
-        map.set(normalizeGroupToken(k), idx++);
-      }
-      return map;
-    })();
 
     function hasSystemOrderOverride(fields) {
       // Allow overriding the default "system last" behavior without firmware changes:
@@ -372,11 +373,15 @@ const displayRuntimeGroups = computed(() => {
     if (!aSystemOverride && aToken === 'system' && bToken !== 'system') return 1;
     if (!bSystemOverride && bToken === 'system' && aToken !== 'system') return -1;
 
+    // Primary ordering: runtime.json key insertion order (firmware provider order).
+    // This should align with ConfigManagerRuntime::runtimeValuesToJSON() sorting providers by provider.order.
     const aRuntimePos = runtimeOrder.has(aToken) ? runtimeOrder.get(aToken) : null;
     const bRuntimePos = runtimeOrder.has(bToken) ? runtimeOrder.get(bToken) : null;
     if (aRuntimePos !== null && bRuntimePos !== null && aRuntimePos !== bRuntimePos) {
       return aRuntimePos - bRuntimePos;
     }
+    if (aRuntimePos !== null && bRuntimePos === null) return -1;
+    if (aRuntimePos === null && bRuntimePos !== null) return 1;
 
     function computeGroupOrder(groupToken, fields) {
       let minOrder = 1000;
@@ -400,6 +405,7 @@ const displayRuntimeGroups = computed(() => {
       const hasOrder = hasAnyOrderNumber && minOrder < 1000;
       return { hasOrder, order: minOrder };
     }
+    // Secondary ordering: metadata-derived order (mainly for extra cards not present in runtime.json).
     const aMeta = computeGroupOrder(aToken, aFields);
     const bMeta = computeGroupOrder(bToken, bFields);
 
