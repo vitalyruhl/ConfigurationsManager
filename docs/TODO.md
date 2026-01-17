@@ -21,6 +21,7 @@
 
   - Goal: keep `ConfigManager` as small as possible in compile size and dependencies.
   - Suggested implementation order (one side-branch per item)
+    - Test target: use `BME280-Full-GUI-Demo` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
     1) Core settings templates / injection (WiFi/System/Buttons)
     2) Fix/extend built-in `system` runtime provider behavior
     3) Relay manager module
@@ -28,6 +29,7 @@
     5) Logging (lightweight core + optional advanced module)
     6) Refactor `SolarInverterLimiter` example to consume modules
     7) Documentation for all modules
+    8) Update other examples to use the new core settings/modules where applicable
   - Core settings templates / injection
     - WiFi settings baseline must be available immediately during initialization (same keys/categories across projects).
       - Use the `BME280-Full-GUI-Demo` WiFi struct as the baseline reference.
