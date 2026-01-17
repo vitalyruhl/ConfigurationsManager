@@ -31,6 +31,7 @@
     7) Documentation for all modules
     8) Update other examples to use the new core settings/modules where applicable
   - Core settings templates / injection
+    - [COMPLETED] Documented category merge/injection behavior in `docs/SETTINGS.md` and added `cm::CoreCategories::*` constants to avoid typos.
     - WiFi settings baseline must be available immediately during initialization (same keys/categories across projects).
       - Use the `BME280-Full-GUI-Demo` WiFi struct as the baseline reference.
       - Allow user projects to inject additional settings into the same `WiFi` category without forking the baseline.
