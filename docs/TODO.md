@@ -3,13 +3,13 @@
 ## Current Focus
 
 ### v3 stabilization & roadmap
+
 - As of: 2026-01-09
 - UI/UX (Settings & Runtime)
   - GUI display mode toggle: “Current” (cards) vs “Categories” (map/list view).
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
 - Architecture / API
-  - Library does not include the docs folder.
   - Settings auth: remove or hard-disable legacy endpoint `/config/settings_password`.
   - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
   - Settings schema versioning/migration (when new fields/structure are introduced).
@@ -19,26 +19,24 @@
 
 ### High Priority Bugs (Prio 1)
 
-- **[Bug] Live-view cards are not sorted by `order`**
-- **[Bug] Browser tab title is not configurable**
-  - Currently always "ESP32 Configuration"; should be configurable via `.setAppName(APP_NAME)` or a dedicated `.setTitle`.
-- **[Bug] Settings password prompt when password is unset**
-  - If `cfg.setSettingsPassword(SETTINGS_PASSWORD);` is not set, no password should be requested.
-- **[Bug] Tab mode: apply-all/save-all not working**
-  - Works only in card mode.
-- **[Tooling] VS Code include error for `#include <BME280_I2C.h>`**
+
+- **[Bug/Design]** Custom runtime provider named `system` overrides built-in System provider
+  - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
+  - Expected: allow adding extra fields without losing default System fields.
+  - Options: provider chaining/merging for identical groups, or a dedicated API to extend the built-in System provider.
+  - check if it possable to add/append to the system provider instead of overwriting it. (```.appendValue("system", [](JsonObject &data){data["testValue"] = 42;}, 99);``` or similar)
+- **[Tooling]** VS Code include error for `#include <BME280_I2C.h>`
 
 ### Medium Priority Bugs/Features (Prio 5)
 
-- **[FEATURE] Failover Wifi native support**
+- **[FEATURE]** Failover Wifi native support
 
 ### Low Priority Bugs/Features (Prio 10)
 
-- **[FEATURE] Card layout/grid improvement**
+- **[FEATURE]** Card layout/grid improvement
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
-
-- **[FEATURE] v3 follow-ups**
-  - Add divider (hr-like) in full demo.
+- consolidate the Version-History before v3.0.0 into less detailed summary
+- **[FEATURE]** v3 follow-ups
   - Add something into the system card (full demo).
   - Extract modules that can be imported separately:
     - Logger: split into 3 extras (serial, MQTT, display)
@@ -49,7 +47,10 @@
   - Copy the current ones into the dev-info folder.
   - Check whether there are other modules that can be extracted.
 
-- **[FEATURE] Automated component testing**
+- **[FEATURE]** Automated component testing
+- **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
+- **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
+- **[FEATURE]** add templates for common Settings, like WiFi, System, non blocking blinking LED, etc.
 
   - Create script that checks component on/off flags
   - Ensure compilation succeeds for all flag combinations
@@ -57,4 +58,27 @@
 
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
 
+### Ideas / Suggestions
 
+- **[IDEA]** what about Matter - the new standard for smart home devices?
+  - maybe add a Matter component to the library in the future?
+- **[IDEA]** what about bacNet? send data to a bacNet server like mqtt?
+
+
+### Done / Resolved (but not tested yet)
+
+- **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
+  - days is not tetsed yet
+- Library does not include the docs folder.
+- **[COMPLETED][Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
+
+### Done / Resolved
+
+- **[COMPLETED][Bug]** Settings password prompt when password is unset
+- **[COMPLETED][Bug]** Browser tab title is configurable
+  - H1 uses `.setAppName(APP_NAME)`
+  - Browser tab uses `.setAppTitle("...")`
+  - If `.setVersion(VERSION)` is set: it is appended to both
+- **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
+- **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`
+- Add divider (hr-like) in full demo.

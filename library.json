@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "keywords": "esp32, configuration, wifi, web-server, ota",
   "description": "Robust configuration management system with web interface for ESP32 and ota support.",
   "repository": {
@@ -19,6 +19,7 @@
     "include": [
       "src/*",
       "tools/*",
+      "docs/*",
       "examples/*",
       "webui/index.html",
       "webui/vite.config.mjs",

@@ -413,7 +413,7 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             localtime_r(&now, &tmnow);
             char buf[24];
             // Format: YYYY-MM-DDTHH:MM:SS
-            strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tmnow);
+            strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tmnow);
             obj["dateTime"] = buf;
         }
 #endif
@@ -454,20 +454,20 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         };
 
         // Orders 0-2 are used by app_name/app_version/build_date defined in main.cpp
-        upsertMeta("rssi", "WiFi RSSI", "dBm", 3, false, false, 0);
-        upsertMeta("rssiTxt", "Signal", "", 4, false, true, 0);
-        upsertMeta("localIP", "Local IP", "", 5, false, true, 0);
-        upsertMeta("gateway", "Gateway", "", 6, false, true, 0);
-        upsertMeta("routerMAC", "Router MAC", "", 7, false, true, 0);
-        upsertMeta("channel", "WiFi Channel", "", 8, false, false, 0);
+        upsertMeta("wifiConnected", "Wifi Connected", "", 3, true);
+        upsertMeta("rssi", "WiFi RSSI", "dBm", 4, false, false, 0);
+        upsertMeta("rssiTxt", "Signal", "", 5, false, true, 0);
+        upsertMeta("localIP", "Local IP", "", 6, false, true, 0);
+        upsertMeta("gateway", "Gateway", "", 7, false, true, 0);
+        upsertMeta("routerMAC", "Router MAC", "", 8, false, true, 0);
+        upsertMeta("channel", "WiFi Channel", "", 9, false, false, 0);
 
-    // Connectivity and OTA state (booleans)
-        upsertMeta("wifiConnected", "WifiConnected", "", 9, true);
+        // Connectivity and OTA state (booleans)
         upsertMeta("allowOTA", "AllowOTA", "", 10, true);
         upsertMeta("otaActive", "OtaActive", "", 11, true);
 
 #if CM_ENABLE_SYSTEM_TIME
-    upsertMeta("dateTime", "Date/Time", "", 8, false, true, 0);
+        upsertMeta("dateTime", "Date/Time", "", 12, false, true, 0);
 #endif
 
         // System numeric stats

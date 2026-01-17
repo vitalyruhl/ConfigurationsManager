@@ -8,6 +8,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Provide detailed explanations only when explicitly asked
 
 - Semi-automatic Workflow Guidelines:
+  - User changes are sacred: Never revert/overwrite user edits without asking first.
   - Confirm-before-write: If requirements are ambiguous or the change impacts multiple subsystems/files, ask 1-3 precise clarifying questions (or propose 2-3 options) before editing files.
   - One side-branch at a time: Do not work on more than one side-branch simultaneously.
   - Step-by-step workflow: Implement changes incrementally in small steps: fix -> verify -> commit -> continue.
@@ -21,6 +22,11 @@ you are my coding assistant. Follow the instructions in this file carefully when
 - Git Workflow Guidelines:
   - Never change main directly: For future work, do not implement changes while the active branch is main/master. If the active branch is main/master, emit a [WARNING] and propose 2-3 suitable branch names before making any edits.
   - Exception (docs-only TODO updates): If the only changes are documentation TODO files (e.g. docs/TODO.md, docs/todo_*.md), direct commits to main are allowed.
+  - Git read-only commands are allowed without asking: Examples: `git status`, `git diff`, `git log`, `git show`, `git branch`, `git remote -v`.
+  - Git commands that can modify the working tree/index/history still require confirmation: Examples: `git add`, `git commit`, `git switch/checkout`, `git reset`, `git merge`, `git rebase`, `git clean`, `git stash`, `git cherry-pick`.
+  - Command execution style:
+    - For Git commands, do NOT prepend `Set-Location ...;` (just run e.g. `git status -sb`).
+    - Only change directories when required for non-git commands (e.g. WebUI/PlatformIO in examples) and use `Push-Location`/`Pop-Location` to avoid leaving the terminal in a different folder.
   - Large changes require a clean baseline: Before starting larger changes (multi-file refactor, settings/storage/OTA/security, or anything that could take >30 minutes), ensure the current work is saved in git (commit or stash) so changes stay reviewable and reversible.
   - Branch naming check: Verify the active branch name matches the change topic. If it does not, emit a [WARNING] and propose 2-3 suitable branch names.
   - GitHub CLI preferred: If GitHub-related actions are needed (create/view PRs, check CI status, view issues), prefer using GitHub CLI (gh) when available.
@@ -53,6 +59,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Mock implementations for testing
 
 - ESP32 / PlatformIO Project Guidelines:
+  - Build target rule: For testing/flashing, use the example `examples/BME280-Full-GUI-Demo` by default unless the user explicitly requests another target. For publishing/release verification, build the minimal/root project first.
   - Build validation: Always run the relevant PlatformIO build for at least one ESP32 environment from platformio.ini (e.g. "pio run -e <env>"). If tests are affected, also run "pio test -e <env>".
   - Memory/flash safety: After changes to WebUI/HTML content or large strings, verify binary size and memory behavior (heap/PSRAM) to avoid runtime instability on ESP32.
   - Settings migration: Any change to the settings structure must be backwards-compatible (defensive defaults) and should include a migration/versioning strategy to prevent OTA updates from breaking existing devices.
@@ -103,6 +110,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Production code should always fetch real data from APIs - mock data only for testing when specifically requested
 
 - Executable Path Policy:
+  - Scope note: The full-path rule applies to PowerShell commands that invoke executables (especially when paths may contain spaces). It does NOT apply to git commands (e.g. `git status`, `git diff`, `git commit`) which can be run normally.
   - ALWAYS use full absolute paths for executables to prevent PowerShell path confusion
   - CRITICAL: Use PowerShell call operator (&) when using quoted full paths, OR change directory first and use relative paths
   - NEVER use relative paths like .\Release\executable.exe without changing directory first

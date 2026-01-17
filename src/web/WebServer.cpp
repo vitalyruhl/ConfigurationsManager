@@ -168,6 +168,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
         
         request->send(200, "text/plain", payload);
     });
+
+    // App info endpoint (JSON) consumed by the WebUI.
+    // Allows separate H1 (appName) and browser tab title (appTitle).
+    server->on("/appinfo", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        DynamicJsonDocument out(256);
+        out["appName"] = (configManager && configManager->getAppName().length()) ? configManager->getAppName() : String("");
+        out["appTitle"] = (configManager && configManager->getAppTitle().length()) ? configManager->getAppTitle() : String("");
+        out["version"] = (configManager && configManager->getVersion().length()) ? configManager->getVersion() : String("");
+        String resp;
+        serializeJson(out, resp);
+
+        AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
+        enableCORS(response);
+        request->send(response);
+    });
     // Debug route to catch any config requests with body handling
         server->on("/config_raw", HTTP_ANY,
         [this](AsyncWebServerRequest* request) {
@@ -534,10 +549,16 @@ void ConfigManagerWeb::setupAPIRoutes() {
         request->send(200, "application/json", resp);
     });
 
-    // Settings password endpoint - /config/settings_password (returns settings password for frontend auth)
+    // Legacy endpoint (deprecated): /config/settings_password
+    // Never return the configured password.
     server->on("/config/settings_password", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        String response = "{\"status\":\"ok\",\"password\":\"" + settingsPassword + "\"}";
-        request->send(200, "application/json", response);
+        AsyncWebServerResponse* response = request->beginResponse(
+            410,
+            "application/json",
+            "{\"status\":\"error\",\"reason\":\"deprecated\"}"
+        );
+        enableCORS(response);
+        request->send(response);
     });
 
     // Bulk apply endpoint - /config/apply_all (applies all settings to memory only)

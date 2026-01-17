@@ -180,7 +180,7 @@
           v-if="group.name === 'system' && runtime.uptime !== undefined"
           class="uptime"
         >
-          Uptime: {{ Math.floor((runtime.uptime || 0) / 1000) }} s
+          Uptime: {{ formatUptime(runtime.uptime) }}
         </p>
         <p
           v-if="
@@ -299,6 +299,22 @@ const savedOtaPassword = ref('');
 
 const builtinSystemHiddenFields = new Set(["loopAvg", "otaActive"]);
 
+function formatUptime(uptimeMs) {
+  const ms = Number(uptimeMs);
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 function normalizeGroupToken(value) {
   return String(value || '')
     .toLowerCase()
@@ -316,19 +332,94 @@ const rURIComp = encodeURIComponent;
 
 const displayRuntimeGroups = computed(() => {
   const visible = runtimeGroups.value.filter((group) => groupHasVisibleContent(group));
-  // Stable group ordering: prefer metadata order (min field order), then title
+  // Stable group ordering:
+  // 1) Prefer runtime.json key insertion order (firmware provider order)
+  // 2) Fallback: metadata-derived order for cards not present in runtime.json (e.g. extra cards)
+  // 3) Final fallback: heuristics + title
+  const runtimeOrder = (() => {
+    const r = runtime.value && typeof runtime.value === 'object' ? runtime.value : {};
+    const keys = Object.keys(r)
+      .filter((k) => k !== 'uptime')
+      .filter((k) => r && r[k] && typeof r[k] === 'object' && !Array.isArray(r[k]));
+    const map = new Map();
+    let idx = 0;
+    for (const k of keys) {
+      map.set(normalizeGroupToken(k), idx++);
+    }
+    return map;
+  })();
+
   visible.sort((a, b) => {
-    // Prefer a fixed ordering for the most important cards.
+    const aFields = Array.isArray(a?.fields) ? a.fields : [];
+    const bFields = Array.isArray(b?.fields) ? b.fields : [];
+
+    const aToken = normalizeGroupToken(a?.name || a?.title);
+    const bToken = normalizeGroupToken(b?.name || b?.title);
+
+    function hasSystemOrderOverride(fields) {
+      // Allow overriding the default "system last" behavior without firmware changes:
+      // any negative order value will move system back into ordered sorting.
+      for (const f of fields) {
+        if (!f || typeof f.order !== 'number') continue;
+        if (f.order < 0) return true;
+      }
+      return false;
+    }
+
+    const aSystemOverride = aToken === 'system' && hasSystemOrderOverride(aFields);
+    const bSystemOverride = bToken === 'system' && hasSystemOrderOverride(bFields);
+
+    // Default: system group always last.
+    if (!aSystemOverride && aToken === 'system' && bToken !== 'system') return 1;
+    if (!bSystemOverride && bToken === 'system' && aToken !== 'system') return -1;
+
+    // Primary ordering: runtime.json key insertion order (firmware provider order).
+    // This should align with ConfigManagerRuntime::runtimeValuesToJSON() sorting providers by provider.order.
+    const aRuntimePos = runtimeOrder.has(aToken) ? runtimeOrder.get(aToken) : null;
+    const bRuntimePos = runtimeOrder.has(bToken) ? runtimeOrder.get(bToken) : null;
+    if (aRuntimePos !== null && bRuntimePos !== null && aRuntimePos !== bRuntimePos) {
+      return aRuntimePos - bRuntimePos;
+    }
+    if (aRuntimePos !== null && bRuntimePos === null) return -1;
+    if (aRuntimePos === null && bRuntimePos !== null) return 1;
+
+    function computeGroupOrder(groupToken, fields) {
+      let minOrder = 1000;
+      let hasAnyOrderNumber = false;
+      let hasNonZeroOrder = false;
+
+      for (const f of fields) {
+        if (!f || typeof f.order !== 'number') continue;
+        hasAnyOrderNumber = true;
+        minOrder = Math.min(minOrder, f.order);
+        if (f.order !== 0) hasNonZeroOrder = true;
+      }
+
+      // Special-case: most runtime fields default to order=0.
+      // For the "system" group this caused it to jump to the front.
+      // Default it to 1000 (last) unless a non-zero order is explicitly set.
+      if (groupToken === 'system' && !hasNonZeroOrder) {
+        return { hasOrder: false, order: 1000 };
+      }
+
+      const hasOrder = hasAnyOrderNumber && minOrder < 1000;
+      return { hasOrder, order: minOrder };
+    }
+    // Secondary ordering: metadata-derived order (mainly for extra cards not present in runtime.json).
+    const aMeta = computeGroupOrder(aToken, aFields);
+    const bMeta = computeGroupOrder(bToken, bFields);
+
+    if (aMeta.hasOrder && bMeta.hasOrder && aMeta.order !== bMeta.order) return aMeta.order - bMeta.order;
+    if (aMeta.hasOrder !== bMeta.hasOrder) return aMeta.hasOrder ? -1 : 1;
+
+    // Fallback ordering for groups without any explicit order.
     const priorityOrder = {
       alerts: 0,
       sensors: 1,
       control: 2,
       controls: 2,
       controll: 2,
-      system: 3,
     };
-    const aToken = normalizeGroupToken(a?.name || a?.title);
-    const bToken = normalizeGroupToken(b?.name || b?.title);
     const aPrio = Object.prototype.hasOwnProperty.call(priorityOrder, aToken)
       ? priorityOrder[aToken]
       : Number.POSITIVE_INFINITY;
@@ -337,17 +428,6 @@ const displayRuntimeGroups = computed(() => {
       : Number.POSITIVE_INFINITY;
     if (aPrio !== bPrio) return aPrio - bPrio;
 
-    const aFields = Array.isArray(a?.fields) ? a.fields : [];
-    const bFields = Array.isArray(b?.fields) ? b.fields : [];
-    const aOrder = aFields.reduce((min, f) => {
-      const o = (f && typeof f.order === 'number') ? f.order : 1000;
-      return Math.min(min, o);
-    }, 1000);
-    const bOrder = bFields.reduce((min, f) => {
-      const o = (f && typeof f.order === 'number') ? f.order : 1000;
-      return Math.min(min, o);
-    }, 1000);
-    if (aOrder !== bOrder) return aOrder - bOrder;
     const aTitle = String(a?.title || a?.name || '');
     const bTitle = String(b?.title || b?.name || '');
     const titleCmp = aTitle.localeCompare(bTitle);

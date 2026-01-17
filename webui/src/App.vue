@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 id="mainHeader" class="ta-center">{{ version }}</h1>
+    <h1 id="mainHeader" class="ta-center">{{ headerTitle }}</h1>
     <div class="tabs">
       <button
         v-if="hasLiveContent"
@@ -18,6 +18,13 @@
       <button class="flash-btn" @click="startFlash" :disabled="!canFlash">
         Flash
       </button>
+    </div>
+    <div v-if="showHttpOnlyHint" class="http-only-hint" role="note" aria-label="HTTP only hint">
+      <div class="http-only-hint__text">
+        This device does not support HTTPS. Use
+        <a class="http-only-hint__link" :href="httpOnlyHintUrl">{{ httpOnlyHintUrl }}</a>
+      </div>
+      <button class="http-only-hint__dismiss" type="button" @click="dismissHttpOnlyHint">Dismiss</button>
     </div>
     <div class="toast-wrapper">
       <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
@@ -165,7 +172,14 @@ async function processValueForTransmission(category, key, value, settingData) {
 const config = ref({});
 const refreshKey = ref(0);
 const version = ref("");
+const appName = ref("");
+const appTitle = ref("");
 const refreshing = ref(false);
+
+const headerTitle = computed(() => {
+  const base = (appName.value && appName.value.length) ? appName.value : "ConfigManager";
+  return (version.value && version.value.length) ? `${base} ${version.value}` : base;
+});
 
 function resolveCategoryLabel(categoryKey, settingsObj) {
   if (
@@ -195,6 +209,21 @@ function normalizeCategoryToken(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function resolveCategoryOrder(settingsObj) {
+  if (!settingsObj || typeof settingsObj !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(settingsObj, 'categoryOrder') && typeof settingsObj.categoryOrder === 'number') {
+    return settingsObj.categoryOrder;
+  }
+  for (const key in settingsObj) {
+    if (key === 'categoryPretty' || key === 'categoryOrder') continue;
+    const sd = settingsObj[key];
+    if (sd && typeof sd === 'object' && typeof sd.categoryOrder === 'number') {
+      return sd.categoryOrder;
+    }
+  }
+  return undefined;
+}
+
 const orderedSettingsCategories = computed(() => {
   const cfg = config.value;
   const entries = Object.entries(cfg || {});
@@ -204,15 +233,29 @@ const orderedSettingsCategories = computed(() => {
     const aLabel = resolveCategoryLabel(aKey, a[1]);
     const bLabel = resolveCategoryLabel(bKey, b[1]);
 
+    // Optional override via metadata
+    const aOrder = resolveCategoryOrder(a[1]);
+    const bOrder = resolveCategoryOrder(b[1]);
+    if (typeof aOrder === 'number' && typeof bOrder === 'number' && aOrder !== bOrder) return aOrder - bOrder;
+    if (typeof aOrder === 'number' && typeof bOrder !== 'number') return -1;
+    if (typeof bOrder === 'number' && typeof aOrder !== 'number') return 1;
+
     // Prefer a fixed ordering for the most important categories.
     const priorityOrder = {
       wifi: 0,
-      system: 1,
       buttons: 2,
       ntp: 3,
+      system: 1000,
     };
     const aToken = normalizeCategoryToken(aLabel) || normalizeCategoryToken(aKey);
     const bToken = normalizeCategoryToken(bLabel) || normalizeCategoryToken(bKey);
+
+    // Default: push "system" behind everything else unless categoryOrder is explicitly set.
+    if (typeof aOrder !== 'number' && typeof bOrder !== 'number') {
+      if (aToken === 'system' && bToken !== 'system') return 1;
+      if (bToken === 'system' && aToken !== 'system') return -1;
+    }
+
     const aPrio = Object.prototype.hasOwnProperty.call(priorityOrder, aToken) ? priorityOrder[aToken] : Number.POSITIVE_INFINITY;
     const bPrio = Object.prototype.hasOwnProperty.call(priorityOrder, bToken) ? priorityOrder[bToken] : Number.POSITIVE_INFINITY;
     if (aPrio !== bPrio) return aPrio - bPrio;
@@ -228,6 +271,10 @@ const runtimeDashboard = ref(null);
 const canFlash = ref(false);
 const toasts = ref([]); // {id,message,type,sticky,ts}
 let toastCounter = 0;
+
+const showHttpOnlyHint = ref(false);
+const httpOnlyHintUrl = ref('');
+const HTTP_ONLY_HINT_STORAGE_KEY = 'cm.dismiss.httpOnlyHint.v1';
 
 // Detect if there is any live UI content available
 const hasLiveContent = ref(true);
@@ -275,6 +322,15 @@ function isSettingsAuthTokenValid() {
     settingsAuthToken.value.length > 0 &&
     Date.now() < settingsAuthTokenExpiresAtMs.value
   );
+}
+
+async function ensureSettingsAuthToken(opts = {}) {
+  const timeoutMs = (opts && typeof opts.timeoutMs === 'number') ? opts.timeoutMs : 1500;
+  if (isSettingsAuthTokenValid()) return true;
+
+  // Password-less setups: try to authenticate silently with empty password
+  const probe = await authenticateSettings("", { timeoutMs, silent: true });
+  return !!probe.ok;
 }
 
 async function authenticateSettings(password, opts = {}) {
@@ -325,8 +381,8 @@ async function authenticateSettings(password, opts = {}) {
 }
 
 async function fetchStoredPassword(category, key) {
-  if (!isSettingsAuthTokenValid()) {
-    // Do not auto-auth with an empty password.
+  const ok = await ensureSettingsAuthToken({ timeoutMs: 1500 });
+  if (!ok) {
     settingsAuthenticated.value = false;
     showSettingsAuth.value = true;
     throw new Error("Not authenticated");
@@ -389,6 +445,42 @@ provide("notify", notify);
 provide("updateToast", updateToast);
 provide("dismissToast", dismissToast);
 provide("fetchStoredPassword", fetchStoredPassword);
+
+function isPrivateIpv4(hostname) {
+  const m = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/.exec(hostname);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  const c = Number(m[3]);
+  const d = Number(m[4]);
+  if ([a, b, c, d].some((x) => Number.isNaN(x) || x < 0 || x > 255)) return false;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function shouldShowHttpOnlyHint() {
+  try {
+    if (localStorage.getItem(HTTP_ONLY_HINT_STORAGE_KEY) === '1') return false;
+  } catch {
+    // Ignore storage access errors
+  }
+
+  // Only show when the UI is actually loaded via HTTPS (e.g. reverse proxy).
+  // If the browser auto-upgrades to HTTPS and the device can't serve it, the page won't load
+  // and we can't show any hint here.
+  return window.location.protocol === 'https:';
+}
+
+function dismissHttpOnlyHint() {
+  showHttpOnlyHint.value = false;
+  try {
+    localStorage.setItem(HTTP_ONLY_HINT_STORAGE_KEY, '1');
+  } catch {
+    // Ignore storage access errors
+  }
+}
 
 async function loadSettings() {
   try {
@@ -521,6 +613,16 @@ async function switchToSettings() {
     return;
   }
 
+  // Try a silent auth probe with an empty password.
+  // This enables password-less setups without prompting the user.
+  const probe = await authenticateSettings("", { timeoutMs: 1500, silent: true });
+  if (probe.ok) {
+    showSettingsAuth.value = false;
+    activeTab.value = "settings";
+    await loadSettings();
+    return;
+  }
+
   // Show modal immediately (avoid UI delay on slow WiFi/requests)
   showSettingsAuth.value = true;
   // Focus password input after modal appears
@@ -565,11 +667,36 @@ function cancelSettingsAuth() {
 }
 async function injectVersion() {
   try {
-    const r = await fetch("/version");
-    if (!r.ok) throw new Error("Version fetch failed");
-    version.value = String(await r.text());
+    // Preferred: structured app info
+    const r = await fetch("/appinfo");
+    if (r.ok) {
+      const info = await r.json().catch(() => ({}));
+      appName.value = info && typeof info.appName === 'string' ? info.appName.trim() : "";
+      appTitle.value = info && typeof info.appTitle === 'string' ? info.appTitle.trim() : "";
+      version.value = info && typeof info.version === 'string' ? info.version.trim() : "";
+
+      const tabBase = (appTitle.value && appTitle.value.length)
+        ? appTitle.value
+        : ((appName.value && appName.value.length) ? appName.value : "ESP32 Configuration");
+      document.title = (version.value && version.value.length) ? `${tabBase} ${version.value}` : tabBase;
+      return;
+    }
+
+    // Fallback: legacy /version (plain text "<name> <semver>")
+    const r2 = await fetch("/version");
+    if (!r2.ok) throw new Error("Version fetch failed");
+    const raw = String(await r2.text()).trim();
+    const m = raw.match(/^(.*)\s+(\d+\.\d+\.\d+(?:[-+].*)?)$/);
+    const legacyName = (m && m[1]) ? String(m[1]).trim() : raw;
+    const legacyVer = (m && m[2]) ? String(m[2]).trim() : "";
+    appName.value = legacyName;
+    version.value = legacyVer;
+    document.title = (legacyVer && legacyVer.length) ? `${legacyName} ${legacyVer}` : legacyName;
   } catch (e) {
+    appName.value = "";
+    appTitle.value = "";
     version.value = "";
+    document.title = "ESP32 Configuration";
   }
 }
 async function loadUserTheme() {
@@ -805,6 +932,10 @@ function handleCanFlashChange(v) {
   canFlash.value = !!v;
 }
 onMounted(() => {
+  if (shouldShowHttpOnlyHint()) {
+    httpOnlyHintUrl.value = `http://${window.location.host}/`;
+    showHttpOnlyHint.value = true;
+  }
   loadUserTheme();
   loadSettings();
   injectVersion();
@@ -828,6 +959,41 @@ onMounted(() => {
   gap: 0.5rem;
   justify-content: center;
   margin: 1rem 0;
+}
+
+.http-only-hint {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin: -0.5rem 10px 0.75rem;
+  padding: 10px 12px;
+  background: #fff3cd;
+  border: 1px solid #ffe69c;
+  border-radius: 8px;
+  color: #6b4a00;
+  font-size: 0.9rem;
+}
+
+.http-only-hint__text {
+  line-height: 1.3;
+}
+
+.http-only-hint__link {
+  margin-left: 6px;
+  color: #034875;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.http-only-hint__dismiss {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: inherit;
+  font-weight: 600;
 }
 .tabs button {
   background: slategray;
