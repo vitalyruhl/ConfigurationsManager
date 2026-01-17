@@ -104,6 +104,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Production code should always fetch real data from APIs - mock data only for testing when specifically requested
 
 - Executable Path Policy:
+  - Scope note: The full-path rule applies to PowerShell commands that invoke executables (especially when paths may contain spaces). It does NOT apply to git commands (e.g. `git status`, `git diff`, `git commit`) which can be run normally.
   - ALWAYS use full absolute paths for executables to prevent PowerShell path confusion
   - CRITICAL: Use PowerShell call operator (&) when using quoted full paths, OR change directory first and use relative paths
   - NEVER use relative paths like .\Release\executable.exe without changing directory first
