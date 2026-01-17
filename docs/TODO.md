@@ -21,66 +21,42 @@
 
   - Goal: keep `ConfigManager` as small as possible in compile size and dependencies.
   - Suggested implementation order (one side-branch per item)
-    - Test target: use `BME280-Full-GUI-Demo` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
-    1) Core settings templates / injection (WiFi/System/Buttons)
-    2) Fix/extend built-in `system` runtime provider behavior
-    3) Relay manager module
-    4) MQTT manager module (+ baseline settings + ordering/injection)
-    5) Logging (lightweight core + optional advanced module)
-    6) Refactor `SolarInverterLimiter` example to consume modules
-    7) Documentation for all modules
-    8) Update other examples to use the new core settings/modules where applicable
-  - Core settings templates / injection
-    - [COMPLETED] Documented category merge/injection behavior in `docs/SETTINGS.md` and added `cm::CoreCategories::*` constants to avoid typos.
-    - WiFi settings baseline must be available immediately during initialization (same keys/categories across projects).
-      - Use the `BME280-Full-GUI-Demo` WiFi struct as the baseline reference.
-      - Allow user projects to inject additional settings into the same `WiFi` category without forking the baseline.
-    - System settings baseline must be available immediately during initialization.
-      - Use a stable default set equivalent to the common `SystemSettings` struct:
-        - `allowOTA`, `otaPassword`, `wifiRebootTimeoutMin`, `version`
-      - Goal: shrink example `main.cpp` by removing repeated boilerplate.
-    - Button / IO core settings must be available immediately during initialization.
-      - Provide a baseline equivalent to `ButtonSettings` (`apModePin`, `resetDefaultsPin`, ...).
-      - Consider IO preset vs settings ownership:
-        - Allow a compile-time preset for boot-critical pins (e.g. default AP-mode pin = 13) that is used very early.
-        - Still expose the pins as settings so they can be re-mapped in the GUI later.
-        - Support inversion/active-low/active-high so the boot check can be configured safely.
-    - Treat this as a dedicated refactor item (clean API + stable ordering).
-  - **[Bug/Design]** Custom runtime provider named `system` overrides built-in System provider
-    - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
-    - Expected: allow adding extra fields without losing default System fields.
-    - Options: provider chaining/merging for identical groups, or a dedicated API to extend the built-in System provider.
-    - check if it possable to add/append to the system provider instead of overwriting it. (```.appendValue("system", [](JsonObject &data){data["testValue"] = 42;}, 99);``` or similar)
-  - Relays
-    - Turn the current `relay(s).h` idea into a proper relay manager class that can be "married" with `ConfigManager`.
-      - Settings are owned by `ConfigManager` (pin, active-low, enabled, etc.).
-      - Runtime API for code: e.g. `relay.set("fan", true)` / `relay.get("fan")`.
-      - Support callbacks/on-change handling so GPIO changes happen when settings change.
-      - Do not hard-couple the module to example-specific `settings.h`; use a clean API/config structure.
-  - MQTT
-    - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
-    - Ensure the core library does not require MQTT dependencies unless the module is included/used.
-    - Core settings auto-load (when the module is used)
-      - Provide a module-owned settings bundle that registers a stable, reusable MQTT settings baseline:
-        - `mqtt_port`, `mqtt_server`, `mqtt_username`, `mqtt_password`
-        - `publishTopicBase`
-        - `mqttPublishPeriodSec`, `mqttListenPeriodSec`
-        - `enableMQTT`
-      - Ensure these settings exist immediately after module initialization (no extra boilerplate in user code).
-    - Publish items ordering / injection
-      - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
-      - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
-  - Logging
-    - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
-    - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
-      - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
-      - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
-      - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
-  - Example
-    - Refactor the `SolarInverterLimiter` example to use the new optional modules.
-    - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
-  - Documentation
-    - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
+    - Test target: use `BME280-Full-GUI-Demo-Core` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
+    1) Fix/extend built-in `system` runtime provider behavior
+       - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
+       - Expected: allow adding extra fields without losing default System fields.
+       - Options: provider chaining/merging for identical groups, or a dedicated API to extend the built-in System provider.
+       - Check if it is possible to add/append to the system provider instead of overwriting it (e.g. `.appendValue("system", [](JsonObject &data){ data["testValue"] = 42; }, 99);`).
+    2) Relay manager module
+       - Turn the current `relay(s).h` idea into a proper relay manager class that can be "married" with `ConfigManager`.
+         - Settings are owned by `ConfigManager` (pin, active-low, enabled, etc.).
+         - Runtime API for code: e.g. `relay.set("fan", true)` / `relay.get("fan")`.
+         - Support callbacks/on-change handling so GPIO changes happen when settings change.
+         - Do not hard-couple the module to example-specific `settings.h`; use a clean API/config structure.
+    3) MQTT manager module (+ baseline settings + ordering/injection)
+       - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
+       - Ensure the core library does not require MQTT dependencies unless the module is included/used.
+       - Core settings auto-load (when the module is used)
+         - Provide a module-owned settings bundle that registers a stable, reusable MQTT settings baseline:
+           - `mqtt_port`, `mqtt_server`, `mqtt_username`, `mqtt_password`
+           - `publishTopicBase`
+           - `mqttPublishPeriodSec`, `mqttListenPeriodSec`
+           - `enableMQTT`
+         - Ensure these settings exist immediately after module initialization (no extra boilerplate in user code).
+       - Publish items ordering / injection
+         - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
+         - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
+    4) Logging (lightweight core + optional advanced module)
+       - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
+       - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
+         - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
+         - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
+         - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
+    5) Refactor `SolarInverterLimiter` example to consume modules
+       - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
+    6) Documentation for all modules
+       - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
+    7) Update other examples to use the new core settings/modules where applicable
 - **[Tooling]** VS Code include error for `#include <BME280_I2C.h>`
 
 ### Medium Priority Bugs/Features (Prio 5)
@@ -146,3 +122,7 @@
 - **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
 - **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`
 - Add divider (hr-like) in full demo.
+- **[COMPLETED][TESTED]** Core settings templates / injection (WiFi/System/Buttons + optional NTP)
+  - Implemented core settings templates (WiFi/System/Buttons + optional NTP) and a dedicated core demo example.
+  - Validated via PlatformIO build and flashed to ESP32.
+  - Documented category merge/injection behavior in `docs/SETTINGS.md` and added `cm::CoreCategories::*` constants to avoid typos.
