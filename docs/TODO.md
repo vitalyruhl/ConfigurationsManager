@@ -19,7 +19,6 @@
 
 ### High Priority Bugs (Prio 1)
 
-- **[Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
 
 - **[Bug/Design]** Custom runtime provider named `system` overrides built-in System provider
   - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
@@ -38,7 +37,6 @@
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
 - consolidate the Version-History before v3.0.0 into less detailed summary
 - **[FEATURE]** v3 follow-ups
-  - Add divider (hr-like) in full demo.
   - Add something into the system card (full demo).
   - Extract modules that can be imported separately:
     - Logger: split into 3 extras (serial, MQTT, display)
@@ -72,6 +70,7 @@
 - **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
   - days is not tetsed yet
 - Library does not include the docs folder.
+- **[COMPLETED][Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
 
 ### Done / Resolved
 
@@ -82,3 +81,4 @@
   - If `.setVersion(VERSION)` is set: it is appended to both
 - **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
 - **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`
+- Add divider (hr-like) in full demo.
