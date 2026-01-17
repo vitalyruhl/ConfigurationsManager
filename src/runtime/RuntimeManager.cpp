@@ -107,7 +107,16 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
     sortProviders();
 
     for (auto& prov : runtimeProviders) {
-        JsonObject slot = root.createNestedObject(prov.name);
+        JsonObject slot;
+        JsonVariant existing = root[prov.name];
+        if (existing.isNull()) {
+            slot = root.createNestedObject(prov.name);
+        } else if (existing.is<JsonObject>()) {
+            slot = existing.as<JsonObject>();
+        } else {
+            root.remove(prov.name);
+            slot = root.createNestedObject(prov.name);
+        }
         if (prov.fill) {
             prov.fill(slot);
         }
