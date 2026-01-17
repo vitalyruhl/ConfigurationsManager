@@ -166,23 +166,33 @@ void ConfigManagerWiFi::update() {
     // Update last good connection time
     lastGoodConnectionMillis = millis();
   } else {
-    // WiFi is disconnected - log the actual status
-    int wifiStatus = WiFi.status();
-    if (currentState == WIFI_STATE_CONNECTED) {
-      WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d", wifiStatus);
-      transitionToState(WIFI_STATE_DISCONNECTED);
-    } else if (currentState == WIFI_STATE_CONNECTING) {
-      // Still trying to connect, log status periodically  
-      static unsigned long lastStatusLog = 0;
-      if (millis() - lastStatusLog > 5000) { // Log every 5 seconds
-        WIFI_LOG_VERBOSE("[WiFi] Still connecting... WiFi.status() = %d (%s)", 
-               wifiStatus, getWiFiStatusString(wifiStatus).c_str());
-        lastStatusLog = millis();
-      }
-    }
+    // WiFi is not reporting WL_CONNECTED - log the actual status
+    const int wifiStatus = WiFi.status();
 
-    // Handle reconnection attempts (non-blocking)
-    handleReconnection();
+    // The ESP32 WiFi stack can temporarily report WL_SCAN_COMPLETED (and sometimes WL_IDLE_STATUS)
+    // even while the link is still up (e.g. during scans/roaming). If we were connected before,
+    // treat this as a transient state to avoid false disconnect transitions and reconnect storms.
+    if (currentState == WIFI_STATE_CONNECTED && (wifiStatus == WL_SCAN_COMPLETED || wifiStatus == WL_IDLE_STATUS)) {
+      WIFI_LOG_VERBOSE("[WiFi] Transient status while connected: %d (%s)",
+                       wifiStatus, getWiFiStatusString(wifiStatus).c_str());
+      lastGoodConnectionMillis = millis();
+    } else {
+      if (currentState == WIFI_STATE_CONNECTED) {
+        WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d", wifiStatus);
+        transitionToState(WIFI_STATE_DISCONNECTED);
+      } else if (currentState == WIFI_STATE_CONNECTING) {
+        // Still trying to connect, log status periodically
+        static unsigned long lastStatusLog = 0;
+        if (millis() - lastStatusLog > 5000) { // Log every 5 seconds
+          WIFI_LOG_VERBOSE("[WiFi] Still connecting... WiFi.status() = %d (%s)",
+                           wifiStatus, getWiFiStatusString(wifiStatus).c_str());
+          lastStatusLog = millis();
+        }
+      }
+
+      // Handle reconnection attempts (non-blocking)
+      handleReconnection();
+    }
   }
 
   // Check auto-reboot condition
@@ -268,6 +278,14 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
 void ConfigManagerWiFi::handleReconnection() {
   if (WiFi.getMode() == WIFI_AP) return; // Don't reconnect in AP mode
 
+  // Avoid reconnect storms while the WiFi stack is already busy.
+  // Some ESP32 Arduino stacks report WL_IDLE_STATUS during an ongoing connect and
+  // WL_SCAN_COMPLETED transiently during scans.
+  const int wifiStatus = WiFi.status();
+  if (wifiStatus == WL_IDLE_STATUS || wifiStatus == WL_SCAN_COMPLETED) {
+    return;
+  }
+
   unsigned long now = millis();
 
   // Non-blocking reconnection attempt
@@ -335,7 +353,6 @@ void ConfigManagerWiFi::setReconnectInterval(unsigned long intervalMs) {
 void ConfigManagerWiFi::forceReconnect() {
   lastReconnectAttempt = 0; // Reset timer to trigger immediate reconnect
 }
-
 void ConfigManagerWiFi::reconnect() {
   WIFI_LOG("[WiFi] Manual reconnect requested");
   WiFi.disconnect();
