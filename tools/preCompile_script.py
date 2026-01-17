@@ -15,7 +15,31 @@ except Exception:
 npm_cmd = r'C:\Program Files\nodejs\npm.cmd'
 node_exe = r'C:\Program Files\nodejs\node.exe'
 
-webui_path = 'webui'
+def _resolve_repo_root() -> Path:
+	"""Resolve repository root in a PlatformIO/SCons-friendly way.
+
+	Note: extra_scripts are executed via exec() and may not define __file__.
+	"""
+	if env is not None:
+		proj_dir_raw = env.get('PROJECT_DIR') or env.subst('$PROJECT_DIR')
+		project_dir = Path(str(proj_dir_raw)).resolve()
+	else:
+		project_dir = Path.cwd().resolve()
+
+	# Look upwards for a folder that contains both 'webui' and 'tools'.
+	candidates = [project_dir]
+	for _ in range(4):
+		candidates.append(candidates[-1].parent)
+	for candidate in candidates:
+		if (candidate / 'webui').is_dir() and (candidate / 'tools').is_dir():
+			return candidate
+
+	return project_dir
+
+
+ROOT_DIR = _resolve_repo_root()
+WEBUI_DIR = ROOT_DIR / 'webui'
+HEADER_PATH = ROOT_DIR / 'src' / 'html_content.h'
 
 def _get_define_from_scons(name: str, default: str) -> str:
 	"""Read a -D define from PlatformIO/SCons if available; return default otherwise."""
@@ -49,7 +73,7 @@ EMBED_WEBUI = True
 
 if EMBED_WEBUI:
 	# Ensure node modules present only when embedding
-	subprocess.run([npm_cmd, 'install'], cwd=webui_path, check=True)
+	subprocess.run([npm_cmd, 'install'], cwd=str(WEBUI_DIR), check=True)
 
 	# Prepare environment
 	env_vars = os.environ.copy()
@@ -58,10 +82,10 @@ if EMBED_WEBUI:
 	# Passwords are transmitted in plaintext over HTTP in v3.0.0.
 
 	# 1. Build Vue app with feature env
-	subprocess.run([npm_cmd, 'run', 'build'], cwd='webui', check=True, env=env_vars)
+	subprocess.run([npm_cmd, 'run', 'build'], cwd=str(WEBUI_DIR), check=True, env=env_vars)
 
 	# 1b. Gzip compress dist/index.html to reduce flash footprint before header conversion
-	dist_index = Path(webui_path) / 'dist' / 'index.html'
+	dist_index = WEBUI_DIR / 'dist' / 'index.html'
 	if dist_index.exists():
 		raw = dist_index.read_bytes()
 		gz_path = dist_index.with_suffix('.html.gz')
@@ -70,12 +94,7 @@ if EMBED_WEBUI:
 
 	# 2. Generate header from built assets (invoke the moved generator in tools/)
 	try:
-		# Determine project root: prefer PlatformIO env, else current working directory
-		if env is not None:
-			proj_dir = env.get('PROJECT_DIR') or env.subst('$PROJECT_DIR')
-			root_dir = Path(str(proj_dir))
-		else:
-			root_dir = Path.cwd()
+		root_dir = ROOT_DIR
 		generator = root_dir / 'tools' / 'webui_to_header.js'
 		if not generator.exists():
 			raise FileNotFoundError(f"Header generator not found at {generator}")
@@ -83,6 +102,8 @@ if EMBED_WEBUI:
 		subprocess.run([node_exe, str(generator)], cwd=str(root_dir), check=True, env=env_vars)
 	except Exception as e:
 		raise RuntimeError(f"Failed to run webui_to_header.js: {e}")
+
+else:
 	stub = (
 		"#pragma once\n"
 		"#include <pgmspace.h>\n\n"
@@ -91,8 +112,8 @@ if EMBED_WEBUI:
 		'R"HTML(<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WebUI disabled</title><style>body{font-family:sans-serif;background:#111;color:#ddd;margin:2rem} .note{padding:1rem;border:1px solid #333;border-radius:8px;background:#1a1a1a}</style></head><body><h3>Embedded WebUI disabled</h3><div class="note">Use external WebUI. APIs are still available on this device.</div></body></html>)HTML";\n'
 	)
 	try:
-		header_path.write_text(stub, encoding='utf-8')
-		print(f"[extra_script] Wrote stub header: {header_path}")
+		HEADER_PATH.write_text(stub, encoding='utf-8')
+		print(f"[extra_script] Wrote stub header: {HEADER_PATH}")
 	except Exception as e:
 		print(f"[extra_script] Warning: failed to write stub header: {e}")
 

@@ -63,6 +63,11 @@ struct ConfigOptions
     void (*callback)(T) = nullptr;       // Value change callback
     std::function<bool()> showIf = nullptr; // Conditional visibility
     const char *categoryPretty = nullptr;   // Optional pretty name for category/card
+
+    // Optional card grouping within a category (Settings UI)
+    const char *card = nullptr;             // Optional card key within the category
+    const char *cardPretty = nullptr;       // Optional pretty name for the card
+    int cardOrder = 100;                    // Optional sort order for the card
 };
 
 // Server abstraction
@@ -203,6 +208,9 @@ protected:
     const char *category;
     const char *displayName;
     const char *categoryPrettyName = nullptr;
+    const char *cardName = nullptr;
+    const char *cardPrettyName = nullptr;
+    int cardOrder = 100;
     SettingType type;
     int sortOrder = 100;
     bool hasKeyLengthError = false;
@@ -281,9 +289,11 @@ public:
 
     // New constructor for ConfigOptions-based initialization
     BaseSetting(const char* key, const char* name, const char* category, SettingType type,
-                bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr)
-        : keyName(key), displayName(name), category(category), categoryPrettyName(categoryPretty), type(type),
-          showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
+                                bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr,
+                                const char* card = nullptr, const char* cardPretty = nullptr, int cardOrder = 100)
+                : keyName(key), displayName(name), category(category), categoryPrettyName(categoryPretty),
+                    cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder), type(type),
+                    showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
     {
         // If no key provided, generate one from name and category
         if (!keyName || strlen(keyName) == 0) {
@@ -307,6 +317,9 @@ public:
     const char *getKey() const { return keyName; }
     const char *getCategory() const { return category; }
     const char *getCategoryPretty() const { return categoryPrettyName ? categoryPrettyName : category; }
+    const char *getCard() const { return cardName; }
+    const char *getCardPretty() const { return cardPrettyName ? cardPrettyName : cardName; }
+    int getCardOrder() const { return cardOrder; }
     const char *getName() const { return keyName; }
     int getSortOrder() const { return sortOrder; }
     bool isSecret() const { return isPassword; }
@@ -333,7 +346,8 @@ public:
     // New primary constructor for ConfigOptions
     explicit Config(const ConfigOptions<T> &opts)
         : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type,
-                     opts.showInWeb, opts.isPassword, opts.sortOrder, opts.categoryPretty),
+                     opts.showInWeb, opts.isPassword, opts.sortOrder, opts.categoryPretty,
+                     opts.card, opts.cardPretty, opts.cardOrder),
           value(opts.defaultValue), defaultValue(opts.defaultValue)
     {
         showIfFunc = opts.showIf;
@@ -496,7 +510,8 @@ public:
 
     void toJSON(JsonObject &obj) const override
     {
-        JsonObject settingObj = obj.createNestedObject(getDisplayName());
+        const char* jsonKey = (getCard() && getCard()[0]) ? getKey() : getDisplayName();
+        JsonObject settingObj = obj.createNestedObject(jsonKey);
 
         if (isPassword)
         {
@@ -510,6 +525,7 @@ public:
 
         // Add metadata for web interface
         settingObj["displayName"] = getDisplayName();
+        settingObj["key"] = getKey();
         settingObj["isPassword"] = isPassword;
         settingObj["sortOrder"] = sortOrder;
 
@@ -685,6 +701,15 @@ public:
     // Settings management
     BaseSetting *findSetting(const String &category, const String &key)
     {
+        for (auto *setting : settings)
+        {
+            if (String(setting->getCategory()) == category && String(setting->getKey()) == key)
+            {
+                return setting;
+            }
+        }
+
+        // Backwards compatibility: older clients used displayName as the JSON key.
         for (auto *setting : settings)
         {
             if (String(setting->getCategory()) == category && String(setting->getDisplayName()) == key)
@@ -1289,6 +1314,76 @@ public:
                 }
             }
 
+            // Optional: card grouping inside the category.
+            // If a setting declares a card, it will be emitted into category.cards[card].settings.
+            // WebUI can render cards as separate Settings panels while keeping the persisted category token stable.
+            JsonObject targetObj = catObj;
+            const char* card = s->getCard();
+            if (card && card[0])
+            {
+                JsonObject cardsObj;
+                JsonVariant existingCards = catObj["cards"];
+                if (existingCards.isNull())
+                {
+                    cardsObj = catObj.createNestedObject("cards");
+                }
+                else if (existingCards.is<JsonObject>())
+                {
+                    cardsObj = existingCards.as<JsonObject>();
+                }
+                else
+                {
+                    catObj.remove("cards");
+                    cardsObj = catObj.createNestedObject("cards");
+                }
+
+                JsonObject cardObj;
+                JsonVariant existingCard = cardsObj[card];
+                if (existingCard.isNull())
+                {
+                    cardObj = cardsObj.createNestedObject(card);
+                    const char* cardPretty = s->getCardPretty();
+                    if (cardPretty && cardPretty[0])
+                    {
+                        cardObj["cardPretty"] = cardPretty;
+                    }
+                    cardObj["cardOrder"] = s->getCardOrder();
+                }
+                else if (existingCard.is<JsonObject>())
+                {
+                    cardObj = existingCard.as<JsonObject>();
+                }
+                else
+                {
+                    cardsObj.remove(card);
+                    cardObj = cardsObj.createNestedObject(card);
+                    const char* cardPretty = s->getCardPretty();
+                    if (cardPretty && cardPretty[0])
+                    {
+                        cardObj["cardPretty"] = cardPretty;
+                    }
+                    cardObj["cardOrder"] = s->getCardOrder();
+                }
+
+                JsonObject settingsObj;
+                JsonVariant existingCardSettings = cardObj["settings"];
+                if (existingCardSettings.isNull())
+                {
+                    settingsObj = cardObj.createNestedObject("settings");
+                }
+                else if (existingCardSettings.is<JsonObject>())
+                {
+                    settingsObj = existingCardSettings.as<JsonObject>();
+                }
+                else
+                {
+                    cardObj.remove("settings");
+                    settingsObj = cardObj.createNestedObject("settings");
+                }
+
+                targetObj = settingsObj;
+            }
+
             if (includeSecrets || !s->isSecret())
             {
                 if (s->isSecret()) {
@@ -1296,7 +1391,7 @@ public:
                            s->getCategory(), s->getDisplayName(),
                            includeSecrets ? "true" : "false");
                 }
-                s->toJSON(catObj);
+                s->toJSON(targetObj);
             }
             else
             {

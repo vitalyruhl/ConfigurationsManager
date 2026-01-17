@@ -21,7 +21,7 @@
 
   - Goal: keep `ConfigManager` as small as possible in compile size and dependencies.
   - Suggested implementation order (one side-branch per item)
-    - Test target: use `BME280-Full-GUI-Demo-Core` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
+    - Test target: use `IO-Full-Demo` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
     1) IOManager module (buttons + digital IO + analog IO)
        - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
        - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.

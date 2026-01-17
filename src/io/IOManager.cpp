@@ -1,10 +1,20 @@
 #include "IOManager.h"
+#include "core/CoreSettings.h"
 
 namespace cm {
 
+static constexpr const char* IO_CATEGORY_PRETTY = "I/O";
+
+String IOManager::formatSlotKey(uint8_t slot, char suffix)
+{
+    char buf[8];
+    snprintf(buf, sizeof(buf), "IO%02u%c", static_cast<unsigned>(slot), suffix);
+    return String(buf);
+}
+
 void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
 {
-    if (!binding.id || !binding.id[0] || !binding.pin || !binding.activeLow) {
+    if (!binding.id || !binding.id[0]) {
         CM_LOG("[IOManager][ERROR] addDigitalOutput: invalid binding");
         return;
     }
@@ -16,11 +26,139 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
 
     DigitalOutputEntry entry;
     entry.id = binding.id;
-    entry.pin = binding.pin;
-    entry.activeLow = binding.activeLow;
-    entry.enabled = binding.enabled;
+    entry.name = binding.name ? binding.name : binding.id;
 
-    digitalOutputs.push_back(entry);
+    entry.slot = nextDigitalOutputSlot;
+    if (nextDigitalOutputSlot < 99) {
+        nextDigitalOutputSlot++;
+    } else {
+        CM_LOG("[IOManager][WARNING] addDigitalOutput: exceeded slot range 00..99, keys may not remain stable");
+        nextDigitalOutputSlot++;
+    }
+
+    entry.defaultPin = binding.defaultPin;
+    entry.defaultActiveLow = binding.defaultActiveLow;
+    entry.defaultEnabled = binding.defaultEnabled;
+
+    entry.showPinInWeb = binding.showPinInWeb;
+    entry.showActiveLowInWeb = binding.showActiveLowInWeb;
+
+    digitalOutputs.push_back(std::move(entry));
+}
+
+void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
+{
+    const int idx = findIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addIOtoGUI: unknown output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
+    if (entry.settingsRegistered) {
+        CM_LOG("[IOManager][WARNING] addIOtoGUI: output '%s' already registered", entry.id.c_str());
+        return;
+    }
+
+    entry.cardKey = entry.id; // stable card key
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.keyPin = formatSlotKey(entry.slot, 'P');
+    entry.keyActiveLow = formatSlotKey(entry.slot, 'L');
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPin.c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 11,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKey.c_str(),
+        .cardPretty = entry.cardPretty.c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyActiveLow.c_str(),
+        .name = "Active LOW",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultActiveLow,
+        .showInWeb = entry.showActiveLowInWeb,
+        .sortOrder = 12,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKey.c_str(),
+        .cardPretty = entry.cardPretty.c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.activeLow.get());
+
+    entry.settingsRegistered = true;
+}
+
+void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
+                           std::function<void()> onPress,
+                           const char* runtimeLabel,
+                           const char* runtimeGroup)
+{
+    addIOtoGUI(id, cardName, order);
+
+    const int idx = findIndex(id);
+    if (idx < 0) {
+        return;
+    }
+    const DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
+
+    if (type != RuntimeControlType::Button) {
+        CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' uses 1 callback but type is not Button", entry.id.c_str());
+        return;
+    }
+    if (!onPress) {
+        CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' missing onPress callback", entry.id.c_str());
+        return;
+    }
+
+    const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
+    const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    ConfigManager.defineRuntimeButton(group, entry.id, label, onPress, String(), order);
+}
+
+void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
+                           std::function<bool()> getter,
+                           std::function<void(bool)> setter,
+                           const char* runtimeLabel,
+                           const char* runtimeGroup)
+{
+    addIOtoGUI(id, cardName, order);
+
+    const int idx = findIndex(id);
+    if (idx < 0) {
+        return;
+    }
+    const DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
+
+    if (!getter || !setter) {
+        CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' missing getter/setter", entry.id.c_str());
+        return;
+    }
+
+    const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
+    const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+
+    switch (type) {
+        case RuntimeControlType::Checkbox:
+            ConfigManager.defineRuntimeCheckbox(group, entry.id, label, getter, setter, String(), order);
+            break;
+        case RuntimeControlType::StateButton:
+            ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order);
+            break;
+        default:
+            CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());
+            break;
+    }
 }
 
 void IOManager::begin()
@@ -65,9 +203,6 @@ bool IOManager::getState(const char* id) const
     }
 
     const DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
-    if (!isEnabledNow(entry)) {
-        return false;
-    }
 
     const int pin = getPinNow(entry);
     if (!isValidPin(pin)) {
@@ -110,19 +245,14 @@ int IOManager::findIndex(const char* id) const
     return -1;
 }
 
-bool IOManager::isEnabledNow(const DigitalOutputEntry& entry)
-{
-    return entry.enabled ? entry.enabled->get() : true;
-}
-
 bool IOManager::isActiveLowNow(const DigitalOutputEntry& entry)
 {
-    return entry.activeLow ? entry.activeLow->get() : true;
+    return entry.activeLow ? entry.activeLow->get() : entry.defaultActiveLow;
 }
 
 int IOManager::getPinNow(const DigitalOutputEntry& entry)
 {
-    return entry.pin ? entry.pin->get() : -1;
+    return entry.pin ? entry.pin->get() : entry.defaultPin;
 }
 
 void IOManager::writePinState(int pin, bool activeLow, bool on)
@@ -137,33 +267,28 @@ void IOManager::applyDesiredState(DigitalOutputEntry& entry)
     if (!isValidPin(pin)) {
         return;
     }
-
-    const bool enabled = isEnabledNow(entry);
     const bool activeLow = isActiveLowNow(entry);
 
     pinMode(pin, OUTPUT);
-    writePinState(pin, activeLow, enabled ? entry.desiredState : false);
+    writePinState(pin, activeLow, entry.desiredState);
 }
 
 void IOManager::reconfigureIfNeeded(DigitalOutputEntry& entry)
 {
     const int newPin = getPinNow(entry);
     const bool newActiveLow = isActiveLowNow(entry);
-    const bool newEnabled = isEnabledNow(entry);
 
     if (!entry.hasLast) {
         entry.lastPin = newPin;
         entry.lastActiveLow = newActiveLow;
-        entry.lastEnabled = newEnabled;
         entry.hasLast = true;
         return;
     }
 
     const bool pinChanged = (newPin != entry.lastPin);
     const bool polarityChanged = (newActiveLow != entry.lastActiveLow);
-    const bool enabledChanged = (newEnabled != entry.lastEnabled);
 
-    if (!pinChanged && !polarityChanged && !enabledChanged) {
+    if (!pinChanged && !polarityChanged) {
         return;
     }
 
@@ -175,7 +300,6 @@ void IOManager::reconfigureIfNeeded(DigitalOutputEntry& entry)
 
     entry.lastPin = newPin;
     entry.lastActiveLow = newActiveLow;
-    entry.lastEnabled = newEnabled;
 }
 
 } // namespace cm

@@ -23,13 +23,14 @@ import Setting from './Setting.vue';
 const props = defineProps({
   category: String,
   settings: Object,
+  title: { type: String, default: '' },
   busyMap: { type: Object, default: () => ({}) }
 });
 const emit = defineEmits(['apply-single', 'save-single']);
 const filteredSettings = computed(() => {
-  // Filter out categoryPretty meta key
+  // Filter out meta keys (category/card containers)
   return Object.fromEntries(
-    Object.entries(props.settings).filter(([key, val]) => key !== 'categoryPretty')
+    Object.entries(props.settings).filter(([key, val]) => key !== 'categoryPretty' && key !== 'categoryOrder' && key !== 'cards')
   );
 });
 
@@ -64,6 +65,7 @@ function shouldShow(settingData){
   return true;
 }
 const prettyName = computed(() => {
+  if (typeof props.title === 'string' && props.title.trim().length) return props.title;
   // Prefer category-level pretty name if provided
   if (
     Object.prototype.hasOwnProperty.call(props.settings, 'categoryPretty') &&
