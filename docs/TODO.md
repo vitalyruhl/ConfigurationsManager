@@ -23,7 +23,7 @@
 - **[Bug]** Settings password prompt when password is unset
 - **[Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
 - **[Bug/Design]** Live-view cards are not sorted by `order`
-- **[Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
+- **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
 - **[Bug/Design]** Custom runtime provider named `system` overrides built-in System provider
   - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
   - Expected: allow adding extra fields without losing default System fields.
