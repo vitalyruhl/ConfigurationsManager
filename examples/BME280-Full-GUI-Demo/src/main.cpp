@@ -817,27 +817,35 @@ void setupGUI()
     // #endregion Alarms
 
 
-    // #region test injection example (do not override built-in system provider)
-    // NOTE: Do NOT register a custom runtime provider named "system".
-    // It will override the built-in System provider (enabled via ConfigManager.enableBuiltinSystemProvider())
-    // and you will lose the default fields (RSSI/IP/Gateway/DateTime/etc.).
-    //
-    // If you want to add test data, use a separate group/card like "system_test".
-    // If you really need to inject into the System card, the runtime engine needs provider chaining/merging.
-    //
-    // Serial.println("[GUI] Adding runtime provider: system_test");
-    // CRM().addRuntimeProvider("system_test", [](JsonObject &data)
-    // {
-    //     data["testValue"] = 42;
-    // }, 99);
-    //
-    // Serial.println("[GUI] Adding meta: system_test.testValue");
-    // RuntimeFieldMeta testValueMeta;
-    // testValueMeta.group = "system_test";
-    // testValueMeta.key = "testValue";
-    // testValueMeta.label = "Test Value";
-    // testValueMeta.order = 99;
-    // CRM().addRuntimeMeta(testValueMeta);
+
+    // #region test injection example (system card)
+    // NOTE: Runtime providers with the same group name are merged (not overwritten).
+    // That means you CAN inject additional values into the built-in "system" card.
+    Serial.println("[GUI] Adding runtime provider: system (injection)");
+    CRM().addRuntimeProvider("system", [](JsonObject &data)
+    {
+        data["testValue"] = temperature;
+    }, 99);
+
+    Serial.println("[GUI] Adding meta divider: system.customDivider");
+    RuntimeFieldMeta systemCustomDivider;
+    systemCustomDivider.group = "system";
+    systemCustomDivider.key = "customDivider";
+    systemCustomDivider.label = "Custom";
+    systemCustomDivider.isDivider = true;
+    systemCustomDivider.order = 98;
+    CRM().addRuntimeMeta(systemCustomDivider);
+
+    Serial.println("[GUI] Adding meta: system.testValue");
+    RuntimeFieldMeta testValueMeta2;
+    testValueMeta2.group = "system";
+    testValueMeta2.key = "testValue";
+    testValueMeta2.label = "Injected Value";
+    testValueMeta2.order = 99;
+    testValueMeta2.unit = "°C";
+    testValueMeta2.precision = 1;
+
+    CRM().addRuntimeMeta(testValueMeta2);
     // #endregion test injection example
 
 

@@ -20,10 +20,42 @@ except Exception:
     print("[precompile_wrapper] SCons environment not available, running in standalone mode")
     SCONS_AVAILABLE = False
 
-# Ensure logs are flushed immediately
+def _get_define_from_scons(name: str, default: int) -> int:
+    """Read -D defines from PlatformIO/SCons env (CPPDEFINES)."""
+    if not SCONS_AVAILABLE or env is None:
+        return default
+    try:
+        defines = env.get('CPPDEFINES', [])
+        for d in defines:
+            if isinstance(d, tuple) and len(d) == 2:
+                k, v = d
+                if k == name:
+                    try:
+                        return int(v)
+                    except Exception:
+                        return 1 if str(v).lower() in ('1', 'true', 'yes', 'on') else 0
+            elif isinstance(d, str) and d == name:
+                return 1
+    except Exception:
+        return default
+    return default
+
+
+LOGGING_ENABLED = _get_define_from_scons('CM_ENABLE_LOGGING', 1) == 1
+VERBOSE_LOGGING_ENABLED = _get_define_from_scons('CM_ENABLE_VERBOSE_LOGGING', 0) == 1
+
+
 def log(message):
+    if not LOGGING_ENABLED:
+        return
     print(message)
     sys.stdout.flush()
+
+
+def vlog(message):
+    if not VERBOSE_LOGGING_ENABLED:
+        return
+    log(message)
 
 def main():
     if not SCONS_AVAILABLE:
@@ -74,36 +106,6 @@ def main():
         env_vars['NODE_ENV'] = 'development'
         print(f"[precompile_wrapper] Original CWD: {original_cwd}")
         
-        # Parse build_flags from platformio.ini and pass them via PLATFORMIO_BUILD_FLAGS for the precompiler
-        def _collect_build_flags(ini_path: Path, env_name: str):
-            if not ini_path.exists():
-                return []
-            content = ini_path.read_text(encoding='utf-8', errors='ignore').splitlines()
-            in_env = False
-            collecting = False
-            tokens = []
-            for line in content:
-                s = line.strip()
-                if s.startswith('[') and s.endswith(']'):
-                    in_env = (s == f'[env:{env_name}]')
-                    collecting = False
-                    continue
-                if not in_env:
-                    continue
-                if s.startswith('build_flags'):
-                    collecting = True
-                    parts = line.split('=', 1)
-                    if len(parts) == 2:
-                        rhs = parts[1]
-                        tokens.extend(rhs.strip().split())
-                    continue
-                if collecting and s and not line.startswith(('	', ' ', ';', '#')) and '=' in line:
-                    collecting = False
-                if collecting:
-                    if s and not s.startswith((';', '#')):
-                        tokens.extend(s.split())
-            return tokens
-
         def _collect_local_lib_paths(ini_path: Path):
             """Return a list of candidate local library paths which exist on disk.
             Sources:
@@ -254,15 +256,6 @@ def main():
                 print(f"[precompile_wrapper] Note: could not sync C++ sources: {e}")
                 return False
 
-        flags_tokens = _collect_build_flags(project_dir / 'platformio.ini', active_env)
-        if flags_tokens:
-            env_vars['PLATFORMIO_BUILD_FLAGS'] = ' '.join(flags_tokens)
-            # Also keep legacy var name for robustness
-            env_vars['BUILD_FLAGS'] = env_vars['PLATFORMIO_BUILD_FLAGS']
-            print(f"[precompile_wrapper] Propagating {len(flags_tokens)} build flags")
-        else:
-            print(f"[precompile_wrapper] WARNING: No build flags found in platformio.ini")
-
         # Password encryption/salt injection removed in v3.0.0
 
         # Change working directory to the library so its relative paths resolve
@@ -329,7 +322,7 @@ def main():
             log("[precompile_wrapper] SCons environment not detected. Running in standalone mode.")
 
         log(f"[precompile_wrapper] Current working directory: {os.getcwd()}")
-        log(f"[precompile_wrapper] Environment variables: {os.environ}")
+        vlog(f"[precompile_wrapper] Environment variables: {os.environ}")
 
         # Debugging library path
         log(f"[precompile_wrapper] Calculated library path: {lib_path}")

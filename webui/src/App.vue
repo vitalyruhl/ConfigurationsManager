@@ -107,23 +107,28 @@
 
       <div id="settingsContainer" :key="refreshKey">
         <template v-if="settingsViewMode === 'tabs'">
-          <Category
-            v-for="c in settingsCategories"
-            v-show="c.key === selectedSettingsCategory"
-            :key="c.key + '_' + refreshKey"
-            :category="c.key"
-            :settings="c.settings"
-            :busy-map="opBusy"
-            @apply-single="applySingle"
-            @save-single="saveSingle"
-          />
+          <template v-for="c in settingsCategories" :key="c.key + '_' + refreshKey">
+            <template v-if="c.key === selectedSettingsCategory">
+              <template v-for="card in extractSettingsCardsFromCategory(c.key, c.settings)" :key="c.key + '_' + (card.cardKey || card.title) + '_' + refreshKey">
+                <Category
+                  :category="c.key"
+                  :settings="card.settings"
+                  :title="card.title"
+                  :busy-map="opBusy"
+                  @apply-single="applySingle"
+                  @save-single="saveSingle"
+                />
+              </template>
+            </template>
+          </template>
         </template>
         <template v-else>
           <Category
-            v-for="([category, settings]) in orderedSettingsCategories"
-            :key="category + '_' + refreshKey"
-            :category="category"
-            :settings="settings"
+            v-for="card in orderedSettingsCards"
+            :key="card.category + '_' + (card.cardKey || card.title) + '_' + refreshKey"
+            :category="card.category"
+            :settings="card.settings"
+            :title="card.title"
             :busy-map="opBusy"
             @apply-single="applySingle"
             @save-single="saveSingle"
@@ -200,6 +205,7 @@ function resolveCategoryLabel(categoryKey, settingsObj) {
       }
     }
   }
+  if (categoryKey === 'IO') return 'I/O';
   return categoryKey;
 }
 
@@ -215,7 +221,7 @@ function resolveCategoryOrder(settingsObj) {
     return settingsObj.categoryOrder;
   }
   for (const key in settingsObj) {
-    if (key === 'categoryPretty' || key === 'categoryOrder') continue;
+    if (key === 'categoryPretty' || key === 'categoryOrder' || key === 'cards') continue;
     const sd = settingsObj[key];
     if (sd && typeof sd === 'object' && typeof sd.categoryOrder === 'number') {
       return sd.categoryOrder;
@@ -265,6 +271,58 @@ const orderedSettingsCategories = computed(() => {
     return String(aKey).localeCompare(String(bKey));
   });
   return entries;
+});
+
+function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
+  if (!settingsObj || typeof settingsObj !== 'object') {
+    return [{
+      category: categoryKey,
+      title: resolveCategoryLabel(categoryKey, settingsObj),
+      order: undefined,
+      settings: settingsObj || {},
+    }];
+  }
+
+  const cardsContainer = settingsObj.cards;
+  if (!cardsContainer || typeof cardsContainer !== 'object') {
+    return [{
+      category: categoryKey,
+      title: resolveCategoryLabel(categoryKey, settingsObj),
+      order: resolveCategoryOrder(settingsObj),
+      settings: settingsObj,
+    }];
+  }
+
+  const cards = Object.entries(cardsContainer)
+    .map(([cardKey, cardObj]) => {
+      const co = (cardObj && typeof cardObj === 'object') ? cardObj : {};
+      const title = (typeof co.cardPretty === 'string' && co.cardPretty.trim().length) ? co.cardPretty : String(cardKey);
+      const order = (typeof co.cardOrder === 'number') ? co.cardOrder : undefined;
+      const settings = (co && typeof co.settings === 'object' && co.settings) ? co.settings : {};
+      return { category: categoryKey, title, order, settings, cardKey: String(cardKey) };
+    });
+
+  cards.sort((a, b) => {
+    const ao = a.order;
+    const bo = b.order;
+    if (typeof ao === 'number' && typeof bo === 'number' && ao !== bo) return ao - bo;
+    if (typeof ao === 'number' && typeof bo !== 'number') return -1;
+    if (typeof bo === 'number' && typeof ao !== 'number') return 1;
+    const t = String(a.title).localeCompare(String(b.title));
+    if (t !== 0) return t;
+    return String(a.cardKey || '').localeCompare(String(b.cardKey || ''));
+  });
+  return cards;
+}
+
+const orderedSettingsCards = computed(() => {
+  const result = [];
+  for (const [categoryKey, settingsObj] of (orderedSettingsCategories.value || [])) {
+    const cards = extractSettingsCardsFromCategory(categoryKey, settingsObj);
+    // If a category expands into multiple cards, keep them adjacent.
+    for (const c of cards) result.push(c);
+  }
+  return result;
 });
 const activeTab = ref("live");
 const runtimeDashboard = ref(null);

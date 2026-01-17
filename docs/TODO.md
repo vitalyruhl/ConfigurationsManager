@@ -7,6 +7,7 @@
 - As of: 2026-01-09
 - UI/UX (Settings & Runtime)
   - GUI display mode toggle: “Current” (cards) vs “Categories” (map/list view).
+  - [TODO] Remove Settings List view; keep Tabs only.
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
 - Architecture / API
@@ -21,19 +22,47 @@
 
   - Goal: keep `ConfigManager` as small as possible in compile size and dependencies.
   - Suggested implementation order (one side-branch per item)
-    - Test target: use `BME280-Full-GUI-Demo-Core` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
-    1) Fix/extend built-in `system` runtime provider behavior
-       - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
-       - Expected: allow adding extra fields without losing default System fields.
-       - Options: provider chaining/merging for identical groups, or a dedicated API to extend the built-in System provider.
-       - Check if it is possible to add/append to the system provider instead of overwriting it (e.g. `.appendValue("system", [](JsonObject &data){ data["testValue"] = 42; }, 99);`).
-    2) Relay manager module
-       - Turn the current `relay(s).h` idea into a proper relay manager class that can be "married" with `ConfigManager`.
-         - Settings are owned by `ConfigManager` (pin, active-low, enabled, etc.).
-         - Runtime API for code: e.g. `relay.set("fan", true)` / `relay.get("fan")`.
-         - Support callbacks/on-change handling so GPIO changes happen when settings change.
-         - Do not hard-couple the module to example-specific `settings.h`; use a clean API/config structure.
-    3) MQTT manager module (+ baseline settings + ordering/injection)
+    - Test target: use `IO-Full-Demo` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
+    1) IOManager module (buttons + digital IO + analog IO)
+       - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
+       - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
+         - GUI label must be `"I/O"` (display only); do not bake `"I/O"` into the persisted category token.
+       - Prefer stable IDs: each IO item/provider uses an `id` that is also used for settings key-prefixing (e.g. `io.<id>.*`) and runtime keys.
+       - Buttons
+         - API idea: `io.addButton({ .id=..., .name=..., .pin=..., ... })`
+         - Settings: GPIO pin, active-low/high, pull-up/down., longpress in ms
+         - Callbacks: pressed, double-pressed, long-pressed.
+       - Digital outputs (relay-style)
+         - API idea: `io.addDigitalOutput({ .id=..., .name=..., .pin=..., ... })`
+         - Settings: GPIO pin, active-low/high, enabled.
+         - Runtime API: `set(bool)` / `get()`.
+       - Analog inputs
+         - API idea: `io.addAnalogInput({ .id=..., .name=..., .pin=..., ... }).onChange(0.01f, callback)`
+         - Settings: GPIO pin, read-rate (ms), deadband/sensitivity, unit.
+       - Analog outputs
+         - API idea: `io.addAnalogOutput({ .id=..., .name=..., .pin=..., ... }).setValue(1.5f)`
+         - Settings: GPIO pin, extended-range flag.
+       - Capability differences (important)
+         - Not all boards support full ADC resolution, not all support PWM, and not all support both input and output.
+         - Design should be provider-based (like runtime providers): users add only what the board supports, e.g. `.addAnalogInputProvider(...)`, `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`.
+       - Range/scaling model (baseline)
+         - `raw.*` defaults MUST come from the selected provider / board capabilities (no hardcoded library defaults).
+           - Example only: ESP32 ADC raw is typically `0..4095` (12-bit), but this can differ by board/config.
+         - Default behavior: full raw range is mapped into the output range.
+           - If the user does not override `out.*`, default `out.min/out.max` should represent a pass-through of the full raw range (i.e. identity scaling, so raw==out in meaning).
+         - User override example: a potentiometer should show `0..100%`.
+           - User sets `out.min = 0`, `out.max = 100` in code.
+           - This must automatically enable/register the corresponding settings so the user can fine-tune in the GUI.
+         - GUI activation rule
+           - If a channel provides explicit `out.*` overrides in code (or sets an explicit `enableScaling` flag), IOManager registers `out.min/out.max` (and optionally `unit`, `sensitivity`) as editable settings under category `IO`.
+           - If not overridden, keep those settings hidden/disabled by default to avoid UI clutter.
+         - Unit example: `"°C"` (engineering units).
+         - Sensitivity example: `0.01` relative to the output range (e.g. for 0..150°C, step is 0.01 in that out-range).
+       - Key length caution (ESP32 Preferences)
+         - ID-based key prefixing must respect the 15 character key-name limit (including category prefixing).
+         - IDs therefore must be short, and generated keys must be validated via `checkSettingsForErrors()`.
+       - add  gui-helper eg. addIOtoGUI("id", "card-name", order)
+    2) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.
        - Core settings auto-load (when the module is used)
@@ -46,17 +75,17 @@
        - Publish items ordering / injection
          - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
          - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
-    4) Logging (lightweight core + optional advanced module)
+    3) Logging (lightweight core + optional advanced module)
        - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
        - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
          - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
          - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
          - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
-    5) Refactor `SolarInverterLimiter` example to consume modules
+    4) Refactor `SolarInverterLimiter` example to consume modules
        - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
-    6) Documentation for all modules
+    5) Documentation for all modules
        - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
-    7) Update other examples to use the new core settings/modules where applicable
+    6) Update other examples to use the new core settings/modules where applicable
 - **[Tooling]** VS Code include error for `#include <BME280_I2C.h>`
 
 ### Medium Priority Bugs/Features (Prio 5)
@@ -126,3 +155,7 @@
   - Implemented core settings templates (WiFi/System/Buttons + optional NTP) and a dedicated core demo example.
   - Validated via PlatformIO build and flashed to ESP32.
   - Documented category merge/injection behavior in `docs/SETTINGS.md` and added `cm::CoreCategories::*` constants to avoid typos.
+
+- **[COMPLETED][TESTED]** Custom runtime provider named `system` overrides built-in System provider
+  - Fixed by merging runtime providers that share the same group name ("system" etc.) instead of overwriting.
+  - Validated by injecting `system.testValue` into the System card (with a divider).

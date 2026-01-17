@@ -1,0 +1,207 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+template: !include templates.yaml
+utility_meter: !include meterconfig.yaml
+
+# sensor: !include sensors.yaml #its empty thistime... 2025.04.28 viru
+
+binary_sensor:
+  # Quelle: https://community.home-assistant.io/t/automation-shower-detection-trigger-when-humidity-increases-in-10-minutes/162250
+  - platform: template
+    sensors:
+      dryer_running:
+        friendly_name: "Dryer running"
+        value_template: "{{ states('sensor.tasmota_smartplug_2_energy_power') | float(0) > 4 }}"
+
+mqtt:
+  sensor:
+    # BOILER -->
+    # Temperatur-Sensor
+    - name: "BoilerSaver_TemperatureBoiler"
+      state_topic: "BoilerSaver/TemperatureBoiler"
+      unique_id: BoilerSaver_TemperatureBoiler
+      device_class: temperature
+      unit_of_measurement: "°C"
+      icon: "mdi:thermometer"
+
+    # Verbleibende Zeit bis Boiler heiß ist
+    - name: "BoilerSaver_TimeRemaining"
+      state_topic: "BoilerSaver/TimeRemaining"
+      unique_id: BoilerSaver_TimeRemaining
+      icon: "mdi:timer"
+      value_template: >
+        {% if value == "00:00:00" or value == "" %}
+          Bereit
+        {% else %}
+          {{ value }}
+        {% endif %}
+
+    # Boiler Status (Heizung an/aus)
+    - name: "BoilerSaver_BoilerState"
+      state_topic: "BoilerSaver/AktualState"
+      unique_id: BoilerSaver_BoilerState
+      value_template: "{% if value == '1' %}Heizt{% else %}Sparmodus{% endif %}"
+      icon: "mdi:water-boiler"
+
+    # Du kannst jetzt duschen
+    - name: "BoilerSaver_YouCanShowerNow"
+      state_topic: "BoilerSaver/YouCanShowerNow"
+      unique_id: BoilerSaver_YouCanShowerNow
+      value_template: "{% if value == '1' %}Kannst{% else %}Kalt{% endif %}"
+      icon: "mdi:shower"
+
+    # Einstellungen als Sensoren (optional, für Monitoring)
+    - name: "BoilerSaver_OnThreshold"
+      state_topic: "BoilerSaver/Settings/OnThreshold"
+      unique_id: BoilerSaver_OnThreshold
+      device_class: temperature
+      unit_of_measurement: "°C"
+      icon: "mdi:thermometer-low"
+
+    - name: "BoilerSaver_OffThreshold"
+      state_topic: "BoilerSaver/Settings/OffThreshold"
+      unique_id: BoilerSaver_OffThreshold
+      device_class: temperature
+      unit_of_measurement: "°C"
+      icon: "mdi:thermometer-high"
+
+    - name: "BoilerSaver_SetShowerTime"
+      state_topic: "BoilerSaver/Settings/SetShowerTime"
+      unique_id: BoilerSaver_SetShowerTime
+      unit_of_measurement: "min"
+      icon: "mdi:timer-cog"
+
+  binary_sensor:
+    # Boiler aktiv/inaktiv
+    - name: "BoilerSaver_BoilerActive"
+      state_topic: "BoilerSaver/AktualState"
+      unique_id: BoilerSaver_BoilerActive
+      payload_on: "1"
+      payload_off: "0"
+      device_class: heat
+      icon: "mdi:water-boiler"
+
+    # Bereit zum Duschen
+    - name: "BoilerSaver_ShowerReady"
+      state_topic: "BoilerSaver/YouCanShowerNow"
+      unique_id: BoilerSaver_ShowerReady
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:shower"
+
+    # Boiler aktiviert (Einstellung)
+    - name: "BoilerSaver_BoilerEnabled"
+      state_topic: "BoilerSaver/Settings/BoilerEnabled"
+      unique_id: BoilerSaver_BoilerEnabled
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:power"
+
+    # Will Shower Modus
+    - name: "BoilerSaver_WillShower"
+      state_topic: "BoilerSaver/Settings/WillShower"
+      unique_id: BoilerSaver_WillShower
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:account-clock"
+
+    # Stop Timer bei Zieltemperatur
+    - name: "BoilerSaver_StopTimerOnTarget"
+      state_topic: "BoilerSaver/Settings/StopTimerOnTarget"
+      unique_id: BoilerSaver_StopTimerOnTarget
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:timer-stop"
+
+    # Nur einmal pro Periode
+    - name: "BoilerSaver_OncePerPeriod"
+      state_topic: "BoilerSaver/Settings/OncePerPeriod"
+      unique_id: BoilerSaver_OncePerPeriod
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:clock-check"
+
+  switch:
+    # Boiler Ein-/Ausschalten
+    # Boiler Ein-/Ausschalten
+    - name: "BoilerSaver_BoilerEnable"
+      command_topic: "BoilerSaver/Settings/BoilerEnabled"
+      state_topic: "BoilerSaver/Settings/BoilerEnabled"
+      unique_id: BoilerSaver_BoilerEnable_Switch
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:power"
+
+    # Will Shower aktivieren/deaktivieren
+    - name: "BoilerSaver_WillShowerToggle"
+      command_topic: "BoilerSaver/Settings/WillShower"
+      state_topic: "BoilerSaver/Settings/WillShower"
+      unique_id: BoilerSaver_WillShowerToggle_Switch
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:account-clock"
+
+    # Timer bei Zieltemperatur stoppen
+    - name: "BoilerSaver_StopTimerOnTargetToggle"
+      command_topic: "BoilerSaver/Settings/StopTimerOnTarget"
+      state_topic: "BoilerSaver/Settings/StopTimerOnTarget"
+      unique_id: BoilerSaver_StopTimerOnTargetToggle_Switch
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:timer-stop"
+
+    # Einmal pro Periode
+    - name: "BoilerSaver_OncePerPeriodToggle"
+      command_topic: "BoilerSaver/Settings/OncePerPeriod"
+      state_topic: "BoilerSaver/Settings/OncePerPeriod"
+      unique_id: BoilerSaver_OncePerPeriodToggle_Switch
+      payload_on: "1"
+      payload_off: "0"
+      icon: "mdi:repeat-once"
+
+  # Zahlen-Eingabe für Einstellungen (optional)
+  number:
+    # Duschzeit einstellen
+    - name: "BoilerSaver_ShowerTime"
+      command_topic: "BoilerSaver/Settings/SetShowerTime"
+      state_topic: "BoilerSaver/Settings/SetShowerTime"
+      unique_id: BoilerSaver_ShowerTime_Number
+      min: 30
+      max: 360
+      step: 15
+      unit_of_measurement: "min"
+      icon: "mdi:timer-cog"
+
+    # Untere Temperaturschwelle
+    - name: "BoilerSaver_OnThresholdSet"
+      command_topic: "BoilerSaver/Settings/OnThreshold"
+      state_topic: "BoilerSaver/Settings/OnThreshold"
+      unique_id: BoilerSaver_OnThresholdSet_Number
+      min: 50
+      max: 70
+      step: 1
+      unit_of_measurement: "°C"
+      icon: "mdi:thermometer-low"
+
+    # Obere Temperaturschwelle
+    - name: "BoilerSaver_OffThresholdSet"
+      command_topic: "BoilerSaver/Settings/OffThreshold"
+      state_topic: "BoilerSaver/Settings/OffThreshold"
+      unique_id: BoilerSaver_OffThresholdSet_Number
+      min: 50
+      max: 95
+      step: 1
+      unit_of_measurement: "°C"
+      icon: "mdi:thermometer-high"

@@ -56,8 +56,7 @@ def main():
     print(f"[precompile_wrapper] Library path: {lib_path}")
     print(f"[precompile_wrapper] Script path: {precompile_script}")
     
-    # Run the library script from the library directory (it expects its own relative paths)
-    # but propagate PlatformIO build flags explicitly so it can enable features correctly.
+    # Run the library script from the library directory (it expects its own relative paths).
     original_cwd = os.getcwd()
     try:
         # Set environment variables that the script might need
@@ -67,45 +66,6 @@ def main():
         env_vars['PROJECT_DIR'] = str(project_dir)
         print(f"[precompile_wrapper] Original CWD: {original_cwd}")
         
-        # Parse build_flags from platformio.ini and pass them via PLATFORMIO_BUILD_FLAGS for the precompiler
-        def _collect_build_flags(ini_path: Path, env_name: str):
-            if not ini_path.exists():
-                return []
-            content = ini_path.read_text(encoding='utf-8', errors='ignore').splitlines()
-            in_env = False
-            collecting = False
-            tokens = []
-            for line in content:
-                s = line.strip()
-                if s.startswith('[') and s.endswith(']'):
-                    in_env = (s == f'[env:{env_name}]')
-                    collecting = False
-                    continue
-                if not in_env:
-                    continue
-                if s.startswith('build_flags'):
-                    collecting = True
-                    parts = line.split('=', 1)
-                    if len(parts) == 2:
-                        rhs = parts[1]
-                        tokens.extend(rhs.strip().split())
-                    continue
-                if collecting and s and not line.startswith(('\t', ' ', ';', '#')) and '=' in line:
-                    collecting = False
-                if collecting:
-                    if s and not s.startswith((';', '#')):
-                        tokens.extend(s.split())
-            return tokens
-
-        flags_tokens = _collect_build_flags(project_dir / 'platformio.ini', active_env)
-        if flags_tokens:
-            env_vars['PLATFORMIO_BUILD_FLAGS'] = ' '.join(flags_tokens)
-            # Also keep legacy var name for robustness
-            env_vars['BUILD_FLAGS'] = env_vars['PLATFORMIO_BUILD_FLAGS']
-            print(f"[precompile_wrapper] Propagating {len(flags_tokens)} build flags")
-        else:
-            print(f"[precompile_wrapper] WARNING: No build flags found in platformio.ini")
-
         # Change working directory to the library so its relative paths resolve
         os.chdir(str(lib_path))
         print(f"[precompile_wrapper] Changed CWD to: {os.getcwd()}")
