@@ -600,6 +600,7 @@ private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
     String appName;
+    String appTitle;
     String appVersion;
 
     // Modular components
@@ -944,6 +945,14 @@ public:
     }
 
     const String &getAppName() const { return appName; }
+
+    void setAppTitle(const String &title)
+    {
+        appTitle = title;
+        CM_LOG("[I] App title set: %s", title.c_str());
+    }
+
+    const String &getAppTitle() const { return appTitle; }
 
     void setVersion(const String &version)
     {

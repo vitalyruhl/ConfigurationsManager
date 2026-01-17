@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 id="mainHeader" class="ta-center">{{ version }}</h1>
+    <h1 id="mainHeader" class="ta-center">{{ headerTitle }}</h1>
     <div class="tabs">
       <button
         v-if="hasLiveContent"
@@ -172,7 +172,14 @@ async function processValueForTransmission(category, key, value, settingData) {
 const config = ref({});
 const refreshKey = ref(0);
 const version = ref("");
+const appName = ref("");
+const appTitle = ref("");
 const refreshing = ref(false);
+
+const headerTitle = computed(() => {
+  const base = (appName.value && appName.value.length) ? appName.value : "ConfigManager";
+  return (version.value && version.value.length) ? `${base} ${version.value}` : base;
+});
 
 function resolveCategoryLabel(categoryKey, settingsObj) {
   if (
@@ -317,6 +324,15 @@ function isSettingsAuthTokenValid() {
   );
 }
 
+async function ensureSettingsAuthToken(opts = {}) {
+  const timeoutMs = (opts && typeof opts.timeoutMs === 'number') ? opts.timeoutMs : 1500;
+  if (isSettingsAuthTokenValid()) return true;
+
+  // Password-less setups: try to authenticate silently with empty password
+  const probe = await authenticateSettings("", { timeoutMs, silent: true });
+  return !!probe.ok;
+}
+
 async function authenticateSettings(password, opts = {}) {
   const { timeoutMs = 1500, silent = false } = opts;
   try {
@@ -365,8 +381,8 @@ async function authenticateSettings(password, opts = {}) {
 }
 
 async function fetchStoredPassword(category, key) {
-  if (!isSettingsAuthTokenValid()) {
-    // Do not auto-auth with an empty password.
+  const ok = await ensureSettingsAuthToken({ timeoutMs: 1500 });
+  if (!ok) {
     settingsAuthenticated.value = false;
     showSettingsAuth.value = true;
     throw new Error("Not authenticated");
@@ -651,17 +667,34 @@ function cancelSettingsAuth() {
 }
 async function injectVersion() {
   try {
-    const r = await fetch("/version");
-    if (!r.ok) throw new Error("Version fetch failed");
-    const raw = String(await r.text()).trim();
-    version.value = raw;
+    // Preferred: structured app info
+    const r = await fetch("/appinfo");
+    if (r.ok) {
+      const info = await r.json().catch(() => ({}));
+      appName.value = info && typeof info.appName === 'string' ? info.appName.trim() : "";
+      appTitle.value = info && typeof info.appTitle === 'string' ? info.appTitle.trim() : "";
+      version.value = info && typeof info.version === 'string' ? info.version.trim() : "";
 
-    // Use app name from /version as the browser tab title.
-    // Expected format: "<appName> <semver>" (appName can be configured via setAppName()).
+      const tabBase = (appTitle.value && appTitle.value.length)
+        ? appTitle.value
+        : ((appName.value && appName.value.length) ? appName.value : "ESP32 Configuration");
+      document.title = (version.value && version.value.length) ? `${tabBase} ${version.value}` : tabBase;
+      return;
+    }
+
+    // Fallback: legacy /version (plain text "<name> <semver>")
+    const r2 = await fetch("/version");
+    if (!r2.ok) throw new Error("Version fetch failed");
+    const raw = String(await r2.text()).trim();
     const m = raw.match(/^(.*)\s+(\d+\.\d+\.\d+(?:[-+].*)?)$/);
-    const appTitle = (m && m[1]) ? String(m[1]).trim() : raw;
-    document.title = appTitle && appTitle.length ? appTitle : "ESP32 Configuration";
+    const legacyName = (m && m[1]) ? String(m[1]).trim() : raw;
+    const legacyVer = (m && m[2]) ? String(m[2]).trim() : "";
+    appName.value = legacyName;
+    version.value = legacyVer;
+    document.title = (legacyVer && legacyVer.length) ? `${legacyName} ${legacyVer}` : legacyName;
   } catch (e) {
+    appName.value = "";
+    appTitle.value = "";
     version.value = "";
     document.title = "ESP32 Configuration";
   }

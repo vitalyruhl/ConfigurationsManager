@@ -19,7 +19,6 @@
 
 ### High Priority Bugs (Prio 1)
 
-- **[Bug]** Settings password prompt when password is unset
 - **[Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
 
 - **[Bug/Design]** Custom runtime provider named `system` overrides built-in System provider
@@ -27,9 +26,6 @@
   - Expected: allow adding extra fields without losing default System fields.
   - Options: provider chaining/merging for identical groups, or a dedicated API to extend the built-in System provider.
   - check if it possable to add/append to the system provider instead of overwriting it. (```.appendValue("system", [](JsonObject &data){data["testValue"] = 42;}, 99);``` or similar)
-- **[Bug]** Browser tab title is not configurable
-  - Currently always "ESP32 Configuration"; should be configurable via `.setAppName(APP_NAME)` or a dedicated `.setTitle`.
-  - If `cfg.setSettingsPassword(SETTINGS_PASSWORD);` is not set, no password should be requested.
 - **[Tooling]** VS Code include error for `#include <BME280_I2C.h>`
 
 ### Medium Priority Bugs/Features (Prio 5)
@@ -79,5 +75,10 @@
 
 ### Done / Resolved
 
+- **[COMPLETED][Bug]** Settings password prompt when password is unset
+- **[COMPLETED][Bug]** Browser tab title is configurable
+  - H1 uses `.setAppName(APP_NAME)`
+  - Browser tab uses `.setAppTitle("...")`
+  - If `.setVersion(VERSION)` is set: it is appended to both
 - **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
 - **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`

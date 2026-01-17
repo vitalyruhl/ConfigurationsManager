@@ -168,6 +168,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
         
         request->send(200, "text/plain", payload);
     });
+
+    // App info endpoint (JSON) consumed by the WebUI.
+    // Allows separate H1 (appName) and browser tab title (appTitle).
+    server->on("/appinfo", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        DynamicJsonDocument out(256);
+        out["appName"] = (configManager && configManager->getAppName().length()) ? configManager->getAppName() : String("");
+        out["appTitle"] = (configManager && configManager->getAppTitle().length()) ? configManager->getAppTitle() : String("");
+        out["version"] = (configManager && configManager->getVersion().length()) ? configManager->getVersion() : String("");
+        String resp;
+        serializeJson(out, resp);
+
+        AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
+        enableCORS(response);
+        request->send(response);
+    });
     // Debug route to catch any config requests with body handling
         server->on("/config_raw", HTTP_ANY,
         [this](AsyncWebServerRequest* request) {
