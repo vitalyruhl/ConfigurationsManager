@@ -101,6 +101,7 @@ void setup() {
     
     // ConfigManager konfigurieren
     ConfigManager.setAppName(APP_NAME);
+    ConfigManager.setAppTitle(APP_NAME);
     ConfigManager.setVersion(VERSION);
     // ... weitere ConfigManager-Setup
     

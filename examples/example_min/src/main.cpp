@@ -72,6 +72,7 @@ void setup()
         });
 
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.enableBuiltinSystemProvider();
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);

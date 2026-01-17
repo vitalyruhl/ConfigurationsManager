@@ -89,7 +89,7 @@ pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
        ; -DCM_ENABLE_VERBOSE_LOGGING=0
    
    lib_deps =
-       vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
+    vitaly.ruhl/ESP32 Configuration Manager@^3.2.0
    ```
    
    > **Note:** Replace `usb` with your environment name if different. See `examples/example_min/platformio.ini` for a complete example.
@@ -132,7 +132,7 @@ build_flags =
     ; -DCM_ENABLE_VERBOSE_LOGGING=0
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
+    vitaly.ruhl/ESP32 Configuration Manager@^3.2.0
 ```
 
 > **📋 See complete examples in `examples/example_min/platformio.ini`**
@@ -245,6 +245,7 @@ void setup()
                                   { Serial.print("[CFG] "); Serial.println(msg); });
 
     cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    cfg.setAppTitle(APP_NAME); // Set an application title, used for web UI display
 
     cfg.addSetting(&updateInterval);
     cfg.checkSettingsForErrors();
@@ -405,7 +406,7 @@ build_flags =
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
+    vitaly.ruhl/ESP32 Configuration Manager@^3.2.0
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
@@ -431,7 +432,7 @@ build_flags =
 	-DCONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE=1
 	-DCONFIG_ESP32_BROWNOUT_DET_LVL0=1
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.1.1
+    vitaly.ruhl/ESP32 Configuration Manager@^3.2.0
 	ks-tec/BME280_I2C@1.4.1+002
 	knolleary/PubSubClient@^2.8
 	adafruit/Adafruit GFX Library@^1.12.1
@@ -558,6 +559,7 @@ pio run -e usb -t upload # Re-upload firmware
 - **2.7.6**: Minor bugfixes and documentation updates.
 - **3.0.0**: v3 release: removed most build-time feature flags, embedded WebUI committed, docs reorganized.
 - **3.1.0**: v3 stabilization: runtime/UI improvements, ordering fixes in Settings/Live views, WebSocket/OTA fixes.
+- **3.1.1**: WebUI header vs tab title split (`setAppName` vs `setAppTitle` via `/appinfo`), improved settings password prompt for passwordless setups, WiFi reconnect-storm mitigation during scans.
 
 ## Smart WiFi Roaming Feature
 

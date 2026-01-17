@@ -410,7 +410,7 @@ void setup()
     //-----------------------------------------------------------------
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    ConfigManager.setAppTitle("test-appname"); // Set an application title, used for web UI display
+    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     // Optional demo: global CSS override
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h

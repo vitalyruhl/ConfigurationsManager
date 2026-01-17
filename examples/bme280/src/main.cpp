@@ -304,6 +304,7 @@ void setup()
     });
 
     ConfigManager.setAppName(APP_NAME);
+    ConfigManager.setAppTitle(APP_NAME);
     ConfigManager.setVersion(VERSION);
 
     systemSettings.init();
