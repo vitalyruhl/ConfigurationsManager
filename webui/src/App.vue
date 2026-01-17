@@ -200,6 +200,7 @@ function resolveCategoryLabel(categoryKey, settingsObj) {
       }
     }
   }
+  if (categoryKey === 'IO') return 'I/O';
   return categoryKey;
 }
 

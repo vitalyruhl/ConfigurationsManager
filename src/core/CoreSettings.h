@@ -24,6 +24,7 @@ namespace CoreCategories
 inline constexpr char WiFi[] = "WiFi";
 inline constexpr char System[] = "System";
 inline constexpr char Buttons[] = "Buttons";
+inline constexpr char IO[] = "IO";
 inline constexpr char Ntp[] = "NTP";
 }
 

@@ -43,6 +43,9 @@ static const char OTA_PASSWORD[] = "ota";
 // -------------------------------------------------------------------
 #include "core/CoreSettings.h"
 
+// IO manager demo (settings-driven digital outputs)
+#include "io/IOManager.h"
+
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-BME280-Full-GUI-Demo-Core"
 #define BUTTON_PIN_AP_MODE 13
@@ -120,6 +123,87 @@ Config<int> showerRequestPin(ConfigOptions<int>{
         .category = cm::CoreCategories::Buttons,
     .defaultValue = 19,
     .showInWeb = true});
+
+// -------------------------------------------------------------------
+// Digital output settings + IO manager demo
+// Notes:
+// - Pins < 0 are treated as disabled.
+// - Keys must be <= 15 chars (ESP32 Preferences limit).
+
+static cm::IOManager ioManager;
+
+struct DigitalOutputSettings
+{
+    Config<bool> heaterEnabled;
+    Config<int> heaterPin;
+    Config<bool> heaterActiveLow;
+
+    Config<bool> fanEnabled;
+    Config<int> fanPin;
+    Config<bool> fanActiveLow;
+
+        DigitalOutputSettings()
+        : heaterEnabled(ConfigOptions<bool>{
+              .key = "RHeatEn",
+                            .name = "Enable Heater Output",
+                            .category = cm::CoreCategories::IO,
+              .defaultValue = true,
+              .sortOrder = 10,
+          })
+        , heaterPin(ConfigOptions<int>{
+              .key = "RHeatPin",
+                            .name = "Heater Output GPIO",
+                            .category = cm::CoreCategories::IO,
+              .defaultValue = 23,
+              .sortOrder = 11,
+              .showIf = [this]() { return this->heaterEnabled.get(); },
+          })
+        , heaterActiveLow(ConfigOptions<bool>{
+              .key = "RHeatLow",
+              .name = "Heater Active LOW",
+                            .category = cm::CoreCategories::IO,
+              .defaultValue = true,
+              .sortOrder = 12,
+              .showIf = [this]() { return this->heaterEnabled.get(); },
+          })
+        , fanEnabled(ConfigOptions<bool>{
+              .key = "RFanEn",
+                            .name = "Enable Fan Output",
+                            .category = cm::CoreCategories::IO,
+              .defaultValue = true,
+              .sortOrder = 20,
+          })
+        , fanPin(ConfigOptions<int>{
+              .key = "RFanPin",
+                            .name = "Fan Output GPIO",
+                            .category = cm::CoreCategories::IO,
+              .defaultValue = 25,
+              .sortOrder = 21,
+              .showIf = [this]() { return this->fanEnabled.get(); },
+          })
+        , fanActiveLow(ConfigOptions<bool>{
+              .key = "RFanLow",
+              .name = "Fan Active LOW",
+                            .category = cm::CoreCategories::IO,
+              .defaultValue = true,
+              .sortOrder = 22,
+              .showIf = [this]() { return this->fanEnabled.get(); },
+          })
+    {
+    }
+
+    void init()
+    {
+        ConfigManager.addSetting(&heaterEnabled);
+        ConfigManager.addSetting(&heaterPin);
+        ConfigManager.addSetting(&heaterActiveLow);
+        ConfigManager.addSetting(&fanEnabled);
+        ConfigManager.addSetting(&fanPin);
+        ConfigManager.addSetting(&fanActiveLow);
+    }
+};
+
+static DigitalOutputSettings digitalOutputSettings;
 
 // #endregion Examples
 
@@ -320,12 +404,18 @@ void setup()
     tempSettings.init();      // BME280 temperature sensor settings
     coreSettings.attach(ConfigManager);      // Register WiFi/System/Buttons core settings
     coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
+    digitalOutputSettings.init(); // IO: heater/fan outputs (pins + polarity)
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
     ConfigManager.checkSettingsForErrors(); // 2025.09.04 New function to check all settings for errors (e.g., duplicate keys after truncation etc.)
 
     ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
+
+    // Initialize IO manager after settings are loaded
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{.id = "heater", .pin = &digitalOutputSettings.heaterPin, .activeLow = &digitalOutputSettings.heaterActiveLow, .enabled = &digitalOutputSettings.heaterEnabled});
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{.id = "fan", .pin = &digitalOutputSettings.fanPin, .activeLow = &digitalOutputSettings.fanActiveLow, .enabled = &digitalOutputSettings.fanEnabled});
+    ioManager.begin();
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
@@ -398,6 +488,7 @@ void loop()
     ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
     ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
+    ioManager.update(); // Apply IO setting changes and keep outputs consistent
     //-------------------------------------------------------------------------------------------------------------
 
 
@@ -510,26 +601,22 @@ void setupGUI()
         }, "", 20);
 
         // Example toggle slider
-        static bool heaterState = false;
         Serial.println("[GUI] Defining runtime checkbox: controls.heater");
         ConfigManager.defineRuntimeCheckbox("controls", "heater", "Heater", []()
         {
-            return heaterState;
+            return ioManager.getState("heater");
         }, [](bool state)
         {
-            heaterState = state;
             setHeaterState(state);
         }, "", 21);
 
         // Example state button (toggle with visual feedback)
-        static bool fanState = false;
         Serial.println("[GUI] Defining runtime state button: controls.fan");
         ConfigManager.defineRuntimeStateButton("controls", "fan", "Fan", []()
         {
-            return fanState;
+            return ioManager.getState("fan");
         }, [](bool state)
         {
-            fanState = state;
             setFanState(state);
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         }, false, "", 22);
@@ -924,37 +1011,31 @@ void onWiFiAPMode()
 //----------------------------------------
 
 
-#define HEATER_PIN 23       // Example pin for heater relay
-#define FAN_PIN 25          // Example pin for fan relay
-#define LowActiveRelay true // Set to true if relay is active LOW, false if active HIGH
-
 void setHeaterState(bool on)
 {
-    pinMode(HEATER_PIN, OUTPUT); // Example pin for heater relay
     if (on)
     {
         Serial.println("Heater ON");
-        digitalWrite(HEATER_PIN, LowActiveRelay ? LOW : HIGH); // Example: turn on heater relay
+        ioManager.setState("heater", true);
     }
     else
     {
         Serial.println("Heater OFF");
-        digitalWrite(HEATER_PIN, LowActiveRelay ? HIGH : LOW); // Example: turn off heater relay
+        ioManager.setState("heater", false);
     }
 }
 
 void setFanState(bool on)
 {
-    pinMode(FAN_PIN, OUTPUT); // Example pin for fan relay
     if (on)
     {
         Serial.println("Fan ON");
-        digitalWrite(FAN_PIN, LowActiveRelay ? LOW : HIGH); // Example: turn on fan relay
+        ioManager.setState("fan", true);
     }
     else
     {
         Serial.println("Fan OFF");
-        digitalWrite(FAN_PIN, LowActiveRelay ? HIGH : LOW); // Example: turn off fan relay
+        ioManager.setState("fan", false);
     }
 }
 

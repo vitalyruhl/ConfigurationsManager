@@ -1,6 +1,5 @@
 import os
 import subprocess
-import re
 import gzip
 
 from pathlib import Path
@@ -18,204 +17,35 @@ node_exe = r'C:\Program Files\nodejs\node.exe'
 
 webui_path = 'webui'
 
-# Helper: read flag in all contexts
-def flag_enabled(name: str) -> bool:
-	# Prefer PlatformIO's SCons env if available
-	if env is not None:
-		try:
-			defines = env.get('CPPDEFINES', [])
-			val = _get_define_value_from_scons(defines, name)
-			if val is not None:
-				return str(val).lower() in ('1', 'true', 'yes', 'on')
-		except Exception:
-			pass
-	# Fallback 1: inspect OS environment aggregates (may be empty in PIO)
-	build_flags = (os.environ.get('PLATFORMIO_BUILD_FLAGS', '') + ' ' + os.environ.get('BUILD_FLAGS', '')).strip()
-	if build_flags:
-		return re.search(rf'(?:\s|^){re.escape(name)}=1(\s|$)', build_flags) is not None or re.search(rf'(?:\s|^)-D{re.escape(name)}(?:=1)?(\s|$)', build_flags) is not None
-
-	# Fallback 2: parse platformio.ini for the active env (PIOENV)
+def _get_define_from_scons(name: str, default: str) -> str:
+	"""Read a -D define from PlatformIO/SCons if available; return default otherwise."""
+	if env is None:
+		return default
 	try:
-		ini_path = Path('platformio.ini')
-		if ini_path.exists():
-			pioenv = os.environ.get('PIOENV') or os.environ.get('PLATFORMIO_ENV')
-			if pioenv:
-				defines = _parse_ini_defines_for_env(ini_path, pioenv)
-			else:
-				defines = _parse_ini_defines_all_envs(ini_path)
-			if name in defines:
-				v = defines.get(name)
-				return (v is None) or (str(v).lower() in ('1', 'true', 'yes', 'on'))
+		defines = env.get('CPPDEFINES', [])
+		for d in defines:
+			if isinstance(d, tuple) and len(d) == 2:
+				k, v = d
+				if k == name:
+					return str(v)
+			elif isinstance(d, str) and d == name:
+				return '1'
 	except Exception:
-		pass
-	return False
+		return default
+	return default
 
-def _get_define_value_from_scons(defines, name: str):
-	if not defines:
-		return None
-	for d in defines:
-		if isinstance(d, tuple) and len(d) == 2:
-			k, v = d
-			if k == name:
-				return v
-		elif isinstance(d, str):
-			# bare define like 'NAME' -> treat as truthy
-			if d == name:
-				return 1
-	return None
 
-# (delay EMBED_WEBUI evaluation until after helper parsers are defined)
-
-def _parse_ini_defines_for_env(ini_path: Path, env_name: str):
-	"""Minimal parser to extract -DNAME[=VALUE] tokens from build_flags of [env:env_name]."""
-	content = ini_path.read_text(encoding='utf-8', errors='ignore').splitlines()
-	in_env = False
-	collecting_flags = False
-	tokens = []
-	for line in content:
-		s = line.strip()
-		if s.startswith('[') and s.endswith(']'):
-			in_env = (s == f'[env:{env_name}]')
-			collecting_flags = False
-			continue
-		if not in_env:
-			continue
-		# detect start of build_flags
-		if s.startswith('build_flags'):
-			collecting_flags = True
-			# possible inline after '='
-			parts = line.split('=', 1)
-			if len(parts) == 2:
-				rhs = parts[1]
-				tokens.extend(rhs.strip().split())
-			continue
-		# stop collecting when a new key of the section appears
-		if collecting_flags and s and not line.startswith(('\t', ' ', ';', '#')) and '=' in line:
-			collecting_flags = False
-		if collecting_flags:
-			# continuation lines usually indented or on separate lines
-			if s and not s.startswith((';', '#')):
-				tokens.extend(s.split())
-	defines = {}
-	for t in tokens:
-		if t.startswith('-D'):
-			kv = t[2:]
-			if '=' in kv:
-				k, v = kv.split('=', 1)
-				defines[k.strip()] = v.strip()
-			else:
-				defines[kv.strip()] = None
-	return defines
-
-def _parse_ini_defines_all_envs(ini_path: Path):
-	"""Parse -D defines from build_flags across all [env:*] sections and merge them (last wins)."""
-	content = ini_path.read_text(encoding='utf-8', errors='ignore').splitlines()
-	in_env = False
-	collecting_flags = False
-	tokens = []
-	for line in content:
-		s = line.strip()
-		if s.startswith('[') and s.endswith(']'):
-			in_env = s.startswith('[env:')
-			collecting_flags = False
-			continue
-		if not in_env:
-			continue
-		if s.startswith('build_flags'):
-			collecting_flags = True
-			parts = line.split('=', 1)
-			if len(parts) == 2:
-				rhs = parts[1]
-				tokens.extend(rhs.strip().split())
-			continue
-		if collecting_flags and s and not line.startswith(('\t', ' ', ';', '#')) and '=' in line:
-			collecting_flags = False
-		if collecting_flags:
-			if s and not s.startswith((';', '#')):
-				tokens.extend(s.split())
-	defines = {}
-	for t in tokens:
-		if t.startswith('-D'):
-			kv = t[2:]
-			if '=' in kv:
-				k, v = kv.split('=', 1)
-				defines[k.strip()] = v.strip()
-			else:
-				defines[kv.strip()] = None
-	return defines
-
-def sliders_enabled_combined() -> bool:
-	# New combined flag takes precedence
-	if flag_enabled('CM_ENABLE_RUNTIME_ANALOG_SLIDERS'):
-		return True
-	# Backward compatibility: either int or float
-	return flag_enabled('CM_ENABLE_RUNTIME_INT_SLIDERS') or flag_enabled('CM_ENABLE_RUNTIME_FLOAT_SLIDERS')
-
-# v3.0.0: feature build flags removed. Always build the embedded WebUI with all runtime controls enabled.
-EMBED_WEBUI = True
-
-# Map firmware features to frontend env vars (fixed defaults)
-sliders_on = True
-state_btn_on = True
-buttons_on = True
-checkboxes_on = True
-num_inputs_on = True
-feature_env = {
-	'VITE_ENABLE_WS_PUSH': '1',
-	'VITE_ENABLE_RUNTIME_ANALOG_SLIDERS': '1',
-	'VITE_ENABLE_RUNTIME_STATE_BUTTONS': '1',
-	'VITE_ENABLE_SYSTEM_PROVIDER': '1',
+# v3.x: WebUI is always built as a full bundle.
+# Only logging-related settings are optionally forwarded to the frontend build.
+FEATURE_ENV = {
+	'VITE_CM_ENABLE_LOGGING': _get_define_from_scons('CM_ENABLE_LOGGING', '1'),
+	'VITE_CM_ENABLE_VERBOSE_LOGGING': _get_define_from_scons('CM_ENABLE_VERBOSE_LOGGING', '0'),
 }
 
-print(f"[extra_script] Flags: embed_webui={EMBED_WEBUI} sliders_on={sliders_on} state_btn_on={state_btn_on} buttons_on={buttons_on} checkboxes_on={checkboxes_on} number_inputs_on={num_inputs_on}")
 
-def select_component(target_rel: str, enabled_rel: str, disabled_rel: str, enabled: bool):
-	"""Copy either the enabled or disabled template to the target component path."""
-	target = Path(webui_path) / target_rel
-	src = Path(webui_path) / (enabled_rel if enabled else disabled_rel)
-	if not src.exists():
-		raise FileNotFoundError(f"Missing template: {src}")
-	target.write_text(src.read_text(encoding='utf-8'), encoding='utf-8')
+# Always embed/build the WebUI bundle (no feature pruning).
+EMBED_WEBUI = True
 
-if EMBED_WEBUI:
-	# Select appropriate component variants based on flags
-	select_component(
-		'src/components/runtime/RuntimeSlider.vue',
-		'src/components/runtime/templates/RuntimeSlider.enabled.vue',
-		'src/components/runtime/templates/RuntimeSlider.disabled.vue',
-		feature_env['VITE_ENABLE_RUNTIME_ANALOG_SLIDERS'] == '1'
-	)
-
-	select_component(
-		'src/components/runtime/RuntimeStateButton.vue',
-		'src/components/runtime/templates/RuntimeStateButton.enabled.vue',
-		'src/components/runtime/templates/RuntimeStateButton.disabled.vue',
-		feature_env['VITE_ENABLE_RUNTIME_STATE_BUTTONS'] == '1'
-	)
-
-	# Action button
-	select_component(
-		'src/components/runtime/RuntimeActionButton.vue',
-		'src/components/runtime/templates/RuntimeActionButton.enabled.vue',
-		'src/components/runtime/templates/RuntimeActionButton.disabled.vue',
-		buttons_on
-	)
-
-	# Checkbox
-	select_component(
-		'src/components/runtime/RuntimeCheckbox.vue',
-		'src/components/runtime/templates/RuntimeCheckbox.enabled.vue',
-		'src/components/runtime/templates/RuntimeCheckbox.disabled.vue',
-		checkboxes_on
-	)
-
-	# Number input (optional pruning, enabled by flag default)
-	select_component(
-		'src/components/runtime/RuntimeNumberInput.vue',
-		'src/components/runtime/templates/RuntimeNumberInput.enabled.vue',
-		'src/components/runtime/templates/RuntimeNumberInput.disabled.vue',
-		num_inputs_on
-	)
 
 if EMBED_WEBUI:
 	# Ensure node modules present only when embedding
@@ -223,7 +53,7 @@ if EMBED_WEBUI:
 
 	# Prepare environment
 	env_vars = os.environ.copy()
-	env_vars.update(feature_env)
+	env_vars.update(FEATURE_ENV)
 
 	# Passwords are transmitted in plaintext over HTTP in v3.0.0.
 
@@ -249,15 +79,10 @@ if EMBED_WEBUI:
 		generator = root_dir / 'tools' / 'webui_to_header.js'
 		if not generator.exists():
 			raise FileNotFoundError(f"Header generator not found at {generator}")
-		# Pass environment variables (feature flags etc.) to header generator
+		# Pass environment variables to header generator
 		subprocess.run([node_exe, str(generator)], cwd=str(root_dir), check=True, env=env_vars)
 	except Exception as e:
 		raise RuntimeError(f"Failed to run webui_to_header.js: {e}")
-else:
-	# Skipping WebUI build and header generation (external UI mode)
-	print("[extra_script] CM_EMBED_WEBUI=0 -> Skipping webui build and header generation.")
-	# Overwrite header with a tiny stub to avoid accidentally keeping old embedded content
-	header_path = Path('src') / 'html_content.h'
 	stub = (
 		"#pragma once\n"
 		"#include <pgmspace.h>\n\n"

@@ -78,6 +78,7 @@ const prettyName = computed(() => {
     const sd = props.settings[key];
     if (sd && typeof sd === 'object' && sd.categoryPretty) return sd.categoryPretty;
   }
+  if (props.category === 'IO') return 'I/O';
   return props.category;
 });
 function onApply(key, value) {
