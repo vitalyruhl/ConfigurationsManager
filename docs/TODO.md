@@ -7,6 +7,7 @@
 - As of: 2026-01-09
 - UI/UX (Settings & Runtime)
   - GUI display mode toggle: “Current” (cards) vs “Categories” (map/list view).
+  - [TODO] Remove Settings List view; keep Tabs only.
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
 - Architecture / API

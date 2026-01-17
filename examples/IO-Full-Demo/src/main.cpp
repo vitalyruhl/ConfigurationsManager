@@ -63,6 +63,9 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                     
 static cm::IOManager ioManager;
 // -------------------------------------------------------------------
 
+// Taster: relay pulse helper (non-blocking)
+static Ticker tasterOffTicker;
+
 
 // -------------------------------------------------------------------
 // Global theme override test: make all h3 headings orange without underline
@@ -178,10 +181,34 @@ void setup()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+
+    // Additional relays
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
+        .id = "taster",
+        .name = "Taster",
+        .defaultPin = 26,
+        .defaultActiveLow = true,
+        .defaultEnabled = true,
+    });
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
+        .id = "relay27",
+        .name = "Relay 27",
+        .defaultPin = 27,
+        .defaultActiveLow = true,
+        .defaultEnabled = true,
+    });
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
+        .id = "relay14",
+        .name = "Relay 14",
+        .defaultPin = 14,
+        .defaultActiveLow = true,
+        .defaultEnabled = true,
+        .showPinInWeb = false,
+    });
     // Create dedicated Settings cards for each IO item (category token stays "IO")
     ioManager.addIOtoGUI(
         "heater",
-        "Heater",
+        nullptr,
         2,
         cm::IOManager::RuntimeControlType::Checkbox,
         []() { return ioManager.getState("heater"); },
@@ -191,7 +218,7 @@ void setup()
 
     ioManager.addIOtoGUI(
         "fan",
-        "Controls",
+        nullptr,
         3,
         cm::IOManager::RuntimeControlType::StateButton,
         []() { return ioManager.getState("fan"); },
@@ -200,6 +227,42 @@ void setup()
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         },
         "Fan"
+    );
+
+    // Taster: momentary button (pulses relay)
+    ioManager.addIOtoGUI(
+        "taster",
+        nullptr,
+        4,
+        cm::IOManager::RuntimeControlType::Button,
+        []() {
+            ioManager.set("taster", true);
+            tasterOffTicker.detach();
+            tasterOffTicker.attach_ms(200, +[]() {
+                ioManager.set("taster", false);
+            });
+        },
+        "Taster"
+    );
+
+    // Additional relays as switches
+    ioManager.addIOtoGUI(
+        "relay27",
+        nullptr,
+        5,
+        cm::IOManager::RuntimeControlType::Checkbox,
+        []() { return ioManager.getState("relay27"); },
+        [](bool state) { ioManager.set("relay27", state); },
+        "Relay 27"
+    );
+    ioManager.addIOtoGUI(
+        "relay14",
+        nullptr,
+        6,
+        cm::IOManager::RuntimeControlType::Checkbox,
+        []() { return ioManager.getState("relay14"); },
+        [](bool state) { ioManager.set("relay14", state); },
+        "Relay 14"
     );
 
     //----------------------------------------------------------------------------------------------------------------------------------
