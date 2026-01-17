@@ -1,0 +1,769 @@
+title: Home
+views:
+  - path: default_view
+    title: Home
+    cards:
+      - show_current: true
+        show_forecast: true
+        type: weather-forecast
+        entity: weather.forecast_home
+      - type: entities
+        entities:
+          - entity: sensor.tagesverbrauch_helper
+            name: Bezogen von EVU
+          - entity: sensor.tasmota_smartplug_12_energy_today
+            name: Solar Erzeugung
+          - entity: sensor.money_saved
+            name: Ersparnis durch Solar
+          - entity: sensor.helper_daily_daily_energy_gifted
+            name: Solar verschenkt
+          - entity: sensor.meter_reading_out
+            name: Solar verschenkt (gesamt)
+        title: Energie Heute
+      - type: custom:apexcharts-card
+        graph_span: 15m
+        header:
+          show: true
+          title: Power Usage (15m)
+          show_states: true
+          colorize_states: true
+        series:
+          - entity: sensor.power_usage
+            name: Bezug von EVU
+            stroke_width: 1
+            color: '#ff0000'
+          - entity: sensor.total_power_usage
+            name: Verbrauch
+            stroke_width: 1
+            color: '#ffff00'
+          - entity: sensor.tasmota_smartplug_12_energy_power
+            name: Solar Erzeugung
+            stroke_width: 1
+            color: '#00ff00'
+          - entity: sensor.meter_giving_away
+            name: Einspeisung
+            stroke_width: 1
+            color: '#00ffff'
+          - entity: sensor.solarlimiter_setvalue
+            name: Setvalue Inverter
+            stroke_width: 1
+            color: '#aaaaaa'
+      - type: custom:apexcharts-card
+        header:
+          show: true
+        graph_span: 96h
+        span:
+          start: day
+        now:
+          show: true
+          label: Now
+        color_list:
+          - var(--primary-color)
+        series:
+          - entity: sensor.epex_spot_data_net_price_2
+            yaxis_id: uurprijs
+            float_precision: 2
+            type: column
+            curve: smooth
+            extend_to: false
+            show:
+              extremas: time
+            data_generator: |
+              return entity.attributes.data.map((entry) => { 
+                return [new Date(entry.start_time).getTime(), entry.price_per_kwh]; 
+              }).slice(0,96);
+            color_threshold:
+              - value: 0
+                color: '#186ddc'
+              - value: 0.155
+                color: '#04822e'
+              - value: 0.2
+                color: '#12A141'
+              - value: 0.25
+                color: '#79B92C'
+              - value: 0.3
+                color: '#C4D81D'
+              - value: 0.35
+                color: '#F3DC0C'
+              - value: 0.4
+                color: red
+              - value: 0.5
+                color: green
+        experimental:
+          color_threshold: true
+        yaxis:
+          - id: uurprijs
+            decimals: 2
+            apex_config:
+              title:
+                text: €/kWh
+              tickAmount: 4
+        apex_config:
+          legend:
+            show: false
+          tooltip:
+            x:
+              show: true
+              format: HH:00 - HH:59
+      - type: entities
+        entities:
+          - entity: sensor.solarlimiter_getvalue
+          - entity: sensor.solarlimiter_setvalue
+          - entity: sensor.solarlimiter_temperature
+          - entity: sensor.solarlimiter_humidity
+          - entity: sensor.solarlimiter_dewpoint
+        title: Solarlimiter
+      - type: custom:sunsynk-power-flow-card
+        cardstyle: compact
+        panel_mode: false
+        large_font: false
+        show_solar: true
+        show_battery: false
+        show_grid: true
+        decimal_places: 2
+        dynamic_line_width: true
+        min_line_width: 1
+        max_line_width: 4
+        inverter:
+          modern: false
+          colour: grey
+          autarky: power
+          auto_scale: true
+          three_phase: false
+          model: azzurro
+        battery:
+          energy: 1200
+          shutdown_soc: 10
+          invert_power: true
+          colour: pink
+          show_daily: true
+          animation_speed: 6
+          max_power: 4500
+          show_absolute: false
+          auto_scale: true
+          hide_soc: true
+          dynamic_colour: true
+          linear_gradient: true
+          animate: true
+          path_threshold: 100
+        solar:
+          colour: orange
+          show_daily: true
+          mppts: 1
+          animation_speed: 9
+          max_power: 1000
+          pv1_name: ''
+          pv1_max_power: 1000
+          auto_scale: true
+          display_mode: 3
+          dynamic_colour: true
+          efficiency: 3
+          off_threshold: 0
+        grid:
+          colour: '#5490c2'
+          export_colour: brown
+          grid_off_colour: red
+          show_daily_buy: true
+          show_daily_sell: true
+          no_grid_colour: green
+          show_nonessential: true
+          invert_grid: false
+          animation_speed: 8
+          max_power: 8000
+          auto_scale: true
+          off_threshold: 0
+          grid_name: EWE
+        entities:
+          use_timer_248: 'no'
+          priority_load_243: 'no'
+          pv1_power_186: sensor.tasmota_smartplug_12_energy_power
+          pv1_voltage_109: sensor.tasmota_smartplug_12_energy_voltage
+          pv1_current_110: sensor.tasmota_smartplug_12_energy_current
+          pv_total: 0
+          day_pv_energy_108: sensor.tasmota_smartplug_12_energy_today
+          total_pv_generation: sensor.energy_current_hour
+          essential_power: none
+          essential_load1: sensor.total_power_usage
+          inverter_voltage_154: null
+          grid_power_169: sensor.total_power_usage
+          grid_ct_power_172: sensor.power_usage
+          day_load_energy_84: sensor.daily_energy_consumed_kw
+          aux_power_166: sensor.tasmota_smartplug_10_energy_power
+          day_grid_import_76: sensor.tagesverbrauch_helper
+          day_grid_export_77: sensor.vershenkte_energie_helper_neu
+          environment_temp: null
+          inverter_power_175: sensor.power_usage
+      - type: horizontal-stack
+        cards:
+          - type: custom:mini-graph-card
+            name: Solar / Total (24h)
+            icon: mdi:solar-power-variant-outline
+            hours_to_show: 24
+            points_per_hour: 3
+            hour24: true
+            line_width: 2
+            font_size: 75
+            entities:
+              - entity: sensor.tasmota_smartplug_12_energy_power
+                name: Solar-In
+                color: green
+                show_state: true
+              - entity: sensor.tasmota_smartplug_12_energy_today
+                name: Total Usage
+                color: yellow
+                show_state: true
+      - type: horizontal-stack
+        cards:
+          - type: custom:mini-graph-card
+            name: Solar/Gifted (24h)
+            icon: mdi:solar-power-variant-outline
+            hours_to_show: 24
+            font_size: 90
+            points_per_hour: 3
+            hour24: true
+            line_width: 2
+            entities:
+              - entity: sensor.tasmota_smartplug_12_energy_today
+                name: From-Grid
+                line_color: red
+                show_state: true
+              - entity: sensor.helper_daily_daily_energy_gifted
+                name: To-Grid
+                line_color: red
+                show_state: true
+      - type: horizontal-stack
+        cards:
+          - type: custom:mini-graph-card
+            name: In/Out (24h)
+            icon: mdi:transmission-tower-import
+            hours_to_show: 24
+            font_size: 90
+            points_per_hour: 3
+            hour24: true
+            line_width: 2
+            entities:
+              - entity: sensor.tagesverbrauch_helper
+                name: From-Grid
+                line_color: red
+                show_state: true
+              - entity: sensor.tasmota_smartplug_12_energy_today
+                name: To-Grid
+                line_color: red
+                show_state: true
+      - type: custom:power-flow-card-plus
+        entities:
+          battery:
+            state_of_charge: sensor.thomas_tablet_battery_level
+          grid:
+            entity:
+              consumption: sensor.power_usage
+              production: sensor.meter_giving_away
+          solar:
+            entity: sensor.tasmota_smartplug_12_energy_power
+          fossil_fuel_percentage: {}
+        clickable_entities: true
+        display_zero_lines:
+          mode: hide
+          transparency: 50
+          grey_color:
+            - 189
+            - 189
+            - 189
+        use_new_flow_rate_model: true
+        w_decimals: 0
+        kw_decimals: 1
+        min_flow_rate: 0.75
+        max_flow_rate: 6
+        max_expected_power: 2000
+        min_expected_power: 0.01
+        watt_threshold: 1000
+        transparency_zero_lines: 0
+        disable_dots: false
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Next 4 hours
+        graph_span: 6h
+        span:
+          start: hour
+        now:
+          show: true
+          label: Now
+        color_list:
+          - var(--primary-color)
+        series:
+          - entity: sensor.epex_spot_data_net_price_2
+            yaxis_id: uurprijs
+            float_precision: 3
+            type: column
+            curve: smooth
+            extend_to: false
+            data_generator: >
+              const now = Date.now(); const windowStart = now - 8 * 60 * 60 * 1000;
+              const future = entity.attributes.data.filter(
+                entry => new Date(entry.start_time).getTime() >= windowStart
+              ); return future.slice(0,14).map(entry => [
+                new Date(entry.start_time).getTime(),
+                entry.price_per_kwh
+              ]);
+            color_threshold:
+              - value: 0
+                color: '#186ddc'
+              - value: 0.155
+                color: '#04822e'
+              - value: 0.2
+                color: '#12A141'
+              - value: 0.25
+                color: '#79B92C'
+              - value: 0.3
+                color: '#C4D81D'
+              - value: 0.35
+                color: '#F3DC0C'
+              - value: 0.4
+                color: red
+              - value: 0.5
+                color: magenta
+        experimental:
+          color_threshold: true
+        yaxis:
+          - id: uurprijs
+            decimals: 3
+            min: 0
+            max: 0.5
+            apex_config:
+              title:
+                text: €/kWh
+              tickAmount: 4
+        apex_config:
+          legend:
+            show: false
+          tooltip:
+            x:
+              show: true
+              format: HH:00 - HH:59
+  - title: Shed
+    path: shed
+    icon: mdi:greenhouse
+    cards:
+      - type: custom:apexcharts-card
+        graph_span: 3h
+        header:
+          show: true
+          title: Temperatur
+          show_states: true
+          colorize_states: true
+        series:
+          - entity: sensor.tasmota_air_sensor_2_dht11_temperature
+            name: Temp
+            yaxis_id: temp
+            stroke_width: 2
+            color: '#ff5050'
+          - entity: sensor.tasmota_air_sensor_2_dht11_dewpoint
+            name: DewPoint
+            yaxis_id: temp
+            stroke_width: 2
+            color: '#5050ff'
+          - entity: sensor.tasmota_air_sensor_2_dht11_humidity
+            name: Humidity
+            yaxis_id: humid
+            stroke_width: 2
+            color: '#ffff00'
+          - entity: input_number.set_temp_shed
+            name: Setpoint
+            yaxis_id: temp
+            stroke_width: 2
+        yaxis:
+          - id: temp
+          - id: humid
+            opposite: true
+      - type: entities
+        entities:
+          - entity: light.shuppen
+        title: Shuppen LED
+      - show_name: true
+        show_icon: true
+        type: button
+        tap_action:
+          action: toggle
+        entity: light.shuppen
+  - title: Server room
+    path: server-room
+    icon: mdi:server
+    cards:
+      - type: custom:apexcharts-card
+        graph_span: 3h
+        header:
+          show: true
+          title: Power Usage
+          show_states: true
+          colorize_states: true
+        series:
+          - entity: sensor.tasmota_smartplug_10_energy_power
+            stroke_width: 1
+            yaxis_id: power
+          - entity: sensor.apc_load
+            stroke_width: 3
+            yaxis_id: usage
+        yaxis:
+          - id: power
+          - id: usage
+            opposite: true
+      - type: custom:apexcharts-card
+        graph_span: 3h
+        header:
+          show: true
+          title: Temperatur
+          show_states: true
+          colorize_states: true
+        series:
+          - entity: sensor.tasmota_servertemp_bme280_temperature
+            name: Temp
+            yaxis_id: temp
+            stroke_width: 2
+            color: '#ff5050'
+          - entity: sensor.tasmota_servertemp_bme280_dewpoint
+            name: DewPoint
+            yaxis_id: temp
+            stroke_width: 2
+            color: '#5050ff'
+          - entity: sensor.tasmota_servertemp_bme280_humidity
+            name: Humidity
+            yaxis_id: humid
+            stroke_width: 2
+            color: '#ffff00'
+        yaxis:
+          - id: temp
+          - id: humid
+            opposite: true
+      - type: vertical-stack
+        cards:
+          - type: gauge
+            entity: sensor.apc_load
+            name: USV Last
+            unit: '%'
+            min: 0
+            max: 100
+            needle: true
+            severity:
+              green: 0
+              yellow: 50
+              red: 90
+          - type: gauge
+            entity: sensor.tasmota_servertemp_bme280_temperature
+            name: Temperatur
+            unit: °C
+            min: 0
+            max: 60
+            needle: true
+            severity:
+              green: 15
+              yellow: 30
+              red: 40
+          - type: gauge
+            entity: sensor.apc_battery_charge
+            name: USV Batteriestand
+            unit: '%'
+            min: 0
+            max: 100
+            needle: true
+            severity:
+              green: 95
+              yellow: 50
+              red: 0
+      - type: entities
+        entities:
+          - sensor.tasmota_servertemp_bme280_dewpoint
+          - sensor.tasmota_servertemp_bme280_humidity
+          - sensor.tasmota_servertemp_bme280_pressure
+          - sensor.tasmota_servertemp_bme280_temperature
+      - chart_type: line
+        period: hour
+        type: statistics-graph
+        entities:
+          - sensor.tasmota_servertemp_bme280_temperature
+        stat_types:
+          - mean
+          - min
+          - max
+      - type: entities
+        entities:
+          - entity: sensor.apc_battery_charge
+          - entity: sensor.apc_load
+          - entity: sensor.apc_status
+          - entity: sensor.apc_status_data
+  - title: Power
+    path: prices
+    cards:
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Next 4 hours
+        graph_span: 6h
+        span:
+          start: hour
+        now:
+          show: true
+          label: Now
+        color_list:
+          - var(--primary-color)
+        series:
+          - entity: sensor.epex_spot_data_net_price_2
+            yaxis_id: uurprijs
+            float_precision: 3
+            type: column
+            curve: smooth
+            extend_to: false
+            data_generator: >
+              const now = Date.now(); const windowStart = now - 8 * 60 * 60 * 1000;
+              const future = entity.attributes.data.filter(
+                entry => new Date(entry.start_time).getTime() >= windowStart
+              ); return future.slice(0,14).map(entry => [
+                new Date(entry.start_time).getTime(),
+                entry.price_per_kwh
+              ]);
+            color_threshold:
+              - value: 0
+                color: '#186ddc'
+              - value: 0.155
+                color: '#04822e'
+              - value: 0.2
+                color: '#12A141'
+              - value: 0.25
+                color: '#79B92C'
+              - value: 0.3
+                color: '#C4D81D'
+              - value: 0.35
+                color: '#F3DC0C'
+              - value: 0.4
+                color: red
+              - value: 0.5
+                color: magenta
+        experimental:
+          color_threshold: true
+        yaxis:
+          - id: uurprijs
+            decimals: 3
+            apex_config:
+              title:
+                text: €/kWh
+              tickAmount: 4
+        apex_config:
+          legend:
+            show: false
+          tooltip:
+            x:
+              show: true
+              format: HH:00 - HH:59
+      - type: custom:apexcharts-card
+        header:
+          show: true
+        graph_span: 96h
+        span:
+          start: day
+        now:
+          show: true
+          label: Now
+        color_list:
+          - var(--primary-color)
+        series:
+          - entity: sensor.epex_spot_data_net_price_2
+            yaxis_id: uurprijs
+            float_precision: 2
+            type: column
+            curve: smooth
+            extend_to: false
+            show:
+              extremas: time
+            data_generator: |
+              return entity.attributes.data.map((entry) => { 
+                return [new Date(entry.start_time).getTime(), entry.price_per_kwh]; 
+              }).slice(0,96);
+            color_threshold:
+              - value: 0
+                color: '#186ddc'
+              - value: 0.155
+                color: '#04822e'
+              - value: 0.2
+                color: '#12A141'
+              - value: 0.25
+                color: '#79B92C'
+              - value: 0.3
+                color: '#C4D81D'
+              - value: 0.35
+                color: '#F3DC0C'
+              - value: 0.4
+                color: red
+              - value: 0.5
+                color: green
+        experimental:
+          color_threshold: true
+        yaxis:
+          - id: uurprijs
+            decimals: 2
+            apex_config:
+              title:
+                text: €/kWh
+              tickAmount: 4
+        apex_config:
+          legend:
+            show: false
+          tooltip:
+            x:
+              show: true
+              format: HH:00 - HH:59
+  - title: Garden
+    path: garden
+    icon: mdi:cctv
+    cards:
+      - image: default
+        image_size: '4'
+        show_animation: true
+        show_status: true
+        show_toolbar: true
+        type: custom:landroid-card
+        entity: lawn_mower.landroid_mrmower
+        image_left: false
+        compact_view: false
+        show_name: true
+        stats:
+          default:
+            - entity_id: sensor.mower_blades_total_on_time
+              subtitle: Total blade time
+              value_template: '{{ as_timedelta((value | float(0) * 3600) | string) }}'
+            - entity_id: sensor.mower_blades_current_on_time
+              subtitle: Current blade time
+              value_template: '{{ as_timedelta((value | float(0) * 3600) | string) }}'
+            - entity_id: sensor.mower_total_worktime
+              subtitle: Work time
+              value_template: '{{ as_timedelta((value | float(0) * 3600) | string ) }}'
+            - entity_id: sensor.mower_distance_driven
+              value_template: '{{ (value | float(0) / 1000) | round(3) }}'
+              unit: km
+              subtitle: Distance
+          mowing:
+            - entity_id: sensor.mower_yaw
+              subtitle: Yaw
+              unit: °
+            - entity_id: sensor.mower_roll
+              subtitle: Roll
+              unit: °
+            - entity_id: sensor.mower_pitch
+              subtitle: Pitch
+              unit: °
+        shortcuts:
+          - name: Notification
+            service: automation.toggle
+            icon: mdi:bell
+            service_data:
+              entity_id: automation.mower_notify_status
+  - title: Thomas room
+    path: thomas-room
+    icon: mdi:bed
+    cards:
+      - type: custom:apexcharts-card
+        graph_span: 48h
+        header:
+          show: true
+          title: Temperatur
+          show_states: true
+          colorize_states: true
+        series:
+          - entity: sensor.smart_thermostat_temperature
+            name: Temp
+            yaxis_id: temp
+            stroke_width: 3
+            color: '#ff5050'
+          - entity: climate.smart_thermostat
+            attribute: temperature
+            name: Setpoint
+            yaxis_id: temp
+            stroke_width: 3
+            color: '#ffff00'
+          - entity: sensor.tasmota_air_sensor_1_dht11_humidity
+            name: Humidity
+            yaxis_id: humid
+            stroke_width: 3
+            color: '#ffff00'
+        yaxis:
+          - id: temp
+          - id: humid
+            opposite: true
+      - show_name: true
+        show_icon: true
+        type: button
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-power/ACThomas
+        hold_action:
+          action: none
+        icon: mdi:air-conditioner
+        show_state: true
+        entity: switch.tasmota_smartplug_11_tasmota
+        name: 'Klimaanlage Thomas '
+      - title: History
+        type: history-graph
+        hours_to_show: 47
+        entities:
+          - climate.smart_thermostat
+      - type: thermostat
+        entity: climate.smart_thermostat
+        features:
+          - type: climate-hvac-modes
+            hvac_modes:
+              - 'off'
+              - heat
+  - theme: Backend-selected
+    title: Office
+    path: office
+    badges: []
+    cards:
+      - type: entities
+        entities:
+          - entity: light.shellyrgbw2_ec64c9d40aed
+            secondary_info: none
+        title: Nachtlicht
+        state_color: true
+      - type: entities
+        entities:
+          - entity: sensor.hp_laserjet_200_colormfp_m276n
+      - type: gauge
+        entity: sensor.hp_laserjet_200_colormfp_m276n_black_cartridge_hp_cf210x
+        name: Black color
+        unit: '%'
+        min: 0
+        max: 100
+        needle: false
+        severity:
+          green: 50
+          yellow: 30
+          red: 10
+      - type: gauge
+        entity: sensor.hp_laserjet_200_colormfp_m276n_cyan_cartridge_hp_cf211a
+        name: Cyan color
+        unit: '%'
+        min: 0
+        max: 100
+        severity:
+          green: 50
+          yellow: 30
+          red: 10
+      - type: gauge
+        entity: sensor.hp_laserjet_200_colormfp_m276n_magenta_cartridge_hp_cf213a
+        name: Magenta color
+        unit: '%'
+        min: 0
+        max: 100
+        severity:
+          green: 50
+          yellow: 30
+          red: 10
+      - type: gauge
+        entity: sensor.hp_laserjet_200_colormfp_m276n_yellow_cartridge_hp_cf212a
+        name: Yellow color
+        unit: '%'
+        min: 0
+        max: 100
+        severity:
+          green: 50
+          yellow: 30
+          red: 10

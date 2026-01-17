@@ -30,3 +30,4 @@ pnpm-debug.log*
 .env*
 /src/secret
 /webui/dist/assets
+wifiSecret.h
