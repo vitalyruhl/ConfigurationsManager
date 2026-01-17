@@ -8,6 +8,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Provide detailed explanations only when explicitly asked
 
 - Semi-automatic Workflow Guidelines:
+  - User changes are sacred: Never revert/overwrite user edits without asking first.
   - Confirm-before-write: If requirements are ambiguous or the change impacts multiple subsystems/files, ask 1-3 precise clarifying questions (or propose 2-3 options) before editing files.
   - One side-branch at a time: Do not work on more than one side-branch simultaneously.
   - Step-by-step workflow: Implement changes incrementally in small steps: fix -> verify -> commit -> continue.

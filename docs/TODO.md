@@ -37,7 +37,7 @@
 ### Medium Priority Bugs/Features (Prio 5)
 
 - **[FEATURE]** Failover Wifi native support
-- **[Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
+- **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
 
 ### Low Priority Bugs/Features (Prio 10)
 
