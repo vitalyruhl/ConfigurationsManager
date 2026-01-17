@@ -10,7 +10,6 @@
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
 - Architecture / API
-  - Library does not include the docs folder.
   - Settings auth: remove or hard-disable legacy endpoint `/config/settings_password`.
   - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
   - Settings schema versioning/migration (when new fields/structure are introduced).
@@ -22,8 +21,7 @@
 
 - **[Bug]** Settings password prompt when password is unset
 - **[Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
-- **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`
-- **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
+
 - **[Bug/Design]** Custom runtime provider named `system` overrides built-in System provider
   - Symptom: System card shows `—` for default fields after adding a custom provider with group `system`.
   - Expected: allow adding extra fields without losing default System fields.
@@ -37,7 +35,6 @@
 ### Medium Priority Bugs/Features (Prio 5)
 
 - **[FEATURE]** Failover Wifi native support
-- **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
 
 ### Low Priority Bugs/Features (Prio 10)
 
@@ -72,3 +69,15 @@
 - **[IDEA]** what about Matter - the new standard for smart home devices?
   - maybe add a Matter component to the library in the future?
 - **[IDEA]** what about bacNet? send data to a bacNet server like mqtt?
+
+
+### Done / Resolved (but not tested yet)
+
+- **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
+  - days is not tetsed yet
+- Library does not include the docs folder.
+
+### Done / Resolved
+
+- **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
+- **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`

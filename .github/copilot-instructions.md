@@ -22,6 +22,11 @@ you are my coding assistant. Follow the instructions in this file carefully when
 - Git Workflow Guidelines:
   - Never change main directly: For future work, do not implement changes while the active branch is main/master. If the active branch is main/master, emit a [WARNING] and propose 2-3 suitable branch names before making any edits.
   - Exception (docs-only TODO updates): If the only changes are documentation TODO files (e.g. docs/TODO.md, docs/todo_*.md), direct commits to main are allowed.
+  - Git read-only commands are allowed without asking: Examples: `git status`, `git diff`, `git log`, `git show`, `git branch`, `git remote -v`.
+  - Git commands that can modify the working tree/index/history still require confirmation: Examples: `git add`, `git commit`, `git switch/checkout`, `git reset`, `git merge`, `git rebase`, `git clean`, `git stash`, `git cherry-pick`.
+  - Command execution style:
+    - For Git commands, do NOT prepend `Set-Location ...;` (just run e.g. `git status -sb`).
+    - Only change directories when required for non-git commands (e.g. WebUI/PlatformIO in examples) and use `Push-Location`/`Pop-Location` to avoid leaving the terminal in a different folder.
   - Large changes require a clean baseline: Before starting larger changes (multi-file refactor, settings/storage/OTA/security, or anything that could take >30 minutes), ensure the current work is saved in git (commit or stash) so changes stay reviewable and reversible.
   - Branch naming check: Verify the active branch name matches the change topic. If it does not, emit a [WARNING] and propose 2-3 suitable branch names.
   - GitHub CLI preferred: If GitHub-related actions are needed (create/view PRs, check CI status, view issues), prefer using GitHub CLI (gh) when available.
@@ -54,6 +59,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Mock implementations for testing
 
 - ESP32 / PlatformIO Project Guidelines:
+  - Build target rule: For testing/flashing, use the example `examples/BME280-Full-GUI-Demo` by default unless the user explicitly requests another target. For publishing/release verification, build the minimal/root project first.
   - Build validation: Always run the relevant PlatformIO build for at least one ESP32 environment from platformio.ini (e.g. "pio run -e <env>"). If tests are affected, also run "pio test -e <env>".
   - Memory/flash safety: After changes to WebUI/HTML content or large strings, verify binary size and memory behavior (heap/PSRAM) to avoid runtime instability on ESP32.
   - Settings migration: Any change to the settings structure must be backwards-compatible (defensive defaults) and should include a migration/versioning strategy to prevent OTA updates from breaking existing devices.
