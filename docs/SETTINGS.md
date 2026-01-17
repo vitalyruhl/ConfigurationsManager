@@ -4,9 +4,6 @@ This document describes how to declare, register, persist and display configurat
 
 ## Core Concepts
 
-- Config<T>: Lightweight wrapper around a persisted value (Preferences / NVS).
-- ConfigOptions<T>: Aggregate initialization structure used to construct a Config<T>.
-- Registration: Add each Config<T> to the manager via addSetting().
 - Persistence: loadAll() on startup, saveAll() (or individual save) after changes.
 - Visibility: showIf predicate determines whether a setting appears in the web UI JSON.
 
@@ -21,6 +18,22 @@ Config<int> sample(ConfigOptions<int>{
   .showInWeb = true,
   .callback = [](){ Serial.println("Interval changed"); }
 });
+
+## Category
+
+In the WebUI, settings are grouped by the `.category` string. This is intentionally a simple string match:
+
+- Same category string => settings are merged into the same UI group/card.
+- Different category string (including different case or extra whitespace) => a separate UI group/card is created.
+
+This means you can "inject" settings into an existing category by using the exact same category string.
+
+Best practices:
+
+- Prefer shared constants for common categories (e.g. `cm::CoreCategories::WiFi`, `cm::CoreCategories::System`, `cm::CoreCategories::Buttons`) to avoid typos.
+- Keep categories stable and consistent across sketches/modules.
+- Use `sortOrder` to keep injected settings in a predictable place inside a category.
+- Keep keys short and unique; truncated key collisions can lead to hard-to-debug issues.
 ```
 
 Add to manager and load persisted value:

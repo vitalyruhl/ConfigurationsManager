@@ -15,12 +15,16 @@
 //
 // See docs/FEATURE_FLAGS.md for the complete list and examples. For convenience, this project enables
 // most features by default in platformio.ini so you can test and then disable what you don’t need.
+// [WARNING] Warning
+//   ESP32 has a limitation of 15 characters for the key name.
+//      The key name is built from the category and the key name (<category>_<key>).
+//      The category is limited to 13 characters, the key name to 1 character.
 // ---------------------------------------------------------------------------------------------------------------------
 #include "ConfigManager.h"
 // ---------------------------------------------------------------------------------------------------------------------
 
 // Demo defaults (do not store real credentials in repo)
-static const char SETTINGS_PASSWORD[] = "cm";
+static const char SETTINGS_PASSWORD[] = ""; // emty settings deaktivates password protection for settings-tab
 static const char OTA_PASSWORD[] = "ota";
 
 #include <WiFi.h>
@@ -32,65 +36,33 @@ static const char OTA_PASSWORD[] = "ota";
 #include <ESPAsyncWebServer.h>
 
 // -------------------------------------------------------------------
-// Core settings demo mode
+// Core settings templates demo
 //
-// This example is intended to demonstrate the future "built-in core settings" API (WiFi/System/Buttons)
-// that will shrink the sketch significantly.
-//
-// For now (Step 1 not implemented yet), keep it building by using the local structs.
-// Once core settings exist in the library, you can flip the flag in platformio.ini:
-//   -DCM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS=1
+// This example demonstrates using the built-in core settings templates (WiFi/System/Buttons/NTP)
+// from the library to keep the sketch smaller and consistent across projects.
 // -------------------------------------------------------------------
-#ifndef CM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS
-#define CM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS 0
-#endif
-
-#if CM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS
-#if __has_include("core/CoreSettings.h")
 #include "core/CoreSettings.h"
-#else
-#error "CM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS=1 requires core/CoreSettings.h (implement Step 1 first)."
-#endif
-#endif
 
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-BME280-Full-GUI-Demo-Core"
 #define BUTTON_PIN_AP_MODE 13
 
-// [WARNING] Warning
-// ESP32 has a limitation of 15 characters for the key name.
-// The key name is built from the category and the key name (<category>_<key>).
-// The category is limited to 13 characters, the key name to 1 character.
-// Since V2.0.0, the key will be truncated if it is too long, but you now have a user-friendly displayName to show in the web interface.
-
-
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
-//--------------------------------------------------------------------
-// Forward declarations of functions
-void SetupCheckForAPModeButton();
-void SetupCheckForResetButton();
-void updateStatusLED(); // new non-blocking status LED handler
-void setHeaterState(bool on);
-void setFanState(bool on);
-void cbTestButton();
-void setupGUI();
-bool SetupStartWebServer();
-void onWiFiConnected();
-void onWiFiDisconnected();
-void onWiFiAPMode();
-void SetupStartTemperatureMeasuring();
-void readBme280();
-static float computeDewPoint(float temperatureC, float relHumidityPct);
-void SetupCheckForAPModeButton();
-void setHeaterState(bool on);
-void cbTestButton();
+// Built-in core settings templates.
+// These references provide shorter names for the settings bundles used in this sketch.
+static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();              // Core container for settings templates
+static cm::CoreSystemSettings &systemSettings = coreSettings.system;               // System: OTA, WiFi reboot timeout, version
+static cm::CoreButtonSettings &buttonSettings = coreSettings.buttons;              // Buttons: GPIO pins, polarity, pull configuration
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;                     // WiFi: SSID, password, DHCP/static networking
+static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                        // NTP: sync interval, servers, timezone
+// -------------------------------------------------------------------
+
 
 // -------------------------------------------------------------------
 // Global theme override test: make all h3 headings orange without underline
 // Served via /user_theme.css and auto-injected by the frontend if present.
 // NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
-
 
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .card h3 { color: orange; text-decoration: underline; font-weight: 900 !Important; font-size: 1.2rem !Important; }
@@ -113,20 +85,6 @@ Config<int> updateInterval(ConfigOptions<int>{
     .name = "Update Interval (seconds)",
     .category = "Example Settings",
     .defaultValue = 30});
-
-// Now, these will be truncated and added if their truncated keys are unique:
-Config<float> VeryLongCategoryName(ConfigOptions<float>{
-    .key = "VlongC",
-    .name = "category Correction long",
-    .category = "VeryLongCategoryName",
-    .defaultValue = 0.1f,
-    .categoryPretty = "Category correction long - Example"});
-
-Config<float> VeryLongKeyName(ConfigOptions<float>{
-    .key = "VeryLongKeyName",
-    .name = "Key correction long",
-    .category = "VeryLongCategoryName",
-    .defaultValue = 0.1f});
 
 //---------------------------------------------------------------------------------------------------
 // ---- Temporary dynamic visibility example ----
@@ -154,141 +112,39 @@ Config<String> tempSettingAktiveOnFalse(ConfigOptions<String>{
     { return !tempBoolToggle.get(); }});
 // ---- End temporary dynamic visibility example ----
 
-//--------------------------------------------------------------------------------------------------------------
-// Example: Using structures for grouped settings
-// SystemSettings configuration (structure example)
+// Extra button setting (example-specific) shows how-to inject a setting in core category.
+// Not part of CoreButtonSettings because it is project-specific and not "core".
+Config<int> showerRequestPin(ConfigOptions<int>{
+    .key = "BtnShower",
+    .name = "Shower Request Button GPIO",
+        .category = cm::CoreCategories::Buttons,
+    .defaultValue = 19,
+    .showInWeb = true});
+
 // #endregion Examples
 
-// #region Structured Settings (System/WiFi/NTP)
 
-#if !CM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS
+//--------------------------------------------------------------------
+// Forward declarations of functions
+void SetupCheckForAPModeButton();
+void SetupCheckForResetButton();
+void updateStatusLED(); // new non-blocking status LED handler
+void setHeaterState(bool on);
+void setFanState(bool on);
+void cbTestButton();
+void setupGUI();
+bool SetupStartWebServer();
+void onWiFiConnected();
+void onWiFiDisconnected();
+void onWiFiAPMode();
+void SetupStartTemperatureMeasuring();
+void readBme280();
+static float computeDewPoint(float temperatureC, float relHumidityPct);
+void SetupCheckForAPModeButton();
+void setHeaterState(bool on);
+void cbTestButton();
 
-struct SystemSettings
-{
-    Config<bool> allowOTA;
-    Config<String> otaPassword;
-    Config<int> wifiRebootTimeoutMin;
-    Config<String> version;
-    SystemSettings() : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = "System", .defaultValue = true}),
-                       otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = "System", .defaultValue = String(OTA_PASSWORD), .showInWeb = true, .isPassword = true}),
-                       wifiRebootTimeoutMin(ConfigOptions<int>{
-                           .key = "WiFiRb",
-                           .name = "Reboot if WiFi lost (min)",
-                           .category = "System",
-                           .defaultValue = 5,
-                           .showInWeb = true}),
-                       version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})
-    {
-        // Constructor - do not register here due to static initialization order
-    }
 
-    void init() {
-        // Register settings with ConfigManager after ConfigManager is ready
-        ConfigManager.addSetting(&allowOTA);
-        ConfigManager.addSetting(&otaPassword);
-        ConfigManager.addSetting(&wifiRebootTimeoutMin);
-        ConfigManager.addSetting(&version);
-    }
-};
-
-struct ButtonSettings
-{
-    Config<int> apModePin;
-    Config<int> resetDefaultsPin;
-    Config<int> showerRequestPin;
-    ButtonSettings() : apModePin(ConfigOptions<int>{.key = "BtnAP", .name = "AP Mode Button GPIO", .category = "Buttons", .defaultValue = 13}),
-                       resetDefaultsPin(ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = "Buttons", .defaultValue = 15}),
-                       showerRequestPin(ConfigOptions<int>{.key = "BtnShower", .name = "Shower Request Button GPIO", .category = "Buttons", .defaultValue = 19, .showInWeb = true})
-    {
-        // Constructor - do not register here due to static initialization order
-    }
-
-    void init() {
-        // Register settings with ConfigManager after ConfigManager is ready
-        ConfigManager.addSetting(&apModePin);
-        ConfigManager.addSetting(&resetDefaultsPin);
-        ConfigManager.addSetting(&showerRequestPin);
-    }
-};
-
-SystemSettings systemSettings; // Create an instance of SystemSettings-Struct
-ButtonSettings buttonSettings; // Create an instance of ButtonSettings-Struct
-
-// Example of a structure for WiFi settings
-struct WiFi_Settings // wifiSettings
-{
-    Config<String> wifiSsid;
-    Config<String> wifiPassword;
-    Config<bool> useDhcp;
-    Config<String> staticIp;
-    Config<String> gateway;
-    Config<String> subnet;
-    Config<String> dnsPrimary;
-    Config<String> dnsSecondary;
-
-    WiFi_Settings() : wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .showInWeb = true, .sortOrder = 1}),
-                      wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .showInWeb = true, .isPassword = true, .sortOrder = 2}),
-                      useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = true, .showInWeb = true, .sortOrder = 3}),
-                      staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.2.131", .sortOrder = 4, .showIf = [this](){ return !useDhcp.get(); }}),
-                      gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 5, .showIf = [this](){ return !useDhcp.get(); }}),
-                      subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this](){ return !useDhcp.get(); }}),
-                      dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.2.250", .sortOrder = 7, .showIf = [this](){ return !useDhcp.get(); }}),
-                      dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this](){ return !useDhcp.get(); }})
-    {
-        // Constructor - do not register here due to static initialization order
-    }
-
-    void init() {
-        // Register settings with ConfigManager after ConfigManager is ready
-        ConfigManager.addSetting(&wifiSsid);
-        ConfigManager.addSetting(&wifiPassword);
-        ConfigManager.addSetting(&useDhcp);
-        ConfigManager.addSetting(&staticIp);
-        ConfigManager.addSetting(&gateway);
-        ConfigManager.addSetting(&subnet);
-        ConfigManager.addSetting(&dnsPrimary);
-        ConfigManager.addSetting(&dnsSecondary);
-    }
-
-};
-
-WiFi_Settings wifiSettings; // Create an instance of WiFi_Settings-Struct
-
-#else
-
-// Step 1 (Core settings templates) will provide built-in WiFi/System/Button settings here.
-// The example will be updated to use the library-owned settings once available.
-
-#endif
-
-//--------------------------------------------------------------------------------------------------------------
-// NTP Settings
-struct NTPSettings
-{
-    Config<int> frequencySec; // Sync frequency (seconds)
-    Config<String> server1;   // Primary NTP server
-    Config<String> server2;   // Secondary NTP server
-    Config<String> tz;        // POSIX/TZ string for local time
-    NTPSettings() : frequencySec(ConfigOptions<int>{.key = "NTPFrq", .name = "NTP Sync Interval (s)", .category = "NTP", .defaultValue = 3600, .showInWeb = true}),
-                    server1(ConfigOptions<String>{.key = "NTP1", .name = "NTP Server 1", .category = "NTP", .defaultValue = String("192.168.2.250"), .showInWeb = true}),
-                    server2(ConfigOptions<String>{.key = "NTP2", .name = "NTP Server 2", .category = "NTP", .defaultValue = String("pool.ntp.org"), .showInWeb = true}),
-                    tz(ConfigOptions<String>{.key = "NTPTZ", .name = "Time Zone (POSIX)", .category = "NTP", .defaultValue = String("CET-1CEST,M3.5.0/02,M10.5.0/03"), .showInWeb = true})
-    {
-        // Constructor - do not register here due to static initialization order
-    }
-
-    void init() {
-        // Register settings with ConfigManager after ConfigManager is ready
-        ConfigManager.addSetting(&frequencySec);
-        ConfigManager.addSetting(&server1);
-        ConfigManager.addSetting(&server2);
-        ConfigManager.addSetting(&tz);
-    }
-};
-
-NTPSettings ntpSettings; // ntpSettings
-
-// #endregion Structured Settings (System/WiFi/NTP)
 
 // #region Temperature Measurement
 
@@ -452,8 +308,7 @@ void setup()
     // Register individual settings (non-structured)
     ConfigManager.addSetting(&updateInterval);
     ConfigManager.addSetting(&testBool);
-    ConfigManager.addSetting(&VeryLongCategoryName);
-    ConfigManager.addSetting(&VeryLongKeyName);
+    ConfigManager.addSetting(&showerRequestPin);
 
     // Register temporary dynamic test settings
     ConfigManager.addSetting(&tempBoolToggle); // show, we have used it in gui, but register it here - no problem, its only showing
@@ -463,15 +318,8 @@ void setup()
     // Initialize structured settings using Delayed Initialization Pattern
     // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
     tempSettings.init();      // BME280 temperature sensor settings
-    ntpSettings.init();       // NTP time synchronization settings
-
-#if !CM_EXAMPLE_USE_BUILTIN_CORE_SETTINGS
-    systemSettings.init();    // System settings (OTA, version, etc.)
-    buttonSettings.init();    // GPIO button configuration
-    wifiSettings.init();      // WiFi connection settings
-#else
-    // Step 1: enable/attach built-in core settings here (WiFi/System/Buttons).
-#endif
+    coreSettings.attach(ConfigManager);      // Register WiFi/System/Buttons core settings
+    coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -884,10 +732,29 @@ void setupGUI()
 // HELPER FUNCTIONS
 //----------------------------------------
 
+// TODO(IOManager): Move this helper into a dedicated IO manager module.
+// Goal: Centralize GPIO button handling (pull mode, active level, debouncing).
+// API idea:
+//   - bool IOManager::checkResetToDefaultsButton(const cm::CoreButtonSettings& cfg,
+//       std::function<void()> onPressed);
+// Notes:
+//   - The callback should decide whether/when to reboot (library should not force ESP.restart()).
+//   - Keep this example as the reference behavior for the future IOManager implementation.
 void SetupCheckForResetButton()
 {
+    const int resetPin = buttonSettings.resetDefaultsPin.get();
+    if (resetPin < 0)
+    {
+        return; // Button not present
+    }
+
+    // Configure pin based on settings (boot-time).
+    pinMode(resetPin, buttonSettings.resetUsePullup.get() ? INPUT_PULLUP : INPUT_PULLDOWN);
+
     // check for pressed reset button
-    if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
+    const int resetLevel = digitalRead(resetPin);
+    const bool resetPressed = buttonSettings.resetActiveLow.get() ? (resetLevel == LOW) : (resetLevel == HIGH);
+    if (resetPressed)
     {
         Serial.println("[MAIN] Reset button pressed -> Reset all settings...");
         ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
@@ -900,6 +767,12 @@ void SetupCheckForResetButton()
     }
 }
 
+// TODO(IOManager): Move this helper into a dedicated IO manager module.
+// API idea:
+//   - bool IOManager::checkApModeButton(const cm::CoreButtonSettings& cfg,
+//       std::function<void()> onPressed);
+// Notes:
+//   - The callback should decide what "AP mode" means (SSID, password, portal, etc.).
 void SetupCheckForAPModeButton()
 {
     String APName = "ESP32_Config";
@@ -913,7 +786,18 @@ void SetupCheckForAPModeButton()
 
     // check for pressed AP mode button
 
-    if (digitalRead(buttonSettings.apModePin.get()) == LOW)
+    // Configure pin based on settings (boot-time).
+    const int apPin = buttonSettings.apModePin.get();
+    if (apPin < 0)
+    {
+        return; // Button not present
+    }
+
+    pinMode(apPin, buttonSettings.apModeUsePullup.get() ? INPUT_PULLUP : INPUT_PULLDOWN);
+
+    const int apLevel = digitalRead(apPin);
+    const bool apPressed = buttonSettings.apModeActiveLow.get() ? (apLevel == LOW) : (apLevel == HIGH);
+    if (apPressed)
     {
         Serial.println("[MAIN] AP mode button pressed -> starting AP mode...");
         ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
