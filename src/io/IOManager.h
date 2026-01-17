@@ -26,6 +26,10 @@ public:
         bool defaultActiveLow = true;
         bool defaultEnabled = true;
 
+        // If false, IOManager will not register any ConfigManager settings for this output.
+        // That means: no Settings tab entries, no persistence, and defaults are used at runtime.
+        bool registerSettings = true;
+
         // Visibility controls (UI only). Hidden settings still exist and apply.
         bool showPinInWeb = true;
         bool showActiveLowInWeb = true;
@@ -83,6 +87,8 @@ private:
         int defaultPin = -1;
         bool defaultActiveLow = true;
         bool defaultEnabled = true;
+
+        bool registerSettings = true;
 
         bool showPinInWeb = true;
         bool showActiveLowInWeb = true;

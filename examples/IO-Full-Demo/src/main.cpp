@@ -203,7 +203,7 @@ void setup()
         .defaultPin = 14,
         .defaultActiveLow = true,
         .defaultEnabled = true,
-        .showPinInWeb = false,
+        .registerSettings = false,
     });
     // Create dedicated Settings cards for each IO item (category token stays "IO")
     ioManager.addIOtoGUI(
@@ -226,7 +226,8 @@ void setup()
             setFanState(state);
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         },
-        "Fan"
+        "Fan",
+        "sensors"
     );
 
     // Taster: momentary button (pulses relay)

@@ -40,6 +40,8 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
     entry.defaultActiveLow = binding.defaultActiveLow;
     entry.defaultEnabled = binding.defaultEnabled;
 
+    entry.registerSettings = binding.registerSettings;
+
     entry.showPinInWeb = binding.showPinInWeb;
     entry.showActiveLowInWeb = binding.showActiveLowInWeb;
 
@@ -57,6 +59,12 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
     if (entry.settingsRegistered) {
         CM_LOG("[IOManager][WARNING] addIOtoGUI: output '%s' already registered", entry.id.c_str());
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        // Runtime-only / programmatic output: no Settings tab entries and no persistence.
+        entry.settingsRegistered = true;
         return;
     }
 
