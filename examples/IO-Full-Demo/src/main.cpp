@@ -161,7 +161,7 @@ static void registerDigitalOutputsGui()
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         },
         "Fan",
-        "sensors"
+        "FAN Control"
     );
 
     // Momentary button: hold-to-activate (pressed -> ON, released -> OFF)
@@ -447,6 +447,23 @@ static void createAnalogInputs()
     });
     ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "sensors");
     ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "raw-values", true);
+    ioManager.addAnalogInputToGUIWithAlarm(
+    "ldr_w",
+    nullptr,
+    30,
+    30.0f,
+    95.0f,
+    cm::IOManager::AnalogAlarmCallbacks{
+            .onEnter = []() {
+                Serial.println("[ALARM][ldr_w] enter");
+            },
+            .onExit = []() {
+                Serial.println("[ALARM][ldr_w] exit");
+            },
+        },
+        "LDR West",
+        "Min_Max Alarms"
+    );
 }
 
 static void createAnalogOutputs()

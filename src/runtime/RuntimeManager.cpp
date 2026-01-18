@@ -99,7 +99,8 @@ void ConfigManagerRuntime::sortMeta() {
 }
 
 String ConfigManagerRuntime::runtimeValuesToJSON() {
-    DynamicJsonDocument d(2048);
+    // Must stay small enough for frequent WS pushes, but large enough for typical runtime payloads.
+    DynamicJsonDocument d(4096);
     JsonObject root = d.to<JsonObject>();
     root["uptime"] = millis();
 
@@ -179,7 +180,12 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 #endif
 
     String out;
-    serializeJson(d, out);
+    out.reserve(2048);
+    const size_t written = serializeJson(d, out);
+    if (written == 0 || out.length() == 0 || out[0] != '{') {
+        // Never return an empty/invalid frame; the WebUI expects a JSON object.
+        return "{}";
+    }
     return out;
 }
 

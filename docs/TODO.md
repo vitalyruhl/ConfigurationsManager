@@ -38,33 +38,9 @@
          - Settings: GPIO pin, active-low/high, enabled.
          - Runtime API: `set(bool)` / `get()`.
        - Analog inputs
-         - Anlegen wie bei `DigitalInput` (IOManager verwaltet Settings + Runtime + Events)
-         - API idea: `io.addAnalogInput({ .id=..., .name=..., .pin=..., ... })`
-         - Events: `.onChange(...)` (deadband-basiert), zusätzlich periodisch via `.setMinEvent(10000)`
-         - Settings / API
-           - `.setMapping(rawMin, rawMax, outMin, outMax)`
-             - Default (wenn nicht gesetzt): `raw == out` (identity mapping)
-             - Range/scaling model
-               - `raw.*` defaults MUST come from the selected provider / board capabilities (no hardcoded library defaults).
-                 - Example only: ESP32 ADC raw is typically `0..4095` (12-bit), but this can differ by board/config.
-               - Default behavior: full raw range is mapped into the output range.
-                 - If the user does not override `out.*`, default `out.min/out.max` should represent a pass-through of the full raw range (i.e. identity scaling, so raw==out in meaning).
-               - User override example: a potentiometer should show `0..100%`.
-                 - User sets `out.min = 0`, `out.max = 100` in code.
-                 - This must automatically enable/register the corresponding settings so the user can fine-tune in the GUI.
-               - GUI activation rule
-                 - If a channel provides explicit `out.*` overrides in code (or sets an explicit `enableScaling` flag), IOManager registers `out.min/out.max` (and optionally `unit`, `sensitivity`) as editable settings under category `IO`.
-                 - If not overridden, keep those settings hidden/disabled by default to avoid UI clutter.
-           - `.setUnit("°C")` / `.setUnit("%")` (nur Anzeige)
-           - Thresholds + Alarme
-             - `.setMin(value)` / `.setMax(value)`
-             - Events bei Unter-/Überschreiten (z.B. `onBelowMin`, `onAboveMax`)
-             - Für diese Events Alarm-Anzeigen (Runtime bool-dot) für die GUI bereitstellen
-           - `.setDB(0.01f)` (default) Deadband für Eventauslösung
-           - `.simulate(43.3f)` sendet konstanten Wert (keine ADC reads)
-           - `.setMinEvent(10000)` (default) auch bei unverändertem Wert min. alle 10s ein `onChange`
-         - Readout ohne Eventauslösung: `.getRawValue()` und `.getValue()`
-         - Runtime Anzeige: raw + value (und optional min/max Alarmzustand)
+         - **[COMPLETED][TESTED]** Analog inputs (raw + scaled mapping, deadband + minEvent)
+         - **[COMPLETED][TESTED]** Runtime UI: raw/scaled values can be shown on different cards/groups
+         - **[COMPLETED][TESTED]** Alarms: optional min/max thresholds (min-only/max-only/both) with callbacks + runtime indicators
        - Analog outputs
          - API idea: `io.addAnalogOutput({ .id=..., .name=..., .pin=..., ... }).setValue(1.5f)`
          - Settings: GPIO pin, extended-range flag.
@@ -180,3 +156,7 @@
 - **[COMPLETED][TESTED]** IOManager Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
 - **[COMPLETED][TESTED]** IOManager Digital inputs: non-blocking events (press/release/click/double/long)
 - **[COMPLETED][TESTED]** IOManager Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
+
+- **[COMPLETED][TESTED]** IOManager Analog inputs: raw/scaled mapping + deadband/minEvent + runtime multi-card registration
+- **[COMPLETED][TESTED]** IOManager Analog alarms: dynamic min/max thresholds via settings + separate min/max callbacks + runtime flags (`<id>_alarm_min/_alarm_max`)
+- **[COMPLETED][TESTED]** WebUI Runtime: numeric alarm highlighting prefers runtime alarm flags when present; WS frames validated + polling fallback prevents stuck UI

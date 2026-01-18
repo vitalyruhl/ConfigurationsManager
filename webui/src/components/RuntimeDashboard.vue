@@ -107,7 +107,7 @@
               v-else-if="
                 runtime[group.name] && runtime[group.name][f.key] !== undefined
               "
-              :class="['rw', valueClasses(runtime[group.name][f.key], f)]"
+              :class="['rw', valueClasses(runtime[group.name][f.key], f, group.name)]"
               :data-group="group.name"
               :data-key="f.key"
               :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
@@ -707,10 +707,21 @@ function startWebSocket(url) {
         return;
       }
       try {
-        runtime.value = JSON.parse(ev.data);
+        const parsed = JSON.parse(ev.data);
+        if (!parsed || typeof parsed !== "object") {
+          if (!pollTimer) {
+            fallbackPolling();
+          }
+          return;
+        }
+        runtime.value = parsed;
         buildRuntimeGroups();
       } catch (e) {
-        /* ignore non-JSON frames */
+        // If we receive non-JSON frames repeatedly, WebSocket mode can look "frozen".
+        // Start polling as a resilient fallback.
+        if (!pollTimer) {
+          fallbackPolling();
+        }
       }
     };
   } catch (e) {
@@ -1234,7 +1245,7 @@ function severityClass(val, meta) {
   return "";
 }
 
-function valueClasses(val, meta) {
+function valueClasses(val, meta, groupName) {
   if (meta && meta.isBool) {
     const classes = ["br"];
     if (
@@ -1245,6 +1256,44 @@ function valueClasses(val, meta) {
     }
     return classes.join(" ");
   }
+
+  // For numeric fields: if the backend provides explicit alarm flags (dynamic settings-driven),
+  // prefer those over static alarmMin/alarmMax from runtime_meta.
+  try {
+    if (groupName && meta && typeof meta.key === "string") {
+      const groupData = runtime.value && runtime.value[groupName];
+      if (groupData && typeof groupData === "object") {
+        const minKey = meta.key + "_alarm_min";
+        const maxKey = meta.key + "_alarm_max";
+        const hasMinFlag = groupData[minKey] !== undefined;
+        const hasMaxFlag = groupData[maxKey] !== undefined;
+        if (hasMinFlag || hasMaxFlag) {
+          if (!!groupData[minKey] || !!groupData[maxKey]) return "sev-alarm";
+          // No alarm active per flags -> still allow warning styling.
+          if (typeof val === "number" && meta) {
+            if (
+              meta.warnMin !== undefined &&
+              meta.warnMin !== null &&
+              !Number.isNaN(meta.warnMin) &&
+              val < meta.warnMin
+            )
+              return "sev-warn";
+            if (
+              meta.warnMax !== undefined &&
+              meta.warnMax !== null &&
+              !Number.isNaN(meta.warnMax) &&
+              val > meta.warnMax
+            )
+              return "sev-warn";
+          }
+          return "";
+        }
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
   return severityClass(val, meta);
 }
 
