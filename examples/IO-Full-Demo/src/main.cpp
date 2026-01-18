@@ -30,7 +30,6 @@ static const char OTA_PASSWORD[] = "ota";
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <Ticker.h>
-#include <math.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
@@ -74,20 +73,6 @@ static bool isPulseActive(uint32_t untilMs)
     return static_cast<int32_t>(millis() - untilMs) <= 0;
 }
 
-// -------------------------------------------------------------------
-// Global theme override test: make all h3 headings orange without underline
-// Served via /user_theme.css and auto-injected by the frontend if present.
-// NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
-
-static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-.rw[data-group="sensors"][data-key="temp"] .rw{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .lab{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-)CSS";
-
-
-
 //--------------------------------------------------------------------
 // Forward declarations of functions
 void updateStatusLED(); // new non-blocking status LED handler
@@ -98,41 +83,12 @@ bool SetupStartWebServer();
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
-void updateMockTemperature();
 
 static void createDigitalOutputs();
 static void registerDigitalOutputsGui();
 static void createDigitalInputs();
 static void createAnalogInputs();
 static void createAnalogOutputs();
-
-// #region Temperature Measurement (mocked)
-
-float temperature = NAN; // current temperature in Celsius
-static unsigned long lastTempReadMs = 0;
-
-
-//this ist temporary, because all will be handled by IOManager later
-struct TempSensorSettings {
-    Config<int> gpioPin;      // DS18B20 data pin
-    Config<float> corrOffset; // correction offset in °C
-    Config<int> readInterval; // seconds
-
-    TempSensorSettings() :
-        gpioPin(ConfigOptions<int>{.key = "TsPin", .name = "GPIO Pin", .category = "Temp Sensor", .defaultValue = 21}),
-        corrOffset(ConfigOptions<float>{.key = "TsOfs", .name = "Correction Offset", .category = "Temp Sensor", .defaultValue = 0.0f, .showInWeb = true}),
-        readInterval(ConfigOptions<int>{.key = "TsInt", .name = "Read Interval (s)", .category = "Temp Sensor", .defaultValue = 30, .showInWeb = true})
-    {}
-
-    void init() {
-        ConfigManager.addSetting(&gpioPin);
-        ConfigManager.addSetting(&corrOffset);
-        ConfigManager.addSetting(&readInterval);
-    }
-};
-static TempSensorSettings tempSensorSettings;
-
-// #endregion Temperature Measurement (mocked)
 
 
 static void createDigitalOutputs()
@@ -404,7 +360,60 @@ static void createDigitalInputs()
 
 static void createAnalogInputs()
 {
-    // TODO: Placeholder for future analog input initialization.
+    // LDR cross (solar tracker) - ADC1 pins (WiFi-safe): 34, 35, 36(VP), 39(VN)
+    // Note: These pins are input-only, which is fine for analog sensors.
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_n",
+        .name = "LDR North",
+        .defaultPin = 34,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUI("ldr_n", nullptr, 13, "LDR North", "sensors", true, true);
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_e",
+        .name = "LDR East",
+        .defaultPin = 35,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "sensors", true, true);
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_s",
+        .name = "LDR South",
+        .defaultPin = 36,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 17, "LDR South", "sensors", true, true);
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_w",
+        .name = "LDR West",
+        .defaultPin = 39,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "sensors", true, true);
 }
 
 static void createAnalogOutputs()
@@ -415,16 +424,6 @@ static void createAnalogOutputs()
 
 Ticker NtpSyncTicker;
 bool tickerActive = false; // Used as a generic "services active" flag (WiFi/OTA/NTP)
-
-void updateMockTemperature()
-{
-    // [MOCKED DATA] Replace later with real DS18B20 (and/or analog input based) reading.
-    // Stable but slightly moving value for UI testing.
-    const float seconds = millis() / 1000.0f;
-    const float base = 42.0f;
-    const float wave = 0.5f * sinf(seconds / 30.0f);
-    temperature = base + wave + tempSensorSettings.corrOffset.get();
-}
 
 void setup()
 {
@@ -442,14 +441,9 @@ void setup()
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
-    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
     ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
     //----------------------------------------------------------------------------------------------------------------------------------
-
-    // Initialize structured settings using Delayed Initialization Pattern
-    // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
-    tempSensorSettings.init();      // DS18B20 (mocked for now) settings
 
     coreSettings.attachWiFi(ConfigManager);     // Register WiFi baseline settings
     coreSettings.attachSystem(ConfigManager);   // Register System baseline settings
@@ -510,9 +504,6 @@ void setup()
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
     ConfigManager.setWebSocketInterval(250); // Faster updates - every 250ms
     ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
-
-    updateMockTemperature();
-    lastTempReadMs = millis();
     //----------------------------------------------------------------------------------------------------------------------------------
 
     Serial.println("Loaded configuration:");
@@ -556,15 +547,6 @@ void loop()
         Serial.printf("[MAIN] Loop running, WiFi status: %d, heap: %d\n", WiFi.status(), ESP.getFreeHeap());
     }
 
-    const int intervalSec = tempSensorSettings.readInterval.get() < 1 ? 1 : tempSensorSettings.readInterval.get();
-    const unsigned long intervalMs = (unsigned long)intervalSec * 1000UL;
-    if (millis() - lastTempReadMs >= intervalMs)
-    {
-        lastTempReadMs = millis();
-        updateMockTemperature();
-    }
-
-
     updateStatusLED();
     delay(10);
 }
@@ -576,28 +558,6 @@ void loop()
 void setupGUI()
 {
     Serial.println("[GUI] setupGUI() start");
-    // #region Sensors Card (Temperature)
-
-        // Register sensor runtime provider for temperature (mocked for now)
-        Serial.println("[GUI] Adding runtime provider: sensors");
-        CRM().addRuntimeProvider("sensors", [](JsonObject &data)
-        {
-            // Apply precision to sensor values to reduce JSON size
-            data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
-        },2);
-
-        // Define sensor display fields using addRuntimeMeta
-        Serial.println("[GUI] Adding meta: sensors.temp");
-        RuntimeFieldMeta tempMeta;
-        tempMeta.group = "sensors";
-        tempMeta.key = "temp";
-        tempMeta.label = "Temperature";
-        tempMeta.unit = "°C";
-        tempMeta.precision = 1;
-        tempMeta.order = 10;
-        CRM().addRuntimeMeta(tempMeta);
-    // #endregion Sensors Card (Temperature)
-
     // #region Controls Card with Buttons, Toggles, and Sliders
         // Add interactive controls provider
         Serial.println("[GUI] Adding runtime provider: controls");
@@ -605,38 +565,6 @@ void setupGUI()
         {
             // Optionally expose control states
         },3);
-
-        // Divider between discrete controls (buttons/toggles) and analog controls
-        Serial.println("[GUI] Adding meta divider: controls.analogDivider");
-        RuntimeFieldMeta analogDividerMeta;
-        analogDividerMeta.group = "controls";
-        analogDividerMeta.key = "analogDivider";
-        analogDividerMeta.label = "Analog";
-        analogDividerMeta.isDivider = true;
-        analogDividerMeta.order = 23;
-        CRM().addRuntimeMeta(analogDividerMeta);
-
-        // Float slider synchronized with the Temp setting (Temp.TCO)
-        Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
-        ConfigManager.defineRuntimeFloatSlider(
-            "controls",
-            "tempOffset",
-            "Temperature Offset",
-            -5.0f,
-            5.0f,
-            tempSensorSettings.corrOffset.get(),
-            2,
-            []() {
-                return tempSensorSettings.corrOffset.get();
-            },
-            [](float value) {
-                tempSensorSettings.corrOffset.set(value);
-                Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
-            },
-            "°C",
-            "",
-            24
-        );
 
     // #endregion Controls Card with Buttons, Toggles, and Sliders
     Serial.println("[GUI] setupGUI() end");

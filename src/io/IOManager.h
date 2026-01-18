@@ -73,8 +73,39 @@ public:
         uint32_t longClickMs = 700;
     };
 
+    struct AnalogInputBinding {
+        const char* id = nullptr;
+        const char* name = nullptr;
+
+        // Defaults used before the first load from Preferences.
+        int defaultPin = -1;
+        bool defaultEnabled = true;
+
+        // Mapping defaults. If you keep out range equal to raw range, the mapping becomes identity (raw == out).
+        int defaultRawMin = 0;
+        int defaultRawMax = 4095;
+        float defaultOutMin = 0.0f;
+        float defaultOutMax = 4095.0f;
+
+        // UI / runtime display
+        const char* defaultUnit = "";
+        int defaultPrecision = 2;
+
+        // Event configuration (used for onChange triggering)
+        float defaultDeadband = 0.01f;
+        uint32_t defaultMinEventMs = 10000;
+
+        bool registerSettings = true;
+        bool showPinInWeb = true;
+        bool showMappingInWeb = true;
+        bool showUnitInWeb = true;
+        bool showDeadbandInWeb = true;
+        bool showMinEventInWeb = true;
+    };
+
     void addDigitalOutput(const DigitalOutputBinding& binding);
     void addDigitalInput(const DigitalInputBinding& binding);
+    void addAnalogInput(const AnalogInputBinding& binding);
 
     // Optional: enable non-blocking button-like events for a digital input.
     // Works independently from the GUI.
@@ -95,6 +126,14 @@ public:
                        const char* runtimeLabel = nullptr,
                        const char* runtimeGroup = "inputs",
                        bool alarmWhenActive = true);
+
+    // Analog input settings + runtime values.
+    // Exposes two runtime rows by default: <id> (scaled) and <id>_raw.
+    void addAnalogInputToGUI(const char* id, const char* cardName, int order,
+                             const char* runtimeLabel = nullptr,
+                             const char* runtimeGroup = "analog",
+                             bool showRaw = true,
+                             bool showScaled = true);
 
     // Overload: also registers a runtime control.
     // - Use RuntimeControlType::Button with a single callback (momentary action)
@@ -123,6 +162,9 @@ public:
     bool getState(const char* id) const;
 
     bool getInputState(const char* id) const;
+
+    int getAnalogRawValue(const char* id) const;
+    float getAnalogValue(const char* id) const;
 
     bool isConfigured(const char* id) const;
 
@@ -236,19 +278,95 @@ private:
         uint32_t lastReleaseMs = 0;
     };
 
+    struct AnalogInputEntry {
+        String id;
+        String name;
+
+        uint8_t slot = 0;
+
+        bool settingsRegistered = false;
+        String cardKey;
+        String cardPretty;
+        int cardOrder = 100;
+
+        String keyPin;
+        String keyRawMin;
+        String keyRawMax;
+        String keyOutMin;
+        String keyOutMax;
+        String keyUnit;
+        String keyDeadband;
+        String keyMinEventMs;
+
+        std::shared_ptr<std::string> cardKeyStable;
+        std::shared_ptr<std::string> cardPrettyStable;
+        std::shared_ptr<std::string> keyPinStable;
+        std::shared_ptr<std::string> keyRawMinStable;
+        std::shared_ptr<std::string> keyRawMaxStable;
+        std::shared_ptr<std::string> keyOutMinStable;
+        std::shared_ptr<std::string> keyOutMaxStable;
+        std::shared_ptr<std::string> keyUnitStable;
+        std::shared_ptr<std::string> keyDeadbandStable;
+        std::shared_ptr<std::string> keyMinEventMsStable;
+
+        std::unique_ptr<Config<int>> pin;
+        std::unique_ptr<Config<int>> rawMin;
+        std::unique_ptr<Config<int>> rawMax;
+        std::unique_ptr<Config<float>> outMin;
+        std::unique_ptr<Config<float>> outMax;
+        std::unique_ptr<Config<String>> unit;
+        std::unique_ptr<Config<float>> deadband;
+        std::unique_ptr<Config<int>> minEventMs;
+
+        int defaultPin = -1;
+        bool defaultEnabled = true;
+        int defaultRawMin = 0;
+        int defaultRawMax = 4095;
+        float defaultOutMin = 0.0f;
+        float defaultOutMax = 4095.0f;
+        String defaultUnit;
+        int defaultPrecision = 2;
+        float defaultDeadband = 0.01f;
+        uint32_t defaultMinEventMs = 10000;
+
+        bool registerSettings = true;
+        bool showPinInWeb = true;
+        bool showMappingInWeb = true;
+        bool showUnitInWeb = true;
+        bool showDeadbandInWeb = true;
+        bool showMinEventInWeb = true;
+
+        String runtimeGroup;
+        String runtimeLabel;
+        int runtimeOrder = 100;
+        bool runtimeShowRaw = true;
+        bool runtimeShowScaled = true;
+
+        int rawValue = -1;
+        float value = NAN;
+
+        int lastRawValue = -1;
+        float lastValue = NAN;
+        uint32_t lastEventMs = 0;
+        bool warningLoggedInvalidPin = false;
+    };
+
     std::vector<DigitalOutputEntry> digitalOutputs;
     std::vector<DigitalInputEntry> digitalInputs;
+    std::vector<AnalogInputEntry> analogInputs;
 
     uint32_t startupLongPressWindowEndsMs = 0;
     static constexpr uint32_t STARTUP_LONG_PRESS_WINDOW_MS = 10000;
 
     uint8_t nextDigitalOutputSlot = 0;
     uint8_t nextDigitalInputSlot = 0;
+    uint8_t nextAnalogInputSlot = 0;
 
     static bool isValidPin(int pin);
 
     int findIndex(const char* id) const;
     int findInputIndex(const char* id) const;
+    int findAnalogInputIndex(const char* id) const;
     static bool isActiveLowNow(const DigitalOutputEntry& entry);
     static int getPinNow(const DigitalOutputEntry& entry);
 
@@ -256,6 +374,23 @@ private:
     static bool isInputPullupNow(const DigitalInputEntry& entry);
     static bool isInputPulldownNow(const DigitalInputEntry& entry);
     static int getInputPinNow(const DigitalInputEntry& entry);
+    static String formatAnalogSlotKey(uint8_t slot, char suffix);
+
+    static bool isValidAnalogPin(int pin);
+
+    static int getAnalogPinNow(const AnalogInputEntry& entry);
+    static int getAnalogRawMinNow(const AnalogInputEntry& entry);
+    static int getAnalogRawMaxNow(const AnalogInputEntry& entry);
+    static float getAnalogOutMinNow(const AnalogInputEntry& entry);
+    static float getAnalogOutMaxNow(const AnalogInputEntry& entry);
+    static float getAnalogDeadbandNow(const AnalogInputEntry& entry);
+    static uint32_t getAnalogMinEventMsNow(const AnalogInputEntry& entry);
+
+    static float mapAnalogValue(int raw, int rawMin, int rawMax, float outMin, float outMax);
+    void reconfigureIfNeeded(AnalogInputEntry& entry);
+    void readAnalogInput(AnalogInputEntry& entry);
+    void processAnalogEvents(AnalogInputEntry& entry, uint32_t nowMs);
+    void ensureAnalogRuntimeProvider(const String& group);
 
     static String formatSlotKey(uint8_t slot, char suffix);
     static String formatInputSlotKey(uint8_t slot, char suffix);
