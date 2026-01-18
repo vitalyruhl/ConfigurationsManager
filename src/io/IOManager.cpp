@@ -335,12 +335,43 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
     entry.settingsRegistered = true;
 }
 
+static void addAnalogRuntimeMeta(ConfigManagerRuntime& runtime,
+                                 const String& group,
+                                 const String& key,
+                                 const String& label,
+                                 const String& unit,
+                                 int precision,
+                                 int order,
+                                 bool hasAlarm,
+                                 float alarmMin,
+                                 float alarmMax)
+{
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.unit = unit;
+    meta.precision = precision;
+    meta.order = order;
+
+    if (hasAlarm) {
+        meta.hasAlarm = true;
+        meta.alarmMin = alarmMin;
+        meta.alarmMax = alarmMax;
+    }
+
+    runtime.addRuntimeMeta(meta);
+}
+
 void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int order,
                                     const char* runtimeLabel,
                                     const char* runtimeGroup,
-                                    bool showRaw,
-                                    bool showScaled)
+                                    bool showRaw)
 {
+    const bool hasAlarm = false;
+    const float alarmMin = 0.0f;
+    const float alarmMax = 0.0f;
+
     const int idx = findAnalogInputIndex(id);
     if (idx < 0) {
         CM_LOG("[IOManager][WARNING] addAnalogInputToGUI: unknown analog input '%s'", id ? id : "(null)");
@@ -348,18 +379,39 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     }
 
     AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
-    if (entry.settingsRegistered) {
-        CM_LOG("[IOManager][WARNING] addAnalogInputToGUI: analog input '%s' already registered", entry.id.c_str());
-        return;
+    const String effectiveGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("analog");
+    const String effectiveLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    registerAnalogRuntimeField(effectiveGroup, entry.id, showRaw);
+    ensureAnalogRuntimeProvider(effectiveGroup);
+
+    if (showRaw) {
+        addAnalogRuntimeMeta(ConfigManager.getRuntime(),
+                             effectiveGroup,
+                             entry.id,
+                             effectiveLabel,
+                             "",
+                             0,
+                             order,
+                             false,
+                             0.0f,
+                             0.0f);
+    } else {
+        const String unit = entry.unit ? entry.unit->get() : entry.defaultUnit;
+        addAnalogRuntimeMeta(ConfigManager.getRuntime(),
+                             effectiveGroup,
+                             entry.id,
+                             effectiveLabel,
+                             unit,
+                             entry.defaultPrecision,
+                             order,
+                             hasAlarm,
+                             alarmMin,
+                             alarmMax);
     }
 
-    entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("analog");
-    entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
-    entry.runtimeOrder = order;
-    entry.runtimeShowRaw = showRaw;
-    entry.runtimeShowScaled = showScaled;
-
-    ensureAnalogRuntimeProvider(entry.runtimeGroup);
+    if (entry.settingsRegistered) {
+        return;
+    }
 
     if (!entry.registerSettings) {
         entry.settingsRegistered = true;
@@ -381,6 +433,8 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     entry.keyUnit = formatAnalogSlotKey(entry.slot, 'U');
     entry.keyDeadband = formatAnalogSlotKey(entry.slot, 'D');
     entry.keyMinEventMs = formatAnalogSlotKey(entry.slot, 'E');
+    entry.keyAlarmMin = formatAnalogSlotKey(entry.slot, 'A');
+    entry.keyAlarmMax = formatAnalogSlotKey(entry.slot, 'B');
 
     entry.keyPinStable = makeStableString(entry.keyPin);
     entry.keyRawMinStable = makeStableString(entry.keyRawMin);
@@ -390,6 +444,8 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     entry.keyUnitStable = makeStableString(entry.keyUnit);
     entry.keyDeadbandStable = makeStableString(entry.keyDeadband);
     entry.keyMinEventMsStable = makeStableString(entry.keyMinEventMs);
+    entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
+    entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
 
     entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
         .key = entry.keyPinStable->c_str(),
@@ -504,30 +560,334 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     ConfigManager.addSetting(entry.deadband.get());
     ConfigManager.addSetting(entry.minEventMs.get());
 
-    // Runtime meta entries
-    if (entry.runtimeShowScaled) {
-        RuntimeFieldMeta meta;
-        meta.group = entry.runtimeGroup;
-        meta.key = entry.id;
-        meta.label = entry.runtimeLabel;
-        meta.unit = entry.unit ? entry.unit->get() : entry.defaultUnit;
-        meta.precision = entry.defaultPrecision;
-        meta.order = entry.runtimeOrder;
-        ConfigManager.getRuntime().addRuntimeMeta(meta);
+    entry.settingsRegistered = true;
+}
+
+void IOManager::ensureAnalogAlarmSettings(AnalogInputEntry& entry,
+                                          float alarmMin,
+                                          float alarmMax)
+{
+    if (!entry.registerSettings) {
+        return;
+    }
+    if (!entry.cardKeyStable || !entry.cardPrettyStable) {
+        return;
+    }
+    if (!entry.keyAlarmMinStable || !entry.keyAlarmMaxStable) {
+        return;
     }
 
-    if (entry.runtimeShowRaw) {
-        RuntimeFieldMeta meta;
-        meta.group = entry.runtimeGroup;
-        meta.key = String(entry.id) + "_raw";
-        meta.label = String(entry.runtimeLabel) + " Raw";
-        meta.unit = "";
-        meta.precision = 0;
-        meta.order = entry.runtimeOrder + 1;
-        ConfigManager.getRuntime().addRuntimeMeta(meta);
+    if (!isnan(alarmMin) && !entry.alarmMinSetting) {
+        entry.alarmMinSetting = std::make_unique<Config<float>>(ConfigOptions<float>{
+            .key = entry.keyAlarmMinStable->c_str(),
+            .name = "Alarm Min",
+            .category = cm::CoreCategories::IO,
+            .defaultValue = alarmMin,
+            .showInWeb = true,
+            .sortOrder = 39,
+            .categoryPretty = IO_CATEGORY_PRETTY,
+            .card = entry.cardKeyStable->c_str(),
+            .cardPretty = entry.cardPrettyStable->c_str(),
+            .cardOrder = entry.cardOrder,
+        });
+        ConfigManager.addSetting(entry.alarmMinSetting.get());
     }
+
+    if (!isnan(alarmMax) && !entry.alarmMaxSetting) {
+        entry.alarmMaxSetting = std::make_unique<Config<float>>(ConfigOptions<float>{
+            .key = entry.keyAlarmMaxStable->c_str(),
+            .name = "Alarm Max",
+            .category = cm::CoreCategories::IO,
+            .defaultValue = alarmMax,
+            .showInWeb = true,
+            .sortOrder = 40,
+            .categoryPretty = IO_CATEGORY_PRETTY,
+            .card = entry.cardKeyStable->c_str(),
+            .cardPretty = entry.cardPrettyStable->c_str(),
+            .cardOrder = entry.cardOrder,
+        });
+        ConfigManager.addSetting(entry.alarmMaxSetting.get());
+    }
+}
+
+static void addAnalogAlarmRuntimeIndicators(ConfigManagerRuntime& runtime,
+                                            const String& group,
+                                            const String& id,
+                                            int baseOrder,
+                                            bool hasMin,
+                                            bool hasMax)
+{
+    if (hasMin) {
+        RuntimeFieldMeta meta;
+        meta.group = group;
+        meta.key = id + "_alarm_min";
+        meta.label = "Alarm Min";
+        meta.isBool = true;
+        meta.boolAlarmValue = true;
+        meta.order = baseOrder + 1;
+        runtime.addRuntimeMeta(meta);
+    }
+
+    if (hasMax) {
+        RuntimeFieldMeta meta;
+        meta.group = group;
+        meta.key = id + "_alarm_max";
+        meta.label = "Alarm Max";
+        meta.isBool = true;
+        meta.boolAlarmValue = true;
+        meta.order = baseOrder + 2;
+        runtime.addRuntimeMeta(meta);
+    }
+}
+
+void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
+                                             float alarmMin, float alarmMax,
+                                             const char* runtimeLabel,
+                                             const char* runtimeGroup)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogInputToGUIWithAlarm: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+
+    // Store thresholds for runtime alarm evaluation (scaled value).
+    entry.alarmMin = alarmMin;
+    entry.alarmMax = alarmMax;
+
+    const String effectiveGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("analog");
+    const String effectiveLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+
+    registerAnalogRuntimeField(effectiveGroup, entry.id, false);
+    ensureAnalogRuntimeProvider(effectiveGroup);
+
+    const String unit = entry.unit ? entry.unit->get() : entry.defaultUnit;
+    addAnalogRuntimeMeta(ConfigManager.getRuntime(),
+                         effectiveGroup,
+                         entry.id,
+                         effectiveLabel,
+                         unit,
+                         entry.defaultPrecision,
+                         order,
+                         true,
+                         alarmMin,
+                         alarmMax);
+
+    // Also show which boundary is active.
+    addAnalogAlarmRuntimeIndicators(ConfigManager.getRuntime(),
+                                    effectiveGroup,
+                                    entry.id,
+                                    order,
+                                    !isnan(alarmMin),
+                                    !isnan(alarmMax));
+
+    if (entry.settingsRegistered) {
+        IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        entry.settingsRegistered = true;
+        return;
+    }
+
+    entry.cardKey = entry.id;
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+    entry.keyPin = formatAnalogSlotKey(entry.slot, 'P');
+    entry.keyRawMin = formatAnalogSlotKey(entry.slot, 'R');
+    entry.keyRawMax = formatAnalogSlotKey(entry.slot, 'S');
+    entry.keyOutMin = formatAnalogSlotKey(entry.slot, 'M');
+    entry.keyOutMax = formatAnalogSlotKey(entry.slot, 'N');
+    entry.keyUnit = formatAnalogSlotKey(entry.slot, 'U');
+    entry.keyDeadband = formatAnalogSlotKey(entry.slot, 'D');
+    entry.keyMinEventMs = formatAnalogSlotKey(entry.slot, 'E');
+    entry.keyAlarmMin = formatAnalogSlotKey(entry.slot, 'A');
+    entry.keyAlarmMax = formatAnalogSlotKey(entry.slot, 'B');
+
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyRawMinStable = makeStableString(entry.keyRawMin);
+    entry.keyRawMaxStable = makeStableString(entry.keyRawMax);
+    entry.keyOutMinStable = makeStableString(entry.keyOutMin);
+    entry.keyOutMaxStable = makeStableString(entry.keyOutMax);
+    entry.keyUnitStable = makeStableString(entry.keyUnit);
+    entry.keyDeadbandStable = makeStableString(entry.keyDeadband);
+    entry.keyMinEventMsStable = makeStableString(entry.keyMinEventMs);
+    entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
+    entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPinStable->c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 31,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.rawMin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyRawMinStable->c_str(),
+        .name = "Raw Min",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultRawMin,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 32,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.rawMax = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyRawMaxStable->c_str(),
+        .name = "Raw Max",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultRawMax,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 33,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.outMin = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyOutMinStable->c_str(),
+        .name = "Out Min",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultOutMin,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 34,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.outMax = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyOutMaxStable->c_str(),
+        .name = "Out Max",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultOutMax,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 35,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.unit = std::make_unique<Config<String>>(ConfigOptions<String>{
+        .key = entry.keyUnitStable->c_str(),
+        .name = "Unit",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultUnit,
+        .showInWeb = entry.showUnitInWeb,
+        .sortOrder = 36,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.deadband = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyDeadbandStable->c_str(),
+        .name = "Deadband",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultDeadband,
+        .showInWeb = entry.showDeadbandInWeb,
+        .sortOrder = 37,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.minEventMs = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyMinEventMsStable->c_str(),
+        .name = "Min Event (ms)",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = static_cast<int>(entry.defaultMinEventMs),
+        .showInWeb = entry.showMinEventInWeb,
+        .sortOrder = 38,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.rawMin.get());
+    ConfigManager.addSetting(entry.rawMax.get());
+    ConfigManager.addSetting(entry.outMin.get());
+    ConfigManager.addSetting(entry.outMax.get());
+    ConfigManager.addSetting(entry.unit.get());
+    ConfigManager.addSetting(entry.deadband.get());
+    ConfigManager.addSetting(entry.minEventMs.get());
+
+    IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
 
     entry.settingsRegistered = true;
+}
+
+void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
+                                             float alarmMin, float alarmMax,
+                                             AnalogAlarmCallbacks callbacks,
+                                             const char* runtimeLabel,
+                                             const char* runtimeGroup)
+{
+    addAnalogInputToGUIWithAlarm(id, cardName, order, alarmMin, alarmMax, runtimeLabel, runtimeGroup);
+    configureAnalogInputAlarm(id, alarmMin, alarmMax, std::move(callbacks));
+}
+
+void IOManager::configureAnalogInputAlarm(const char* id,
+                                          float alarmMin,
+                                          float alarmMax,
+                                          AnalogAlarmCallbacks callbacks)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] configureAnalogInputAlarm: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    entry.alarmMin = alarmMin;
+    entry.alarmMax = alarmMax;
+    entry.alarmCallbacks = std::move(callbacks);
+}
+
+void IOManager::registerAnalogRuntimeField(const String& group, const String& id, bool showRaw)
+{
+    for (auto& runtimeGroup : analogRuntimeGroups) {
+        if (runtimeGroup.group != group) {
+            continue;
+        }
+
+        for (const auto& field : runtimeGroup.fields) {
+            if (field.id == id && field.showRaw == showRaw) {
+                return;
+            }
+        }
+
+        runtimeGroup.fields.push_back(AnalogRuntimeField{.id = id, .showRaw = showRaw});
+        return;
+    }
+
+    AnalogRuntimeGroup newGroup;
+    newGroup.group = group;
+    newGroup.fields.push_back(AnalogRuntimeField{.id = id, .showRaw = showRaw});
+    analogRuntimeGroups.push_back(std::move(newGroup));
 }
 
 void IOManager::configureDigitalInputEvents(const char* id,
@@ -664,6 +1024,10 @@ void IOManager::begin()
         entry.lastValue = NAN;
         entry.lastEventMs = millis();
         entry.warningLoggedInvalidPin = false;
+        entry.alarmState = false;
+        entry.alarmMinState = false;
+        entry.alarmMaxState = false;
+        entry.alarmStateInitialized = false;
         reconfigureIfNeeded(entry);
         readAnalogInput(entry);
     }
@@ -692,7 +1056,131 @@ void IOManager::update()
     for (auto& entry : analogInputs) {
         reconfigureIfNeeded(entry);
         readAnalogInput(entry);
+        processAnalogAlarm(entry);
         processAnalogEvents(entry, nowMs);
+    }
+}
+
+void IOManager::processAnalogAlarm(AnalogInputEntry& entry)
+{
+    const float alarmMin = entry.alarmMinSetting ? entry.alarmMinSetting->get() : entry.alarmMin;
+    const float alarmMax = entry.alarmMaxSetting ? entry.alarmMaxSetting->get() : entry.alarmMax;
+
+    const bool hasMin = !isnan(alarmMin);
+    const bool hasMax = !isnan(alarmMax);
+    if (!hasMin && !hasMax) {
+        // No alarm configured.
+        entry.alarmState = false;
+        entry.alarmMinState = false;
+        entry.alarmMaxState = false;
+        entry.alarmStateInitialized = true;
+        return;
+    }
+
+    bool newMinState = false;
+    bool newMaxState = false;
+    if (isnan(entry.value)) {
+        newMinState = false;
+        newMaxState = false;
+    } else {
+        if (hasMin && entry.value < alarmMin) {
+            newMinState = true;
+        }
+        if (hasMax && entry.value > alarmMax) {
+            newMaxState = true;
+        }
+    }
+
+    const bool newCombinedState = newMinState || newMaxState;
+
+    if (!entry.alarmStateInitialized) {
+        // First evaluation: treat previous state as "not in alarm" and only fire if we start in alarm.
+        entry.alarmStateInitialized = true;
+        entry.alarmState = false;
+        entry.alarmMinState = false;
+        entry.alarmMaxState = false;
+
+        if (newMinState) {
+            entry.alarmMinState = true;
+            if (entry.alarmCallbacks.onMinStateChanged) {
+                entry.alarmCallbacks.onMinStateChanged(true);
+            }
+            if (entry.alarmCallbacks.onMinEnter) {
+                entry.alarmCallbacks.onMinEnter();
+            }
+        }
+        if (newMaxState) {
+            entry.alarmMaxState = true;
+            if (entry.alarmCallbacks.onMaxStateChanged) {
+                entry.alarmCallbacks.onMaxStateChanged(true);
+            }
+            if (entry.alarmCallbacks.onMaxEnter) {
+                entry.alarmCallbacks.onMaxEnter();
+            }
+        }
+
+        if (newCombinedState) {
+            entry.alarmState = true;
+            if (entry.alarmCallbacks.onStateChanged) {
+                entry.alarmCallbacks.onStateChanged(true);
+            }
+            if (entry.alarmCallbacks.onEnter) {
+                entry.alarmCallbacks.onEnter();
+            }
+        }
+        return;
+    }
+
+    if (newMinState != entry.alarmMinState) {
+        entry.alarmMinState = newMinState;
+        if (entry.alarmCallbacks.onMinStateChanged) {
+            entry.alarmCallbacks.onMinStateChanged(newMinState);
+        }
+        if (newMinState) {
+            if (entry.alarmCallbacks.onMinEnter) {
+                entry.alarmCallbacks.onMinEnter();
+            }
+        } else {
+            if (entry.alarmCallbacks.onMinExit) {
+                entry.alarmCallbacks.onMinExit();
+            }
+        }
+    }
+
+    if (newMaxState != entry.alarmMaxState) {
+        entry.alarmMaxState = newMaxState;
+        if (entry.alarmCallbacks.onMaxStateChanged) {
+            entry.alarmCallbacks.onMaxStateChanged(newMaxState);
+        }
+        if (newMaxState) {
+            if (entry.alarmCallbacks.onMaxEnter) {
+                entry.alarmCallbacks.onMaxEnter();
+            }
+        } else {
+            if (entry.alarmCallbacks.onMaxExit) {
+                entry.alarmCallbacks.onMaxExit();
+            }
+        }
+    }
+
+    if (newCombinedState == entry.alarmState) {
+        return;
+    }
+
+    entry.alarmState = newCombinedState;
+
+    if (entry.alarmCallbacks.onStateChanged) {
+        entry.alarmCallbacks.onStateChanged(newCombinedState);
+    }
+
+    if (newCombinedState) {
+        if (entry.alarmCallbacks.onEnter) {
+            entry.alarmCallbacks.onEnter();
+        }
+    } else {
+        if (entry.alarmCallbacks.onExit) {
+            entry.alarmCallbacks.onExit();
+        }
     }
 }
 
@@ -1098,26 +1586,41 @@ void IOManager::ensureAnalogRuntimeProvider(const String& group)
     }
 
     ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
-        for (const auto& entry : analogInputs) {
-            if (entry.runtimeGroup != group) {
+        const AnalogRuntimeGroup* runtimeGroupPtr = nullptr;
+        for (const auto& rg : analogRuntimeGroups) {
+            if (rg.group == group) {
+                runtimeGroupPtr = &rg;
+                break;
+            }
+        }
+        if (!runtimeGroupPtr) {
+            return;
+        }
+
+        for (const auto& field : runtimeGroupPtr->fields) {
+            const int idx = findAnalogInputIndex(field.id.c_str());
+            if (idx < 0) {
                 continue;
             }
 
-            if (entry.runtimeShowScaled) {
+            const AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+            if (field.showRaw) {
+                if (entry.rawValue < 0) {
+                    data[entry.id] = nullptr;
+                } else {
+                    data[entry.id] = entry.rawValue;
+                }
+            } else {
                 if (isnan(entry.value)) {
                     data[entry.id] = nullptr;
                 } else {
                     data[entry.id] = entry.value;
                 }
-            }
 
-            if (entry.runtimeShowRaw) {
-                const String rawKey = String(entry.id) + "_raw";
-                if (entry.rawValue < 0) {
-                    data[rawKey] = nullptr;
-                } else {
-                    data[rawKey] = entry.rawValue;
-                }
+                const String minKey = entry.id + "_alarm_min";
+                const String maxKey = entry.id + "_alarm_max";
+                data[minKey] = entry.alarmMinState;
+                data[maxKey] = entry.alarmMaxState;
             }
         }
     }, 5);

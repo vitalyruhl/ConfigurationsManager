@@ -103,6 +103,25 @@ public:
         bool showMinEventInWeb = true;
     };
 
+    struct AnalogAlarmCallbacks {
+        // Fired on each alarm state transition (false->true or true->false)
+        // The parameter is the new alarm state.
+        std::function<void(bool)> onStateChanged;
+
+        // Convenience callbacks (also fired only on transitions)
+        std::function<void()> onEnter;
+        std::function<void()> onExit;
+
+        // Min/Max specific transitions (true when below min / above max)
+        std::function<void(bool)> onMinStateChanged;
+        std::function<void()> onMinEnter;
+        std::function<void()> onMinExit;
+
+        std::function<void(bool)> onMaxStateChanged;
+        std::function<void()> onMaxEnter;
+        std::function<void()> onMaxExit;
+    };
+
     void addDigitalOutput(const DigitalOutputBinding& binding);
     void addDigitalInput(const DigitalInputBinding& binding);
     void addAnalogInput(const AnalogInputBinding& binding);
@@ -128,12 +147,34 @@ public:
                        bool alarmWhenActive = true);
 
     // Analog input settings + runtime values.
-    // Exposes two runtime rows by default: <id> (scaled) and <id>_raw.
+    // Shows either scaled OR raw value (depending on showRaw).
+    // Call this function multiple times with different runtimeGroup values to show the same input in multiple cards.
     void addAnalogInputToGUI(const char* id, const char* cardName, int order,
                              const char* runtimeLabel = nullptr,
                              const char* runtimeGroup = "analog",
-                             bool showRaw = true,
-                             bool showScaled = true);
+                             bool showRaw = false);
+
+    // Registers the scaled value with alarm thresholds.
+    // Alarm triggers when value < alarmMin OR value > alarmMax.
+    void addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
+                                      float alarmMin, float alarmMax,
+                                      const char* runtimeLabel = nullptr,
+                                      const char* runtimeGroup = "analog");
+
+    // Overload: same as above, but also sets callbacks for alarm transitions.
+    void addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
+                                      float alarmMin, float alarmMax,
+                                      AnalogAlarmCallbacks callbacks,
+                                      const char* runtimeLabel = nullptr,
+                                      const char* runtimeGroup = "analog");
+
+    // Configure analog alarm thresholds + callbacks.
+    // Use NAN for alarmMin and/or alarmMax to disable that boundary.
+    // Alarm is evaluated on the scaled value (getAnalogValue / runtime scaled field).
+    void configureAnalogInputAlarm(const char* id,
+                                   float alarmMin,
+                                   float alarmMax,
+                                   AnalogAlarmCallbacks callbacks = {});
 
     // Overload: also registers a runtime control.
     // - Use RuntimeControlType::Button with a single callback (momentary action)
@@ -169,6 +210,16 @@ public:
     bool isConfigured(const char* id) const;
 
 private:
+    struct AnalogRuntimeField {
+        String id;
+        bool showRaw = false;
+    };
+
+    struct AnalogRuntimeGroup {
+        String group;
+        std::vector<AnalogRuntimeField> fields;
+    };
+
     struct DigitalOutputEntry {
         String id;
         String name;
@@ -297,6 +348,8 @@ private:
         String keyUnit;
         String keyDeadband;
         String keyMinEventMs;
+        String keyAlarmMin;
+        String keyAlarmMax;
 
         std::shared_ptr<std::string> cardKeyStable;
         std::shared_ptr<std::string> cardPrettyStable;
@@ -308,6 +361,8 @@ private:
         std::shared_ptr<std::string> keyUnitStable;
         std::shared_ptr<std::string> keyDeadbandStable;
         std::shared_ptr<std::string> keyMinEventMsStable;
+        std::shared_ptr<std::string> keyAlarmMinStable;
+        std::shared_ptr<std::string> keyAlarmMaxStable;
 
         std::unique_ptr<Config<int>> pin;
         std::unique_ptr<Config<int>> rawMin;
@@ -317,6 +372,8 @@ private:
         std::unique_ptr<Config<String>> unit;
         std::unique_ptr<Config<float>> deadband;
         std::unique_ptr<Config<int>> minEventMs;
+        std::unique_ptr<Config<float>> alarmMinSetting;
+        std::unique_ptr<Config<float>> alarmMaxSetting;
 
         int defaultPin = -1;
         bool defaultEnabled = true;
@@ -345,6 +402,14 @@ private:
         int rawValue = -1;
         float value = NAN;
 
+        float alarmMin = NAN;
+        float alarmMax = NAN;
+        AnalogAlarmCallbacks alarmCallbacks;
+        bool alarmState = false;
+        bool alarmMinState = false;
+        bool alarmMaxState = false;
+        bool alarmStateInitialized = false;
+
         int lastRawValue = -1;
         float lastValue = NAN;
         uint32_t lastEventMs = 0;
@@ -354,6 +419,8 @@ private:
     std::vector<DigitalOutputEntry> digitalOutputs;
     std::vector<DigitalInputEntry> digitalInputs;
     std::vector<AnalogInputEntry> analogInputs;
+
+    std::vector<AnalogRuntimeGroup> analogRuntimeGroups;
 
     uint32_t startupLongPressWindowEndsMs = 0;
     static constexpr uint32_t STARTUP_LONG_PRESS_WINDOW_MS = 10000;
@@ -390,7 +457,10 @@ private:
     void reconfigureIfNeeded(AnalogInputEntry& entry);
     void readAnalogInput(AnalogInputEntry& entry);
     void processAnalogEvents(AnalogInputEntry& entry, uint32_t nowMs);
+    void processAnalogAlarm(AnalogInputEntry& entry);
+    static void ensureAnalogAlarmSettings(AnalogInputEntry& entry, float alarmMin, float alarmMax);
     void ensureAnalogRuntimeProvider(const String& group);
+    void registerAnalogRuntimeField(const String& group, const String& id, bool showRaw);
 
     static String formatSlotKey(uint8_t slot, char suffix);
     static String formatInputSlotKey(uint8_t slot, char suffix);

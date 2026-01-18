@@ -374,7 +374,21 @@ static void createAnalogInputs()
         .defaultUnit = "%",
         .defaultPrecision = 1,
     });
-    ioManager.addAnalogInputToGUI("ldr_n", nullptr, 13, "LDR North", "sensors", true, true);
+    ioManager.addAnalogInputToGUIWithAlarm(
+        "ldr_n",
+        nullptr,
+        13,
+        NAN,
+        90.0f,
+        cm::IOManager::AnalogAlarmCallbacks{
+            .onStateChanged = [](bool inAlarm) {
+                Serial.printf("[ALARM][ldr_n] state=%s\n", inAlarm ? "ON" : "OFF");
+            },
+        },
+        "LDR North",
+        "sensors"
+    );
+    ioManager.addAnalogInputToGUI("ldr_n", nullptr, 13, "LDR North", "raw-values", true);
 
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_e",
@@ -387,7 +401,8 @@ static void createAnalogInputs()
         .defaultUnit = "%",
         .defaultPrecision = 1,
     });
-    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "sensors", true, true);
+    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "sensors");
+    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "raw-values", true);
 
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_s",
@@ -400,7 +415,24 @@ static void createAnalogInputs()
         .defaultUnit = "%",
         .defaultPrecision = 1,
     });
-    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 17, "LDR South", "sensors", true, true);
+    ioManager.addAnalogInputToGUIWithAlarm(
+        "ldr_s",
+        nullptr,
+        17,
+        30.0f,
+        NAN,
+        cm::IOManager::AnalogAlarmCallbacks{
+            .onEnter = []() {
+                Serial.println("[ALARM][ldr_s] enter");
+            },
+            .onExit = []() {
+                Serial.println("[ALARM][ldr_s] exit");
+            },
+        },
+        "LDR South",
+        "sensors"
+    );
+    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 17, "LDR South", "raw-values", true);
 
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_w",
@@ -413,7 +445,8 @@ static void createAnalogInputs()
         .defaultUnit = "%",
         .defaultPrecision = 1,
     });
-    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "sensors", true, true);
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "sensors");
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "raw-values", true);
 }
 
 static void createAnalogOutputs()
