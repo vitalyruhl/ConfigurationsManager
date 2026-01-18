@@ -99,7 +99,8 @@ void ConfigManagerRuntime::sortMeta() {
 }
 
 String ConfigManagerRuntime::runtimeValuesToJSON() {
-    DynamicJsonDocument d(2048);
+    // Must stay small enough for frequent WS pushes, but large enough for typical runtime payloads.
+    DynamicJsonDocument d(4096);
     JsonObject root = d.to<JsonObject>();
     root["uptime"] = millis();
 
@@ -179,7 +180,12 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 #endif
 
     String out;
-    serializeJson(d, out);
+    out.reserve(2048);
+    const size_t written = serializeJson(d, out);
+    if (written == 0 || out.length() == 0 || out[0] != '{') {
+        // Never return an empty/invalid frame; the WebUI expects a JSON object.
+        return "{}";
+    }
     return out;
 }
 
@@ -226,6 +232,7 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         if (m.isButton) o["isButton"] = true;
         if (m.isCheckbox) o["isCheckbox"] = true;
         if (m.isStateButton) o["isStateButton"] = true;
+        if (m.isMomentaryButton) o["isMomentaryButton"] = true;
         if (m.isIntSlider) {
             o["isIntSlider"] = true;
             o["min"] = m.intMin;
@@ -266,6 +273,12 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         o["order"] = m.order;
         if (m.staticValue.length()) {
             o["staticValue"] = m.staticValue;
+        }
+        if (m.onLabel.length()) {
+            o["onLabel"] = m.onLabel;
+        }
+        if (m.offLabel.length()) {
+            o["offLabel"] = m.offLabel;
         }
     }
 
@@ -763,7 +776,8 @@ void ConfigManagerRuntime::handleCheckboxChange(const String& group, const Strin
 #if CM_ENABLE_RUNTIME_STATE_BUTTONS
 void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const String& key, const String& label,
                                                    std::function<bool()> getter, std::function<void(bool)> setter,
-                                                   bool initState, const String& card, int order) {
+                                                   bool initState, const String& card, int order,
+                                                   const String& onLabel, const String& offLabel) {
     RuntimeFieldMeta meta;
     meta.group = group;
     meta.key = key;
@@ -772,10 +786,31 @@ void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const S
     meta.initialState = initState;
     meta.order = order;
     meta.card = card;
+    meta.onLabel = onLabel;
+    meta.offLabel = offLabel;
     addRuntimeMeta(meta);
 
     runtimeStateButtons.emplace_back(group, key, getter, setter);
     RUNTIME_LOG("[RT] Added state button: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::defineRuntimeMomentaryButton(const String& group, const String& key, const String& label,
+                                                        std::function<bool()> getter, std::function<void(bool)> setter,
+                                                        const String& card, int order,
+                                                        const String& onLabel, const String& offLabel) {
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.isMomentaryButton = true;
+    meta.order = order;
+    meta.card = card;
+    meta.onLabel = onLabel;
+    meta.offLabel = offLabel;
+    addRuntimeMeta(meta);
+
+    runtimeStateButtons.emplace_back(group, key, getter, setter);
+    RUNTIME_LOG("[RT] Added momentary button: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const String& key) {
@@ -786,6 +821,19 @@ void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const St
                 bool newState = !currentState;
                 button.setter(newState);
                 RUNTIME_LOG("[RT] State button toggled: %s.%s = %s", group.c_str(), key.c_str(), newState ? "true" : "false");
+            }
+            return;
+        }
+    }
+    RUNTIME_LOG("[RT] State button not found: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::handleStateButtonSet(const String& group, const String& key, bool value) {
+    for (auto& button : runtimeStateButtons) {
+        if (button.group == group && button.key == key) {
+            if (button.setter) {
+                button.setter(value);
+                RUNTIME_LOG("[RT] State button set: %s.%s = %s", group.c_str(), key.c_str(), value ? "true" : "false");
             }
             return;
         }

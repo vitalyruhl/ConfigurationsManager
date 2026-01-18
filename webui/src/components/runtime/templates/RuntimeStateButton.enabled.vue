@@ -1,7 +1,15 @@
 <template>
   <div class="rw sb">
     <span class="lab">{{ field.label }}</span>
-    <button class="btn" :class="on ? 'on' : 'off'" @click="toggle">
+    <button
+      class="btn"
+      :class="on ? 'on' : 'off'"
+      @pointerdown.prevent="onPointerDown"
+      @pointerup.prevent="onPointerUp"
+      @pointercancel.prevent="onPointerCancel"
+      @pointerleave.prevent="onPointerCancel"
+      @click="onClick"
+    >
       {{ on ? (field.onLabel || 'ON') : (field.offLabel || 'OFF') }}
     </button>
     <span class="un"></span>
@@ -9,11 +17,63 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 const props = defineProps({ group: String, field: Object, value: Boolean });
 const emit = defineEmits(['toggle']);
 const on = computed(() => !!props.value);
-function toggle(){ emit('toggle', { group: props.group, field: props.field, nextValue: !on.value }); }
+
+const ignoreNextClick = ref(false);
+const isHeldDown = ref(false);
+
+const holdToActivate = computed(() => {
+  if (props.field && props.field.holdToActivate === true) return true;
+  if (props.field && props.field.triggerOnPress === true) return true;
+  return false;
+});
+
+function emitNext(nextValue){
+  emit('toggle', { group: props.group, field: props.field, nextValue: !!nextValue });
+}
+
+function toggle(){
+  emitNext(!on.value);
+}
+
+function onPointerDown(){
+  if (!holdToActivate.value) return;
+  if (isHeldDown.value) return;
+  ignoreNextClick.value = true;
+  isHeldDown.value = true;
+  emitNext(true);
+}
+
+function onPointerUp(){
+  if (!holdToActivate.value) return;
+  if (!isHeldDown.value) return;
+  ignoreNextClick.value = true;
+  isHeldDown.value = false;
+  emitNext(false);
+}
+
+function onPointerCancel(){
+  if (!holdToActivate.value) return;
+  if (!isHeldDown.value) return;
+  ignoreNextClick.value = true;
+  isHeldDown.value = false;
+  emitNext(false);
+}
+
+function onClick(){
+  if (ignoreNextClick.value) {
+    ignoreNextClick.value = false;
+    return;
+  }
+  if (holdToActivate.value) {
+    // Hold-mode buttons are controlled via pointer down/up only.
+    return;
+  }
+  toggle();
+}
 </script>
 
 <style scoped>

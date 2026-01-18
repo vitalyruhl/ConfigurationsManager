@@ -10,6 +10,7 @@
   - [TODO] Remove Settings List view; keep Tabs only.
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
+  - [COMPLETED] Runtime: add `MomentaryButton` (press-and-hold) control type (no label heuristics).
 - Architecture / API
   - Settings auth: remove or hard-disable legacy endpoint `/config/settings_password`.
   - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
@@ -37,31 +38,24 @@
          - Settings: GPIO pin, active-low/high, enabled.
          - Runtime API: `set(bool)` / `get()`.
        - Analog inputs
-         - API idea: `io.addAnalogInput({ .id=..., .name=..., .pin=..., ... }).onChange(0.01f, callback)`
-         - Settings: GPIO pin, read-rate (ms), deadband/sensitivity, unit.
+         - **[COMPLETED][TESTED]** Analog inputs (raw + scaled mapping, deadband + minEvent)
+         - **[COMPLETED][TESTED]** Runtime UI: raw/scaled values can be shown on different cards/groups
+         - **[COMPLETED][TESTED]** Alarms: optional min/max thresholds (min-only/max-only/both) with callbacks + runtime indicators
        - Analog outputs
          - API idea: `io.addAnalogOutput({ .id=..., .name=..., .pin=..., ... }).setValue(1.5f)`
          - Settings: GPIO pin, extended-range flag.
        - Capability differences (important)
          - Not all boards support full ADC resolution, not all support PWM, and not all support both input and output.
          - Design should be provider-based (like runtime providers): users add only what the board supports, e.g. `.addAnalogInputProvider(...)`, `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`.
-       - Range/scaling model (baseline)
-         - `raw.*` defaults MUST come from the selected provider / board capabilities (no hardcoded library defaults).
-           - Example only: ESP32 ADC raw is typically `0..4095` (12-bit), but this can differ by board/config.
-         - Default behavior: full raw range is mapped into the output range.
-           - If the user does not override `out.*`, default `out.min/out.max` should represent a pass-through of the full raw range (i.e. identity scaling, so raw==out in meaning).
-         - User override example: a potentiometer should show `0..100%`.
-           - User sets `out.min = 0`, `out.max = 100` in code.
-           - This must automatically enable/register the corresponding settings so the user can fine-tune in the GUI.
-         - GUI activation rule
-           - If a channel provides explicit `out.*` overrides in code (or sets an explicit `enableScaling` flag), IOManager registers `out.min/out.max` (and optionally `unit`, `sensitivity`) as editable settings under category `IO`.
-           - If not overridden, keep those settings hidden/disabled by default to avoid UI clutter.
-         - Unit example: `"°C"` (engineering units).
-         - Sensitivity example: `0.01` relative to the output range (e.g. for 0..150°C, step is 0.01 in that out-range).
        - Key length caution (ESP32 Preferences)
          - ID-based key prefixing must respect the 15 character key-name limit (including category prefixing).
          - IDs therefore must be short, and generated keys must be validated via `checkSettingsForErrors()`.
        - add  gui-helper eg. addIOtoGUI("id", "card-name", order)
+
+       - [COMPLETED] Docs: IO inputs/outputs
+         - docs/IO-DigitalInputs.md
+         - docs/IO-DigitalOutputs.md
+         - docs/IO-AnalogInputs.md
     2) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.
@@ -159,3 +153,11 @@
 - **[COMPLETED][TESTED]** Custom runtime provider named `system` overrides built-in System provider
   - Fixed by merging runtime providers that share the same group name ("system" etc.) instead of overwriting.
   - Validated by injecting `system.testValue` into the System card (with a divider).
+
+- **[COMPLETED][TESTED]** IOManager Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
+- **[COMPLETED][TESTED]** IOManager Digital inputs: non-blocking events (press/release/click/double/long)
+- **[COMPLETED][TESTED]** IOManager Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
+
+- **[COMPLETED][TESTED]** IOManager Analog inputs: raw/scaled mapping + deadband/minEvent + runtime multi-card registration
+- **[COMPLETED][TESTED]** IOManager Analog alarms: dynamic min/max thresholds via settings + separate min/max callbacks + runtime flags (`<id>_alarm_min/_alarm_max`)
+- **[COMPLETED][TESTED]** WebUI Runtime: numeric alarm highlighting prefers runtime alarm flags when present; WS frames validated + polling fallback prevents stuck UI

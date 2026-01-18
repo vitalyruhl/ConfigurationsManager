@@ -30,7 +30,6 @@ static const char OTA_PASSWORD[] = "ota";
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <Ticker.h>
-#include <math.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
@@ -47,7 +46,6 @@ static const char OTA_PASSWORD[] = "ota";
 
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-IO-Full-Demo"
-#define BUTTON_PIN_AP_MODE 13
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
@@ -57,33 +55,26 @@ static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
 // These references provide shorter names for the settings bundles used in this sketch.
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();              // Core container for settings templates
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;               // System: OTA, WiFi reboot timeout, version
-static cm::CoreButtonSettings &buttonSettings = coreSettings.buttons;              // Buttons: GPIO pins, polarity, pull configuration
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;                     // WiFi: SSID, password, DHCP/static networking
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                        // NTP: sync interval, servers, timezone
 static cm::IOManager ioManager;
 // -------------------------------------------------------------------
 
-// Taster: relay pulse helper (non-blocking)
-static Ticker tasterOffTicker;
+static uint32_t testPressPulseUntilMs = 0;
+static uint32_t testReleasePulseUntilMs = 0;
+static uint32_t testClickPulseUntilMs = 0;
+static bool testDoubleClickToggle = false;
+static bool testLongPressToggle = false;
 
+static constexpr uint32_t TEST_EVENT_PULSE_MS = 700;
 
-// -------------------------------------------------------------------
-// Global theme override test: make all h3 headings orange without underline
-// Served via /user_theme.css and auto-injected by the frontend if present.
-// NOTE: We only have setCustomCss() (no _P variant yet) so we pass the PROGMEM string pointer directly.
-
-static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-.rw[data-group="sensors"][data-key="temp"] .rw{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-)CSS";
-
-
+static bool isPulseActive(uint32_t untilMs)
+{
+    return static_cast<int32_t>(millis() - untilMs) <= 0;
+}
 
 //--------------------------------------------------------------------
 // Forward declarations of functions
-void SetupCheckForAPModeButton();
-void SetupCheckForResetButton();
 void updateStatusLED(); // new non-blocking status LED handler
 void setHeaterState(bool on);
 void setFanState(bool on);
@@ -92,81 +83,17 @@ bool SetupStartWebServer();
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
-void updateMockTemperature();
 
-// #region Temperature Measurement (mocked)
-
-float temperature = NAN; // current temperature in Celsius
-static unsigned long lastTempReadMs = 0;
-
-
-//this ist temporary, because all will be handled by IOManager later
-struct TempSensorSettings {
-    Config<int> gpioPin;      // DS18B20 data pin
-    Config<float> corrOffset; // correction offset in °C
-    Config<int> readInterval; // seconds
-
-    TempSensorSettings() :
-        gpioPin(ConfigOptions<int>{.key = "TsPin", .name = "GPIO Pin", .category = "Temp Sensor", .defaultValue = 21}),
-        corrOffset(ConfigOptions<float>{.key = "TsOfs", .name = "Correction Offset", .category = "Temp Sensor", .defaultValue = 0.0f, .showInWeb = true}),
-        readInterval(ConfigOptions<int>{.key = "TsInt", .name = "Read Interval (s)", .category = "Temp Sensor", .defaultValue = 30, .showInWeb = true})
-    {}
-
-    void init() {
-        ConfigManager.addSetting(&gpioPin);
-        ConfigManager.addSetting(&corrOffset);
-        ConfigManager.addSetting(&readInterval);
-    }
-};
-static TempSensorSettings tempSensorSettings;
-
-// #endregion Temperature Measurement (mocked)
+static void createDigitalOutputs();
+static void registerDigitalOutputsGui();
+static void createDigitalInputs();
+static void createAnalogInputs();
+static void createAnalogOutputs();
 
 
-Ticker NtpSyncTicker;
-bool tickerActive = false; // Used as a generic "services active" flag (WiFi/OTA/NTP)
-
-void updateMockTemperature()
+static void createDigitalOutputs()
 {
-    // [MOCKED DATA] Replace later with real DS18B20 (and/or analog input based) reading.
-    // Stable but slightly moving value for UI testing.
-    const float seconds = millis() / 1000.0f;
-    const float base = 42.0f;
-    const float wave = 0.5f * sinf(seconds / 30.0f);
-    temperature = base + wave + tempSensorSettings.corrOffset.get();
-}
-
-void setup()
-{
-    Serial.begin(115200);
-
-    pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
-
-    ConfigManagerClass::setLogger([](const char *msg)
-        {
-            Serial.print("[ConfigManager] ");
-            Serial.println(msg);
-        });
-
-    //-----------------------------------------------------------------
-    ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
-    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
-    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
-    ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
-    //----------------------------------------------------------------------------------------------------------------------------------
-
-    // Initialize structured settings using Delayed Initialization Pattern
-    // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
-    tempSensorSettings.init();      // DS18B20 (mocked for now) settings
-
-    coreSettings.attach(ConfigManager);      // Register WiFi/System/Buttons core settings
-    coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
-
-    // IO: declare outputs and let IOManager own/register all settings
-    //todo: move it to a function
+    // Digital outputs are settings-driven and owned by IOManager.
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "heater",
         .name = "Heater",
@@ -174,6 +101,7 @@ void setup()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "fan",
         .name = "Cooling Fan",
@@ -184,12 +112,13 @@ void setup()
 
     // Additional relays
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "taster",
-        .name = "Taster",
+        .id = "holdbutton",
+        .name = "holdbutton",
         .defaultPin = 26,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "relay27",
         .name = "Relay 27",
@@ -197,6 +126,7 @@ void setup()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+    
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "relay14",
         .name = "Relay 14",
@@ -205,6 +135,10 @@ void setup()
         .defaultEnabled = true,
         .registerSettings = false,
     });
+}
+
+static void registerDigitalOutputsGui()
+{
     // Create dedicated Settings cards for each IO item (category token stays "IO")
     ioManager.addIOtoGUI(
         "heater",
@@ -227,23 +161,21 @@ void setup()
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         },
         "Fan",
-        "sensors"
+        "FAN Control"
     );
 
-    // Taster: momentary button (pulses relay)
+    // Momentary button: hold-to-activate (pressed -> ON, released -> OFF)
     ioManager.addIOtoGUI(
-        "taster",
+        "holdbutton",
         nullptr,
         4,
-        cm::IOManager::RuntimeControlType::Button,
-        []() {
-            ioManager.set("taster", true);
-            tasterOffTicker.detach();
-            tasterOffTicker.attach_ms(200, +[]() {
-                ioManager.set("taster", false);
-            });
-        },
-        "Taster"
+        cm::IOManager::RuntimeControlType::MomentaryButton,
+        []() { return ioManager.getState("holdbutton"); },
+        [](bool state) { ioManager.set("holdbutton", state); },
+        "Holdbutton",
+        "controls",
+        "Running",
+        "Push"
     );
 
     // Additional relays as switches
@@ -260,11 +192,318 @@ void setup()
         "relay14",
         nullptr,
         6,
-        cm::IOManager::RuntimeControlType::Checkbox,
+        cm::IOManager::RuntimeControlType::StateButton,
         []() { return ioManager.getState("relay14"); },
         [](bool state) { ioManager.set("relay14", state); },
-        "Relay 14"
+        "Start/Stop",
+        "controls",
+        "Stop",
+        "Start"
     );
+}
+
+static void createDigitalInputs()
+{
+    // Boot/action buttons (wired to 3.3V => active-high).
+    // Use internal pulldown so idle is stable LOW.
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = "ap_mode",
+        .name = "AP Mode Button",
+        .defaultPin = 13,
+        .defaultActiveLow = false,
+        .defaultPullup = false,
+        .defaultPulldown = true,
+        .defaultEnabled = true,
+    });
+
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = "reset",
+        .name = "Reset Button",
+        .defaultPin = 15,
+        .defaultActiveLow = false,
+        .defaultPullup = false,
+        .defaultPulldown = true,
+        .defaultEnabled = true,
+    });
+
+    ioManager.addInputToGUI("ap_mode", nullptr, 8, "AP Mode", "inputs", false);
+    ioManager.addInputToGUI("reset", nullptr, 9, "Reset", "inputs", false);
+
+    cm::IOManager::DigitalInputEventOptions apOptions;
+    apOptions.longClickMs = 1200;
+    ioManager.configureDigitalInputEvents(
+        "ap_mode",
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onLongPressOnStartup = []() {
+                Serial.println("[INPUT][ap_mode] LongPressOnStartup -> starting AP mode");
+                ConfigManager.startAccessPoint("ESP32_Config", "");
+            }
+        },
+        apOptions
+    );
+
+    cm::IOManager::DigitalInputEventOptions resetOptions;
+    resetOptions.longClickMs = 2500;
+    ioManager.configureDigitalInputEvents(
+        "reset",
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onLongPressOnStartup = []() {
+                Serial.println("[INPUT][reset] LongPressOnStartup -> reset settings and restart");
+                ConfigManager.clearAllFromPrefs();
+                ConfigManager.saveAll();
+                ESP.restart();
+            }
+        },
+        resetOptions
+    );
+
+    // Digital input demo: button wired to 3.3V (active-high).
+    // With defaultPulldown=true we enable the internal pulldown (idle = LOW, pressed = HIGH).
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = "testbutton",
+        .name = "Test Button",
+        .defaultPin = 33,
+        .defaultActiveLow = false,
+        .defaultPullup = false,
+        .defaultPulldown = true,
+        .defaultEnabled = true,
+    });
+
+    // Show as bool dot in runtime.
+    ioManager.addInputToGUI(
+        "testbutton",
+        nullptr,
+        10,
+        "Test Button",
+        "inputs",
+        false
+    );
+
+    // Divider + per-event indicators for test button
+    {
+        RuntimeFieldMeta divider;
+        divider.group = "inputs";
+        divider.key = "testbutton_events";
+        divider.label = "Test Button Events";
+        divider.isDivider = true;
+        divider.order = 11;
+        CRM().addRuntimeMeta(divider);
+
+        RuntimeFieldMeta meta;
+        meta.group = "inputs";
+
+        meta.key = "test_press";
+        meta.label = "Press";
+        meta.isBool = true;
+        meta.order = 12;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_release";
+        meta.label = "Release";
+        meta.isBool = true;
+        meta.order = 13;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_click";
+        meta.label = "Click";
+        meta.isBool = true;
+        meta.order = 14;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_doubleclick_toggle";
+        meta.label = "DoubleClick (Toggle)";
+        meta.isBool = true;
+        meta.order = 15;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_longpress_toggle";
+        meta.label = "LongPress (Toggle)";
+        meta.isBool = true;
+        meta.order = 16;
+        CRM().addRuntimeMeta(meta);
+
+        CRM().addRuntimeProvider("inputs", [](JsonObject& data) {
+            data["test_press"] = isPulseActive(testPressPulseUntilMs);
+            data["test_release"] = isPulseActive(testReleasePulseUntilMs);
+            data["test_click"] = isPulseActive(testClickPulseUntilMs);
+            data["test_doubleclick_toggle"] = testDoubleClickToggle;
+            data["test_longpress_toggle"] = testLongPressToggle;
+        }, 6);
+    }
+
+    ioManager.configureDigitalInputEvents(
+        "testbutton",
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onPress = []() {
+                testPressPulseUntilMs = millis() + TEST_EVENT_PULSE_MS;
+                Serial.println("[INPUT][testbutton] Press");
+            },
+            .onRelease = []() {
+                testReleasePulseUntilMs = millis() + TEST_EVENT_PULSE_MS;
+                Serial.println("[INPUT][testbutton] Release");
+            },
+            .onClick = []() {
+                testClickPulseUntilMs = millis() + TEST_EVENT_PULSE_MS;
+                Serial.println("[INPUT][testbutton] Click");
+            },
+            .onDoubleClick = []() {
+                testDoubleClickToggle = !testDoubleClickToggle;
+                Serial.printf("[INPUT][testbutton] DoubleClick -> toggle=%s\n", testDoubleClickToggle ? "true" : "false");
+            },
+            .onLongClick = []() {
+                testLongPressToggle = !testLongPressToggle;
+                Serial.printf("[INPUT][testbutton] LongClick -> toggle=%s\n", testLongPressToggle ? "true" : "false");
+            },
+        }
+    );
+}
+
+static void createAnalogInputs()
+{
+    // LDR cross (solar tracker) - ADC1 pins (WiFi-safe): 34, 35, 36(VP), 39(VN)
+    // Note: These pins are input-only, which is fine for analog sensors.
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_n",
+        .name = "LDR North",
+        .defaultPin = 34,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUIWithAlarm(
+        "ldr_n",
+        nullptr,
+        13,
+        NAN,
+        90.0f,
+        cm::IOManager::AnalogAlarmCallbacks{
+            .onStateChanged = [](bool inAlarm) {
+                Serial.printf("[ALARM][ldr_n] state=%s\n", inAlarm ? "ON" : "OFF");
+            },
+        },
+        "LDR North",
+        "sensors"
+    );
+    ioManager.addAnalogInputToGUI("ldr_n", nullptr, 13, "LDR North", "raw-values", true);
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_e",
+        .name = "LDR East",
+        .defaultPin = 35,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "sensors");
+    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "raw-values", true);
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_s",
+        .name = "LDR South",
+        .defaultPin = 36,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUIWithAlarm(
+        "ldr_s",
+        nullptr,
+        17,
+        30.0f,
+        NAN,
+        cm::IOManager::AnalogAlarmCallbacks{
+            .onEnter = []() {
+                Serial.println("[ALARM][ldr_s] enter");
+            },
+            .onExit = []() {
+                Serial.println("[ALARM][ldr_s] exit");
+            },
+        },
+        "LDR South",
+        "sensors"
+    );
+    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 17, "LDR South", "raw-values", true);
+
+    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
+        .id = "ldr_w",
+        .name = "LDR West",
+        .defaultPin = 39,
+        .defaultRawMin = 0,
+        .defaultRawMax = 4095,
+        .defaultOutMin = 0.0f,
+        .defaultOutMax = 100.0f,
+        .defaultUnit = "%",
+        .defaultPrecision = 1,
+    });
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "sensors");
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "raw-values", true);
+    ioManager.addAnalogInputToGUIWithAlarm(
+    "ldr_w",
+    nullptr,
+    30,
+    30.0f,
+    95.0f,
+    cm::IOManager::AnalogAlarmCallbacks{
+            .onEnter = []() {
+                Serial.println("[ALARM][ldr_w] enter");
+            },
+            .onExit = []() {
+                Serial.println("[ALARM][ldr_w] exit");
+            },
+        },
+        "LDR West",
+        "Min_Max Alarms"
+    );
+}
+
+static void createAnalogOutputs()
+{
+    // TODO: Placeholder for future analog output initialization.
+}
+
+
+Ticker NtpSyncTicker;
+bool tickerActive = false; // Used as a generic "services active" flag (WiFi/OTA/NTP)
+
+void setup()
+{
+    Serial.begin(115200);
+
+    pinMode(LED_BUILTIN, OUTPUT);
+
+    ConfigManagerClass::setLogger([](const char *msg)
+        {
+            Serial.print("[ConfigManager] ");
+            Serial.println(msg);
+        });
+
+    //-----------------------------------------------------------------
+    ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    ConfigManager.setVersion(VERSION); // Set the application version for web UI display
+    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
+    ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
+    //----------------------------------------------------------------------------------------------------------------------------------
+
+    coreSettings.attachWiFi(ConfigManager);     // Register WiFi baseline settings
+    coreSettings.attachSystem(ConfigManager);   // Register System baseline settings
+    coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
+
+    createDigitalOutputs();
+    createDigitalInputs();
+    createAnalogInputs();
+    createAnalogOutputs();
+    registerDigitalOutputsGui();
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -272,6 +511,15 @@ void setup()
 
     ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
     ioManager.begin();
+
+    // Boot behavior:
+    // - If WiFi SSID is empty (fresh reset/unconfigured), start AP mode automatically.
+    // - Avoid instant reset loops: do NOT reset on "pressed at boot"; reset/AP are handled via LongPressOnStartup event.
+    const bool ssidEmpty = (wifiSettings.wifiSsid.get().length() == 0);
+    if (ssidEmpty) {
+        Serial.println("[BOOT] WiFi SSID is empty -> starting AP mode");
+        ConfigManager.startAccessPoint("ESP32_Config", "");
+    }
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
@@ -286,12 +534,11 @@ void setup()
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
-    SetupCheckForResetButton();
-    
-    SetupCheckForAPModeButton(); // check for AP mode button AFTER setting WiFi credentials
-
-    // perform the wifi connection
-    bool startedInStationMode = SetupStartWebServer();
+    // perform the wifi connection (skip if we are in AP mode)
+    bool startedInStationMode = false;
+    if (!ssidEmpty && WiFi.getMode() != WIFI_AP) {
+        startedInStationMode = SetupStartWebServer();
+    }
     if (startedInStationMode)
     {
         // setupMQTT();
@@ -305,11 +552,8 @@ void setup()
 
     // Enhanced WebSocket configuration
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-    ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
+    ConfigManager.setWebSocketInterval(250); // Faster updates - every 250ms
     ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
-
-    updateMockTemperature();
-    lastTempReadMs = millis();
     //----------------------------------------------------------------------------------------------------------------------------------
 
     Serial.println("Loaded configuration:");
@@ -341,27 +585,17 @@ void loop()
     // for working with the ConfigManager nessesary in loop
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
     ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+    ioManager.update(); // Apply IO setting changes and keep inputs/outputs state current
     ConfigManager.handleClient(); // Handle web server client requests
     ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
-    ioManager.update(); // Apply IO setting changes and keep outputs consistent
     //-------------------------------------------------------------------------------------------------------------
-
 
     static unsigned long lastLoopLog = 0;
     if (millis() - lastLoopLog > 60000) { // Every 60 seconds
         lastLoopLog = millis();
         Serial.printf("[MAIN] Loop running, WiFi status: %d, heap: %d\n", WiFi.status(), ESP.getFreeHeap());
     }
-
-    const int intervalSec = tempSensorSettings.readInterval.get() < 1 ? 1 : tempSensorSettings.readInterval.get();
-    const unsigned long intervalMs = (unsigned long)intervalSec * 1000UL;
-    if (millis() - lastTempReadMs >= intervalMs)
-    {
-        lastTempReadMs = millis();
-        updateMockTemperature();
-    }
-
 
     updateStatusLED();
     delay(10);
@@ -374,28 +608,6 @@ void loop()
 void setupGUI()
 {
     Serial.println("[GUI] setupGUI() start");
-    // #region Sensors Card (Temperature)
-
-        // Register sensor runtime provider for temperature (mocked for now)
-        Serial.println("[GUI] Adding runtime provider: sensors");
-        CRM().addRuntimeProvider("sensors", [](JsonObject &data)
-        {
-            // Apply precision to sensor values to reduce JSON size
-            data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
-        },2);
-
-        // Define sensor display fields using addRuntimeMeta
-        Serial.println("[GUI] Adding meta: sensors.temp");
-        RuntimeFieldMeta tempMeta;
-        tempMeta.group = "sensors";
-        tempMeta.key = "temp";
-        tempMeta.label = "Temperature";
-        tempMeta.unit = "°C";
-        tempMeta.precision = 1;
-        tempMeta.order = 10;
-        CRM().addRuntimeMeta(tempMeta);
-    // #endregion Sensors Card (Temperature)
-
     // #region Controls Card with Buttons, Toggles, and Sliders
         // Add interactive controls provider
         Serial.println("[GUI] Adding runtime provider: controls");
@@ -404,38 +616,6 @@ void setupGUI()
             // Optionally expose control states
         },3);
 
-        // Divider between discrete controls (buttons/toggles) and analog controls
-        Serial.println("[GUI] Adding meta divider: controls.analogDivider");
-        RuntimeFieldMeta analogDividerMeta;
-        analogDividerMeta.group = "controls";
-        analogDividerMeta.key = "analogDivider";
-        analogDividerMeta.label = "Analog";
-        analogDividerMeta.isDivider = true;
-        analogDividerMeta.order = 23;
-        CRM().addRuntimeMeta(analogDividerMeta);
-
-        // Float slider synchronized with the Temp setting (Temp.TCO)
-        Serial.println("[GUI] Defining runtime float slider: controls.tempOffset");
-        ConfigManager.defineRuntimeFloatSlider(
-            "controls",
-            "tempOffset",
-            "Temperature Offset",
-            -5.0f,
-            5.0f,
-            tempSensorSettings.corrOffset.get(),
-            2,
-            []() {
-                return tempSensorSettings.corrOffset.get();
-            },
-            [](float value) {
-                tempSensorSettings.corrOffset.set(value);
-                Serial.printf("[TEMP_OFFSET] Value: %.2f°C\n", value);
-            },
-            "°C",
-            "",
-            24
-        );
-
     // #endregion Controls Card with Buttons, Toggles, and Sliders
     Serial.println("[GUI] setupGUI() end");
 }
@@ -443,78 +623,6 @@ void setupGUI()
 //----------------------------------------
 // HELPER FUNCTIONS
 //----------------------------------------
-
-// TODO(IOManager): Move this helper into a dedicated IO manager module.
-// Goal: Centralize GPIO button handling (pull mode, active level, debouncing).
-// API idea:
-//   - bool IOManager::checkResetToDefaultsButton(const cm::CoreButtonSettings& cfg,
-//       std::function<void()> onPressed);
-// Notes:
-//   - The callback should decide whether/when to reboot (library should not force ESP.restart()).
-//   - Keep this example as the reference behavior for the future IOManager implementation.
-void SetupCheckForResetButton()
-{
-    const int resetPin = buttonSettings.resetDefaultsPin.get();
-    if (resetPin < 0)
-    {
-        return; // Button not present
-    }
-
-    // Configure pin based on settings (boot-time).
-    pinMode(resetPin, buttonSettings.resetUsePullup.get() ? INPUT_PULLUP : INPUT_PULLDOWN);
-
-    // check for pressed reset button
-    const int resetLevel = digitalRead(resetPin);
-    const bool resetPressed = buttonSettings.resetActiveLow.get() ? (resetLevel == LOW) : (resetLevel == HIGH);
-    if (resetPressed)
-    {
-        Serial.println("[MAIN] Reset button pressed -> Reset all settings...");
-        ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
-        ConfigManager.saveAll();           // Save the default settings to EEPROM
-
-        // Show user feedback that reset is happening
-        Serial.println("[MAIN] restarting...");
-        //ToDo: add non blocking delay to show message on display before restart
-        ESP.restart(); // Restart the ESP32
-    }
-}
-
-// TODO(IOManager): Move this helper into a dedicated IO manager module.
-// API idea:
-//   - bool IOManager::checkApModeButton(const cm::CoreButtonSettings& cfg,
-//       std::function<void()> onPressed);
-// Notes:
-//   - The callback should decide what "AP mode" means (SSID, password, portal, etc.).
-void SetupCheckForAPModeButton()
-{
-    String APName = "ESP32_Config";
-    String pwd = "config1234"; // Default AP password
-
-    if (wifiSettings.wifiSsid.get().length() == 0)
-    {
-        Serial.println("[MAIN] WiFi SSID is empty (fresh/unconfigured)");
-        ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
-    }
-
-    // check for pressed AP mode button
-
-    // Configure pin based on settings (boot-time).
-    const int apPin = buttonSettings.apModePin.get();
-    if (apPin < 0)
-    {
-        return; // Button not present
-    }
-
-    pinMode(apPin, buttonSettings.apModeUsePullup.get() ? INPUT_PULLUP : INPUT_PULLDOWN);
-
-    const int apLevel = digitalRead(apPin);
-    const bool apPressed = buttonSettings.apModeActiveLow.get() ? (apLevel == LOW) : (apLevel == HIGH);
-    if (apPressed)
-    {
-        Serial.println("[MAIN] AP mode button pressed -> starting AP mode...");
-        ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
-    }
-}
 
 //----------------------------------------
 // WIFI MANAGER CALLBACK FUNCTIONS

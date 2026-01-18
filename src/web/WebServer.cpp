@@ -976,7 +976,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
 #endif
 
 #if CM_ENABLE_RUNTIME_STATE_BUTTONS
-    // Runtime state button toggle endpoint
+    // Runtime state button endpoint (toggle or explicit set via value=...)
     server->on("/runtime_action/state_button", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             if (!configManager) {
@@ -989,7 +989,14 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 String group = request->getParam("group")->value();
                 String key = request->getParam("key")->value();
 
-                configManager->getRuntimeManager().handleStateButtonToggle(group, key);
+                if (request->hasParam("value")) {
+                    String raw = request->getParam("value")->value();
+                    raw.toLowerCase();
+                    const bool value = (raw == "true" || raw == "1" || raw == "on");
+                    configManager->getRuntimeManager().handleStateButtonSet(group, key, value);
+                } else {
+                    configManager->getRuntimeManager().handleStateButtonToggle(group, key);
+                }
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
                 return;
             }
@@ -1014,7 +1021,12 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         String key = doc["key"].as<String>();
 
                         if (configManager) {
-                            configManager->getRuntimeManager().handleStateButtonToggle(group, key);
+                            if (doc.containsKey("value")) {
+                                bool value = doc["value"].as<bool>();
+                                configManager->getRuntimeManager().handleStateButtonSet(group, key, value);
+                            } else {
+                                configManager->getRuntimeManager().handleStateButtonToggle(group, key);
+                            }
                             request->send(200, "application/json", "{\"status\":\"ok\"}");
                         } else {
                             request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"no_manager\"}");

@@ -64,6 +64,17 @@ cfg.setRuntimeProviderOrder("sensors", 5);
 
 Alarm booleans visually distinguish safe vs active states (dot colors and optional blink). Boolean meta includes `isBool` and, when relevant, `alarmWhenTrue`.
 
+## Dynamic Numeric Alarms (e.g. IOManager)
+
+Some subsystems (like `IOManager` analog alarms) use **dynamic thresholds** that can be changed via Settings at runtime.
+
+- In this case, static `alarmMin/alarmMax` values in `/runtime_meta.json` are treated as defaults / hints.
+- The recommended mechanism for the Live UI is to additionally expose explicit alarm state flags next to the numeric value:
+  - `<key>_alarm_min` (bool)
+  - `<key>_alarm_max` (bool)
+
+When present, the WebUI uses these flags to decide whether a numeric field is in alarm state.
+
 ## Cross-Field Alarms
 
 ```cpp

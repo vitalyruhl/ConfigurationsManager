@@ -3,12 +3,31 @@
 
 namespace cm {
 
+static std::shared_ptr<std::string> makeStableString(const String& value)
+{
+    return std::make_shared<std::string>(value.c_str());
+}
+
 static constexpr const char* IO_CATEGORY_PRETTY = "I/O";
 
 String IOManager::formatSlotKey(uint8_t slot, char suffix)
 {
     char buf[8];
     snprintf(buf, sizeof(buf), "IO%02u%c", static_cast<unsigned>(slot), suffix);
+    return String(buf);
+}
+
+String IOManager::formatInputSlotKey(uint8_t slot, char suffix)
+{
+    char buf[8];
+    snprintf(buf, sizeof(buf), "II%02u%c", static_cast<unsigned>(slot), suffix);
+    return String(buf);
+}
+
+String IOManager::formatAnalogSlotKey(uint8_t slot, char suffix)
+{
+    char buf[8];
+    snprintf(buf, sizeof(buf), "AI%02u%c", static_cast<unsigned>(slot), suffix);
     return String(buf);
 }
 
@@ -48,6 +67,93 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
     digitalOutputs.push_back(std::move(entry));
 }
 
+void IOManager::addDigitalInput(const DigitalInputBinding& binding)
+{
+    if (!binding.id || !binding.id[0]) {
+        CM_LOG("[IOManager][ERROR] addDigitalInput: invalid binding");
+        return;
+    }
+
+    if (findInputIndex(binding.id) >= 0) {
+        CM_LOG("[IOManager][WARNING] addDigitalInput: input '%s' already exists", binding.id);
+        return;
+    }
+
+    DigitalInputEntry entry;
+    entry.id = binding.id;
+    entry.name = binding.name ? binding.name : binding.id;
+
+    entry.slot = nextDigitalInputSlot;
+    if (nextDigitalInputSlot < 99) {
+        nextDigitalInputSlot++;
+    } else {
+        CM_LOG("[IOManager][WARNING] addDigitalInput: exceeded slot range 00..99, keys may not remain stable");
+        nextDigitalInputSlot++;
+    }
+
+    entry.defaultPin = binding.defaultPin;
+    entry.defaultActiveLow = binding.defaultActiveLow;
+    entry.defaultPullup = binding.defaultPullup;
+    entry.defaultPulldown = binding.defaultPulldown;
+    entry.defaultEnabled = binding.defaultEnabled;
+
+    entry.registerSettings = binding.registerSettings;
+
+    entry.showPinInWeb = binding.showPinInWeb;
+    entry.showActiveLowInWeb = binding.showActiveLowInWeb;
+    entry.showPullupInWeb = binding.showPullupInWeb;
+    entry.showPulldownInWeb = binding.showPulldownInWeb;
+
+    digitalInputs.push_back(std::move(entry));
+}
+
+void IOManager::addAnalogInput(const AnalogInputBinding& binding)
+{
+    if (!binding.id || !binding.id[0]) {
+        CM_LOG("[IOManager][ERROR] addAnalogInput: invalid binding");
+        return;
+    }
+
+    if (findAnalogInputIndex(binding.id) >= 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogInput: input '%s' already exists", binding.id);
+        return;
+    }
+
+    AnalogInputEntry entry;
+    entry.id = binding.id;
+    entry.name = binding.name ? binding.name : binding.id;
+
+    entry.slot = nextAnalogInputSlot;
+    if (nextAnalogInputSlot < 99) {
+        nextAnalogInputSlot++;
+    } else {
+        CM_LOG("[IOManager][WARNING] addAnalogInput: exceeded slot range 00..99, keys may not remain stable");
+        nextAnalogInputSlot++;
+    }
+
+    entry.defaultPin = binding.defaultPin;
+    entry.defaultEnabled = binding.defaultEnabled;
+
+    entry.defaultRawMin = binding.defaultRawMin;
+    entry.defaultRawMax = binding.defaultRawMax;
+    entry.defaultOutMin = binding.defaultOutMin;
+    entry.defaultOutMax = binding.defaultOutMax;
+
+    entry.defaultUnit = binding.defaultUnit ? String(binding.defaultUnit) : String();
+    entry.defaultPrecision = binding.defaultPrecision;
+    entry.defaultDeadband = binding.defaultDeadband;
+    entry.defaultMinEventMs = binding.defaultMinEventMs;
+
+    entry.registerSettings = binding.registerSettings;
+    entry.showPinInWeb = binding.showPinInWeb;
+    entry.showMappingInWeb = binding.showMappingInWeb;
+    entry.showUnitInWeb = binding.showUnitInWeb;
+    entry.showDeadbandInWeb = binding.showDeadbandInWeb;
+    entry.showMinEventInWeb = binding.showMinEventInWeb;
+
+    analogInputs.push_back(std::move(entry));
+}
+
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
 {
     const int idx = findIndex(id);
@@ -72,32 +178,38 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
     entry.cardOrder = order;
 
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
     entry.keyPin = formatSlotKey(entry.slot, 'P');
     entry.keyActiveLow = formatSlotKey(entry.slot, 'L');
 
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+
     entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPin.c_str(),
+        .key = entry.keyPinStable->c_str(),
         .name = "GPIO",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultPin,
         .showInWeb = entry.showPinInWeb,
         .sortOrder = 11,
         .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKey.c_str(),
-        .cardPretty = entry.cardPretty.c_str(),
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
         .cardOrder = entry.cardOrder,
     });
 
     entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyActiveLow.c_str(),
+        .key = entry.keyActiveLowStable->c_str(),
         .name = "Active LOW",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultActiveLow,
         .showInWeb = entry.showActiveLowInWeb,
         .sortOrder = 12,
         .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKey.c_str(),
-        .cardPretty = entry.cardPretty.c_str(),
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
         .cardOrder = entry.cardOrder,
     });
 
@@ -105,6 +217,709 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     ConfigManager.addSetting(entry.activeLow.get());
 
     entry.settingsRegistered = true;
+}
+
+void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
+                              const char* runtimeLabel,
+                              const char* runtimeGroup,
+                              bool alarmWhenActive)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addInputToGUI: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    if (entry.settingsRegistered) {
+        CM_LOG("[IOManager][WARNING] addInputToGUI: input '%s' already registered", entry.id.c_str());
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        entry.settingsRegistered = true;
+        return;
+    }
+
+    entry.cardKey = entry.id;
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+    entry.keyPin = formatInputSlotKey(entry.slot, 'P');
+    entry.keyActiveLow = formatInputSlotKey(entry.slot, 'L');
+    entry.keyPullup = formatInputSlotKey(entry.slot, 'U');
+    entry.keyPulldown = formatInputSlotKey(entry.slot, 'D');
+
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+    entry.keyPullupStable = makeStableString(entry.keyPullup);
+    entry.keyPulldownStable = makeStableString(entry.keyPulldown);
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPinStable->c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 21,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyActiveLowStable->c_str(),
+        .name = "Active LOW",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultActiveLow,
+        .showInWeb = entry.showActiveLowInWeb,
+        .sortOrder = 22,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.pullup = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyPullupStable->c_str(),
+        .name = "Pull-up",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPullup,
+        .showInWeb = entry.showPullupInWeb,
+        .sortOrder = 23,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.pulldown = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyPulldownStable->c_str(),
+        .name = "Pull-down",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPulldown,
+        .showInWeb = entry.showPulldownInWeb,
+        .sortOrder = 24,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.activeLow.get());
+    ConfigManager.addSetting(entry.pullup.get());
+    ConfigManager.addSetting(entry.pulldown.get());
+
+    entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("inputs");
+    entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    entry.runtimeOrder = order;
+    entry.alarmWhenActive = alarmWhenActive;
+    ensureInputRuntimeProvider(entry.runtimeGroup);
+
+    RuntimeFieldMeta meta;
+    meta.group = entry.runtimeGroup;
+    meta.key = entry.id;
+    meta.label = entry.runtimeLabel;
+    meta.isBool = true;
+    meta.order = entry.runtimeOrder;
+    if (entry.alarmWhenActive) {
+        meta.boolAlarmValue = true;
+    }
+    ConfigManager.getRuntime().addRuntimeMeta(meta);
+
+    entry.settingsRegistered = true;
+}
+
+static void addAnalogRuntimeMeta(ConfigManagerRuntime& runtime,
+                                 const String& group,
+                                 const String& key,
+                                 const String& label,
+                                 const String& unit,
+                                 int precision,
+                                 int order,
+                                 bool hasAlarm,
+                                 float alarmMin,
+                                 float alarmMax)
+{
+    RuntimeFieldMeta meta;
+    meta.group = group;
+    meta.key = key;
+    meta.label = label;
+    meta.unit = unit;
+    meta.precision = precision;
+    meta.order = order;
+
+    if (hasAlarm) {
+        meta.hasAlarm = true;
+        meta.alarmMin = alarmMin;
+        meta.alarmMax = alarmMax;
+    }
+
+    runtime.addRuntimeMeta(meta);
+}
+
+void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int order,
+                                    const char* runtimeLabel,
+                                    const char* runtimeGroup,
+                                    bool showRaw)
+{
+    const bool hasAlarm = false;
+    const float alarmMin = 0.0f;
+    const float alarmMax = 0.0f;
+
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogInputToGUI: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    const String effectiveGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("analog");
+    const String effectiveLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    registerAnalogRuntimeField(effectiveGroup, entry.id, showRaw);
+    ensureAnalogRuntimeProvider(effectiveGroup);
+
+    if (showRaw) {
+        addAnalogRuntimeMeta(ConfigManager.getRuntime(),
+                             effectiveGroup,
+                             entry.id,
+                             effectiveLabel,
+                             "",
+                             0,
+                             order,
+                             false,
+                             0.0f,
+                             0.0f);
+    } else {
+        const String unit = entry.unit ? entry.unit->get() : entry.defaultUnit;
+        addAnalogRuntimeMeta(ConfigManager.getRuntime(),
+                             effectiveGroup,
+                             entry.id,
+                             effectiveLabel,
+                             unit,
+                             entry.defaultPrecision,
+                             order,
+                             hasAlarm,
+                             alarmMin,
+                             alarmMax);
+    }
+
+    if (entry.settingsRegistered) {
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        entry.settingsRegistered = true;
+        return;
+    }
+
+    entry.cardKey = entry.id;
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+    entry.keyPin = formatAnalogSlotKey(entry.slot, 'P');
+    entry.keyRawMin = formatAnalogSlotKey(entry.slot, 'R');
+    entry.keyRawMax = formatAnalogSlotKey(entry.slot, 'S');
+    entry.keyOutMin = formatAnalogSlotKey(entry.slot, 'M');
+    entry.keyOutMax = formatAnalogSlotKey(entry.slot, 'N');
+    entry.keyUnit = formatAnalogSlotKey(entry.slot, 'U');
+    entry.keyDeadband = formatAnalogSlotKey(entry.slot, 'D');
+    entry.keyMinEventMs = formatAnalogSlotKey(entry.slot, 'E');
+    entry.keyAlarmMin = formatAnalogSlotKey(entry.slot, 'A');
+    entry.keyAlarmMax = formatAnalogSlotKey(entry.slot, 'B');
+
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyRawMinStable = makeStableString(entry.keyRawMin);
+    entry.keyRawMaxStable = makeStableString(entry.keyRawMax);
+    entry.keyOutMinStable = makeStableString(entry.keyOutMin);
+    entry.keyOutMaxStable = makeStableString(entry.keyOutMax);
+    entry.keyUnitStable = makeStableString(entry.keyUnit);
+    entry.keyDeadbandStable = makeStableString(entry.keyDeadband);
+    entry.keyMinEventMsStable = makeStableString(entry.keyMinEventMs);
+    entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
+    entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPinStable->c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 31,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.rawMin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyRawMinStable->c_str(),
+        .name = "Raw Min",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultRawMin,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 32,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.rawMax = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyRawMaxStable->c_str(),
+        .name = "Raw Max",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultRawMax,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 33,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.outMin = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyOutMinStable->c_str(),
+        .name = "Out Min",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultOutMin,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 34,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.outMax = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyOutMaxStable->c_str(),
+        .name = "Out Max",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultOutMax,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 35,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.unit = std::make_unique<Config<String>>(ConfigOptions<String>{
+        .key = entry.keyUnitStable->c_str(),
+        .name = "Unit",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultUnit,
+        .showInWeb = entry.showUnitInWeb,
+        .sortOrder = 36,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.deadband = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyDeadbandStable->c_str(),
+        .name = "Deadband",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultDeadband,
+        .showInWeb = entry.showDeadbandInWeb,
+        .sortOrder = 37,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.minEventMs = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyMinEventMsStable->c_str(),
+        .name = "Min Event (ms)",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = static_cast<int>(entry.defaultMinEventMs),
+        .showInWeb = entry.showMinEventInWeb,
+        .sortOrder = 38,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.rawMin.get());
+    ConfigManager.addSetting(entry.rawMax.get());
+    ConfigManager.addSetting(entry.outMin.get());
+    ConfigManager.addSetting(entry.outMax.get());
+    ConfigManager.addSetting(entry.unit.get());
+    ConfigManager.addSetting(entry.deadband.get());
+    ConfigManager.addSetting(entry.minEventMs.get());
+
+    entry.settingsRegistered = true;
+}
+
+void IOManager::ensureAnalogAlarmSettings(AnalogInputEntry& entry,
+                                          float alarmMin,
+                                          float alarmMax)
+{
+    if (!entry.registerSettings) {
+        return;
+    }
+    if (!entry.cardKeyStable || !entry.cardPrettyStable) {
+        return;
+    }
+    if (!entry.keyAlarmMinStable || !entry.keyAlarmMaxStable) {
+        return;
+    }
+
+    if (!isnan(alarmMin) && !entry.alarmMinSetting) {
+        entry.alarmMinSetting = std::make_unique<Config<float>>(ConfigOptions<float>{
+            .key = entry.keyAlarmMinStable->c_str(),
+            .name = "Alarm Min",
+            .category = cm::CoreCategories::IO,
+            .defaultValue = alarmMin,
+            .showInWeb = true,
+            .sortOrder = 39,
+            .categoryPretty = IO_CATEGORY_PRETTY,
+            .card = entry.cardKeyStable->c_str(),
+            .cardPretty = entry.cardPrettyStable->c_str(),
+            .cardOrder = entry.cardOrder,
+        });
+        ConfigManager.addSetting(entry.alarmMinSetting.get());
+    }
+
+    if (!isnan(alarmMax) && !entry.alarmMaxSetting) {
+        entry.alarmMaxSetting = std::make_unique<Config<float>>(ConfigOptions<float>{
+            .key = entry.keyAlarmMaxStable->c_str(),
+            .name = "Alarm Max",
+            .category = cm::CoreCategories::IO,
+            .defaultValue = alarmMax,
+            .showInWeb = true,
+            .sortOrder = 40,
+            .categoryPretty = IO_CATEGORY_PRETTY,
+            .card = entry.cardKeyStable->c_str(),
+            .cardPretty = entry.cardPrettyStable->c_str(),
+            .cardOrder = entry.cardOrder,
+        });
+        ConfigManager.addSetting(entry.alarmMaxSetting.get());
+    }
+}
+
+static void addAnalogAlarmRuntimeIndicators(ConfigManagerRuntime& runtime,
+                                            const String& group,
+                                            const String& id,
+                                            int baseOrder,
+                                            bool hasMin,
+                                            bool hasMax)
+{
+    if (hasMin) {
+        RuntimeFieldMeta meta;
+        meta.group = group;
+        meta.key = id + "_alarm_min";
+        meta.label = "Alarm Min";
+        meta.isBool = true;
+        meta.boolAlarmValue = true;
+        meta.order = baseOrder + 1;
+        runtime.addRuntimeMeta(meta);
+    }
+
+    if (hasMax) {
+        RuntimeFieldMeta meta;
+        meta.group = group;
+        meta.key = id + "_alarm_max";
+        meta.label = "Alarm Max";
+        meta.isBool = true;
+        meta.boolAlarmValue = true;
+        meta.order = baseOrder + 2;
+        runtime.addRuntimeMeta(meta);
+    }
+}
+
+void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
+                                             float alarmMin, float alarmMax,
+                                             const char* runtimeLabel,
+                                             const char* runtimeGroup)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogInputToGUIWithAlarm: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+
+    // Store thresholds for runtime alarm evaluation (scaled value).
+    entry.alarmMin = alarmMin;
+    entry.alarmMax = alarmMax;
+
+    const String effectiveGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("analog");
+    const String effectiveLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+
+    registerAnalogRuntimeField(effectiveGroup, entry.id, false);
+    ensureAnalogRuntimeProvider(effectiveGroup);
+
+    const String unit = entry.unit ? entry.unit->get() : entry.defaultUnit;
+    addAnalogRuntimeMeta(ConfigManager.getRuntime(),
+                         effectiveGroup,
+                         entry.id,
+                         effectiveLabel,
+                         unit,
+                         entry.defaultPrecision,
+                         order,
+                         true,
+                         alarmMin,
+                         alarmMax);
+
+    // Also show which boundary is active.
+    addAnalogAlarmRuntimeIndicators(ConfigManager.getRuntime(),
+                                    effectiveGroup,
+                                    entry.id,
+                                    order,
+                                    !isnan(alarmMin),
+                                    !isnan(alarmMax));
+
+    if (entry.settingsRegistered) {
+        IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        entry.settingsRegistered = true;
+        return;
+    }
+
+    entry.cardKey = entry.id;
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+    entry.keyPin = formatAnalogSlotKey(entry.slot, 'P');
+    entry.keyRawMin = formatAnalogSlotKey(entry.slot, 'R');
+    entry.keyRawMax = formatAnalogSlotKey(entry.slot, 'S');
+    entry.keyOutMin = formatAnalogSlotKey(entry.slot, 'M');
+    entry.keyOutMax = formatAnalogSlotKey(entry.slot, 'N');
+    entry.keyUnit = formatAnalogSlotKey(entry.slot, 'U');
+    entry.keyDeadband = formatAnalogSlotKey(entry.slot, 'D');
+    entry.keyMinEventMs = formatAnalogSlotKey(entry.slot, 'E');
+    entry.keyAlarmMin = formatAnalogSlotKey(entry.slot, 'A');
+    entry.keyAlarmMax = formatAnalogSlotKey(entry.slot, 'B');
+
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyRawMinStable = makeStableString(entry.keyRawMin);
+    entry.keyRawMaxStable = makeStableString(entry.keyRawMax);
+    entry.keyOutMinStable = makeStableString(entry.keyOutMin);
+    entry.keyOutMaxStable = makeStableString(entry.keyOutMax);
+    entry.keyUnitStable = makeStableString(entry.keyUnit);
+    entry.keyDeadbandStable = makeStableString(entry.keyDeadband);
+    entry.keyMinEventMsStable = makeStableString(entry.keyMinEventMs);
+    entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
+    entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPinStable->c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 31,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.rawMin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyRawMinStable->c_str(),
+        .name = "Raw Min",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultRawMin,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 32,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.rawMax = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyRawMaxStable->c_str(),
+        .name = "Raw Max",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultRawMax,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 33,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.outMin = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyOutMinStable->c_str(),
+        .name = "Out Min",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultOutMin,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 34,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.outMax = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyOutMaxStable->c_str(),
+        .name = "Out Max",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultOutMax,
+        .showInWeb = entry.showMappingInWeb,
+        .sortOrder = 35,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.unit = std::make_unique<Config<String>>(ConfigOptions<String>{
+        .key = entry.keyUnitStable->c_str(),
+        .name = "Unit",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultUnit,
+        .showInWeb = entry.showUnitInWeb,
+        .sortOrder = 36,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.deadband = std::make_unique<Config<float>>(ConfigOptions<float>{
+        .key = entry.keyDeadbandStable->c_str(),
+        .name = "Deadband",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultDeadband,
+        .showInWeb = entry.showDeadbandInWeb,
+        .sortOrder = 37,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.minEventMs = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyMinEventMsStable->c_str(),
+        .name = "Min Event (ms)",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = static_cast<int>(entry.defaultMinEventMs),
+        .showInWeb = entry.showMinEventInWeb,
+        .sortOrder = 38,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.rawMin.get());
+    ConfigManager.addSetting(entry.rawMax.get());
+    ConfigManager.addSetting(entry.outMin.get());
+    ConfigManager.addSetting(entry.outMax.get());
+    ConfigManager.addSetting(entry.unit.get());
+    ConfigManager.addSetting(entry.deadband.get());
+    ConfigManager.addSetting(entry.minEventMs.get());
+
+    IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
+
+    entry.settingsRegistered = true;
+}
+
+void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
+                                             float alarmMin, float alarmMax,
+                                             AnalogAlarmCallbacks callbacks,
+                                             const char* runtimeLabel,
+                                             const char* runtimeGroup)
+{
+    addAnalogInputToGUIWithAlarm(id, cardName, order, alarmMin, alarmMax, runtimeLabel, runtimeGroup);
+    configureAnalogInputAlarm(id, alarmMin, alarmMax, std::move(callbacks));
+}
+
+void IOManager::configureAnalogInputAlarm(const char* id,
+                                          float alarmMin,
+                                          float alarmMax,
+                                          AnalogAlarmCallbacks callbacks)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] configureAnalogInputAlarm: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    entry.alarmMin = alarmMin;
+    entry.alarmMax = alarmMax;
+    entry.alarmCallbacks = std::move(callbacks);
+}
+
+void IOManager::registerAnalogRuntimeField(const String& group, const String& id, bool showRaw)
+{
+    for (auto& runtimeGroup : analogRuntimeGroups) {
+        if (runtimeGroup.group != group) {
+            continue;
+        }
+
+        for (const auto& field : runtimeGroup.fields) {
+            if (field.id == id && field.showRaw == showRaw) {
+                return;
+            }
+        }
+
+        runtimeGroup.fields.push_back(AnalogRuntimeField{.id = id, .showRaw = showRaw});
+        return;
+    }
+
+    AnalogRuntimeGroup newGroup;
+    newGroup.group = group;
+    newGroup.fields.push_back(AnalogRuntimeField{.id = id, .showRaw = showRaw});
+    analogRuntimeGroups.push_back(std::move(newGroup));
+}
+
+void IOManager::configureDigitalInputEvents(const char* id,
+                                            DigitalInputEventCallbacks callbacks,
+                                            DigitalInputEventOptions options)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] configureDigitalInputEvents: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    entry.callbacks = std::move(callbacks);
+    entry.eventOptions = options;
+    entry.eventsEnabled = true;
+
+    // Reset event state to avoid spurious triggers.
+    entry.rawState = entry.state;
+    entry.debouncedState = entry.state;
+    entry.lastRawChangeMs = millis();
+    entry.pressStartMs = 0;
+    entry.longFired = false;
+    entry.clickCount = 0;
+    entry.lastReleaseMs = 0;
+}
+
+void IOManager::configureDigitalInputEvents(const char* id,
+                                            DigitalInputEventCallbacks callbacks)
+{
+    DigitalInputEventOptions options;
+    configureDigitalInputEvents(id, std::move(callbacks), options);
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
@@ -138,7 +953,9 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
                            std::function<bool()> getter,
                            std::function<void(bool)> setter,
                            const char* runtimeLabel,
-                           const char* runtimeGroup)
+                           const char* runtimeGroup,
+                           const char* runtimeOnLabel,
+                           const char* runtimeOffLabel)
 {
     addIOtoGUI(id, cardName, order);
 
@@ -155,13 +972,18 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
 
     const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
     const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    const String onLabel = (runtimeOnLabel && runtimeOnLabel[0]) ? String(runtimeOnLabel) : String();
+    const String offLabel = (runtimeOffLabel && runtimeOffLabel[0]) ? String(runtimeOffLabel) : String();
 
     switch (type) {
         case RuntimeControlType::Checkbox:
             ConfigManager.defineRuntimeCheckbox(group, entry.id, label, getter, setter, String(), order);
             break;
+        case RuntimeControlType::MomentaryButton:
+            ConfigManager.defineRuntimeMomentaryButton(group, entry.id, label, getter, setter, String(), order, onLabel, offLabel);
+            break;
         case RuntimeControlType::StateButton:
-            ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order);
+            ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order, onLabel, offLabel);
             break;
         default:
             CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());
@@ -171,12 +993,50 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
 
 void IOManager::begin()
 {
+    startupLongPressWindowEndsMs = millis() + STARTUP_LONG_PRESS_WINDOW_MS;
+
     for (auto& entry : digitalOutputs) {
         entry.desiredState = false;
         entry.hasLast = false;
         reconfigureIfNeeded(entry);
         applyDesiredState(entry);
     }
+
+    for (auto& entry : digitalInputs) {
+        entry.hasLast = false;
+        reconfigureIfNeeded(entry);
+        readInputState(entry);
+
+        if (entry.eventsEnabled) {
+            const uint32_t nowMs = millis();
+            entry.rawState = entry.state;
+            entry.debouncedState = entry.state;
+            entry.lastRawChangeMs = nowMs;
+            entry.pressStartMs = entry.state ? nowMs : 0;
+            entry.longFired = false;
+            entry.clickCount = 0;
+            entry.lastReleaseMs = 0;
+        }
+    }
+
+    for (auto& entry : analogInputs) {
+        entry.lastRawValue = -1;
+        entry.lastValue = NAN;
+        entry.lastEventMs = millis();
+        entry.warningLoggedInvalidPin = false;
+        entry.alarmState = false;
+        entry.alarmMinState = false;
+        entry.alarmMaxState = false;
+        entry.alarmStateInitialized = false;
+        reconfigureIfNeeded(entry);
+        readAnalogInput(entry);
+    }
+}
+
+bool IOManager::isStartupLongPressWindowActive(uint32_t nowMs) const
+{
+    // millis() wrap-safe comparison: active while now <= end.
+    return static_cast<int32_t>(nowMs - startupLongPressWindowEndsMs) <= 0;
 }
 
 void IOManager::update()
@@ -184,6 +1044,143 @@ void IOManager::update()
     for (auto& entry : digitalOutputs) {
         reconfigureIfNeeded(entry);
         applyDesiredState(entry);
+    }
+
+    const uint32_t nowMs = millis();
+    for (auto& entry : digitalInputs) {
+        reconfigureIfNeeded(entry);
+        readInputState(entry);
+        processInputEvents(entry, nowMs);
+    }
+
+    for (auto& entry : analogInputs) {
+        reconfigureIfNeeded(entry);
+        readAnalogInput(entry);
+        processAnalogAlarm(entry);
+        processAnalogEvents(entry, nowMs);
+    }
+}
+
+void IOManager::processAnalogAlarm(AnalogInputEntry& entry)
+{
+    const float alarmMin = entry.alarmMinSetting ? entry.alarmMinSetting->get() : entry.alarmMin;
+    const float alarmMax = entry.alarmMaxSetting ? entry.alarmMaxSetting->get() : entry.alarmMax;
+
+    const bool hasMin = !isnan(alarmMin);
+    const bool hasMax = !isnan(alarmMax);
+    if (!hasMin && !hasMax) {
+        // No alarm configured.
+        entry.alarmState = false;
+        entry.alarmMinState = false;
+        entry.alarmMaxState = false;
+        entry.alarmStateInitialized = true;
+        return;
+    }
+
+    bool newMinState = false;
+    bool newMaxState = false;
+    if (isnan(entry.value)) {
+        newMinState = false;
+        newMaxState = false;
+    } else {
+        if (hasMin && entry.value < alarmMin) {
+            newMinState = true;
+        }
+        if (hasMax && entry.value > alarmMax) {
+            newMaxState = true;
+        }
+    }
+
+    const bool newCombinedState = newMinState || newMaxState;
+
+    if (!entry.alarmStateInitialized) {
+        // First evaluation: treat previous state as "not in alarm" and only fire if we start in alarm.
+        entry.alarmStateInitialized = true;
+        entry.alarmState = false;
+        entry.alarmMinState = false;
+        entry.alarmMaxState = false;
+
+        if (newMinState) {
+            entry.alarmMinState = true;
+            if (entry.alarmCallbacks.onMinStateChanged) {
+                entry.alarmCallbacks.onMinStateChanged(true);
+            }
+            if (entry.alarmCallbacks.onMinEnter) {
+                entry.alarmCallbacks.onMinEnter();
+            }
+        }
+        if (newMaxState) {
+            entry.alarmMaxState = true;
+            if (entry.alarmCallbacks.onMaxStateChanged) {
+                entry.alarmCallbacks.onMaxStateChanged(true);
+            }
+            if (entry.alarmCallbacks.onMaxEnter) {
+                entry.alarmCallbacks.onMaxEnter();
+            }
+        }
+
+        if (newCombinedState) {
+            entry.alarmState = true;
+            if (entry.alarmCallbacks.onStateChanged) {
+                entry.alarmCallbacks.onStateChanged(true);
+            }
+            if (entry.alarmCallbacks.onEnter) {
+                entry.alarmCallbacks.onEnter();
+            }
+        }
+        return;
+    }
+
+    if (newMinState != entry.alarmMinState) {
+        entry.alarmMinState = newMinState;
+        if (entry.alarmCallbacks.onMinStateChanged) {
+            entry.alarmCallbacks.onMinStateChanged(newMinState);
+        }
+        if (newMinState) {
+            if (entry.alarmCallbacks.onMinEnter) {
+                entry.alarmCallbacks.onMinEnter();
+            }
+        } else {
+            if (entry.alarmCallbacks.onMinExit) {
+                entry.alarmCallbacks.onMinExit();
+            }
+        }
+    }
+
+    if (newMaxState != entry.alarmMaxState) {
+        entry.alarmMaxState = newMaxState;
+        if (entry.alarmCallbacks.onMaxStateChanged) {
+            entry.alarmCallbacks.onMaxStateChanged(newMaxState);
+        }
+        if (newMaxState) {
+            if (entry.alarmCallbacks.onMaxEnter) {
+                entry.alarmCallbacks.onMaxEnter();
+            }
+        } else {
+            if (entry.alarmCallbacks.onMaxExit) {
+                entry.alarmCallbacks.onMaxExit();
+            }
+        }
+    }
+
+    if (newCombinedState == entry.alarmState) {
+        return;
+    }
+
+    entry.alarmState = newCombinedState;
+
+    if (entry.alarmCallbacks.onStateChanged) {
+        entry.alarmCallbacks.onStateChanged(newCombinedState);
+    }
+
+    if (newCombinedState) {
+        if (entry.alarmCallbacks.onEnter) {
+            entry.alarmCallbacks.onEnter();
+        }
+    } else {
+        if (entry.alarmCallbacks.onExit) {
+            entry.alarmCallbacks.onExit();
+        }
     }
 }
 
@@ -222,6 +1219,17 @@ bool IOManager::getState(const char* id) const
     return activeLow ? (val == LOW) : (val == HIGH);
 }
 
+bool IOManager::getInputState(const char* id) const
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        return false;
+    }
+
+    const DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    return entry.state;
+}
+
 bool IOManager::isConfigured(const char* id) const
 {
     const int idx = findIndex(id);
@@ -233,9 +1241,42 @@ bool IOManager::isConfigured(const char* id) const
     return isValidPin(getPinNow(entry));
 }
 
+int IOManager::getAnalogRawValue(const char* id) const
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        return -1;
+    }
+
+    const AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    return entry.rawValue;
+}
+
+float IOManager::getAnalogValue(const char* id) const
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        return NAN;
+    }
+
+    const AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    return entry.value;
+}
+
 bool IOManager::isValidPin(int pin)
 {
     return pin >= 0 && pin <= 39;
+}
+
+bool IOManager::isValidAnalogPin(int pin)
+{
+    // ESP32 Arduino: ADC1 pins 32-39, ADC2 pins 0,2,4,12-15,25-27.
+    // Note: ADC2 reads can be unreliable while WiFi is active.
+    if (pin >= 32 && pin <= 39) return true;
+    if (pin == 0 || pin == 2 || pin == 4) return true;
+    if (pin >= 12 && pin <= 15) return true;
+    if (pin >= 25 && pin <= 27) return true;
+    return false;
 }
 
 int IOManager::findIndex(const char* id) const
@@ -253,6 +1294,24 @@ int IOManager::findIndex(const char* id) const
     return -1;
 }
 
+int IOManager::findInputIndex(const char* id) const
+{
+    if (!id || !id[0]) return -1;
+    for (size_t i = 0; i < digitalInputs.size(); i++) {
+        if (digitalInputs[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+int IOManager::findAnalogInputIndex(const char* id) const
+{
+    if (!id || !id[0]) return -1;
+    for (size_t i = 0; i < analogInputs.size(); i++) {
+        if (analogInputs[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
 bool IOManager::isActiveLowNow(const DigitalOutputEntry& entry)
 {
     return entry.activeLow ? entry.activeLow->get() : entry.defaultActiveLow;
@@ -261,6 +1320,97 @@ bool IOManager::isActiveLowNow(const DigitalOutputEntry& entry)
 int IOManager::getPinNow(const DigitalOutputEntry& entry)
 {
     return entry.pin ? entry.pin->get() : entry.defaultPin;
+}
+
+bool IOManager::isInputActiveLowNow(const DigitalInputEntry& entry)
+{
+    if (entry.activeLow) {
+        return entry.activeLow->get();
+    }
+    return entry.defaultActiveLow;
+}
+
+bool IOManager::isInputPullupNow(const DigitalInputEntry& entry)
+{
+    if (entry.pullup) {
+        return entry.pullup->get();
+    }
+    return entry.defaultPullup;
+}
+
+bool IOManager::isInputPulldownNow(const DigitalInputEntry& entry)
+{
+    if (entry.pulldown) {
+        return entry.pulldown->get();
+    }
+    return entry.defaultPulldown;
+}
+
+int IOManager::getInputPinNow(const DigitalInputEntry& entry)
+{
+    if (entry.pin) {
+        return entry.pin->get();
+    }
+    return entry.defaultPin;
+}
+
+int IOManager::getAnalogPinNow(const AnalogInputEntry& entry)
+{
+    if (entry.pin) {
+        return entry.pin->get();
+    }
+    return entry.defaultPin;
+}
+
+int IOManager::getAnalogRawMinNow(const AnalogInputEntry& entry)
+{
+    if (entry.rawMin) return entry.rawMin->get();
+    return entry.defaultRawMin;
+}
+
+int IOManager::getAnalogRawMaxNow(const AnalogInputEntry& entry)
+{
+    if (entry.rawMax) return entry.rawMax->get();
+    return entry.defaultRawMax;
+}
+
+float IOManager::getAnalogOutMinNow(const AnalogInputEntry& entry)
+{
+    if (entry.outMin) return entry.outMin->get();
+    return entry.defaultOutMin;
+}
+
+float IOManager::getAnalogOutMaxNow(const AnalogInputEntry& entry)
+{
+    if (entry.outMax) return entry.outMax->get();
+    return entry.defaultOutMax;
+}
+
+float IOManager::getAnalogDeadbandNow(const AnalogInputEntry& entry)
+{
+    if (entry.deadband) return entry.deadband->get();
+    return entry.defaultDeadband;
+}
+
+uint32_t IOManager::getAnalogMinEventMsNow(const AnalogInputEntry& entry)
+{
+    if (entry.minEventMs) {
+        const int ms = entry.minEventMs->get();
+        if (ms < 0) return 0;
+        return static_cast<uint32_t>(ms);
+    }
+    return entry.defaultMinEventMs;
+}
+
+float IOManager::mapAnalogValue(int raw, int rawMin, int rawMax, float outMin, float outMax)
+{
+    if (rawMax == rawMin) {
+        return outMin;
+    }
+
+    const float t = (static_cast<float>(raw) - static_cast<float>(rawMin)) /
+                    (static_cast<float>(rawMax) - static_cast<float>(rawMin));
+    return outMin + t * (outMax - outMin);
 }
 
 void IOManager::writePinState(int pin, bool activeLow, bool on)
@@ -308,6 +1458,276 @@ void IOManager::reconfigureIfNeeded(DigitalOutputEntry& entry)
 
     entry.lastPin = newPin;
     entry.lastActiveLow = newActiveLow;
+}
+
+void IOManager::reconfigureIfNeeded(DigitalInputEntry& entry)
+{
+    const int pin = getInputPinNow(entry);
+    const bool activeLow = isInputActiveLowNow(entry);
+    const bool pullup = isInputPullupNow(entry);
+    const bool pulldown = isInputPulldownNow(entry);
+
+    if (!isValidPin(pin)) {
+        entry.hasLast = false;
+        entry.state = false;
+        return;
+    }
+
+    if (entry.hasLast && entry.lastPin == pin && entry.lastActiveLow == activeLow && entry.lastPullup == pullup && entry.lastPulldown == pulldown) {
+        return;
+    }
+
+    if (pullup && pulldown) {
+        // Prefer pull-up to stay deterministic.
+        CM_LOG("[IOManager][WARNING] Input '%s': pull-up and pull-down both enabled, using pull-up", entry.id.c_str());
+    }
+
+    if (pullup) {
+        pinMode(pin, INPUT_PULLUP);
+    } else if (pulldown) {
+        pinMode(pin, INPUT_PULLDOWN);
+    } else {
+        pinMode(pin, INPUT);
+    }
+    entry.lastPin = pin;
+    entry.lastActiveLow = activeLow;
+    entry.lastPullup = pullup;
+    entry.lastPulldown = pulldown;
+    entry.hasLast = true;
+}
+
+void IOManager::reconfigureIfNeeded(AnalogInputEntry& entry)
+{
+    const int pin = getAnalogPinNow(entry);
+    if (!isValidAnalogPin(pin)) {
+        entry.rawValue = -1;
+        entry.value = NAN;
+        return;
+    }
+
+    // No pinMode required for analogRead on ESP32, but we keep a best-effort config for clarity.
+    pinMode(pin, INPUT);
+
+    if (!entry.warningLoggedInvalidPin) {
+        // Warn once about ADC2 pins (WiFi interaction). GPIO4 is ADC2.
+        if (!(pin >= 32 && pin <= 39)) {
+            CM_LOG("[IOManager][WARNING] Analog input '%s' uses ADC2 pin %d; readings may be unreliable while WiFi is active", entry.id.c_str(), pin);
+        }
+        entry.warningLoggedInvalidPin = true;
+    }
+}
+
+void IOManager::readAnalogInput(AnalogInputEntry& entry)
+{
+    const int pin = getAnalogPinNow(entry);
+    if (!isValidAnalogPin(pin)) {
+        if (!entry.warningLoggedInvalidPin) {
+            CM_LOG("[IOManager][WARNING] Analog input '%s' pin %d is not ADC-capable on ESP32", entry.id.c_str(), pin);
+            entry.warningLoggedInvalidPin = true;
+        }
+        entry.rawValue = -1;
+        entry.value = NAN;
+        return;
+    }
+
+    if (!entry.defaultEnabled) {
+        entry.rawValue = -1;
+        entry.value = NAN;
+        return;
+    }
+
+    const int raw = analogRead(pin);
+    entry.rawValue = raw;
+
+    const int rawMin = getAnalogRawMinNow(entry);
+    const int rawMax = getAnalogRawMaxNow(entry);
+    const float outMin = getAnalogOutMinNow(entry);
+    const float outMax = getAnalogOutMaxNow(entry);
+    entry.value = mapAnalogValue(raw, rawMin, rawMax, outMin, outMax);
+}
+
+void IOManager::processAnalogEvents(AnalogInputEntry& entry, uint32_t nowMs)
+{
+    // This is a minimal baseline: store last values and allow periodic refresh based on minEventMs.
+    const float db = getAnalogDeadbandNow(entry);
+    const uint32_t minEventMs = getAnalogMinEventMsNow(entry);
+
+    const bool hasValue = !isnan(entry.value);
+    const bool hadValue = !isnan(entry.lastValue);
+
+    bool trigger = false;
+    if (hasValue && hadValue) {
+        const float diff = fabsf(entry.value - entry.lastValue);
+        if (diff >= db) {
+            trigger = true;
+        }
+    } else if (hasValue != hadValue) {
+        trigger = true;
+    }
+
+    if (!trigger && minEventMs > 0) {
+        if (nowMs - entry.lastEventMs >= minEventMs) {
+            trigger = true;
+        }
+    }
+
+    if (trigger) {
+        entry.lastRawValue = entry.rawValue;
+        entry.lastValue = entry.value;
+        entry.lastEventMs = nowMs;
+    }
+}
+
+void IOManager::ensureAnalogRuntimeProvider(const String& group)
+{
+    static std::vector<String> registered;
+    for (const auto& g : registered) {
+        if (g == group) return;
+    }
+
+    ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
+        const AnalogRuntimeGroup* runtimeGroupPtr = nullptr;
+        for (const auto& rg : analogRuntimeGroups) {
+            if (rg.group == group) {
+                runtimeGroupPtr = &rg;
+                break;
+            }
+        }
+        if (!runtimeGroupPtr) {
+            return;
+        }
+
+        for (const auto& field : runtimeGroupPtr->fields) {
+            const int idx = findAnalogInputIndex(field.id.c_str());
+            if (idx < 0) {
+                continue;
+            }
+
+            const AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+            if (field.showRaw) {
+                if (entry.rawValue < 0) {
+                    data[entry.id] = nullptr;
+                } else {
+                    data[entry.id] = entry.rawValue;
+                }
+            } else {
+                if (isnan(entry.value)) {
+                    data[entry.id] = nullptr;
+                } else {
+                    data[entry.id] = entry.value;
+                }
+
+                const String minKey = entry.id + "_alarm_min";
+                const String maxKey = entry.id + "_alarm_max";
+                data[minKey] = entry.alarmMinState;
+                data[maxKey] = entry.alarmMaxState;
+            }
+        }
+    }, 5);
+
+    registered.push_back(group);
+}
+
+void IOManager::readInputState(DigitalInputEntry& entry)
+{
+    const int pin = getInputPinNow(entry);
+    if (!isValidPin(pin)) {
+        entry.state = false;
+        return;
+    }
+
+    const bool activeLow = isInputActiveLowNow(entry);
+    const int level = digitalRead(pin);
+    entry.state = activeLow ? (level == LOW) : (level == HIGH);
+}
+
+void IOManager::processInputEvents(DigitalInputEntry& entry, uint32_t nowMs)
+{
+    if (!entry.eventsEnabled) {
+        return;
+    }
+
+    const bool newRaw = entry.state;
+    if (newRaw != entry.rawState) {
+        entry.rawState = newRaw;
+        entry.lastRawChangeMs = nowMs;
+    }
+
+    const uint32_t debounceMs = entry.eventOptions.debounceMs;
+    if (entry.debouncedState != entry.rawState) {
+        if (nowMs - entry.lastRawChangeMs >= debounceMs) {
+            // Debounced edge
+            entry.debouncedState = entry.rawState;
+
+            if (entry.debouncedState) {
+                // Press
+                entry.pressStartMs = nowMs;
+                entry.longFired = false;
+                if (entry.callbacks.onPress) {
+                    entry.callbacks.onPress();
+                }
+            } else {
+                // Release
+                if (entry.callbacks.onRelease) {
+                    entry.callbacks.onRelease();
+                }
+
+                if (!entry.longFired) {
+                    entry.clickCount = static_cast<uint8_t>(entry.clickCount + 1);
+                    entry.lastReleaseMs = nowMs;
+                    if (entry.clickCount >= 2) {
+                        if (entry.callbacks.onDoubleClick) {
+                            entry.callbacks.onDoubleClick();
+                        }
+                        entry.clickCount = 0;
+                    }
+                } else {
+                    entry.clickCount = 0;
+                }
+            }
+        }
+    }
+
+    // Long click (fires once per press)
+    if (entry.debouncedState && !entry.longFired) {
+        if (nowMs - entry.pressStartMs >= entry.eventOptions.longClickMs) {
+            entry.longFired = true;
+            entry.clickCount = 0;
+            if (entry.callbacks.onLongPressOnStartup && isStartupLongPressWindowActive(nowMs)) {
+                entry.callbacks.onLongPressOnStartup();
+            } else if (entry.callbacks.onLongClick) {
+                entry.callbacks.onLongClick();
+            }
+        }
+    }
+
+    // Single click timeout
+    if (!entry.debouncedState && entry.clickCount == 1) {
+        if (nowMs - entry.lastReleaseMs >= entry.eventOptions.doubleClickMs) {
+            if (entry.callbacks.onClick) {
+                entry.callbacks.onClick();
+            }
+            entry.clickCount = 0;
+        }
+    }
+}
+
+void IOManager::ensureInputRuntimeProvider(const String& group)
+{
+    static std::vector<String> registered;
+    for (const auto& g : registered) {
+        if (g == group) return;
+    }
+
+    ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
+        for (const auto& entry : digitalInputs) {
+            if (entry.runtimeGroup == group) {
+                data[entry.id] = entry.state;
+            }
+        }
+    }, 5);
+
+    registered.push_back(group);
 }
 
 } // namespace cm
