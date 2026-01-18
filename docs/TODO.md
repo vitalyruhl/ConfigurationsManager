@@ -53,8 +53,9 @@
        - add  gui-helper eg. addIOtoGUI("id", "card-name", order)
 
        - [COMPLETED] Docs: IO inputs/outputs
-         - docs/IO-Inputs.md
-         - docs/IO-Outputs.md
+         - docs/IO-DigitalInputs.md
+         - docs/IO-DigitalOutputs.md
+         - docs/IO-AnalogInputs.md
     2) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.

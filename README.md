@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 3.1.0 (2026.01.10)
+> Version 3.3.0
 
 > Breaking changes in v3.0.0
 >
@@ -42,12 +42,23 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - Manager API: `addRuntimeProvider({...})`, `enableWebSocketPush(intervalMs)`, `pushRuntimeNow()`, optional `setCustomLivePayloadBuilder()`
 - 🧩 Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()` visibility helpers (since 2.4.3)
 
+### IOManager (Digital/Analog IO)
+
+The optional `cm::IOManager` module provides a settings-driven IO abstraction for:
+
+- Digital inputs (GPIO + polarity + pull modes + non-blocking button events)
+- Digital outputs (GPIO + polarity + runtime controls)
+- Analog inputs (ADC raw + scaled value, deadband/minEvent, optional min/max alarms)
+
 ## Documentation Index
 
 | Topic                                     | File                    |
 | ----------------------------------------- | ----------------------- |
 | Settings & OptionGroup                    | `docs/SETTINGS.md`      |
 | Runtime Providers & Alarms                | `docs/RUNTIME.md`       |
+| IOManager: Digital Inputs                 | `docs/IO-DigitalInputs.md` |
+| IOManager: Digital Outputs                | `docs/IO-DigitalOutputs.md` |
+| IOManager: Analog Inputs                  | `docs/IO-AnalogInputs.md` |
 | Smart WiFi Roaming                        | `docs/SMART_ROAMING.md` |
 | Security Notes (password transport)       | `docs/SECURITY.md`      |
 | Styling (per-field metadata)              | `docs/STYLING.md`       |

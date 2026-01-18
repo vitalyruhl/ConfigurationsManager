@@ -1,4 +1,4 @@
-# IO Inputs (IOManager)
+# IO Digital Inputs (IOManager)
 
 This document describes how **digital inputs** work in `cm::IOManager`.
 
@@ -11,6 +11,8 @@ This document describes how **digital inputs** work in `cm::IOManager`.
 - Runtime UI indicator (bool-dot)
 
 The input system is designed to be usable early in boot (e.g. startup actions) and in the main loop without blocking delays.
+
+For analog channels (ADC), see `docs/IO-AnalogInputs.md`.
 
 ## Creating an Input
 
@@ -42,7 +44,7 @@ Each input has a small set of settings.
 To keep keys short (ESP32 Preferences limit), IOManager uses **slot-based keys**:
 
 - Inputs: `II%02uX` (e.g. `II00P`)
-- Outputs: `IO%02uX` (see IO-Outputs.md)
+- Outputs: `IO%02uX` (see IO-DigitalOutputs.md)
 
 Suffix meanings for inputs:
 

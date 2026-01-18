@@ -1,4 +1,4 @@
-# IO Outputs (IOManager)
+# IO Digital Outputs (IOManager)
 
 This document describes how **digital outputs** work in `cm::IOManager`.
 
@@ -9,6 +9,8 @@ This document describes how **digital outputs** work in `cm::IOManager`.
 - GPIO configuration via Settings (pin, polarity, enabled)
 - A consistent API to set and read output state
 - Optional runtime controls (checkbox/state button/momentary button)
+
+For analog channels (ADC), see `docs/IO-AnalogInputs.md`.
 
 ## Creating an Output
 
