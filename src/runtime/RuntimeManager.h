@@ -24,6 +24,8 @@ struct RuntimeFieldMeta {
     String key;
     String label;
     String unit;
+    String onLabel;
+    String offLabel;
     int precision = 2;
     int order = 100;
     bool isBool = false;
@@ -32,6 +34,7 @@ struct RuntimeFieldMeta {
     bool isButton = false;
     bool isCheckbox = false;
     bool isStateButton = false;
+    bool isMomentaryButton = false;
     bool isIntSlider = false;
     bool isFloatSlider = false;
     bool isIntInput = false;
@@ -304,11 +307,19 @@ public:
 #if CM_ENABLE_RUNTIME_STATE_BUTTONS
     void defineRuntimeStateButton(const String& group, const String& key, const String& label,
                                 std::function<bool()> getter, std::function<void(bool)> setter,
-                                bool initState = false, const String& card = String(), int order = 100);
+                                bool initState = false, const String& card = String(), int order = 100,
+                                const String& onLabel = String(), const String& offLabel = String());
+    void defineRuntimeMomentaryButton(const String& group, const String& key, const String& label,
+                                      std::function<bool()> getter, std::function<void(bool)> setter,
+                                      const String& card = String(), int order = 100,
+                                      const String& onLabel = String(), const String& offLabel = String());
     void handleStateButtonToggle(const String& group, const String& key);
+    void handleStateButtonSet(const String& group, const String& key, bool value);
 #else
-    void defineRuntimeStateButton(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, bool = false, const String& = String(), int = 100) {}
+    void defineRuntimeStateButton(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, bool = false, const String& = String(), int = 100, const String& = String(), const String& = String()) {}
+    void defineRuntimeMomentaryButton(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, const String& = String(), int = 100, const String& = String(), const String& = String()) {}
     void handleStateButtonToggle(const String&, const String&) {}
+    void handleStateButtonSet(const String&, const String&, bool) {}
 #endif
 
 #if CM_ENABLE_RUNTIME_ANALOG_SLIDERS

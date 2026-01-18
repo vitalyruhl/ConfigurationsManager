@@ -138,7 +138,9 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
                            std::function<bool()> getter,
                            std::function<void(bool)> setter,
                            const char* runtimeLabel,
-                           const char* runtimeGroup)
+                           const char* runtimeGroup,
+                           const char* runtimeOnLabel,
+                           const char* runtimeOffLabel)
 {
     addIOtoGUI(id, cardName, order);
 
@@ -155,13 +157,18 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
 
     const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
     const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    const String onLabel = (runtimeOnLabel && runtimeOnLabel[0]) ? String(runtimeOnLabel) : String();
+    const String offLabel = (runtimeOffLabel && runtimeOffLabel[0]) ? String(runtimeOffLabel) : String();
 
     switch (type) {
         case RuntimeControlType::Checkbox:
             ConfigManager.defineRuntimeCheckbox(group, entry.id, label, getter, setter, String(), order);
             break;
+        case RuntimeControlType::MomentaryButton:
+            ConfigManager.defineRuntimeMomentaryButton(group, entry.id, label, getter, setter, String(), order, onLabel, offLabel);
+            break;
         case RuntimeControlType::StateButton:
-            ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order);
+            ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order, onLabel, offLabel);
             break;
         default:
             CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());

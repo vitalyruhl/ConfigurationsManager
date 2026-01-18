@@ -63,10 +63,6 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                     
 static cm::IOManager ioManager;
 // -------------------------------------------------------------------
 
-// Taster: relay pulse helper (non-blocking)
-static Ticker tasterOffTicker;
-
-
 // -------------------------------------------------------------------
 // Global theme override test: make all h3 headings orange without underline
 // Served via /user_theme.css and auto-injected by the frontend if present.
@@ -184,8 +180,8 @@ void setup()
 
     // Additional relays
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "taster",
-        .name = "Taster",
+        .id = "holdbutton",
+        .name = "holdbutton",
         .defaultPin = 26,
         .defaultActiveLow = true,
         .defaultEnabled = true,
@@ -230,20 +226,18 @@ void setup()
         "sensors"
     );
 
-    // Taster: momentary button (pulses relay)
+    // Momentary button: hold-to-activate (pressed -> ON, released -> OFF)
     ioManager.addIOtoGUI(
-        "taster",
+        "holdbutton",
         nullptr,
         4,
-        cm::IOManager::RuntimeControlType::Button,
-        []() {
-            ioManager.set("taster", true);
-            tasterOffTicker.detach();
-            tasterOffTicker.attach_ms(200, +[]() {
-                ioManager.set("taster", false);
-            });
-        },
-        "Taster"
+        cm::IOManager::RuntimeControlType::MomentaryButton,
+        []() { return ioManager.getState("holdbutton"); },
+        [](bool state) { ioManager.set("holdbutton", state); },
+        "Holdbutton",
+        "controls",
+        "Running",
+        "Push"
     );
 
     // Additional relays as switches
@@ -260,10 +254,13 @@ void setup()
         "relay14",
         nullptr,
         6,
-        cm::IOManager::RuntimeControlType::Checkbox,
+        cm::IOManager::RuntimeControlType::StateButton,
         []() { return ioManager.getState("relay14"); },
         [](bool state) { ioManager.set("relay14", state); },
-        "Relay 14"
+        "Start/Stop",
+        "controls",
+        "Stop",
+        "Start"
     );
 
     //----------------------------------------------------------------------------------------------------------------------------------

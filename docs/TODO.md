@@ -10,6 +10,7 @@
   - [TODO] Remove Settings List view; keep Tabs only.
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
+  - [COMPLETED] Runtime: add `MomentaryButton` (press-and-hold) control type (no label heuristics).
 - Architecture / API
   - Settings auth: remove or hard-disable legacy endpoint `/config/settings_password`.
   - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).

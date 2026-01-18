@@ -44,6 +44,14 @@
               @action="handleRuntimeButton"
             />
 
+            <RuntimeMomentaryButton
+              v-else-if="f.isMomentaryButton"
+              :group="group.name"
+              :field="f"
+              :value="runtime[group.name] && runtime[group.name][f.key]"
+              @set="handleMomentarySet"
+            />
+
             <RuntimeStateButton
               v-else-if="f.isStateButton"
               :group="group.name"
@@ -264,6 +272,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 
 import RuntimeActionButton from "./runtime/RuntimeActionButton.vue";
 import RuntimeCheckbox from "./runtime/RuntimeCheckbox.vue";
+import RuntimeMomentaryButton from "./runtime/RuntimeMomentaryButton.vue";
 import RuntimeNumberInput from "./runtime/RuntimeNumberInput.vue";
 import RuntimeSlider from "./runtime/RuntimeSlider.vue";
 import RuntimeStateButton from "./runtime/RuntimeStateButton.vue";
@@ -789,6 +798,8 @@ function buildRuntimeGroups() {
       grouped[m.group].fields.push({
         key: m.key,
         label: m.label,
+        onLabel: m.onLabel || "",
+        offLabel: m.offLabel || "",
         unit: m.unit,
         precision: m.precision,
         warnMin: m.warnMin,
@@ -797,6 +808,7 @@ function buildRuntimeGroups() {
         alarmMax: m.alarmMax,
         isBool: m.isBool,
         isButton: m.isButton || false,
+        isMomentaryButton: m.isMomentaryButton || false,
         isStateButton: m.isStateButton || false,
         isIntSlider: m.isIntSlider || false,
         isFloatSlider: m.isFloatSlider || false,
@@ -814,6 +826,7 @@ function buildRuntimeGroups() {
         isString: m.isString || false,
         isDivider: m.isDivider || false,
         staticValue: m.staticValue || "",
+        triggerOnPress: m.triggerOnPress === true,
         order: m.order !== undefined ? m.order : 100,
         style: m.style || null,
         styleRules: normalizeStyle(m.style || null),
@@ -950,6 +963,7 @@ function fieldHasVisibleContent(groupName, field) {
 function isInteractiveField(field) {
   return !!(
     field.isButton ||
+    field.isMomentaryButton ||
     field.isStateButton ||
     field.isIntSlider ||
     field.isFloatSlider ||
@@ -1016,6 +1030,10 @@ async function onStateButton(group, f, nextOverride = null) {
 
 function handleStateToggle({ group, field, nextValue }) {
   onStateButton(group, field, nextValue);
+}
+
+function handleMomentarySet({ group, field, value }) {
+  onStateButton(group, field, value);
 }
 
 async function sendInt(group, f, val) {

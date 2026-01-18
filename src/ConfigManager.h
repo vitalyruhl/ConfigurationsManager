@@ -34,7 +34,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "3.2.0" // Synced to library.json
+#define CONFIGMANAGER_VERSION "3.3.0" // Synced to library.json
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
@@ -1186,8 +1186,16 @@ public:
 
     void defineRuntimeStateButton(const String& group, const String& key, const String& label,
                                 std::function<bool()> getter, std::function<void(bool)> setter,
-                                bool initState = false, const String& card = String(), int order = 100) {
-        runtimeManager.defineRuntimeStateButton(group, key, label, getter, setter, initState, card, order);
+                                bool initState = false, const String& card = String(), int order = 100,
+                                const String& onLabel = String(), const String& offLabel = String()) {
+        runtimeManager.defineRuntimeStateButton(group, key, label, getter, setter, initState, card, order, onLabel, offLabel);
+    }
+
+    void defineRuntimeMomentaryButton(const String& group, const String& key, const String& label,
+                                      std::function<bool()> getter, std::function<void(bool)> setter,
+                                      const String& card = String(), int order = 100,
+                                      const String& onLabel = String(), const String& offLabel = String()) {
+        runtimeManager.defineRuntimeMomentaryButton(group, key, label, getter, setter, card, order, onLabel, offLabel);
     }
 
     void defineRuntimeIntSlider(const String& group, const String& key, const String& label,

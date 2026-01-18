@@ -29,6 +29,8 @@ pnpm-debug.log*
 # Env
 .env*
 /src/secret
+/webui/dist/
 /webui/dist/assets
 webui/dist/index.html.gz
 wifiSecret.h
+/webui/dist/index.html

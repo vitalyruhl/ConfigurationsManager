@@ -13,6 +13,7 @@ class IOManager {
 public:
     enum class RuntimeControlType {
         Button,
+        MomentaryButton,
         Checkbox,
         StateButton,
     };
@@ -43,6 +44,7 @@ public:
 
     // Overload: also registers a runtime control.
     // - Use RuntimeControlType::Button with a single callback (momentary action)
+    // - Use RuntimeControlType::MomentaryButton with getter + setter (button UI; sets true on press, false on release)
     // - Use RuntimeControlType::{Checkbox,StateButton} with getter + setter (switch)
     void addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
                     std::function<void()> onPress,
@@ -53,7 +55,9 @@ public:
                     std::function<bool()> getter,
                     std::function<void(bool)> setter,
                     const char* runtimeLabel = nullptr,
-                    const char* runtimeGroup = "controls");
+                    const char* runtimeGroup = "controls",
+                    const char* runtimeOnLabel = nullptr,
+                    const char* runtimeOffLabel = nullptr);
 
     void begin();
     void update();
