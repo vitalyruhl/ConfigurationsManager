@@ -63,6 +63,13 @@
          - ID-based key prefixing must respect the 15 character key-name limit (including category prefixing).
          - IDs therefore must be short, and generated keys must be validated via `checkSettingsForErrors()`.
        - add  gui-helper eg. addIOtoGUI("id", "card-name", order)
+
+       - [COMPLETED] Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
+       - [COMPLETED] Digital inputs: non-blocking events (press/release/click/double/long)
+       - [COMPLETED] Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
+       - [COMPLETED] Docs: IO inputs/outputs
+         - docs/IO-Inputs.md
+         - docs/IO-Outputs.md
     2) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.

@@ -47,7 +47,6 @@ static const char OTA_PASSWORD[] = "ota";
 
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-IO-Full-Demo"
-#define BUTTON_PIN_AP_MODE 13
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
@@ -57,19 +56,23 @@ static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
 // These references provide shorter names for the settings bundles used in this sketch.
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();              // Core container for settings templates
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;               // System: OTA, WiFi reboot timeout, version
-static cm::CoreButtonSettings &buttonSettings = coreSettings.buttons;              // Buttons: GPIO pins, polarity, pull configuration
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;                     // WiFi: SSID, password, DHCP/static networking
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                        // NTP: sync interval, servers, timezone
 static cm::IOManager ioManager;
 // -------------------------------------------------------------------
 
-static bool resetButtonArmed = true;
-static uint32_t resetButtonDisarmAtMs = 0;
-static bool resetButtonDisarmLogged = false;
+static uint32_t testPressPulseUntilMs = 0;
+static uint32_t testReleasePulseUntilMs = 0;
+static uint32_t testClickPulseUntilMs = 0;
+static bool testDoubleClickToggle = false;
+static bool testLongPressToggle = false;
 
-static bool apModeButtonArmed = true;
-static uint32_t apModeButtonDisarmAtMs = 0;
-static bool apModeButtonDisarmLogged = false;
+static constexpr uint32_t TEST_EVENT_PULSE_MS = 700;
+
+static bool isPulseActive(uint32_t untilMs)
+{
+    return static_cast<int32_t>(millis() - untilMs) <= 0;
+}
 
 // -------------------------------------------------------------------
 // Global theme override test: make all h3 headings orange without underline
@@ -80,14 +83,13 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .rw[data-group="sensors"][data-key="temp"] .rw{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 .rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 .rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.rw[data-group="sensors"][data-key="temp"] .lab{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
 
 
 
 //--------------------------------------------------------------------
 // Forward declarations of functions
-void SetupCheckForAPModeButton();
-void SetupCheckForResetButton();
 void updateStatusLED(); // new non-blocking status LED handler
 void setHeaterState(bool on);
 void setFanState(bool on);
@@ -268,28 +270,18 @@ static void createDigitalInputs()
         .defaultEnabled = true,
     });
 
-    ioManager.addInputToGUI("ap_mode", nullptr, 8, "AP Mode", "inputs", true);
-    ioManager.addInputToGUI("reset", nullptr, 9, "Reset", "inputs", true);
+    ioManager.addInputToGUI("ap_mode", nullptr, 8, "AP Mode", "inputs", false);
+    ioManager.addInputToGUI("reset", nullptr, 9, "Reset", "inputs", false);
 
     cm::IOManager::DigitalInputEventOptions apOptions;
     apOptions.longClickMs = 1200;
     ioManager.configureDigitalInputEvents(
         "ap_mode",
         cm::IOManager::DigitalInputEventCallbacks{
-            .onLongClick = []() {
-                if (!apModeButtonArmed) {
-                    if (!ioManager.getInputState("testbutton")) {
-                        Serial.println("[INPUT][ap_mode] LongClick locked after startup; hold Test Button to confirm");
-                        return;
-                    }
-                    Serial.println("[INPUT][ap_mode] LongClick confirmed with Test Button -> starting AP mode");
-                    ConfigManager.startAccessPoint("ESP32_Config", "");
-                    return;
-                }
-
-                Serial.println("[INPUT][ap_mode] LongClick -> starting AP mode");
+            .onLongPressOnStartup = []() {
+                Serial.println("[INPUT][ap_mode] LongPressOnStartup -> starting AP mode");
                 ConfigManager.startAccessPoint("ESP32_Config", "");
-            },
+            }
         },
         apOptions
     );
@@ -299,21 +291,12 @@ static void createDigitalInputs()
     ioManager.configureDigitalInputEvents(
         "reset",
         cm::IOManager::DigitalInputEventCallbacks{
-            .onLongClick = []() {
-                if (!resetButtonArmed) {
-                    if (!ioManager.getInputState("testbutton")) {
-                        Serial.println("[INPUT][reset] LongClick locked after startup; hold Test Button to confirm");
-                        return;
-                    }
-                    Serial.println("[INPUT][reset] LongClick confirmed with Test Button -> reset settings and restart");
-                } else {
-                    Serial.println("[INPUT][reset] LongClick -> reset settings and restart");
-                }
-
+            .onLongPressOnStartup = []() {
+                Serial.println("[INPUT][reset] LongPressOnStartup -> reset settings and restart");
                 ConfigManager.clearAllFromPrefs();
                 ConfigManager.saveAll();
                 ESP.restart();
-            },
+            }
         },
         resetOptions
     );
@@ -337,17 +320,84 @@ static void createDigitalInputs()
         10,
         "Test Button",
         "inputs",
-        true
+        false
     );
+
+    // Divider + per-event indicators for test button
+    {
+        RuntimeFieldMeta divider;
+        divider.group = "inputs";
+        divider.key = "testbutton_events";
+        divider.label = "Test Button Events";
+        divider.isDivider = true;
+        divider.order = 11;
+        CRM().addRuntimeMeta(divider);
+
+        RuntimeFieldMeta meta;
+        meta.group = "inputs";
+
+        meta.key = "test_press";
+        meta.label = "Press";
+        meta.isBool = true;
+        meta.order = 12;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_release";
+        meta.label = "Release";
+        meta.isBool = true;
+        meta.order = 13;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_click";
+        meta.label = "Click";
+        meta.isBool = true;
+        meta.order = 14;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_doubleclick_toggle";
+        meta.label = "DoubleClick (Toggle)";
+        meta.isBool = true;
+        meta.order = 15;
+        CRM().addRuntimeMeta(meta);
+
+        meta.key = "test_longpress_toggle";
+        meta.label = "LongPress (Toggle)";
+        meta.isBool = true;
+        meta.order = 16;
+        CRM().addRuntimeMeta(meta);
+
+        CRM().addRuntimeProvider("inputs", [](JsonObject& data) {
+            data["test_press"] = isPulseActive(testPressPulseUntilMs);
+            data["test_release"] = isPulseActive(testReleasePulseUntilMs);
+            data["test_click"] = isPulseActive(testClickPulseUntilMs);
+            data["test_doubleclick_toggle"] = testDoubleClickToggle;
+            data["test_longpress_toggle"] = testLongPressToggle;
+        }, 6);
+    }
 
     ioManager.configureDigitalInputEvents(
         "testbutton",
         cm::IOManager::DigitalInputEventCallbacks{
-            .onPress = []() { Serial.println("[INPUT][testbutton] Press"); },
-            .onRelease = []() { Serial.println("[INPUT][testbutton] Release"); },
-            .onClick = []() { Serial.println("[INPUT][testbutton] Click"); },
-            .onDoubleClick = []() { Serial.println("[INPUT][testbutton] DoubleClick"); },
-            .onLongClick = []() { Serial.println("[INPUT][testbutton] LongClick"); },
+            .onPress = []() {
+                testPressPulseUntilMs = millis() + TEST_EVENT_PULSE_MS;
+                Serial.println("[INPUT][testbutton] Press");
+            },
+            .onRelease = []() {
+                testReleasePulseUntilMs = millis() + TEST_EVENT_PULSE_MS;
+                Serial.println("[INPUT][testbutton] Release");
+            },
+            .onClick = []() {
+                testClickPulseUntilMs = millis() + TEST_EVENT_PULSE_MS;
+                Serial.println("[INPUT][testbutton] Click");
+            },
+            .onDoubleClick = []() {
+                testDoubleClickToggle = !testDoubleClickToggle;
+                Serial.printf("[INPUT][testbutton] DoubleClick -> toggle=%s\n", testDoubleClickToggle ? "true" : "false");
+            },
+            .onLongClick = []() {
+                testLongPressToggle = !testLongPressToggle;
+                Serial.printf("[INPUT][testbutton] LongClick -> toggle=%s\n", testLongPressToggle ? "true" : "false");
+            },
         }
     );
 }
@@ -380,19 +430,7 @@ void setup()
 {
     Serial.begin(115200);
 
-    // Security/safety: only allow factory reset via button for a short time after boot.
-    // This avoids accidental resets during normal operation.
-    resetButtonArmed = true;
-    resetButtonDisarmLogged = false;
-    resetButtonDisarmAtMs = millis() + 15000;
-
-    // Safety: avoid switching to AP during normal operation.
-    apModeButtonArmed = true;
-    apModeButtonDisarmLogged = false;
-    apModeButtonDisarmAtMs = resetButtonDisarmAtMs;
-
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
 
     ConfigManagerClass::setLogger([](const char *msg)
         {
@@ -413,7 +451,8 @@ void setup()
     // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
     tempSensorSettings.init();      // DS18B20 (mocked for now) settings
 
-    coreSettings.attach(ConfigManager);      // Register WiFi/System/Buttons core settings
+    coreSettings.attachWiFi(ConfigManager);     // Register WiFi baseline settings
+    coreSettings.attachSystem(ConfigManager);   // Register System baseline settings
     coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
 
     createDigitalOutputs();
@@ -431,21 +470,11 @@ void setup()
 
     // Boot behavior:
     // - If WiFi SSID is empty (fresh reset/unconfigured), start AP mode automatically.
-    // - Avoid instant reset loops: do NOT reset on "pressed at boot"; reset is handled via long-click event.
+    // - Avoid instant reset loops: do NOT reset on "pressed at boot"; reset/AP are handled via LongPressOnStartup event.
     const bool ssidEmpty = (wifiSettings.wifiSsid.get().length() == 0);
     if (ssidEmpty) {
         Serial.println("[BOOT] WiFi SSID is empty -> starting AP mode");
         ConfigManager.startAccessPoint("ESP32_Config", "");
-    } else {
-        // Debounced boot check for AP mode button (to avoid strap/glitch reads).
-        const bool apPressed1 = ioManager.getInputState("ap_mode");
-        delay(30);
-        ioManager.update();
-        const bool apPressed2 = ioManager.getInputState("ap_mode");
-        if (apPressed1 && apPressed2) {
-            Serial.println("[BOOT] AP mode button pressed -> starting AP mode...");
-            ConfigManager.startAccessPoint("ESP32_Config", "");
-        }
     }
 
     //----------------------------------------------------------------------------------------------------------------------------------
@@ -520,23 +549,6 @@ void loop()
     ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
     //-------------------------------------------------------------------------------------------------------------
-
-    if (resetButtonArmed && resetButtonDisarmAtMs != 0 && millis() >= resetButtonDisarmAtMs) {
-        resetButtonArmed = false;
-        if (!resetButtonDisarmLogged) {
-            resetButtonDisarmLogged = true;
-            Serial.println("[MAIN] Reset button locked after startup window (hold Test Button to confirm)");
-        }
-    }
-
-    if (apModeButtonArmed && apModeButtonDisarmAtMs != 0 && millis() >= apModeButtonDisarmAtMs) {
-        apModeButtonArmed = false;
-        if (!apModeButtonDisarmLogged) {
-            apModeButtonDisarmLogged = true;
-            Serial.println("[MAIN] AP mode button locked after startup window (hold Test Button to confirm)");
-        }
-    }
-
 
     static unsigned long lastLoopLog = 0;
     if (millis() - lastLoopLog > 60000) { // Every 60 seconds
@@ -633,78 +645,6 @@ void setupGUI()
 //----------------------------------------
 // HELPER FUNCTIONS
 //----------------------------------------
-
-// TODO(IOManager): Move this helper into a dedicated IO manager module.
-// Goal: Centralize GPIO button handling (pull mode, active level, debouncing).
-// API idea:
-//   - bool IOManager::checkResetToDefaultsButton(const cm::CoreButtonSettings& cfg,
-//       std::function<void()> onPressed);
-// Notes:
-//   - The callback should decide whether/when to reboot (library should not force ESP.restart()).
-//   - Keep this example as the reference behavior for the future IOManager implementation.
-void SetupCheckForResetButton()
-{
-    const int resetPin = buttonSettings.resetDefaultsPin.get();
-    if (resetPin < 0)
-    {
-        return; // Button not present
-    }
-
-    // Configure pin based on settings (boot-time).
-    pinMode(resetPin, buttonSettings.resetUsePullup.get() ? INPUT_PULLUP : INPUT_PULLDOWN);
-
-    // check for pressed reset button
-    const int resetLevel = digitalRead(resetPin);
-    const bool resetPressed = buttonSettings.resetActiveLow.get() ? (resetLevel == LOW) : (resetLevel == HIGH);
-    if (resetPressed)
-    {
-        Serial.println("[MAIN] Reset button pressed -> Reset all settings...");
-        ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
-        ConfigManager.saveAll();           // Save the default settings to EEPROM
-
-        // Show user feedback that reset is happening
-        Serial.println("[MAIN] restarting...");
-        //ToDo: add non blocking delay to show message on display before restart
-        ESP.restart(); // Restart the ESP32
-    }
-}
-
-// TODO(IOManager): Move this helper into a dedicated IO manager module.
-// API idea:
-//   - bool IOManager::checkApModeButton(const cm::CoreButtonSettings& cfg,
-//       std::function<void()> onPressed);
-// Notes:
-//   - The callback should decide what "AP mode" means (SSID, password, portal, etc.).
-void SetupCheckForAPModeButton()
-{
-    String APName = "ESP32_Config";
-    String pwd = "config1234"; // Default AP password
-
-    if (wifiSettings.wifiSsid.get().length() == 0)
-    {
-        Serial.println("[MAIN] WiFi SSID is empty (fresh/unconfigured)");
-        ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
-    }
-
-    // check for pressed AP mode button
-
-    // Configure pin based on settings (boot-time).
-    const int apPin = buttonSettings.apModePin.get();
-    if (apPin < 0)
-    {
-        return; // Button not present
-    }
-
-    pinMode(apPin, buttonSettings.apModeUsePullup.get() ? INPUT_PULLUP : INPUT_PULLDOWN);
-
-    const int apLevel = digitalRead(apPin);
-    const bool apPressed = buttonSettings.apModeActiveLow.get() ? (apLevel == LOW) : (apLevel == HIGH);
-    if (apPressed)
-    {
-        Serial.println("[MAIN] AP mode button pressed -> starting AP mode...");
-        ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
-    }
-}
 
 //----------------------------------------
 // WIFI MANAGER CALLBACK FUNCTIONS

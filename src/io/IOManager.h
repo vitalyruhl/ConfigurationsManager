@@ -64,6 +64,7 @@ public:
         std::function<void()> onClick;
         std::function<void()> onDoubleClick;
         std::function<void()> onLongClick;
+        std::function<void()> onLongPressOnStartup;
     };
 
     struct DigitalInputEventOptions {
@@ -238,6 +239,9 @@ private:
     std::vector<DigitalOutputEntry> digitalOutputs;
     std::vector<DigitalInputEntry> digitalInputs;
 
+    uint32_t startupLongPressWindowEndsMs = 0;
+    static constexpr uint32_t STARTUP_LONG_PRESS_WINDOW_MS = 10000;
+
     uint8_t nextDigitalOutputSlot = 0;
     uint8_t nextDigitalInputSlot = 0;
 
@@ -263,6 +267,8 @@ private:
     void readInputState(DigitalInputEntry& entry);
     void processInputEvents(DigitalInputEntry& entry, uint32_t nowMs);
     void ensureInputRuntimeProvider(const String& group);
+
+    bool isStartupLongPressWindowActive(uint32_t nowMs) const;
 
     static void writePinState(int pin, bool activeLow, bool on);
 };

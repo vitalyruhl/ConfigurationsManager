@@ -384,6 +384,8 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
 
 void IOManager::begin()
 {
+    startupLongPressWindowEndsMs = millis() + STARTUP_LONG_PRESS_WINDOW_MS;
+
     for (auto& entry : digitalOutputs) {
         entry.desiredState = false;
         entry.hasLast = false;
@@ -407,6 +409,12 @@ void IOManager::begin()
             entry.lastReleaseMs = 0;
         }
     }
+}
+
+bool IOManager::isStartupLongPressWindowActive(uint32_t nowMs) const
+{
+    // millis() wrap-safe comparison: active while now <= end.
+    return static_cast<int32_t>(nowMs - startupLongPressWindowEndsMs) <= 0;
 }
 
 void IOManager::update()
@@ -700,7 +708,9 @@ void IOManager::processInputEvents(DigitalInputEntry& entry, uint32_t nowMs)
         if (nowMs - entry.pressStartMs >= entry.eventOptions.longClickMs) {
             entry.longFired = true;
             entry.clickCount = 0;
-            if (entry.callbacks.onLongClick) {
+            if (entry.callbacks.onLongPressOnStartup && isStartupLongPressWindowActive(nowMs)) {
+                entry.callbacks.onLongPressOnStartup();
+            } else if (entry.callbacks.onLongClick) {
                 entry.callbacks.onLongClick();
             }
         }
