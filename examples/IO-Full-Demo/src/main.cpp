@@ -63,6 +63,14 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                     
 static cm::IOManager ioManager;
 // -------------------------------------------------------------------
 
+static bool resetButtonArmed = true;
+static uint32_t resetButtonDisarmAtMs = 0;
+static bool resetButtonDisarmLogged = false;
+
+static bool apModeButtonArmed = true;
+static uint32_t apModeButtonDisarmAtMs = 0;
+static bool apModeButtonDisarmLogged = false;
+
 // -------------------------------------------------------------------
 // Global theme override test: make all h3 headings orange without underline
 // Served via /user_theme.css and auto-injected by the frontend if present.
@@ -89,6 +97,12 @@ void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
 void updateMockTemperature();
+
+static void createDigitalOutputs();
+static void registerDigitalOutputsGui();
+static void createDigitalInputs();
+static void createAnalogInputs();
+static void createAnalogOutputs();
 
 // #region Temperature Measurement (mocked)
 
@@ -119,50 +133,9 @@ static TempSensorSettings tempSensorSettings;
 // #endregion Temperature Measurement (mocked)
 
 
-Ticker NtpSyncTicker;
-bool tickerActive = false; // Used as a generic "services active" flag (WiFi/OTA/NTP)
-
-void updateMockTemperature()
+static void createDigitalOutputs()
 {
-    // [MOCKED DATA] Replace later with real DS18B20 (and/or analog input based) reading.
-    // Stable but slightly moving value for UI testing.
-    const float seconds = millis() / 1000.0f;
-    const float base = 42.0f;
-    const float wave = 0.5f * sinf(seconds / 30.0f);
-    temperature = base + wave + tempSensorSettings.corrOffset.get();
-}
-
-void setup()
-{
-    Serial.begin(115200);
-
-    pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
-
-    ConfigManagerClass::setLogger([](const char *msg)
-        {
-            Serial.print("[ConfigManager] ");
-            Serial.println(msg);
-        });
-
-    //-----------------------------------------------------------------
-    ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
-    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
-    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
-    ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
-    //----------------------------------------------------------------------------------------------------------------------------------
-
-    // Initialize structured settings using Delayed Initialization Pattern
-    // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
-    tempSensorSettings.init();      // DS18B20 (mocked for now) settings
-
-    coreSettings.attach(ConfigManager);      // Register WiFi/System/Buttons core settings
-    coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
-
-    // IO: declare outputs and let IOManager own/register all settings
-    //todo: move it to a function
+    // Digital outputs are settings-driven and owned by IOManager.
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "heater",
         .name = "Heater",
@@ -170,6 +143,7 @@ void setup()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "fan",
         .name = "Cooling Fan",
@@ -186,6 +160,7 @@ void setup()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "relay27",
         .name = "Relay 27",
@@ -193,6 +168,7 @@ void setup()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
+    
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "relay14",
         .name = "Relay 14",
@@ -201,6 +177,10 @@ void setup()
         .defaultEnabled = true,
         .registerSettings = false,
     });
+}
+
+static void registerDigitalOutputsGui()
+{
     // Create dedicated Settings cards for each IO item (category token stays "IO")
     ioManager.addIOtoGUI(
         "heater",
@@ -262,6 +242,185 @@ void setup()
         "Stop",
         "Start"
     );
+}
+
+static void createDigitalInputs()
+{
+    // Boot/action buttons (wired to 3.3V => active-high).
+    // Use internal pulldown so idle is stable LOW.
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = "ap_mode",
+        .name = "AP Mode Button",
+        .defaultPin = 13,
+        .defaultActiveLow = false,
+        .defaultPullup = false,
+        .defaultPulldown = true,
+        .defaultEnabled = true,
+    });
+
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = "reset",
+        .name = "Reset Button",
+        .defaultPin = 15,
+        .defaultActiveLow = false,
+        .defaultPullup = false,
+        .defaultPulldown = true,
+        .defaultEnabled = true,
+    });
+
+    ioManager.addInputToGUI("ap_mode", nullptr, 8, "AP Mode", "inputs", true);
+    ioManager.addInputToGUI("reset", nullptr, 9, "Reset", "inputs", true);
+
+    cm::IOManager::DigitalInputEventOptions apOptions;
+    apOptions.longClickMs = 1200;
+    ioManager.configureDigitalInputEvents(
+        "ap_mode",
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onLongClick = []() {
+                if (!apModeButtonArmed) {
+                    if (!ioManager.getInputState("testbutton")) {
+                        Serial.println("[INPUT][ap_mode] LongClick locked after startup; hold Test Button to confirm");
+                        return;
+                    }
+                    Serial.println("[INPUT][ap_mode] LongClick confirmed with Test Button -> starting AP mode");
+                    ConfigManager.startAccessPoint("ESP32_Config", "");
+                    return;
+                }
+
+                Serial.println("[INPUT][ap_mode] LongClick -> starting AP mode");
+                ConfigManager.startAccessPoint("ESP32_Config", "");
+            },
+        },
+        apOptions
+    );
+
+    cm::IOManager::DigitalInputEventOptions resetOptions;
+    resetOptions.longClickMs = 2500;
+    ioManager.configureDigitalInputEvents(
+        "reset",
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onLongClick = []() {
+                if (!resetButtonArmed) {
+                    if (!ioManager.getInputState("testbutton")) {
+                        Serial.println("[INPUT][reset] LongClick locked after startup; hold Test Button to confirm");
+                        return;
+                    }
+                    Serial.println("[INPUT][reset] LongClick confirmed with Test Button -> reset settings and restart");
+                } else {
+                    Serial.println("[INPUT][reset] LongClick -> reset settings and restart");
+                }
+
+                ConfigManager.clearAllFromPrefs();
+                ConfigManager.saveAll();
+                ESP.restart();
+            },
+        },
+        resetOptions
+    );
+
+    // Digital input demo: button wired to 3.3V (active-high).
+    // With defaultPulldown=true we enable the internal pulldown (idle = LOW, pressed = HIGH).
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = "testbutton",
+        .name = "Test Button",
+        .defaultPin = 33,
+        .defaultActiveLow = false,
+        .defaultPullup = false,
+        .defaultPulldown = true,
+        .defaultEnabled = true,
+    });
+
+    // Show as bool dot in runtime.
+    ioManager.addInputToGUI(
+        "testbutton",
+        nullptr,
+        10,
+        "Test Button",
+        "inputs",
+        true
+    );
+
+    ioManager.configureDigitalInputEvents(
+        "testbutton",
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onPress = []() { Serial.println("[INPUT][testbutton] Press"); },
+            .onRelease = []() { Serial.println("[INPUT][testbutton] Release"); },
+            .onClick = []() { Serial.println("[INPUT][testbutton] Click"); },
+            .onDoubleClick = []() { Serial.println("[INPUT][testbutton] DoubleClick"); },
+            .onLongClick = []() { Serial.println("[INPUT][testbutton] LongClick"); },
+        }
+    );
+}
+
+static void createAnalogInputs()
+{
+    // TODO: Placeholder for future analog input initialization.
+}
+
+static void createAnalogOutputs()
+{
+    // TODO: Placeholder for future analog output initialization.
+}
+
+
+Ticker NtpSyncTicker;
+bool tickerActive = false; // Used as a generic "services active" flag (WiFi/OTA/NTP)
+
+void updateMockTemperature()
+{
+    // [MOCKED DATA] Replace later with real DS18B20 (and/or analog input based) reading.
+    // Stable but slightly moving value for UI testing.
+    const float seconds = millis() / 1000.0f;
+    const float base = 42.0f;
+    const float wave = 0.5f * sinf(seconds / 30.0f);
+    temperature = base + wave + tempSensorSettings.corrOffset.get();
+}
+
+void setup()
+{
+    Serial.begin(115200);
+
+    // Security/safety: only allow factory reset via button for a short time after boot.
+    // This avoids accidental resets during normal operation.
+    resetButtonArmed = true;
+    resetButtonDisarmLogged = false;
+    resetButtonDisarmAtMs = millis() + 15000;
+
+    // Safety: avoid switching to AP during normal operation.
+    apModeButtonArmed = true;
+    apModeButtonDisarmLogged = false;
+    apModeButtonDisarmAtMs = resetButtonDisarmAtMs;
+
+    pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(BUTTON_PIN_AP_MODE, INPUT_PULLUP);
+
+    ConfigManagerClass::setLogger([](const char *msg)
+        {
+            Serial.print("[ConfigManager] ");
+            Serial.println(msg);
+        });
+
+    //-----------------------------------------------------------------
+    ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+    ConfigManager.setVersion(VERSION); // Set the application version for web UI display
+    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
+    ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
+    //----------------------------------------------------------------------------------------------------------------------------------
+
+    // Initialize structured settings using Delayed Initialization Pattern
+    // This avoids static initialization order problems - see docs/SETTINGS_STRUCTURE_PATTERN.md
+    tempSensorSettings.init();      // DS18B20 (mocked for now) settings
+
+    coreSettings.attach(ConfigManager);      // Register WiFi/System/Buttons core settings
+    coreSettings.attachNtp(ConfigManager);   // Register optional NTP settings bundle
+
+    createDigitalOutputs();
+    createDigitalInputs();
+    createAnalogInputs();
+    createAnalogOutputs();
+    registerDigitalOutputsGui();
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -269,6 +428,25 @@ void setup()
 
     ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
     ioManager.begin();
+
+    // Boot behavior:
+    // - If WiFi SSID is empty (fresh reset/unconfigured), start AP mode automatically.
+    // - Avoid instant reset loops: do NOT reset on "pressed at boot"; reset is handled via long-click event.
+    const bool ssidEmpty = (wifiSettings.wifiSsid.get().length() == 0);
+    if (ssidEmpty) {
+        Serial.println("[BOOT] WiFi SSID is empty -> starting AP mode");
+        ConfigManager.startAccessPoint("ESP32_Config", "");
+    } else {
+        // Debounced boot check for AP mode button (to avoid strap/glitch reads).
+        const bool apPressed1 = ioManager.getInputState("ap_mode");
+        delay(30);
+        ioManager.update();
+        const bool apPressed2 = ioManager.getInputState("ap_mode");
+        if (apPressed1 && apPressed2) {
+            Serial.println("[BOOT] AP mode button pressed -> starting AP mode...");
+            ConfigManager.startAccessPoint("ESP32_Config", "");
+        }
+    }
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
@@ -283,12 +461,11 @@ void setup()
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
-    SetupCheckForResetButton();
-    
-    SetupCheckForAPModeButton(); // check for AP mode button AFTER setting WiFi credentials
-
-    // perform the wifi connection
-    bool startedInStationMode = SetupStartWebServer();
+    // perform the wifi connection (skip if we are in AP mode)
+    bool startedInStationMode = false;
+    if (!ssidEmpty && WiFi.getMode() != WIFI_AP) {
+        startedInStationMode = SetupStartWebServer();
+    }
     if (startedInStationMode)
     {
         // setupMQTT();
@@ -302,7 +479,7 @@ void setup()
 
     // Enhanced WebSocket configuration
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-    ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
+    ConfigManager.setWebSocketInterval(250); // Faster updates - every 250ms
     ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
 
     updateMockTemperature();
@@ -338,11 +515,27 @@ void loop()
     // for working with the ConfigManager nessesary in loop
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
     ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
+    ioManager.update(); // Apply IO setting changes and keep inputs/outputs state current
     ConfigManager.handleClient(); // Handle web server client requests
     ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
-    ioManager.update(); // Apply IO setting changes and keep outputs consistent
     //-------------------------------------------------------------------------------------------------------------
+
+    if (resetButtonArmed && resetButtonDisarmAtMs != 0 && millis() >= resetButtonDisarmAtMs) {
+        resetButtonArmed = false;
+        if (!resetButtonDisarmLogged) {
+            resetButtonDisarmLogged = true;
+            Serial.println("[MAIN] Reset button locked after startup window (hold Test Button to confirm)");
+        }
+    }
+
+    if (apModeButtonArmed && apModeButtonDisarmAtMs != 0 && millis() >= apModeButtonDisarmAtMs) {
+        apModeButtonArmed = false;
+        if (!apModeButtonDisarmLogged) {
+            apModeButtonDisarmLogged = true;
+            Serial.println("[MAIN] AP mode button locked after startup window (hold Test Button to confirm)");
+        }
+    }
 
 
     static unsigned long lastLoopLog = 0;

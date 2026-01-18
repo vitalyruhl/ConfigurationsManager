@@ -3,12 +3,24 @@
 
 namespace cm {
 
+static std::shared_ptr<std::string> makeStableString(const String& value)
+{
+    return std::make_shared<std::string>(value.c_str());
+}
+
 static constexpr const char* IO_CATEGORY_PRETTY = "I/O";
 
 String IOManager::formatSlotKey(uint8_t slot, char suffix)
 {
     char buf[8];
     snprintf(buf, sizeof(buf), "IO%02u%c", static_cast<unsigned>(slot), suffix);
+    return String(buf);
+}
+
+String IOManager::formatInputSlotKey(uint8_t slot, char suffix)
+{
+    char buf[8];
+    snprintf(buf, sizeof(buf), "II%02u%c", static_cast<unsigned>(slot), suffix);
     return String(buf);
 }
 
@@ -48,6 +60,46 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
     digitalOutputs.push_back(std::move(entry));
 }
 
+void IOManager::addDigitalInput(const DigitalInputBinding& binding)
+{
+    if (!binding.id || !binding.id[0]) {
+        CM_LOG("[IOManager][ERROR] addDigitalInput: invalid binding");
+        return;
+    }
+
+    if (findInputIndex(binding.id) >= 0) {
+        CM_LOG("[IOManager][WARNING] addDigitalInput: input '%s' already exists", binding.id);
+        return;
+    }
+
+    DigitalInputEntry entry;
+    entry.id = binding.id;
+    entry.name = binding.name ? binding.name : binding.id;
+
+    entry.slot = nextDigitalInputSlot;
+    if (nextDigitalInputSlot < 99) {
+        nextDigitalInputSlot++;
+    } else {
+        CM_LOG("[IOManager][WARNING] addDigitalInput: exceeded slot range 00..99, keys may not remain stable");
+        nextDigitalInputSlot++;
+    }
+
+    entry.defaultPin = binding.defaultPin;
+    entry.defaultActiveLow = binding.defaultActiveLow;
+    entry.defaultPullup = binding.defaultPullup;
+    entry.defaultPulldown = binding.defaultPulldown;
+    entry.defaultEnabled = binding.defaultEnabled;
+
+    entry.registerSettings = binding.registerSettings;
+
+    entry.showPinInWeb = binding.showPinInWeb;
+    entry.showActiveLowInWeb = binding.showActiveLowInWeb;
+    entry.showPullupInWeb = binding.showPullupInWeb;
+    entry.showPulldownInWeb = binding.showPulldownInWeb;
+
+    digitalInputs.push_back(std::move(entry));
+}
+
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
 {
     const int idx = findIndex(id);
@@ -72,32 +124,38 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
     entry.cardOrder = order;
 
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
     entry.keyPin = formatSlotKey(entry.slot, 'P');
     entry.keyActiveLow = formatSlotKey(entry.slot, 'L');
 
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+
     entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPin.c_str(),
+        .key = entry.keyPinStable->c_str(),
         .name = "GPIO",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultPin,
         .showInWeb = entry.showPinInWeb,
         .sortOrder = 11,
         .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKey.c_str(),
-        .cardPretty = entry.cardPretty.c_str(),
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
         .cardOrder = entry.cardOrder,
     });
 
     entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyActiveLow.c_str(),
+        .key = entry.keyActiveLowStable->c_str(),
         .name = "Active LOW",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultActiveLow,
         .showInWeb = entry.showActiveLowInWeb,
         .sortOrder = 12,
         .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKey.c_str(),
-        .cardPretty = entry.cardPretty.c_str(),
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
         .cardOrder = entry.cardOrder,
     });
 
@@ -105,6 +163,154 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     ConfigManager.addSetting(entry.activeLow.get());
 
     entry.settingsRegistered = true;
+}
+
+void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
+                              const char* runtimeLabel,
+                              const char* runtimeGroup,
+                              bool alarmWhenActive)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addInputToGUI: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    if (entry.settingsRegistered) {
+        CM_LOG("[IOManager][WARNING] addInputToGUI: input '%s' already registered", entry.id.c_str());
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        entry.settingsRegistered = true;
+        return;
+    }
+
+    entry.cardKey = entry.id;
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+    entry.keyPin = formatInputSlotKey(entry.slot, 'P');
+    entry.keyActiveLow = formatInputSlotKey(entry.slot, 'L');
+    entry.keyPullup = formatInputSlotKey(entry.slot, 'U');
+    entry.keyPulldown = formatInputSlotKey(entry.slot, 'D');
+
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+    entry.keyPullupStable = makeStableString(entry.keyPullup);
+    entry.keyPulldownStable = makeStableString(entry.keyPulldown);
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPinStable->c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 21,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyActiveLowStable->c_str(),
+        .name = "Active LOW",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultActiveLow,
+        .showInWeb = entry.showActiveLowInWeb,
+        .sortOrder = 22,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.pullup = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyPullupStable->c_str(),
+        .name = "Pull-up",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPullup,
+        .showInWeb = entry.showPullupInWeb,
+        .sortOrder = 23,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.pulldown = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyPulldownStable->c_str(),
+        .name = "Pull-down",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPulldown,
+        .showInWeb = entry.showPulldownInWeb,
+        .sortOrder = 24,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.activeLow.get());
+    ConfigManager.addSetting(entry.pullup.get());
+    ConfigManager.addSetting(entry.pulldown.get());
+
+    entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("inputs");
+    entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    entry.runtimeOrder = order;
+    entry.alarmWhenActive = alarmWhenActive;
+    ensureInputRuntimeProvider(entry.runtimeGroup);
+
+    RuntimeFieldMeta meta;
+    meta.group = entry.runtimeGroup;
+    meta.key = entry.id;
+    meta.label = entry.runtimeLabel;
+    meta.isBool = true;
+    meta.order = entry.runtimeOrder;
+    if (entry.alarmWhenActive) {
+        meta.boolAlarmValue = true;
+    }
+    ConfigManager.getRuntime().addRuntimeMeta(meta);
+
+    entry.settingsRegistered = true;
+}
+
+void IOManager::configureDigitalInputEvents(const char* id,
+                                            DigitalInputEventCallbacks callbacks,
+                                            DigitalInputEventOptions options)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] configureDigitalInputEvents: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    entry.callbacks = std::move(callbacks);
+    entry.eventOptions = options;
+    entry.eventsEnabled = true;
+
+    // Reset event state to avoid spurious triggers.
+    entry.rawState = entry.state;
+    entry.debouncedState = entry.state;
+    entry.lastRawChangeMs = millis();
+    entry.pressStartMs = 0;
+    entry.longFired = false;
+    entry.clickCount = 0;
+    entry.lastReleaseMs = 0;
+}
+
+void IOManager::configureDigitalInputEvents(const char* id,
+                                            DigitalInputEventCallbacks callbacks)
+{
+    DigitalInputEventOptions options;
+    configureDigitalInputEvents(id, std::move(callbacks), options);
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
@@ -184,6 +390,23 @@ void IOManager::begin()
         reconfigureIfNeeded(entry);
         applyDesiredState(entry);
     }
+
+    for (auto& entry : digitalInputs) {
+        entry.hasLast = false;
+        reconfigureIfNeeded(entry);
+        readInputState(entry);
+
+        if (entry.eventsEnabled) {
+            const uint32_t nowMs = millis();
+            entry.rawState = entry.state;
+            entry.debouncedState = entry.state;
+            entry.lastRawChangeMs = nowMs;
+            entry.pressStartMs = entry.state ? nowMs : 0;
+            entry.longFired = false;
+            entry.clickCount = 0;
+            entry.lastReleaseMs = 0;
+        }
+    }
 }
 
 void IOManager::update()
@@ -191,6 +414,13 @@ void IOManager::update()
     for (auto& entry : digitalOutputs) {
         reconfigureIfNeeded(entry);
         applyDesiredState(entry);
+    }
+
+    const uint32_t nowMs = millis();
+    for (auto& entry : digitalInputs) {
+        reconfigureIfNeeded(entry);
+        readInputState(entry);
+        processInputEvents(entry, nowMs);
     }
 }
 
@@ -229,6 +459,17 @@ bool IOManager::getState(const char* id) const
     return activeLow ? (val == LOW) : (val == HIGH);
 }
 
+bool IOManager::getInputState(const char* id) const
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        return false;
+    }
+
+    const DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    return entry.state;
+}
+
 bool IOManager::isConfigured(const char* id) const
 {
     const int idx = findIndex(id);
@@ -260,6 +501,15 @@ int IOManager::findIndex(const char* id) const
     return -1;
 }
 
+int IOManager::findInputIndex(const char* id) const
+{
+    if (!id || !id[0]) return -1;
+    for (size_t i = 0; i < digitalInputs.size(); i++) {
+        if (digitalInputs[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
 bool IOManager::isActiveLowNow(const DigitalOutputEntry& entry)
 {
     return entry.activeLow ? entry.activeLow->get() : entry.defaultActiveLow;
@@ -268,6 +518,38 @@ bool IOManager::isActiveLowNow(const DigitalOutputEntry& entry)
 int IOManager::getPinNow(const DigitalOutputEntry& entry)
 {
     return entry.pin ? entry.pin->get() : entry.defaultPin;
+}
+
+bool IOManager::isInputActiveLowNow(const DigitalInputEntry& entry)
+{
+    if (entry.activeLow) {
+        return entry.activeLow->get();
+    }
+    return entry.defaultActiveLow;
+}
+
+bool IOManager::isInputPullupNow(const DigitalInputEntry& entry)
+{
+    if (entry.pullup) {
+        return entry.pullup->get();
+    }
+    return entry.defaultPullup;
+}
+
+bool IOManager::isInputPulldownNow(const DigitalInputEntry& entry)
+{
+    if (entry.pulldown) {
+        return entry.pulldown->get();
+    }
+    return entry.defaultPulldown;
+}
+
+int IOManager::getInputPinNow(const DigitalInputEntry& entry)
+{
+    if (entry.pin) {
+        return entry.pin->get();
+    }
+    return entry.defaultPin;
 }
 
 void IOManager::writePinState(int pin, bool activeLow, bool on)
@@ -315,6 +597,142 @@ void IOManager::reconfigureIfNeeded(DigitalOutputEntry& entry)
 
     entry.lastPin = newPin;
     entry.lastActiveLow = newActiveLow;
+}
+
+void IOManager::reconfigureIfNeeded(DigitalInputEntry& entry)
+{
+    const int pin = getInputPinNow(entry);
+    const bool activeLow = isInputActiveLowNow(entry);
+    const bool pullup = isInputPullupNow(entry);
+    const bool pulldown = isInputPulldownNow(entry);
+
+    if (!isValidPin(pin)) {
+        entry.hasLast = false;
+        entry.state = false;
+        return;
+    }
+
+    if (entry.hasLast && entry.lastPin == pin && entry.lastActiveLow == activeLow && entry.lastPullup == pullup && entry.lastPulldown == pulldown) {
+        return;
+    }
+
+    if (pullup && pulldown) {
+        // Prefer pull-up to stay deterministic.
+        CM_LOG("[IOManager][WARNING] Input '%s': pull-up and pull-down both enabled, using pull-up", entry.id.c_str());
+    }
+
+    if (pullup) {
+        pinMode(pin, INPUT_PULLUP);
+    } else if (pulldown) {
+        pinMode(pin, INPUT_PULLDOWN);
+    } else {
+        pinMode(pin, INPUT);
+    }
+    entry.lastPin = pin;
+    entry.lastActiveLow = activeLow;
+    entry.lastPullup = pullup;
+    entry.lastPulldown = pulldown;
+    entry.hasLast = true;
+}
+
+void IOManager::readInputState(DigitalInputEntry& entry)
+{
+    const int pin = getInputPinNow(entry);
+    if (!isValidPin(pin)) {
+        entry.state = false;
+        return;
+    }
+
+    const bool activeLow = isInputActiveLowNow(entry);
+    const int level = digitalRead(pin);
+    entry.state = activeLow ? (level == LOW) : (level == HIGH);
+}
+
+void IOManager::processInputEvents(DigitalInputEntry& entry, uint32_t nowMs)
+{
+    if (!entry.eventsEnabled) {
+        return;
+    }
+
+    const bool newRaw = entry.state;
+    if (newRaw != entry.rawState) {
+        entry.rawState = newRaw;
+        entry.lastRawChangeMs = nowMs;
+    }
+
+    const uint32_t debounceMs = entry.eventOptions.debounceMs;
+    if (entry.debouncedState != entry.rawState) {
+        if (nowMs - entry.lastRawChangeMs >= debounceMs) {
+            // Debounced edge
+            entry.debouncedState = entry.rawState;
+
+            if (entry.debouncedState) {
+                // Press
+                entry.pressStartMs = nowMs;
+                entry.longFired = false;
+                if (entry.callbacks.onPress) {
+                    entry.callbacks.onPress();
+                }
+            } else {
+                // Release
+                if (entry.callbacks.onRelease) {
+                    entry.callbacks.onRelease();
+                }
+
+                if (!entry.longFired) {
+                    entry.clickCount = static_cast<uint8_t>(entry.clickCount + 1);
+                    entry.lastReleaseMs = nowMs;
+                    if (entry.clickCount >= 2) {
+                        if (entry.callbacks.onDoubleClick) {
+                            entry.callbacks.onDoubleClick();
+                        }
+                        entry.clickCount = 0;
+                    }
+                } else {
+                    entry.clickCount = 0;
+                }
+            }
+        }
+    }
+
+    // Long click (fires once per press)
+    if (entry.debouncedState && !entry.longFired) {
+        if (nowMs - entry.pressStartMs >= entry.eventOptions.longClickMs) {
+            entry.longFired = true;
+            entry.clickCount = 0;
+            if (entry.callbacks.onLongClick) {
+                entry.callbacks.onLongClick();
+            }
+        }
+    }
+
+    // Single click timeout
+    if (!entry.debouncedState && entry.clickCount == 1) {
+        if (nowMs - entry.lastReleaseMs >= entry.eventOptions.doubleClickMs) {
+            if (entry.callbacks.onClick) {
+                entry.callbacks.onClick();
+            }
+            entry.clickCount = 0;
+        }
+    }
+}
+
+void IOManager::ensureInputRuntimeProvider(const String& group)
+{
+    static std::vector<String> registered;
+    for (const auto& g : registered) {
+        if (g == group) return;
+    }
+
+    ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
+        for (const auto& entry : digitalInputs) {
+            if (entry.runtimeGroup == group) {
+                data[entry.id] = entry.state;
+            }
+        }
+    }, 5);
+
+    registered.push_back(group);
 }
 
 } // namespace cm
