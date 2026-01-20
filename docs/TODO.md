@@ -6,13 +6,11 @@
 
 - As of: 2026-01-09
 - UI/UX (Settings & Runtime)
-  - GUI display mode toggle: “Current” (cards) vs “Categories” (map/list view).
-  - [TODO] Remove Settings List view; keep Tabs only.
+
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
   - [COMPLETED] Runtime: add `MomentaryButton` (press-and-hold) control type (no label heuristics).
 - Architecture / API
-  - Settings auth: remove or hard-disable legacy endpoint `/config/settings_password`.
   - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
   - Settings schema versioning/migration (when new fields/structure are introduced).
 - Test & CI
@@ -21,9 +19,9 @@
 
 ### High Priority Bugs/Features (Prio 1)
 
-  - Goal: keep `ConfigManager` as small as possible in compile size and dependencies.
+- Goal: keep `ConfigManager` as small as possible in compile size and dependencies
   - Suggested implementation order (one side-branch per item)
-    - Test target: use `IO-Full-Demo` for steps 1–5; switch to `SolarInverterLimiter` at step 6.
+    - Test target: use `IO-Full-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.
     1) IOManager module (buttons + digital IO + analog IO)
        - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
        - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
@@ -56,7 +54,8 @@
          - docs/IO-DigitalInputs.md
          - docs/IO-DigitalOutputs.md
          - docs/IO-AnalogInputs.md
-    2) MQTT manager module (+ baseline settings + ordering/injection)
+    2) [TODO] Remove Settings List view; keep Tabs only.
+    3) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.
        - Core settings auto-load (when the module is used)
@@ -69,56 +68,43 @@
        - Publish items ordering / injection
          - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
          - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
-    3) Logging (lightweight core + optional advanced module)
+    4) Logging (lightweight core + optional advanced module)
        - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
        - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
          - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
          - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
          - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
-    4) Refactor `SolarInverterLimiter` example to consume modules
+    5) Refactor `SolarInverterLimiter` example to consume modules
        - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
-    5) Documentation for all modules
+    6) Documentation for all modules
        - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
-    6) Update other examples to use the new core settings/modules where applicable
-- **[Tooling]** VS Code include error for `#include <BME280_I2C.h>`
+    7) Update other examples to use the new core settings/modules where applicable
 
 ### Medium Priority Bugs/Features (Prio 5)
 
-- **[FEATURE]** Failover Wifi native support
-
-### Low Priority Bugs/Features (Prio 10)
-
-- **[FEATURE]** Card layout/grid improvement
-  - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
+- **[FEATURE]** Add separated Alarm handling for Analog-Inputs and shorthands for creation of Alarms
+  - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
+- **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
+- **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
 - consolidate the Version-History before v3.0.0 into less detailed summary
 - **[FEATURE]** v3 follow-ups
-  - Add something into the system card (full demo).
   - Extract modules that can be imported separately:
     - Logger: split into 3 extras (serial, MQTT, display)
       - Check logger or GUI extra tab.
       - Display logger: ensure buffer is cleared even when nothing is sent to the display.
       - Check where the latest version is (solarinverter project or boilerSaver).
     - MQTT manager (got it from solarinverter project = latest version)
-  - Copy the current ones into the dev-info folder.
-  - Check whether there are other modules that can be extracted.
 
+### Low Priority Bugs/Features (Prio 10)
+
+- **[FEATURE]** Card layout/grid improvement
+  - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
 - **[FEATURE]** Automated component testing
-- **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
-- **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
-- **[FEATURE]** add templates for common Settings, like WiFi, System, non blocking blinking LED, etc.
-
-- **[Tooling/Design]** Revisit "advanced opt-in" WebUI rebuild (v3.3.x)
-  - Goal: library consumption must NOT require Node.js/npm by default.
-  - Idea: gate WebUI rebuild + `src/html_content.h` regeneration behind a flag (e.g. `CM_WEBUI_REBUILD`).
-  - Decide whether `webui/dist/*` should stay tracked or be generated-only (and ensure release workflow covers it).
-
-- **[Tooling]** WebUI debug logging toggle (v3.3.x)
-  - Add a build-time flag (e.g. `VITE_CM_DEBUG`) and route noisy logs through a `dbg(...)` helper.
-
-  - Create script that checks component on/off flags
-  - Ensure compilation succeeds for all flag combinations
-  - Integrate into test engine for comprehensive validation
-
+- **[FEATURE]** add templates for common Settings, like
+  - [COMPLETED] WiFi,
+  - [COMPLETED] System,
+  - [Todo] non blocking blinking LED, etc.
+- **[FEATURE]** Failover Wifi native support
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
 
 ### Ideas / Suggestions
@@ -130,10 +116,17 @@
 
 ### Done / Resolved (but not tested yet)
 
+- **[Tooling]** WebUI debug logging toggle (v3.3.x)
+  - Add a build-time flag (e.g. `VITE_CM_DEBUG`) and route noisy logs through a `dbg(...)` helper.
 - **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
   - days is not tetsed yet
 - Library does not include the docs folder.
 - **[COMPLETED][Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
+
+- **[Tooling/Design]** Revisit "advanced opt-in" WebUI rebuild (v3.3.x)
+  - Goal: library consumption must NOT require Node.js/npm by default.
+  - Idea: gate WebUI rebuild + `src/html_content.h` regeneration behind a flag (e.g. `CM_WEBUI_REBUILD`).
+  - Decide whether `webui/dist/*` should stay tracked or be generated-only (and ensure release workflow covers it).
 
 ### Done / Resolved
 
