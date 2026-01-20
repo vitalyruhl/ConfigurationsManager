@@ -27,15 +27,15 @@
        - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
          - GUI label must be `"I/O"` (display only); do not bake `"I/O"` into the persisted category token.
        - Prefer stable IDs: each IO item/provider uses an `id` that is also used for settings key-prefixing (e.g. `io.<id>.*`) and runtime keys.
-       - Buttons
+       - [COMPLETED] Buttons
          - API idea: `io.addButton({ .id=..., .name=..., .pin=..., ... })`
          - Settings: GPIO pin, active-low/high, pull-up/down., longpress in ms
          - Callbacks: pressed, double-pressed, long-pressed.
-       - Digital outputs (relay-style)
+       - [COMPLETED] Digital outputs (relay-style)
          - API idea: `io.addDigitalOutput({ .id=..., .name=..., .pin=..., ... })`
          - Settings: GPIO pin, active-low/high, enabled.
          - Runtime API: `set(bool)` / `get()`.
-       - Analog inputs
+       - [COMPLETED] Analog inputs
          - **[COMPLETED][TESTED]** Analog inputs (raw + scaled mapping, deadband + minEvent)
          - **[COMPLETED][TESTED]** Runtime UI: raw/scaled values can be shown on different cards/groups
          - **[COMPLETED][TESTED]** Alarms: optional min/max thresholds (min-only/max-only/both) with callbacks + runtime indicators
