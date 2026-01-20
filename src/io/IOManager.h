@@ -103,6 +103,24 @@ public:
         bool showMinEventInWeb = true;
     };
 
+    struct AnalogOutputBinding {
+        const char* id = nullptr;
+        const char* name = nullptr;
+
+        // Defaults used before the first load from Preferences.
+        int defaultPin = -1;
+        bool defaultEnabled = true;
+
+        // Value mapping: setValue/getValue operate in this range.
+        // Internally, values are mapped to a raw voltage output range (0..3.3V).
+        float valueMin = 0.0f;
+        float valueMax = 100.0f;
+        bool reverse = false;
+
+        bool registerSettings = true;
+        bool showPinInWeb = true;
+    };
+
     struct AnalogAlarmCallbacks {
         // Fired on each alarm state transition (false->true or true->false)
         // The parameter is the new alarm state.
@@ -125,6 +143,10 @@ public:
     void addDigitalOutput(const DigitalOutputBinding& binding);
     void addDigitalInput(const DigitalInputBinding& binding);
     void addAnalogInput(const AnalogInputBinding& binding);
+
+    // Analog output: value mapping (valueMin..valueMax) -> raw voltage (0..3.3V).
+    // Note: initial implementation uses ESP32 DAC pins (GPIO25/26). PWM/LEDC is planned as a follow-up.
+    void addAnalogOutput(const AnalogOutputBinding& binding);
 
     // Optional: enable non-blocking button-like events for a digital input.
     // Works independently from the GUI.
@@ -193,6 +215,17 @@ public:
                     const char* runtimeOnLabel = nullptr,
                     const char* runtimeOffLabel = nullptr);
 
+    // Analog output runtime slider (float).
+    // Uses setValue/getValue internally.
+    void addIOtoGUI(const char* id, const char* cardName, int order,
+                    float sliderMin,
+                    float sliderMax,
+                    float sliderStep,
+                    int sliderPrecision,
+                    const char* runtimeLabel = nullptr,
+                    const char* runtimeGroup = "controls",
+                    const char* unit = nullptr);
+
     void begin();
     void update();
 
@@ -206,6 +239,16 @@ public:
 
     int getAnalogRawValue(const char* id) const;
     float getAnalogValue(const char* id) const;
+
+    // Analog output API
+    bool setValue(const char* id, float value);
+    float getValue(const char* id) const;
+
+    bool setRawValue(const char* id, float rawVolts);
+    float getRawValue(const char* id) const;
+
+    bool setDACValue(const char* id, int dacValue);
+    int getDACValue(const char* id) const;
 
     bool isConfigured(const char* id) const;
 
@@ -416,9 +459,50 @@ private:
         bool warningLoggedInvalidPin = false;
     };
 
+    struct AnalogOutputEntry {
+        String id;
+        String name;
+
+        uint8_t slot = 0;
+
+        bool settingsRegistered = false;
+        String cardKey;
+        String cardPretty;
+        int cardOrder = 100;
+
+        String keyPin;
+
+        std::shared_ptr<std::string> cardKeyStable;
+        std::shared_ptr<std::string> cardPrettyStable;
+        std::shared_ptr<std::string> keyPinStable;
+
+        std::unique_ptr<Config<int>> pin;
+
+        int defaultPin = -1;
+        bool defaultEnabled = true;
+
+        float valueMin = 0.0f;
+        float valueMax = 100.0f;
+        bool reverse = false;
+
+        bool registerSettings = true;
+        bool showPinInWeb = true;
+
+        float desiredRawVolts = 0.0f;
+        float rawVolts = 0.0f;
+
+        float desiredValue = 0.0f;
+        float value = 0.0f;
+
+        int lastPin = -1;
+        bool hasLast = false;
+        bool warningLoggedInvalidPin = false;
+    };
+
     std::vector<DigitalOutputEntry> digitalOutputs;
     std::vector<DigitalInputEntry> digitalInputs;
     std::vector<AnalogInputEntry> analogInputs;
+    std::vector<AnalogOutputEntry> analogOutputs;
 
     std::vector<AnalogRuntimeGroup> analogRuntimeGroups;
 
@@ -428,12 +512,14 @@ private:
     uint8_t nextDigitalOutputSlot = 0;
     uint8_t nextDigitalInputSlot = 0;
     uint8_t nextAnalogInputSlot = 0;
+    uint8_t nextAnalogOutputSlot = 0;
 
     static bool isValidPin(int pin);
 
     int findIndex(const char* id) const;
     int findInputIndex(const char* id) const;
     int findAnalogInputIndex(const char* id) const;
+    int findAnalogOutputIndex(const char* id) const;
     static bool isActiveLowNow(const DigitalOutputEntry& entry);
     static int getPinNow(const DigitalOutputEntry& entry);
 
@@ -442,8 +528,10 @@ private:
     static bool isInputPulldownNow(const DigitalInputEntry& entry);
     static int getInputPinNow(const DigitalInputEntry& entry);
     static String formatAnalogSlotKey(uint8_t slot, char suffix);
+    static String formatAnalogOutputSlotKey(uint8_t slot, char suffix);
 
     static bool isValidAnalogPin(int pin);
+    static bool isValidAnalogOutputPin(int pin);
 
     static int getAnalogPinNow(const AnalogInputEntry& entry);
     static int getAnalogRawMinNow(const AnalogInputEntry& entry);
@@ -467,6 +555,12 @@ private:
 
     void applyDesiredState(DigitalOutputEntry& entry);
     void reconfigureIfNeeded(DigitalOutputEntry& entry);
+
+    void reconfigureIfNeeded(AnalogOutputEntry& entry);
+    void applyDesiredAnalogOutput(AnalogOutputEntry& entry);
+
+    static float clampFloat(float value, float minValue, float maxValue);
+    static float mapFloat(float value, float inMin, float inMax, float outMin, float outMax);
 
     void reconfigureIfNeeded(DigitalInputEntry& entry);
     void readInputState(DigitalInputEntry& entry);

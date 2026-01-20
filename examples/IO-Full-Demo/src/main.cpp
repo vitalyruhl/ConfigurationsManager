@@ -89,6 +89,8 @@ static void registerDigitalOutputsGui();
 static void createDigitalInputs();
 static void createAnalogInputs();
 static void createAnalogOutputs();
+static void registerAnalogOutputsGui();
+static void demoAnalogOutputApi();
 
 
 static void createDigitalOutputs()
@@ -468,7 +470,118 @@ static void createAnalogInputs()
 
 static void createAnalogOutputs()
 {
-    // TODO: Placeholder for future analog output initialization.
+    // Analog outputs (initial implementation uses ESP32 DAC pins 25/26).
+    // Mapping is defined by valueMin/valueMax (reverse optional) and is mapped to 0..3.3V raw output.
+
+    // 0..100 % -> 0..3.3V
+    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
+        .id = "ao_pct",
+        .name = "AO 0..100%",
+        .defaultPin = 25,
+        .valueMin = 0.0f,
+        .valueMax = 100.0f,
+        .reverse = false,
+    });
+
+    // -100..100 % -> 0..3.3V (0% is mid = ~1.65V)
+    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
+        .id = "ao_sym",
+        .name = "AO -100..100%",
+        .defaultPin = 26,
+        .valueMin = -100.0f,
+        .valueMax = 100.0f,
+        .reverse = false,
+    });
+
+    // 0..3.3V direct
+    // Note: DAC has only two pins. This uses GPIO25 by default so you can compare scaling modes.
+    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
+        .id = "ao_v",
+        .name = "AO 0..3.3V",
+        .defaultPin = 25,
+        .valueMin = 0.0f,
+        .valueMax = 3.3f,
+        .reverse = false,
+    });
+}
+
+static void registerAnalogOutputsGui()
+{
+    // Runtime sliders for the three mapping modes.
+    ioManager.addIOtoGUI(
+        "ao_pct",
+        nullptr,
+        40,
+        0.0f,
+        100.0f,
+        1.0f,
+        0,
+        "AO 0..100%",
+        "analog-outputs",
+        "%"
+    );
+
+    ioManager.addIOtoGUI(
+        "ao_sym",
+        nullptr,
+        41,
+        -100.0f,
+        100.0f,
+        1.0f,
+        0,
+        "AO -100..100%",
+        "analog-outputs",
+        "%"
+    );
+
+    ioManager.addIOtoGUI(
+        "ao_v",
+        nullptr,
+        42,
+        0.0f,
+        3.3f,
+        0.05f,
+        2,
+        "AO 0..3.3V",
+        "analog-outputs",
+        "V"
+    );
+}
+
+static void demoAnalogOutputApi()
+{
+    Serial.println("[DEMO] Analog output API demo start");
+
+    struct DemoCase {
+        const char* id;
+        float value;
+        float rawVolts;
+        int dac;
+    };
+
+    const DemoCase cases[] = {
+        {"ao_pct", 25.0f, 1.0f, 64},
+        {"ao_sym", -25.0f, 2.0f, 192},
+        {"ao_v", 1.65f, 3.0f, 128},
+    };
+
+    for (const auto& c : cases) {
+        Serial.printf("[DEMO] id=%s\n", c.id);
+
+        ioManager.setValue(c.id, c.value);
+        Serial.printf("[DEMO] setValue=%.3f -> getValue=%.3f\n", c.value, ioManager.getValue(c.id));
+        Serial.printf("[DEMO] getRawValue=%.3f V, getDACValue=%d\n", ioManager.getRawValue(c.id), ioManager.getDACValue(c.id));
+
+        ioManager.setRawValue(c.id, c.rawVolts);
+        Serial.printf("[DEMO] setRawValue=%.3f V -> getRawValue=%.3f V\n", c.rawVolts, ioManager.getRawValue(c.id));
+        Serial.printf("[DEMO] getValue=%.3f, getDACValue=%d\n", ioManager.getValue(c.id), ioManager.getDACValue(c.id));
+
+        ioManager.setDACValue(c.id, c.dac);
+        Serial.printf("[DEMO] setDACValue=%d -> getDACValue=%d\n", c.dac, ioManager.getDACValue(c.id));
+        Serial.printf("[DEMO] getRawValue=%.3f V, getValue=%.3f\n", ioManager.getRawValue(c.id), ioManager.getValue(c.id));
+    }
+
+    Serial.println("[DEMO] Analog output API demo end");
 }
 
 
@@ -504,6 +617,7 @@ void setup()
     createAnalogInputs();
     createAnalogOutputs();
     registerDigitalOutputsGui();
+    registerAnalogOutputsGui();
 
     //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -549,6 +663,9 @@ void setup()
     }
 
     setupGUI();
+
+    // Demo: exercise all analog output setter/getter APIs once.
+    demoAnalogOutputApi();
 
     // Enhanced WebSocket configuration
     ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates

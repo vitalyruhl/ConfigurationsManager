@@ -39,16 +39,24 @@
          - **[COMPLETED][TESTED]** Analog inputs (raw + scaled mapping, deadband + minEvent)
          - **[COMPLETED][TESTED]** Runtime UI: raw/scaled values can be shown on different cards/groups
          - **[COMPLETED][TESTED]** Alarms: optional min/max thresholds (min-only/max-only/both) with callbacks + runtime indicators
-       - Analog outputs
-         - API idea: `io.addAnalogOutput({ .id=..., .name=..., .pin=..., ... }).setValue(1.5f)`
-         - Settings: GPIO pin, extended-range flag.
+      - **[COMPLETED][NOT TESTED]** Analog outputs (DAC-only initial)
+        - API: `addAnalogOutput(...)` + `setValue/getValue` (mapped) + `setRawValue/getRawValue` (0..3.3V) + `setDACValue/getDACValue` (0..255)
+        - Settings: GPIO pin (DAC pins 25/26 on ESP32)
+        - Demo: `examples/IO-Full-Demo` registers 3 runtime sliders (0..100%, -100..100%, 0..3.3V) + runs a small API demo at end of `setup()`
+         - Follow-ups / options (pick later)
+           - PWM/LEDC backend (most boards): channel allocation, frequency, resolution, attach/detach lifecycle
+           - Range/precision: configurable raw range (board Vref, calibration), output min/max clamp
+           - Extended-range semantics: allow custom raw range, or higher PWM resolution, or "engineering units" mapping
+           - Output smoothing/ramp: slew-rate limiting, step size, min update period, optional easing
+           - Fail-safe: startup default, watchdog to reset outputs on comm loss, safe-state on reboot
+           - Multi-provider design: `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`, external DAC (I2C/SPI)
+           - Per-output enable flag + UI visibility toggles + runtime readback
        - Capability differences (important)
          - Not all boards support full ADC resolution, not all support PWM, and not all support both input and output.
          - Design should be provider-based (like runtime providers): users add only what the board supports, e.g. `.addAnalogInputProvider(...)`, `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`.
        - Key length caution (ESP32 Preferences)
          - ID-based key prefixing must respect the 15 character key-name limit (including category prefixing).
          - IDs therefore must be short, and generated keys must be validated via `checkSettingsForErrors()`.
-       - add  gui-helper eg. addIOtoGUI("id", "card-name", order)
 
        - [COMPLETED] Docs: IO inputs/outputs
          - docs/IO-DigitalInputs.md

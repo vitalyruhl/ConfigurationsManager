@@ -115,6 +115,8 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - CRITICAL: Use PowerShell call operator (&) when using quoted full paths, OR change directory first and use relative paths
   - NEVER use relative paths like .\Release\executable.exe without changing directory first
   - When running executables in PowerShell, always use the complete full path from C:\ OR change to the directory first
+  - PlatformIO builds (PowerShell): ALWAYS use `Push-Location` into the target example/project folder, resolve `pio` via `Get-Command`, run the build, then `Pop-Location`.
+    - Example: `Push-Location "C:\\...\\examples\\IO-Full-Demo"; $pio=(Get-Command pio).Source; & $pio run -e usb; Pop-Location`
 
 - Problem Resolution Policy:
   - Never mark problems as "solved" or "fixed" until user explicitly confirms the fix works

@@ -1,6 +1,8 @@
 #include "IOManager.h"
 #include "core/CoreSettings.h"
 
+#include <cmath>
+
 namespace cm {
 
 static std::shared_ptr<std::string> makeStableString(const String& value)
@@ -29,6 +31,34 @@ String IOManager::formatAnalogSlotKey(uint8_t slot, char suffix)
     char buf[8];
     snprintf(buf, sizeof(buf), "AI%02u%c", static_cast<unsigned>(slot), suffix);
     return String(buf);
+}
+
+String IOManager::formatAnalogOutputSlotKey(uint8_t slot, char suffix)
+{
+    char buf[8];
+    snprintf(buf, sizeof(buf), "AO%02u%c", static_cast<unsigned>(slot), suffix);
+    return String(buf);
+}
+
+float IOManager::clampFloat(float value, float minValue, float maxValue)
+{
+    if (value < minValue) {
+        return minValue;
+    }
+    if (value > maxValue) {
+        return maxValue;
+    }
+    return value;
+}
+
+float IOManager::mapFloat(float value, float inMin, float inMax, float outMin, float outMax)
+{
+    const float inRange = inMax - inMin;
+    if (fabsf(inRange) < 1e-9f) {
+        return outMin;
+    }
+    const float t = (value - inMin) / inRange;
+    return outMin + t * (outMax - outMin);
 }
 
 void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
@@ -152,6 +182,48 @@ void IOManager::addAnalogInput(const AnalogInputBinding& binding)
     entry.showMinEventInWeb = binding.showMinEventInWeb;
 
     analogInputs.push_back(std::move(entry));
+}
+
+void IOManager::addAnalogOutput(const AnalogOutputBinding& binding)
+{
+    if (!binding.id || !binding.id[0]) {
+        CM_LOG("[IOManager][ERROR] addAnalogOutput: invalid binding");
+        return;
+    }
+
+    if (findAnalogOutputIndex(binding.id) >= 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogOutput: output '%s' already exists", binding.id);
+        return;
+    }
+
+    AnalogOutputEntry entry;
+    entry.id = binding.id;
+    entry.name = binding.name ? binding.name : binding.id;
+
+    entry.slot = nextAnalogOutputSlot;
+    if (nextAnalogOutputSlot < 99) {
+        nextAnalogOutputSlot++;
+    } else {
+        CM_LOG("[IOManager][WARNING] addAnalogOutput: exceeded slot range 00..99, keys may not remain stable");
+        nextAnalogOutputSlot++;
+    }
+
+    entry.defaultPin = binding.defaultPin;
+    entry.defaultEnabled = binding.defaultEnabled;
+    entry.valueMin = binding.valueMin;
+    entry.valueMax = binding.valueMax;
+    entry.reverse = binding.reverse;
+
+    entry.registerSettings = binding.registerSettings;
+    entry.showPinInWeb = binding.showPinInWeb;
+
+    // Initialize state
+    entry.desiredRawVolts = 0.0f;
+    entry.rawVolts = 0.0f;
+    entry.desiredValue = clampFloat(0.0f, entry.valueMin, entry.valueMax);
+    entry.value = entry.desiredValue;
+
+    analogOutputs.push_back(std::move(entry));
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
@@ -991,6 +1063,149 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     }
 }
 
+void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
+                           float sliderMin,
+                           float sliderMax,
+                           float sliderStep,
+                           int sliderPrecision,
+                           const char* runtimeLabel,
+                           const char* runtimeGroup,
+                           const char* unit)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addIOtoGUI(analog): unknown analog output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+
+    if (!entry.settingsRegistered) {
+        if (!entry.registerSettings) {
+            entry.settingsRegistered = true;
+        } else {
+            entry.cardKey = entry.id;
+            entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+            entry.cardOrder = order;
+
+            entry.cardKeyStable = makeStableString(entry.cardKey);
+            entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+            entry.keyPin = formatAnalogOutputSlotKey(entry.slot, 'P');
+            entry.keyPinStable = makeStableString(entry.keyPin);
+
+            entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+                .key = entry.keyPinStable->c_str(),
+                .name = "GPIO",
+                .category = cm::CoreCategories::IO,
+                .defaultValue = entry.defaultPin,
+                .showInWeb = entry.showPinInWeb,
+                .sortOrder = 41,
+                .categoryPretty = IO_CATEGORY_PRETTY,
+                .card = entry.cardKeyStable->c_str(),
+                .cardPretty = entry.cardPrettyStable->c_str(),
+                .cardOrder = entry.cardOrder,
+            });
+
+            ConfigManager.addSetting(entry.pin.get());
+            entry.settingsRegistered = true;
+        }
+    }
+
+    const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
+    const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    const String unitStr = (unit && unit[0]) ? String(unit) : String();
+
+    float initValue = 0.0f;
+    if (initValue < sliderMin || initValue > sliderMax) {
+        initValue = sliderMin;
+    }
+
+    // Note: sliderStep is currently forwarded as 'initValue' is separate; step is handled by the WebUI.
+    // The RuntimeManager stores min/max/step/precision in metadata.
+    (void)sliderStep;
+
+    ConfigManager.defineRuntimeFloatSlider(
+        group,
+        entry.id,
+        label,
+        sliderMin,
+        sliderMax,
+        initValue,
+        sliderPrecision,
+        [this, id]() { return this->getValue(id); },
+        [this, id](float v) { this->setValue(id, v); },
+        unitStr,
+        String(),
+        order);
+}
+
+bool IOManager::isValidAnalogOutputPin(int pin)
+{
+#if defined(ARDUINO_ARCH_ESP32)
+    // DAC pins on classic ESP32
+    return pin == 25 || pin == 26;
+#else
+    (void)pin;
+    return false;
+#endif
+}
+
+void IOManager::reconfigureIfNeeded(AnalogOutputEntry& entry)
+{
+    const int pin = entry.pin ? entry.pin->get() : entry.defaultPin;
+    if (!isValidAnalogOutputPin(pin)) {
+        if (!entry.warningLoggedInvalidPin) {
+            CM_LOG("[IOManager][WARNING] AnalogOutput '%s' has invalid/unsupported pin=%d (DAC pins are 25/26)", entry.id.c_str(), pin);
+            entry.warningLoggedInvalidPin = true;
+        }
+        entry.hasLast = true;
+        entry.lastPin = pin;
+        return;
+    }
+
+    entry.warningLoggedInvalidPin = false;
+
+    if (!entry.hasLast || entry.lastPin != pin) {
+        pinMode(pin, OUTPUT);
+        entry.lastPin = pin;
+        entry.hasLast = true;
+    }
+}
+
+void IOManager::applyDesiredAnalogOutput(AnalogOutputEntry& entry)
+{
+    const int pin = entry.pin ? entry.pin->get() : entry.defaultPin;
+    if (!isValidAnalogOutputPin(pin)) {
+        return;
+    }
+
+    // Raw is volts (0..3.3V). Convert to DAC 8-bit.
+    static constexpr float RAW_MIN_V = 0.0f;
+    static constexpr float RAW_MAX_V = 3.3f;
+    const float raw = clampFloat(entry.desiredRawVolts, RAW_MIN_V, RAW_MAX_V);
+
+#if defined(ARDUINO_ARCH_ESP32)
+    const float t = (RAW_MAX_V <= RAW_MIN_V) ? 0.0f : (raw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
+    int dac = static_cast<int>(lroundf(t * 255.0f));
+    if (dac < 0) {
+        dac = 0;
+    }
+    if (dac > 255) {
+        dac = 255;
+    }
+    dacWrite(pin, static_cast<uint8_t>(dac));
+#else
+    (void)raw;
+    CM_LOG("[IOManager][ERROR] AnalogOutput '%s': DAC output not supported on this platform", entry.id.c_str());
+#endif
+
+    entry.rawVolts = raw;
+    // Keep mapped value in sync (value is always derived from the physical raw output).
+    const float effectiveRaw = entry.reverse ? (RAW_MAX_V - (raw - RAW_MIN_V)) : raw;
+    entry.value = clampFloat(mapFloat(effectiveRaw, RAW_MIN_V, RAW_MAX_V, entry.valueMin, entry.valueMax), entry.valueMin, entry.valueMax);
+}
+
 void IOManager::begin()
 {
     startupLongPressWindowEndsMs = millis() + STARTUP_LONG_PRESS_WINDOW_MS;
@@ -1031,6 +1246,13 @@ void IOManager::begin()
         reconfigureIfNeeded(entry);
         readAnalogInput(entry);
     }
+
+    for (auto& entry : analogOutputs) {
+        entry.hasLast = false;
+        entry.warningLoggedInvalidPin = false;
+        reconfigureIfNeeded(entry);
+        applyDesiredAnalogOutput(entry);
+    }
 }
 
 bool IOManager::isStartupLongPressWindowActive(uint32_t nowMs) const
@@ -1059,6 +1281,141 @@ void IOManager::update()
         processAnalogAlarm(entry);
         processAnalogEvents(entry, nowMs);
     }
+
+    for (auto& entry : analogOutputs) {
+        reconfigureIfNeeded(entry);
+        applyDesiredAnalogOutput(entry);
+    }
+}
+
+bool IOManager::setValue(const char* id, float value)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] setValue: unknown analog output '%s'", id ? id : "(null)");
+        return false;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    const float v = clampFloat(value, entry.valueMin, entry.valueMax);
+
+    // Map value -> raw volts (0..3.3)
+    static constexpr float RAW_MIN_V = 0.0f;
+    static constexpr float RAW_MAX_V = 3.3f;
+
+    float raw = mapFloat(v, entry.valueMin, entry.valueMax, RAW_MIN_V, RAW_MAX_V);
+    if (entry.reverse) {
+        raw = RAW_MAX_V - (raw - RAW_MIN_V);
+    }
+
+    entry.desiredValue = v;
+    entry.value = v;
+    entry.desiredRawVolts = clampFloat(raw, RAW_MIN_V, RAW_MAX_V);
+    entry.rawVolts = entry.desiredRawVolts;
+
+    reconfigureIfNeeded(entry);
+    applyDesiredAnalogOutput(entry);
+    return true;
+}
+
+float IOManager::getValue(const char* id) const
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        return NAN;
+    }
+    return analogOutputs[static_cast<size_t>(idx)].value;
+}
+
+bool IOManager::setRawValue(const char* id, float rawVolts)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] setRawValue: unknown analog output '%s'", id ? id : "(null)");
+        return false;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    static constexpr float RAW_MIN_V = 0.0f;
+    static constexpr float RAW_MAX_V = 3.3f;
+
+    const float physicalRaw = clampFloat(rawVolts, RAW_MIN_V, RAW_MAX_V);
+    const float effectiveRaw = entry.reverse ? (RAW_MAX_V - (physicalRaw - RAW_MIN_V)) : physicalRaw;
+
+    // Map (effective) raw volts -> value range
+    const float mapped = mapFloat(effectiveRaw, RAW_MIN_V, RAW_MAX_V, entry.valueMin, entry.valueMax);
+
+    entry.desiredRawVolts = physicalRaw;
+    entry.rawVolts = physicalRaw;
+    entry.desiredValue = mapped;
+    entry.value = mapped;
+
+    reconfigureIfNeeded(entry);
+    applyDesiredAnalogOutput(entry);
+    return true;
+}
+
+float IOManager::getRawValue(const char* id) const
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        return NAN;
+    }
+    return analogOutputs[static_cast<size_t>(idx)].rawVolts;
+}
+
+bool IOManager::setDACValue(const char* id, int dacValue)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] setDACValue: unknown analog output '%s'", id ? id : "(null)");
+        return false;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+
+    static constexpr int DAC_MIN = 0;
+    static constexpr int DAC_MAX = 255;
+    static constexpr float RAW_MIN_V = 0.0f;
+    static constexpr float RAW_MAX_V = 3.3f;
+
+    const int clamped = std::max(DAC_MIN, std::min(DAC_MAX, dacValue));
+    const float t = static_cast<float>(clamped) / static_cast<float>(DAC_MAX);
+    const float physicalRaw = RAW_MIN_V + t * (RAW_MAX_V - RAW_MIN_V);
+
+    const float effectiveRaw = entry.reverse ? (RAW_MAX_V - (physicalRaw - RAW_MIN_V)) : physicalRaw;
+    const float mapped = mapFloat(effectiveRaw, RAW_MIN_V, RAW_MAX_V, entry.valueMin, entry.valueMax);
+
+    entry.desiredRawVolts = physicalRaw;
+    entry.rawVolts = physicalRaw;
+    entry.desiredValue = mapped;
+    entry.value = mapped;
+
+    reconfigureIfNeeded(entry);
+    applyDesiredAnalogOutput(entry);
+    return true;
+}
+
+int IOManager::getDACValue(const char* id) const
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        return -1;
+    }
+
+    static constexpr float RAW_MIN_V = 0.0f;
+    static constexpr float RAW_MAX_V = 3.3f;
+    static constexpr float DAC_MAX = 255.0f;
+
+    const float physicalRaw = analogOutputs[static_cast<size_t>(idx)].rawVolts;
+    if (isnan(physicalRaw)) {
+        return -1;
+    }
+
+    const float clampedRaw = clampFloat(physicalRaw, RAW_MIN_V, RAW_MAX_V);
+    const float t = (RAW_MAX_V <= RAW_MIN_V) ? 0.0f : (clampedRaw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
+    const int code = static_cast<int>(lroundf(t * DAC_MAX));
+    return std::max(0, std::min(255, code));
 }
 
 void IOManager::processAnalogAlarm(AnalogInputEntry& entry)
@@ -1261,6 +1618,20 @@ float IOManager::getAnalogValue(const char* id) const
 
     const AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
     return entry.value;
+}
+
+int IOManager::findAnalogOutputIndex(const char* id) const
+{
+    if (!id || !id[0]) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < analogOutputs.size(); ++i) {
+        if (analogOutputs[i].id == id) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 
 bool IOManager::isValidPin(int pin)
