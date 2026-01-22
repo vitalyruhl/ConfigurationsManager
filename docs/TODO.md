@@ -40,10 +40,10 @@
          - **[COMPLETED][TESTED]** Analog inputs (raw + scaled mapping, deadband + minEvent)
          - **[COMPLETED][TESTED]** Runtime UI: raw/scaled values can be shown on different cards/groups
          - **[COMPLETED][TESTED]** Alarms: optional min/max thresholds (min-only/max-only/both) with callbacks + runtime indicators
-      - **[COMPLETED][NOT TESTED]** Analog outputs (DAC-only initial)
+      - **[COMPLETED][TESTED]** Analog outputs (DAC-only initial)
         - API: `addAnalogOutput(...)` + `setValue/getValue` (mapped) + `setRawValue/getRawValue` (0..3.3V) + `setDACValue/getDACValue` (0..255)
         - Settings: GPIO pin (DAC pins 25/26 on ESP32)
-        - Demo: `examples/IO-Full-Demo` registers 3 runtime sliders (0..100%, -100..100%, 0..3.3V) + runs a small API demo at end of `setup()`
+        - Demo: `examples/IO-Full-Demo` registers runtime sliders + value displays; note only 2 physical DAC outputs exist (GPIO25/26)
          - Follow-ups / options (pick later)
            - PWM/LEDC backend (most boards): channel allocation, frequency, resolution, attach/detach lifecycle
              - register 2 runtime sliders per output: mapped value 0-100% + raw PWM duty cycle

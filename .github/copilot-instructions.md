@@ -20,6 +20,15 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Safety gates: Before rename/delete, always search for references and update them. Before running terminal commands that modify the workspace, ensure the goal/scope is clear.
 
 - Git Workflow Guidelines:
+  - Branch roles in this repo (important):
+    - main: published/released branch
+    - v3.3.0: stable branch for finished and runnable versions
+    - feature/* (e.g. feature/io-manager): work-in-progress branch
+  - "Feierabend" workflow trigger:
+    - If the user says "ich mach jetzt feierabend" or "ich will jetzt feierabend machen", treat this as an end-of-session cue.
+    - Default rule:
+      - If the current work is finished and verified (build/run/test done) and intended to be stable: prepare it for v3.3.0 (ask for explicit confirmation before any git commands that modify history/index).
+      - If the work is not finished or not fully verified: push only to the current work branch (feature/*) and do NOT touch v3.3.0.
   - Never change main directly: For future work, do not implement changes while the active branch is main/master. If the active branch is main/master, emit a [WARNING] and propose 2-3 suitable branch names before making any edits.
   - Exception (docs-only TODO updates): If the only changes are documentation TODO files (e.g. docs/TODO.md, docs/todo_*.md), direct commits to main are allowed.
   - Git read-only commands are allowed without asking: Examples: `git status`, `git diff`, `git log`, `git show`, `git branch`, `git remote -v`.

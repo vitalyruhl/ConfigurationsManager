@@ -440,6 +440,10 @@ static void createAnalogOutputs()
 {
     // Analog outputs (initial implementation uses ESP32 DAC pins 25/26).
     // Mapping is defined by valueMin/valueMax (reverse optional) and is mapped to 0..3.3V raw output.
+    // IMPORTANT:
+    // - ESP32 has only TWO hardware DAC channels (GPIO25/DAC1 and GPIO26/DAC2).
+    // - If multiple analog outputs use the same pin, the last write wins (they overwrite each other).
+    // - For a stable demo, we keep only two outputs enabled by default.
 
     // 0..100 % -> 0..3.3V
     ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
@@ -452,14 +456,16 @@ static void createAnalogOutputs()
     });
 
     // -100..100 % -> 0..3.3V (0% is mid = ~1.65V)
-    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
-        .id = "ao_sym",
-        .name = "AO -100..100%",
-        .defaultPin = 26,
-        .valueMin = -100.0f,
-        .valueMax = 100.0f,
-        .reverse = false,
-    });
+    // Disabled by default to keep the demo deterministic with only 2 physical outputs.
+    // If you want this mapping mode, enable it and ensure it does NOT share a pin with another analog output.
+    // ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
+    //     .id = "ao_sym",
+    //     .name = "AO -100..100%",
+    //     .defaultPin = 26,
+    //     .valueMin = -100.0f,
+    //     .valueMax = 100.0f,
+    //     .reverse = false,
+    // });
 
     // 0..3.3V direct
     // Note: DAC has only two pins. This uses GPIO25 by default so you can compare scaling modes.
@@ -493,22 +499,23 @@ static void registerAnalogOutputsGui()
     ioManager.addAnalogOutputValueRawToGUI("ao_pct", nullptr, 44, "AO 0..100% (DAC 0..255)", "analog-outputs");
     ioManager.addAnalogOutputValueVoltToGUI("ao_pct", nullptr, 45, "AO 0..100% (Volts)", "analog-outputs", 3);
 
-    ioManager.addAnalogOutputSliderToGUI(
-        "ao_sym",
-        nullptr,
-        41,
-        -100.0f,
-        100.0f,
-        1.0f,
-        0,
-        "AO -100..100%",
-        "analog-outputs",
-        "%"
-    );
-
-    ioManager.addAnalogOutputValueToGUI("ao_sym", nullptr, 46, "AO -100..100% (Value)", "analog-outputs", "%", 1);
-    ioManager.addAnalogOutputValueRawToGUI("ao_sym", nullptr, 47, "AO -100..100% (DAC 0..255)", "analog-outputs");
-    ioManager.addAnalogOutputValueVoltToGUI("ao_sym", nullptr, 48, "AO -100..100% (Volts)", "analog-outputs", 3);
+    // NOTE: ao_sym (-100..100%) is disabled by default (see createAnalogOutputs()).
+    // If you enable it, also enable the GUI block below and make sure it uses a free DAC pin.
+    // ioManager.addAnalogOutputSliderToGUI(
+    //     "ao_sym",
+    //     nullptr,
+    //     41,
+    //     -100.0f,
+    //     100.0f,
+    //     1.0f,
+    //     0,
+    //     "AO -100..100%",
+    //     "analog-outputs",
+    //     "%"
+    // );
+    // ioManager.addAnalogOutputValueToGUI("ao_sym", nullptr, 46, "AO -100..100% (Value)", "analog-outputs", "%", 1);
+    // ioManager.addAnalogOutputValueRawToGUI("ao_sym", nullptr, 47, "AO -100..100% (DAC 0..255)", "analog-outputs");
+    // ioManager.addAnalogOutputValueVoltToGUI("ao_sym", nullptr, 48, "AO -100..100% (Volts)", "analog-outputs", 3);
 
     ioManager.addAnalogOutputSliderToGUI(
         "ao_v",
@@ -541,7 +548,7 @@ static void demoAnalogOutputApi()
 
     const DemoCase cases[] = {
         {"ao_pct", 25.0f, 1.0f, 64},
-        {"ao_sym", -25.0f, 2.0f, 192},
+        // {"ao_sym", -25.0f, 2.0f, 192}, // Disabled by default (see createAnalogOutputs())
         {"ao_v", 1.65f, 3.0f, 128},
     };
 
