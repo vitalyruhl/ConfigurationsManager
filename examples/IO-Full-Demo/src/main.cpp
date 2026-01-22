@@ -78,6 +78,7 @@ static bool isPulseActive(uint32_t untilMs)
 void updateStatusLED(); // new non-blocking status LED handler
 void setHeaterState(bool on);
 void setFanState(bool on);
+void setHoldButtonState(bool on);
 void setupGUI();
 bool SetupStartWebServer();
 void onWiFiConnected();
@@ -99,7 +100,7 @@ static void createDigitalOutputs()
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "heater",
         .name = "Heater",
-        .defaultPin = 25,
+        .defaultPin = 4,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
@@ -112,30 +113,12 @@ static void createDigitalOutputs()
         .defaultEnabled = true,
     });
 
-    // Additional relays
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "holdbutton",
-        .name = "holdbutton",
-        .defaultPin = 26,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
-
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "relay27",
-        .name = "Relay 27",
+        .name = "Hold Button",
         .defaultPin = 27,
         .defaultActiveLow = true,
         .defaultEnabled = true,
-    });
-    
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "relay14",
-        .name = "Relay 14",
-        .defaultPin = 14,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-        .registerSettings = false,
     });
 }
 
@@ -163,44 +146,21 @@ static void registerDigitalOutputsGui()
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         },
         "Fan",
-        "FAN Control"
+        nullptr
     );
 
-    // Momentary button: hold-to-activate (pressed -> ON, released -> OFF)
     ioManager.addIOtoGUI(
         "holdbutton",
         nullptr,
         4,
         cm::IOManager::RuntimeControlType::MomentaryButton,
         []() { return ioManager.getState("holdbutton"); },
-        [](bool state) { ioManager.set("holdbutton", state); },
-        "Holdbutton",
-        "controls",
-        "Running",
-        "Push"
-    );
-
-    // Additional relays as switches
-    ioManager.addIOtoGUI(
-        "relay27",
-        nullptr,
-        5,
-        cm::IOManager::RuntimeControlType::Checkbox,
-        []() { return ioManager.getState("relay27"); },
-        [](bool state) { ioManager.set("relay27", state); },
-        "Relay 27"
-    );
-    ioManager.addIOtoGUI(
-        "relay14",
-        nullptr,
-        6,
-        cm::IOManager::RuntimeControlType::StateButton,
-        []() { return ioManager.getState("relay14"); },
-        [](bool state) { ioManager.set("relay14", state); },
-        "Start/Stop",
-        "controls",
-        "Stop",
-        "Start"
+        [](bool state) {
+            setHoldButtonState(state);
+            Serial.printf("[HOLDBUTTON] State: %s\n", state ? "ON" : "OFF");
+        },
+        "Hold",
+        nullptr
     );
 }
 
@@ -221,7 +181,7 @@ static void createDigitalInputs()
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = "reset",
         .name = "Reset Button",
-        .defaultPin = 15,
+        .defaultPin = 14,
         .defaultActiveLow = false,
         .defaultPullup = false,
         .defaultPulldown = true,
@@ -384,6 +344,14 @@ static void createAnalogInputs()
         90.0f,
         cm::IOManager::AnalogAlarmCallbacks{
             .onStateChanged = [](bool inAlarm) {
+                // The raw ADC signal can be noisy and may chatter around the threshold.
+                // Throttle logging to keep Serial output readable.
+                static uint32_t lastLogMs = 0;
+                const uint32_t now = millis();
+                if (static_cast<int32_t>(now - lastLogMs) < 3000) {
+                    return;
+                }
+                lastLogMs = now;
                 Serial.printf("[ALARM][ldr_n] state=%s\n", inAlarm ? "ON" : "OFF");
             },
         },
@@ -879,6 +847,20 @@ void setFanState(bool on)
     {
         Serial.println("Fan OFF");
         ioManager.set("fan", false);
+    }
+}
+
+void setHoldButtonState(bool on)
+{
+    if (on)
+    {
+        Serial.println("Hold Button ON");
+        ioManager.set("holdbutton", true);
+    }
+    else
+    {
+        Serial.println("Hold Button OFF");
+        ioManager.set("holdbutton", false);
     }
 }
 
