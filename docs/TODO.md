@@ -45,8 +45,11 @@
         - Demo: `examples/IO-Full-Demo` registers 3 runtime sliders (0..100%, -100..100%, 0..3.3V) + runs a small API demo at end of `setup()`
          - Follow-ups / options (pick later)
            - PWM/LEDC backend (most boards): channel allocation, frequency, resolution, attach/detach lifecycle
-           - Range/precision: configurable raw range (board Vref, calibration), output min/max clamp
-           - Extended-range semantics: allow custom raw range, or higher PWM resolution, or "engineering units" mapping
+             - register 2 runtime sliders per output: mapped value 0-100% + raw PWM duty cycle
+             - settings include pin, frequency, channel (optional, auto-allocated if unset), resolution (bits)
+             - on startup on/off, and on/off as runtime control over the slider (can use existing checkbox control)
+             - Range/precision: configurable raw range (board Vref, calibration), output min/max clamp
+             - Extended-range semantics: allow custom raw range, or higher PWM resolution, or "engineering units" mapping
            - Output smoothing/ramp: slew-rate limiting, step size, min update period, optional easing
            - Fail-safe: startup default, watchdog to reset outputs on comm loss, safe-state on reboot
            - Multi-provider design: `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`, external DAC (I2C/SPI)
@@ -92,6 +95,7 @@
 
 - **[FEATURE]** Add logging with simple trend for Analog/digital-Inputs (over time/on logDB)
   - like .addAnalogInputTrend("id", "name", "GUI-Card", interval, logTime in houers?, or max entrys to build an array = better, min, max or auto scale ...);
+- **[FEATURE]** add sdcard support for logging data to csv files and logger extension to log to sdcard 
 - **[FEATURE]** Add separated Alarm handling for Analog-Inputs and shorthands for creation of Alarms
   - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
 - **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
@@ -99,10 +103,10 @@
 - consolidate the Version-History before v3.0.0 into less detailed summary
 - **[FEATURE]** v3 follow-ups
   - Extract modules that can be imported separately:
-    - Logger: split into 3 extras (serial, MQTT, display)
-      - Check logger or GUI extra tab.
+    - Logger: split into 4 extras (serial, MQTT, display, sdcard) (also use more, then one logger at once?) (eg. log->Printf([Serial,Display,SDCard,GUI],Module, "Check and start BME280!").Debug();) - so i can use multiple loggers at once, but with diffrent loglevels (eg. log->Printf([Serial,SDCard,GUI],Module, "Check and start BME280!").Debug();log->Printf([Serial,SDCard],Module,"Temperature: %2.1lf °C", temperature).Debug(); ) - eg. module is an String local, or global defined, like "[MAIN]", "[BME280]", "[MQTT]", etc. | Serial,Display,SDCard,GUI are defines or enums for the different loggers depends on how we implement it.
+      - or ist it better loke log1 = new Logger([Serial, Display], Debug); log2 = new Logger([Serial, SDCard], Debug); etc. ? - then we can set different loglevels for each logger instance.
       - Display logger: ensure buffer is cleared even when nothing is sent to the display.
-      - Check where the latest version is (solarinverter project or boilerSaver).
+    - Check where the latest version is (solarinverter project or boilerSaver).
     - MQTT manager (got it from solarinverter project = latest version)
 
 ### Low Priority Bugs/Features (Prio 10)
