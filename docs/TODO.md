@@ -90,6 +90,8 @@
 
 ### Medium Priority Bugs/Features (Prio 5)
 
+- **[FEATURE]** Add logging with simple trend for Analog/digital-Inputs (over time/on logDB)
+  - like .addAnalogInputTrend("id", "name", "GUI-Card", interval, logTime in houers?, or max entrys to build an array = better, min, max or auto scale ...);
 - **[FEATURE]** Add separated Alarm handling for Analog-Inputs and shorthands for creation of Alarms
   - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
 - **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
