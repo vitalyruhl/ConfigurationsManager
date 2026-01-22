@@ -226,6 +226,35 @@ public:
                     const char* runtimeGroup = "controls",
                     const char* unit = nullptr);
 
+    // Analog output helpers (naming aligned with AnalogInput helpers)
+    void addAnalogOutputSliderToGUI(const char* id, const char* cardName, int order,
+                                    float sliderMin,
+                                    float sliderMax,
+                                    float sliderStep,
+                                    int sliderPrecision,
+                                    const char* runtimeLabel = nullptr,
+                                    const char* runtimeGroup = "controls",
+                                    const char* unit = nullptr);
+
+    // Read-only analog output values in runtime dashboard.
+    // These do NOT change the output; they only display current values.
+    void addAnalogOutputValueToGUI(const char* id, const char* cardName, int order,
+                                   const char* runtimeLabel = nullptr,
+                                   const char* runtimeGroup = "controls",
+                                   const char* unit = nullptr,
+                                   int precision = 2);
+
+    // Shows the raw DAC value (0..255).
+    void addAnalogOutputValueRawToGUI(const char* id, const char* cardName, int order,
+                                      const char* runtimeLabel = nullptr,
+                                      const char* runtimeGroup = "controls");
+
+    // Shows the current output voltage (0..3.3V).
+    void addAnalogOutputValueVoltToGUI(const char* id, const char* cardName, int order,
+                                       const char* runtimeLabel = nullptr,
+                                       const char* runtimeGroup = "controls",
+                                       int precision = 3);
+
     void begin();
     void update();
 
@@ -261,6 +290,23 @@ private:
     struct AnalogRuntimeGroup {
         String group;
         std::vector<AnalogRuntimeField> fields;
+    };
+
+    enum class AnalogOutputRuntimeKind {
+        ScaledValue,
+        RawDac,
+        Volts,
+    };
+
+    struct AnalogOutputRuntimeField {
+        String id;
+        String key;
+        AnalogOutputRuntimeKind kind = AnalogOutputRuntimeKind::ScaledValue;
+    };
+
+    struct AnalogOutputRuntimeGroup {
+        String group;
+        std::vector<AnalogOutputRuntimeField> fields;
     };
 
     struct DigitalOutputEntry {
@@ -505,6 +551,7 @@ private:
     std::vector<AnalogOutputEntry> analogOutputs;
 
     std::vector<AnalogRuntimeGroup> analogRuntimeGroups;
+    std::vector<AnalogOutputRuntimeGroup> analogOutputRuntimeGroups;
 
     uint32_t startupLongPressWindowEndsMs = 0;
     static constexpr uint32_t STARTUP_LONG_PRESS_WINDOW_MS = 10000;
@@ -549,6 +596,9 @@ private:
     static void ensureAnalogAlarmSettings(AnalogInputEntry& entry, float alarmMin, float alarmMax);
     void ensureAnalogRuntimeProvider(const String& group);
     void registerAnalogRuntimeField(const String& group, const String& id, bool showRaw);
+
+    void ensureAnalogOutputRuntimeProvider(const String& group);
+    void registerAnalogOutputRuntimeField(const String& group, const String& id, const String& key, AnalogOutputRuntimeKind kind);
 
     static String formatSlotKey(uint8_t slot, char suffix);
     static String formatInputSlotKey(uint8_t slot, char suffix);

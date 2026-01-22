@@ -435,6 +435,17 @@ static void addAnalogRuntimeMeta(ConfigManagerRuntime& runtime,
     runtime.addRuntimeMeta(meta);
 }
 
+static void addAnalogOutputRuntimeMeta(ConfigManagerRuntime& runtime,
+                                       const String& group,
+                                       const String& key,
+                                       const String& label,
+                                       const String& unit,
+                                       int precision,
+                                       int order)
+{
+    addAnalogRuntimeMeta(runtime, group, key, label, unit, precision, order, false, 0.0f, 0.0f);
+}
+
 void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int order,
                                     const char* runtimeLabel,
                                     const char* runtimeGroup,
@@ -1138,6 +1149,92 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
         unitStr,
         String(),
         order);
+}
+
+void IOManager::addAnalogOutputSliderToGUI(const char* id, const char* cardName, int order,
+                                           float sliderMin,
+                                           float sliderMax,
+                                           float sliderStep,
+                                           int sliderPrecision,
+                                           const char* runtimeLabel,
+                                           const char* runtimeGroup,
+                                           const char* unit)
+{
+    addIOtoGUI(id, cardName, order, sliderMin, sliderMax, sliderStep, sliderPrecision, runtimeLabel, runtimeGroup, unit);
+}
+
+void IOManager::addAnalogOutputValueToGUI(const char* id, const char* cardName, int order,
+                                          const char* runtimeLabel,
+                                          const char* runtimeGroup,
+                                          const char* unit,
+                                          int precision)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogOutputValueToGUI: unknown analog output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
+
+    const String key = entry.id + "_value";
+    const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : (entry.name + String(" Value"));
+    const String unitStr = (unit && unit[0]) ? String(unit) : String();
+
+    registerAnalogOutputRuntimeField(group, entry.id, key, AnalogOutputRuntimeKind::ScaledValue);
+    ensureAnalogOutputRuntimeProvider(group);
+    addAnalogOutputRuntimeMeta(ConfigManager.getRuntime(), group, key, label, unitStr, precision, order);
+
+    // Ensure settings card exists (optional)
+    addIOtoGUI(id, cardName, order);
+}
+
+void IOManager::addAnalogOutputValueRawToGUI(const char* id, const char* cardName, int order,
+                                             const char* runtimeLabel,
+                                             const char* runtimeGroup)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogOutputValueRawToGUI: unknown analog output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
+
+    const String key = entry.id + "_dac";
+    const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : (entry.name + String(" DAC"));
+
+    registerAnalogOutputRuntimeField(group, entry.id, key, AnalogOutputRuntimeKind::RawDac);
+    ensureAnalogOutputRuntimeProvider(group);
+    addAnalogOutputRuntimeMeta(ConfigManager.getRuntime(), group, key, label, "", 0, order);
+
+    addIOtoGUI(id, cardName, order);
+}
+
+void IOManager::addAnalogOutputValueVoltToGUI(const char* id, const char* cardName, int order,
+                                              const char* runtimeLabel,
+                                              const char* runtimeGroup,
+                                              int precision)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        CM_LOG("[IOManager][WARNING] addAnalogOutputValueVoltToGUI: unknown analog output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
+
+    const String key = entry.id + "_volts";
+    const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : (entry.name + String(" Volts"));
+
+    registerAnalogOutputRuntimeField(group, entry.id, key, AnalogOutputRuntimeKind::Volts);
+    ensureAnalogOutputRuntimeProvider(group);
+    addAnalogOutputRuntimeMeta(ConfigManager.getRuntime(), group, key, label, "V", precision, order);
+
+    addIOtoGUI(id, cardName, order);
 }
 
 bool IOManager::isValidAnalogOutputPin(int pin)
@@ -1992,6 +2089,71 @@ void IOManager::ensureAnalogRuntimeProvider(const String& group)
                 const String maxKey = entry.id + "_alarm_max";
                 data[minKey] = entry.alarmMinState;
                 data[maxKey] = entry.alarmMaxState;
+            }
+        }
+    }, 5);
+
+    registered.push_back(group);
+}
+
+void IOManager::registerAnalogOutputRuntimeField(const String& group, const String& id, const String& key, AnalogOutputRuntimeKind kind)
+{
+    for (auto& rg : analogOutputRuntimeGroups) {
+        if (rg.group == group) {
+            for (const auto& f : rg.fields) {
+                if (f.key == key) {
+                    return;
+                }
+            }
+            rg.fields.push_back(AnalogOutputRuntimeField{ id, key, kind });
+            return;
+        }
+    }
+
+    AnalogOutputRuntimeGroup newGroup;
+    newGroup.group = group;
+    newGroup.fields.push_back(AnalogOutputRuntimeField{ id, key, kind });
+    analogOutputRuntimeGroups.push_back(std::move(newGroup));
+}
+
+void IOManager::ensureAnalogOutputRuntimeProvider(const String& group)
+{
+    static std::vector<String> registered;
+    for (const auto& g : registered) {
+        if (g == group) return;
+    }
+
+    ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
+        const AnalogOutputRuntimeGroup* runtimeGroupPtr = nullptr;
+        for (const auto& rg : analogOutputRuntimeGroups) {
+            if (rg.group == group) {
+                runtimeGroupPtr = &rg;
+                break;
+            }
+        }
+        if (!runtimeGroupPtr) {
+            return;
+        }
+
+        for (const auto& field : runtimeGroupPtr->fields) {
+            const int idx = findAnalogOutputIndex(field.id.c_str());
+            if (idx < 0) {
+                continue;
+            }
+
+            const AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+            switch (field.kind) {
+                case AnalogOutputRuntimeKind::ScaledValue:
+                    data[field.key] = entry.value;
+                    break;
+                case AnalogOutputRuntimeKind::RawDac:
+                    data[field.key] = this->getDACValue(entry.id.c_str());
+                    break;
+                case AnalogOutputRuntimeKind::Volts:
+                    data[field.key] = entry.rawVolts;
+                    break;
+                default:
+                    break;
             }
         }
     }, 5);

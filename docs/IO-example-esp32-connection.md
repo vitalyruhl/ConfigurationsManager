@@ -23,41 +23,41 @@ Legend:
 
 ```text
 
-                                            _________________________________
-                                            | .---------------------------.  |
-                                            | .   ~~~~~~ Antenna ~~~~~~   .  |
-                                            | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-                                            | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-                                            | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-[LDR]        (DI/ADC1/RO) {RO}       GPIO36 | [x]                        [x] | GPIO23 (DO/PWM)        [Fan Relay]
-                                            |                                |
-[LDR]        (DI/ADC1/RO) {RO}       GPIO39 | [x]                        [x] | GPIO22 (DI/DO)         [I2C SCL]
-                                            |                                |
-[LDR]        (DI/ADC1/RO) {RO}       GPIO34 | [x]                        [ ] | GPIO1  (DO)            [free]
-                                            |                                |
-[LDR]        (DI/ADC1/RO) {RO}       GPIO35 | [x]                        [ ] | GPIO3  (DI)            [free]
-                                            |                                |
-[DS18B20]    (DI/DO/ADC1)            GPIO32 | [x]                        [x] | GPIO21 (DI/DO)         [I2C SDA]
-                                            |                                |
-[Test Btn]   (DI/DO/ADC1)            GPIO33 | [x]                        [ ] | GPIO19 (DI/DO/PWM)     [PWM test]
-                                            |                                |
-[Analog 1]   (DI/DO/DAC1/ADC2/PWM)   GPIO25 | [x]                        [ ] | GPIO18 (DI/DO/PWM)     [PWM test]   {ADC2!}
-                                            |                                |
-[Analog 2]   (DI/DO/DAC2/ADC2/PWM)   GPIO26 | [x]                        [ ] | GPIO5  (DI/DO/PWM)     [free]       {ADC2!}{BOOT}
-                                            |                                |
-[Hold Relay] (DO/ADC2/PWM)           GPIO27 | [x]                        [ ] | GPIO17 (DO/PWM)        [UART2 TX]   {ADC2!}
-                                            |                                |
-[Heater]     (DO/ADC2/PWM)           GPIO14 | [x]                        [ ] | GPIO16 (DI/DO/PWM)     [UART2 RX]   {ADC2!}
-                                            |                                |
-[free]       (DI/DO/ADC2/PWM)        GPIO12 | [ ]                        [ ] | GPIO4  (DO/PWM)        [free]      {BOOT}
-                                            |                                |
-[AP Btn]     (DI/DO)                 GPIO13 | [x]                        [x] | GPIO15 (DI/DO)         [Factory]   {BOOT}
-                                            |                                |
-                                            |      [pwr-LED]  [GPIO2-LED]    |
-                                            |                                |
-                                            |            _______             |
-                                            |            |     |             |
-                                            '------------|-----|------------'
+                                              _________________________________
+                                              | .---------------------------.  |
+                                              | .   ~~~~~~ Antenna ~~~~~~   .  |
+                                              | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
+                                              | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
+                                              | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
+[LDR]          (DI/ADC1/RO) {RO}       GPIO36 | [x]                        [x] | GPIO23 (DO/PWM)        [Fan Relay]
+                                              |                                |
+[LDR]          (DI/ADC1/RO) {RO}       GPIO39 | [x]                        [x] | GPIO22 (DI/DO)         [I2C SCL]
+                                              |                                |
+[LDR]          (DI/ADC1/RO) {RO}       GPIO34 | [x]                        [ ] | GPIO1  (DO)            [free]
+                                              |                                |
+[LDR]          (DI/ADC1/RO) {RO}       GPIO35 | [x]                        [ ] | GPIO3  (DI)            [free]
+                                              |                                |
+[DS18B20]      (DI/DO/ADC1)            GPIO32 | [x]                        [x] | GPIO21 (DI/DO)         [I2C SDA]
+                                              |                                |
+[Test Btn]     (DI/DO/ADC1)            GPIO33 | [x]                        [ ] | GPIO19 (DI/DO/PWM)     [PWM test]
+                                              |                                |
+[Analog 1]     (DI/DO/DAC1/ADC2/PWM)   GPIO25 | [x]                        [ ] | GPIO18 (DI/DO/PWM)     [PWM test]           {ADC2!}
+                                              |                                |
+[Analog 2]     (DI/DO/DAC2/ADC2/PWM)   GPIO26 | [x]                        [ ] | GPIO5  (DI/DO/PWM)     [free]               {ADC2!}{BOOT}
+                                              |                                |
+[Hold Relay]   (DO/ADC2/PWM)           GPIO27 | [x]                        [ ] | GPIO17 (DO/PWM)        [UART2 TX]           {ADC2!}
+                                              |                                |
+[Reset-Button] (DO/ADC2/PWM)           GPIO14 | [x]                        [ ] | GPIO16 (DI/DO/PWM)     [UART2 RX]           {ADC2!}
+                                              |                                |
+[free]         (DI/DO/ADC2/PWM)        GPIO12 | [ ]                        [ ] | GPIO4  (DO/PWM)        [Heater-Relay]       {BOOT}
+                                              |                                |
+[AP Btn]       (DI/DO)                 GPIO13 | [x]                        [x] | GPIO15 (DI/DO)         [Factory]            {BOOT}
+                                              |                                |
+                                              |      [pwr-LED]  [GPIO2-LED]    |
+                                              |                                |
+                                              |            _______             |
+                                              |            |     |             |
+                                              '------------|-----|------------'
 
 
 ```

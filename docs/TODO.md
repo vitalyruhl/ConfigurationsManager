@@ -19,6 +19,7 @@
 
 ### High Priority Bugs/Features (Prio 1)
 
+- **[IDK]** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
 - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
   - Suggested implementation order (one side-branch per item)
     - Test target: use `IO-Full-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.

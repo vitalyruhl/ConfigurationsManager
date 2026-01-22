@@ -476,7 +476,7 @@ static void createAnalogOutputs()
 static void registerAnalogOutputsGui()
 {
     // Runtime sliders for the three mapping modes.
-    ioManager.addIOtoGUI(
+    ioManager.addAnalogOutputSliderToGUI(
         "ao_pct",
         nullptr,
         40,
@@ -489,7 +489,11 @@ static void registerAnalogOutputsGui()
         "%"
     );
 
-    ioManager.addIOtoGUI(
+    ioManager.addAnalogOutputValueToGUI("ao_pct", nullptr, 43, "AO 0..100% (Value)", "analog-outputs", "%", 1);
+    ioManager.addAnalogOutputValueRawToGUI("ao_pct", nullptr, 44, "AO 0..100% (DAC 0..255)", "analog-outputs");
+    ioManager.addAnalogOutputValueVoltToGUI("ao_pct", nullptr, 45, "AO 0..100% (Volts)", "analog-outputs", 3);
+
+    ioManager.addAnalogOutputSliderToGUI(
         "ao_sym",
         nullptr,
         41,
@@ -502,7 +506,11 @@ static void registerAnalogOutputsGui()
         "%"
     );
 
-    ioManager.addIOtoGUI(
+    ioManager.addAnalogOutputValueToGUI("ao_sym", nullptr, 46, "AO -100..100% (Value)", "analog-outputs", "%", 1);
+    ioManager.addAnalogOutputValueRawToGUI("ao_sym", nullptr, 47, "AO -100..100% (DAC 0..255)", "analog-outputs");
+    ioManager.addAnalogOutputValueVoltToGUI("ao_sym", nullptr, 48, "AO -100..100% (Volts)", "analog-outputs", 3);
+
+    ioManager.addAnalogOutputSliderToGUI(
         "ao_v",
         nullptr,
         42,
@@ -514,6 +522,10 @@ static void registerAnalogOutputsGui()
         "analog-outputs",
         "V"
     );
+
+    ioManager.addAnalogOutputValueToGUI("ao_v", nullptr, 49, "AO 0..3.3V (Value)", "analog-outputs", "V", 2);
+    ioManager.addAnalogOutputValueRawToGUI("ao_v", nullptr, 50, "AO 0..3.3V (DAC 0..255)", "analog-outputs");
+    ioManager.addAnalogOutputValueVoltToGUI("ao_v", nullptr, 51, "AO 0..3.3V (Volts)", "analog-outputs", 3);
 }
 
 static void demoAnalogOutputApi()

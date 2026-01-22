@@ -170,6 +170,73 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 #endif
     }
 
+    // Ensure interactive controls are present even when no runtime provider exists for their group.
+    // Otherwise the frontend cannot retrieve the latest values after refresh and may snap back
+    // to defaults (e.g. sliders to 0).
+    auto getOrCreateSlot = [&](const String& groupName) -> JsonObject {
+        JsonObject slot;
+        JsonVariant existing = root[groupName];
+        if (existing.isNull()) {
+            slot = root.createNestedObject(groupName);
+        } else if (existing.is<JsonObject>()) {
+            slot = existing.as<JsonObject>();
+        } else {
+            root.remove(groupName);
+            slot = root.createNestedObject(groupName);
+        }
+        return slot;
+    };
+
+#if CM_ENABLE_RUNTIME_CHECKBOXES
+    for (auto& checkbox : runtimeCheckboxes) {
+        if (checkbox.getter) {
+            JsonObject slot = getOrCreateSlot(checkbox.group);
+            slot[checkbox.key] = checkbox.getter();
+        }
+    }
+#endif
+
+#if CM_ENABLE_RUNTIME_STATE_BUTTONS
+    for (auto& button : runtimeStateButtons) {
+        if (button.getter) {
+            JsonObject slot = getOrCreateSlot(button.group);
+            slot[button.key] = button.getter();
+        }
+    }
+#endif
+
+#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
+    for (auto& slider : runtimeIntSliders) {
+        if (slider.getter) {
+            JsonObject slot = getOrCreateSlot(slider.group);
+            slot[slider.key] = slider.getter();
+        }
+    }
+
+    for (auto& slider : runtimeFloatSliders) {
+        if (slider.getter) {
+            JsonObject slot = getOrCreateSlot(slider.group);
+            slot[slider.key] = slider.getter();
+        }
+    }
+#endif
+
+#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
+    for (auto& input : runtimeIntInputs) {
+        if (input.getter) {
+            JsonObject slot = getOrCreateSlot(input.group);
+            slot[input.key] = input.getter();
+        }
+    }
+
+    for (auto& input : runtimeFloatInputs) {
+        if (input.getter) {
+            JsonObject slot = getOrCreateSlot(input.group);
+            slot[input.key] = input.getter();
+        }
+    }
+#endif
+
 #if CM_ENABLE_RUNTIME_ALARMS
     if (!runtimeAlarms.empty()) {
         JsonObject alarms = root.createNestedObject("alarms");
