@@ -23,7 +23,7 @@
 - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
   - Suggested implementation order (one side-branch per item)
     - Test target: use `IO-Full-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.
-    1) **[COMPLETED][TESTED]** IOManager module (digital IO + analog IO)
+    1) **COMPLETED / TESTED** IOManager module (digital IO + analog IO)
        - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
        - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
          - GUI label must be `"I/O"` (display only); do not bake `"I/O"` into the persisted category token.
@@ -63,7 +63,7 @@
 
 - **[FEATURE]** Add logging with simple trend for Analog/digital-Inputs (over time/on logDB)
   - like .addAnalogInputTrend("id", "name", "GUI-Card", interval, logTime in houers?, or max entrys to build an array = better, min, max or auto scale ...);
-- **[FEATURE]** add sdcard support for logging data to csv files and logger extension to log to sdcard 
+- **[FEATURE]** add sdcard support for logging data to csv files and logger extension to log to sdcard
 - **[FEATURE]** Add separated Alarm handling for Analog-Inputs and shorthands for creation of Alarms
   - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
 - **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
@@ -108,10 +108,10 @@
 
 - **[Tooling]** WebUI debug logging toggle (v3.3.x)
   - Add a build-time flag (e.g. `VITE_CM_DEBUG`) and route noisy logs through a `dbg(...)` helper.
-- **[COMPLETED][Bug/Design]** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
+- **COMPLETED / Bug/Design** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
   - days is not tetsed yet
 - Library does not include the docs folder.
-- **[COMPLETED][Bug]** check restart behavior, sometimes the device restarts multiple times if wifi also good
+- **COMPLETED / Bug** check restart behavior, sometimes the device restarts multiple times if wifi also good
 
 - **[Tooling/Design]** Revisit "advanced opt-in" WebUI rebuild (v3.3.x)
   - Goal: library consumption must NOT require Node.js/npm by default.
@@ -120,30 +120,30 @@
 
 ### Done / Resolved
 
-- **[COMPLETED][Bug]** Settings password prompt when password is unset
-- **[COMPLETED][Bug]** Browser tab title is configurable
+- **COMPLETED / Bug** Settings password prompt when password is unset
+- **COMPLETED / Bug** Browser tab title is configurable
   - H1 uses `.setAppName(APP_NAME)`
   - Browser tab uses `.setAppTitle("...")`
   - If `.setVersion(VERSION)` is set: it is appended to both
-- **[COMPLETED][Bug/Design]** "WifiConnected" in system card --> "Wifi Connected", and position at first place
-- **[COMPLETED][Bug/Design]** Live-view cards are not sorted by `order`
+- **COMPLETED / Bug/Design** "WifiConnected" in system card --> "Wifi Connected", and position at first place
+- **COMPLETED / Bug/Design** Live-view cards are not sorted by `order`
 - Add divider (hr-like) in full demo.
-- **[COMPLETED][TESTED]** Core settings templates / injection (WiFi/System/Buttons + optional NTP)
+- **COMPLETED / TESTED** Core settings templates / injection (WiFi/System/Buttons + optional NTP)
   - Implemented core settings templates (WiFi/System/Buttons + optional NTP) and a dedicated core demo example.
   - Validated via PlatformIO build and flashed to ESP32.
   - Documented category merge/injection behavior in `docs/SETTINGS.md` and added `cm::CoreCategories::*` constants to avoid typos.
 
-- **[COMPLETED][TESTED]** Custom runtime provider named `system` overrides built-in System provider
+- **COMPLETED / TESTED** Custom runtime provider named `system` overrides built-in System provider
   - Fixed by merging runtime providers that share the same group name ("system" etc.) instead of overwriting.
   - Validated by injecting `system.testValue` into the System card (with a divider).
 
-- **[COMPLETED][TESTED]** IOManager Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
-- **[COMPLETED][TESTED]** IOManager Digital inputs: non-blocking events (press/release/click/double/long)
-- **[COMPLETED][TESTED]** IOManager Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
+- **COMPLETED / TESTED** IOManager Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
+- **COMPLETED / TESTED** IOManager Digital inputs: non-blocking events (press/release/click/double/long)
+- **COMPLETED / TESTED** IOManager Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
 
-- **[COMPLETED][TESTED]** IOManager Digital outputs: GPIO + polarity + runtime controls (checkbox/state/momentary)
-- **[COMPLETED][TESTED]** IOManager Analog outputs (DAC): runtime slider + value readouts (scaled/DAC/volts)
+- **COMPLETED / TESTED** IOManager Digital outputs: GPIO + polarity + runtime controls (checkbox/state/momentary)
+- **COMPLETED / TESTED** IOManager Analog outputs (DAC): runtime slider + value readouts (scaled/DAC/volts)
 
-- **[COMPLETED][TESTED]** IOManager Analog inputs: raw/scaled mapping + deadband/minEvent + runtime multi-card registration
-- **[COMPLETED][TESTED]** IOManager Analog alarms: dynamic min/max thresholds via settings + separate min/max callbacks + runtime flags (`<id>_alarm_min/_alarm_max`)
-- **[COMPLETED][TESTED]** WebUI Runtime: numeric alarm highlighting prefers runtime alarm flags when present; WS frames validated + polling fallback prevents stuck UI
+- **COMPLETED / TESTED** IOManager Analog inputs: raw/scaled mapping + deadband/minEvent + runtime multi-card registration
+- **COMPLETED / TESTED** IOManager Analog alarms: dynamic min/max thresholds via settings + separate min/max callbacks + runtime flags (`<id>_alarm_min/_alarm_max`)
+- **COMPLETED / TESTED** WebUI Runtime: numeric alarm highlighting prefers runtime alarm flags when present; WS frames validated + polling fallback prevents stuck UI

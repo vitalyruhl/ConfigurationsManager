@@ -7,6 +7,12 @@ Two complementary styling systems exist:
 
 You can combine them, or disable metadata entirely and rely purely on your own CSS.
 
+## Screenshot
+
+Example: global CSS theming in the WebUI.
+
+![CSS Theming](../examples/screenshots/Info-CSS.jpg)
+
 ## 1. Dynamic Style Metadata
 
 Each runtime field may carry a `style` object inside `/runtime_meta.json`. That object groups rules keyed by logical targets:
@@ -261,13 +267,13 @@ If absent, the route returns 204 and frontend skips insertion.
 
 ## Choosing an Approach
 
-| Need | Use Metadata | Use Global CSS |
-|------|--------------|----------------|
-| Per-field quick tweak | ✅ | ➖ |
-| Ship one cohesive brand theme | ➖ | ✅ |
-| Smallest JSON payload | ➖ | ✅ (disable meta) |
-| Dynamic visibility-based style changes | ✅ | ✅ (with attribute selectors) |
-| Firmware decides style purely in C++ | ✅ | ➖ |
+| Need                              | Use Metadata | Use Global CSS                    |
+| --------------------------------- | ------------ | --------------------------------- |
+| Per-field quick tweak             | Yes          | No                                |
+| Ship one cohesive brand theme     | No           | Yes                               |
+| Smallest JSON payload             | No           | Yes (disable meta)                |
+| Visibility-based style changes    | Yes          | Yes (with attribute selectors)    |
+| Firmware decides style in C++     | Yes          | No                                |
 
 You can also mix: keep minimal defaults in metadata (or none) and layer global CSS for branding.
 
@@ -282,4 +288,3 @@ You can also mix: keep minimal defaults in metadata (or none) and layer global C
 1. Fetch `/runtime_meta.json` in browser → inspect style block for a field.
 2. Toggle `cfg.disableRuntimeStyleMeta(true)` to confirm global CSS still matches.
 3. Use dev tools to verify data-* selectors and final computed styles.
-

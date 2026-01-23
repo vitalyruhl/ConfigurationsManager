@@ -7,10 +7,12 @@
 In C++ werden globale und statische Objekte in **unbestimmter Reihenfolge** zwischen verschiedenen Übersetzungseinheiten (.cpp Dateien) initialisiert. Dies kann zu schwer nachvollziehbaren Bugs führen.
 
 **Konkret in unserem Fall:**
+
 - `ConfigManagerClass ConfigManager;` (definiert in `ConfigManager.cpp`)
 - `SystemSettings systemSettings;` (definiert in `main.cpp`)
 
 **Gefährlicher Code (❌ NICHT verwenden):**
+
 ```cpp
 struct SystemSettings {
     Config<bool> allowOTA;
@@ -32,6 +34,7 @@ struct SystemSettings {
 ### ✅ Korrekte Implementierung
 
 **1. Struktur mit separater `init()` Methode:**
+
 ```cpp
 struct SystemSettings {
     Config<bool> allowOTA;
@@ -84,11 +87,13 @@ struct SystemSettings {
 ```
 
 **2. Instanziierung (global):**
+
 ```cpp
 SystemSettings systemSettings; // Konstruktor wird aufgerufen, aber init() noch nicht
 ```
 
 **3. Explizite Initialisierung in setup():**
+
 ```cpp
 void setup() {
     Serial.begin(115200);
@@ -101,18 +106,22 @@ void setup() {
     
     // ConfigManager konfigurieren
     ConfigManager.setAppName(APP_NAME);
+
     ConfigManager.setAppTitle(APP_NAME);
     ConfigManager.setVersion(VERSION);
     // ... weitere ConfigManager-Setup
     
     // JETZT ist ConfigManager bereit - Settings registrieren
+
     systemSettings.init();    // ✅ Sicher!
+
     buttonSettings.init();    // ✅ Sicher!
     tempSettings.init();      // ✅ Sicher!
     ntpSettings.init();       // ✅ Sicher!
     wifiSettings.init();      // ✅ Sicher!
     mqttSettings.init();      // ✅ Sicher!
     
+
     // Weitere Setup-Schritte...
 }
 ```
@@ -124,6 +133,7 @@ void setup() {
 ```cpp
 struct YourSettings {
     Config<bool> yourBoolSetting;
+
     Config<String> yourStringSetting;
     Config<int> yourIntSetting;
     
@@ -137,6 +147,7 @@ struct YourSettings {
         }),
         yourStringSetting(ConfigOptions<String>{
             .key = "YourStr",
+
             .name = "Your String Setting", 
             .category = "YourCategory",
             .defaultValue = String("default")
@@ -154,6 +165,7 @@ struct YourSettings {
     
     // Phase 2: Explizite Initialisierung
     void init() {
+
         // ✅ Hier ist ConfigManager garantiert bereit
         ConfigManager.addSetting(&yourBoolSetting);
         ConfigManager.addSetting(&yourStringSetting);
@@ -184,12 +196,14 @@ Wenn Settings nicht in der WebUI erscheinen:
 3. **Crash beim Start**: Möglicherweise ConfigManager-Zugriff im Konstruktor
 
 ### Typische Fehlermeldungen
-```
+
+```text
 Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
 ```
 → Wahrscheinlich Zugriff auf nicht-initialisiertes ConfigManager-Objekt
 
 ### Debug-Ausgabe hinzufügen
+
 ```cpp
 void init() {
     Serial.println("[DEBUG] Initializing YourSettings...");
@@ -200,7 +214,8 @@ void init() {
 
 ## Migration bestehender Settings-Strukturen
 
-### Alt (❌ Fehlerhaft):
+### Alt (❌ Fehlerhaft)
+
 ```cpp
 struct OldSettings {
     Config<bool> setting;
@@ -211,7 +226,8 @@ struct OldSettings {
 };
 ```
 
-### Neu (✅ Korrekt):
+### Neu (✅ Korrekt)
+
 ```cpp
 struct NewSettings {
     Config<bool> setting;
@@ -226,7 +242,8 @@ struct NewSettings {
 };
 ```
 
-### Migration Checklist:
+### Migration Checklist
+
 - [ ] `init()` Methode zur Struktur hinzufügen
 - [ ] Alle `ConfigManager.addSetting()` Aufrufe vom Konstruktor in `init()` verschieben
 - [ ] `structureName.init()` in `setup()` nach ConfigManager-Setup aufrufen
@@ -245,6 +262,7 @@ struct NewSettings {
 ## Zusätzliche Hinweise
 
 ### Callbacks und Lambda-Funktionen
+
 ```cpp
 // ✅ Sicher: Callbacks im Konstruktor sind OK
 YourSettings() : 
@@ -261,6 +279,7 @@ YourSettings() :
 ```
 
 ### Abhängigkeiten zwischen Settings
+
 ```cpp
 void init() {
     // Reihenfolge beachten bei Abhängigkeiten

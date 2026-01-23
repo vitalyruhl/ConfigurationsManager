@@ -36,7 +36,7 @@ Keep semantic per‑field tweaks (e.g., hide just one unit or color one label) i
 ## Data Attributes Reference
 
 | Attribute | Values | Purpose |
-|-----------|--------|---------|
+| --- | --- | --- |
 | data-group | provider name | Identify provider card a row belongs to |
 | data-key | field key | Identify field inside provider |
 | data-type | numeric / bool / string / divider | Styling differences |
@@ -84,4 +84,3 @@ You may build CSS at runtime (e.g., from user preferences) and call `setCustomCs
 .rw[data-type="divider"] { border-bottom:1px solid #ccc; margin-top:4px; }
 @keyframes blink { 50% { opacity:0.35; } }
 ```
-

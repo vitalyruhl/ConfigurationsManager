@@ -19,6 +19,8 @@ Config<int> sample(ConfigOptions<int>{
   .callback = [](){ Serial.println("Interval changed"); }
 });
 
+```
+
 ## Category
 
 In the WebUI, settings are grouped by the `.category` string. This is intentionally a simple string match:
@@ -34,7 +36,6 @@ Best practices:
 - Keep categories stable and consistent across sketches/modules.
 - Use `sortOrder` to keep injected settings in a predictable place inside a category.
 - Keep keys short and unique; truncated key collisions can lead to hard-to-debug issues.
-```
 
 Add to manager and load persisted value:
 
@@ -50,7 +51,6 @@ Internal storage key format: `<category>_<key>` truncated to 15 chars to satisfy
 ### Password / Secret Fields
 
 Set `.isPassword = true` to mask in the UI. The backend stores the real value; the UI obscures it and only sends a new value when the field changes.
-
 
 ## Reducing Boilerplate with OptionGroup (since 2.4.3)
 
@@ -94,7 +94,7 @@ Config<String> wifiPassword( WIFI_GROUP.opt<String>("password", String("secret")
 
 Template signature (conceptual):
 
-```
+```cpp
 template<class T>
 ConfigOptions<T> OptionGroup::opt(
    const char* key,
@@ -110,7 +110,6 @@ ConfigOptions<T> OptionGroup::opt(
 ### Dynamic Visibility (showIf) Pattern
 
 The `showIf` member of `ConfigOptions<T>` is a `std::function<bool()>`. It is evaluated on every JSON generation for the web UI (after each apply/save). Keep it lightweight (simple flag checks) to avoid blocking the loop. Example:
-
 
 ```cpp
 Config<bool> enableAdvanced(ConfigOptions<bool>{
@@ -173,7 +172,7 @@ Benefits:
 - Lower risk of copy/paste mistakes (e.g., forgetting to invert a condition)
 - Consistent semantics across different settings groups
 
-## Password / Secret Fields
+## Password / Secret Fields (Recap)
 
 Set `.isPassword = true` to mask the value in the UI. The real value is stored and only submitted when modified.
 

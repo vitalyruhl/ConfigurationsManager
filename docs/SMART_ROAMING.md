@@ -72,7 +72,7 @@ void setup() {
 ## Configuration Parameters
 
 | Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
+| --- | --- | --- | --- | --- |
 | **Enabled** | `bool` | `true` | true/false | Enable/disable Smart Roaming |
 | **Threshold** | `int` | `-75` | -30 to -90 | Signal strength trigger (dBm) |
 | **Cooldown** | `unsigned long` | `120` | 30-600 | Seconds between roaming attempts |
@@ -81,6 +81,7 @@ void setup() {
 ### Parameter Guidelines
 
 **Roaming Threshold (-30 to -90 dBm):**
+
 - `-60 dBm`: Very aggressive (excellent signal only)
 - `-70 dBm`: Aggressive (good signal preferred)  
 - `-75 dBm`: **Default** (balanced performance)
@@ -88,11 +89,13 @@ void setup() {
 - `-90 dBm`: Very conservative (emergency roaming only)
 
 **Cooldown Period (30-600 seconds):**
+
 - `30-60 seconds`: Fast switching (may cause instability)
 - `120 seconds`: **Default** (balanced stability)
 - `300+ seconds`: Slow switching (very stable)
 
 **Signal Improvement (5-30 dBm):**
+
 - `5 dBm`: Switches easily (may cause ping-ponging)
 - `10 dBm`: **Default** (good balance)
 - `15+ dBm`: Conservative switching (very stable)

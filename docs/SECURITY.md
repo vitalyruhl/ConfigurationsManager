@@ -5,6 +5,7 @@
 ConfigurationsManager serves its Web UI and API over plain HTTP by default.
 
 That means:
+
 - Password fields are **masked** in the UI (displayed as `***`).
 - When a user **sets or changes** a password in the WebUI, it is transmitted to the ESP32 **in cleartext over HTTP**.
 

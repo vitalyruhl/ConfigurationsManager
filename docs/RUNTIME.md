@@ -124,7 +124,6 @@ Call `cfg.handleRuntimeAlarms()` periodically (e.g. every 1–3s) if you use cro
 
 For per‑field style metadata (colors, visibility, boolean dot behavior) see `docs/STYLING.md`. For global CSS theming via `/user_theme.css`, see `docs/THEMING.md`.
 
-
 ### Minimal End‑to‑End Example (Live + Alarm)
 
 ```cpp
@@ -170,11 +169,10 @@ cfg.setRuntimeProviderOrder("sensors", 5);
 Metadata additions in `/runtime_meta.json`:
 
 | Key | Meaning |
-|-----|---------|
+| --- | --- |
 | `isString` | Render as plain text value (no unit/precision formatting) |
 | `isDivider` | Render a horizontal rule with label |
 | `staticValue` | Value to show even if absent from `/runtime.json` |
 | `order` | Sort hint (lower first). Default 100 |
 
 Older frontends ignore these keys gracefully.
-
