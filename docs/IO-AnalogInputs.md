@@ -32,7 +32,32 @@ ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
 
 ## Settings (GPIO + Mapping)
 
-Analog inputs use short, slot-based keys (ESP32 Preferences safe). The exact key names are internal, but the settings exposed in the UI include:
+Analog inputs use short, slot-based keys (ESP32 Preferences safe).
+
+### Key format (ESP32 NVS safe)
+
+To keep keys short (ESP32 Preferences limit), IOManager uses **slot-based keys**:
+
+- Analog inputs: `AI%02uX` (e.g. `AI00P`)
+
+Suffix meanings for analog inputs:
+
+- `P` = pin
+- `R` = raw min
+- `S` = raw max
+- `M` = out min
+- `N` = out max
+- `U` = unit
+- `D` = deadband
+- `E` = min event (ms)
+- `A` = alarm min
+- `B` = alarm max
+
+Important: slot-based keys depend on the order of `addAnalogInput(...)` calls.
+
+### Settings list
+
+The settings exposed in the UI include:
 
 - `GPIO`: ADC pin
 - `Raw Min` / `Raw Max`: input range for mapping
@@ -40,8 +65,6 @@ Analog inputs use short, slot-based keys (ESP32 Preferences safe). The exact key
 - `Unit`: display only
 - `Deadband`: minimum delta to trigger an event/update
 - `Min Event (ms)`: emits an update at least every N ms (even if unchanged)
-
-Note: slot-based keys depend on the order of `addAnalogInput(...)` calls.
 
 ## Runtime UI (raw vs scaled)
 
@@ -51,6 +74,18 @@ Analog channels can be registered for the runtime UI as:
 - raw ADC value
 
 These can be shown in different runtime cards/groups.
+
+Scaled value:
+
+```cpp
+ioManager.addAnalogInputToGUI("ldr_s", nullptr, 10, "LDR South", "analog", false);
+```
+
+Raw value:
+
+```cpp
+ioManager.addAnalogInputToGUI("ldr_s", nullptr, 11, "LDR South (raw)", "analog_raw", true);
+```
 
 ## Alarms (min/max)
 
@@ -80,3 +115,12 @@ Use `AnalogAlarmCallbacks` to distinguish which boundary triggered:
 - `onMaxEnter` / `onMaxExit`
 
 You can also use combined callbacks (`onEnter`/`onExit` or `onStateChanged`) if you only care whether *any* alarm is active.
+
+## Lifecycle
+
+Typical sketch order:
+
+1. `addAnalogInput(...)` / optional `addAnalogInputToGUI(...)` / optional `configureAnalogInputAlarm(...)`
+2. `ConfigManager.loadAll()` (loads persisted pins/mapping)
+3. `ioManager.begin()`
+4. In `loop()`: `ioManager.update()` continuously reads inputs, updates runtime values, and evaluates alarms

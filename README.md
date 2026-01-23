@@ -28,7 +28,7 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 ## Features
 
 - 📦 Non-Volatile Storage (NVS) integration (ESP Preferences)
-- 🎯 Declarative config registration with a `ConfigOptions<T>` aggregate
+- Declarative config registration with a `ConfigOptions<T>` aggregate
 - 🌐 responsive web configuration interface (embedded in flash)
 - 🚀 OTA firmware upload endpoint
 - ⚡ Flash firmware directly from the web UI (password-protected HTTP OTA)
@@ -348,6 +348,7 @@ void loop()
 > - Some APIs have been moved into dedicated manager classes (use `getWiFiManager()`, `getWebManager()`, etc.)
 > - ConfigOptions field rename: `keyName` → `key`, `prettyName` → `name`, `prettyCat` → `categoryPretty`
 > - If you are upgrading from < 2.7, check your code for WiFi management calls and update accordingly
+
 - **FRITZ!Box Mesh networks** with multiple repeaters
 - **Enterprise WiFi** with multiple access points
 - **Home mesh systems** where devices get "stuck" to distant APs
@@ -361,7 +362,7 @@ void loop()
     ConfigManager.setRoamingImprovement(10);       // Minimum signal improvement required in dBm (default: 10)
 
     // ... continue with WiFi setup ...
-}
+
 ### Default Settings
 
 | Parameter       | Default Value | Description                                        |
@@ -473,12 +474,12 @@ Note: The runtime JSON includes system-level OTA flags used by the WebUI to enab
 
 The project now always uses the Async stack; no `env:async` or `-DUSE_ASYNC_WEBSERVER` define is needed.
 
-If the WebSocket isn't connected the frontend transparently polls `/runtime.json`.
+The WebUI prefers WebSocket live updates (`/ws`). If WebSocket is unavailable (blocked/disabled/network issues), it transparently falls back to polling `/runtime.json`.
 
 ### PlatformIO environments (usb / ota / publish)
 
 ```sh
-#See platformio.ini for details
+# See platformio.ini for details
 
 pio run -e usb -t upload # upload via usb
 
@@ -490,6 +491,7 @@ pio run -e ota -t upload
 pio run -e ota -t upload --upload-port 192.168.2.126
 
 # Or over the Web UI by press the "Flash" Button and upload the firmware.bin
+```
 
 ## Troubleshooting
 
@@ -498,7 +500,7 @@ pio run -e ota -t upload --upload-port 192.168.2.126
 v3.0.0 builds without PlatformIO prebuild scripts. If you are developing the WebUI, see `webui/README.md`.
 
 **Web UI not building or old version showing:**
-```bash
+```sh
 pio run -e usb -t clean # Clean previous build files
 # Then rebuild
 pio run -e usb
@@ -507,11 +509,9 @@ pio run -e usb
 ### Flash/Memory Issues
 
 **ESP32 won't boot or guru meditation errors:**
-```bash
+```sh
 pio run -e usb -t erase # WARNING: Deletes all flash data on ESP32!
 pio run -e usb -t upload # Re-upload firmware
-```
-
 ```
 
 ## Screenshots
@@ -535,48 +535,23 @@ pio run -e usb -t upload # Re-upload firmware
 
 ## Version History
 
-- **1.0.0**: Initial release with basic features.
-- **1.0.2**: make an library
-- **1.1.0**: add Structure example, bugfix, add delete settings functions
-- **1.1.1**: forgot to change library version in library.json
-- **1.1.2**: Bugfix: add forgotten function applyAll() in html
-- **1.2.0**: add logging function as callback for flexible logging
-- **1.2.1**: bugfix in logger over more, then one headder using, add dnsserver option for static ip.
-- **1.2.2**: bugfix remove throwing errors, becaus it let esp restart without showing the error message.
-- **2.0.0**: Add OTA support, add new example for OTA, add new example for WiFiManager with OTA. Add PrettyName for web interface
-- **2.0.1**: bugfixing, and add an additional site to transfer firmware over webinterface
-- **2.0.2**: bugfixing, prevent an buffer overflow on to long category and / or (idk) have an white spaces in key or category.
-  I has an mistake in TempCorrectionOffset("TCO","Temperature Correction", "Temp", 0.1) instead of TempCorrectionOffset("TCO", "Temp","Temperature Correction", 0.1) --> buffer overflow and guru meditation error
-- **2.1.0**: add callback for value changes
-- **2.2.0**: add optional pretty category names, convert static HTML to Vue3 project for better maintainability
-- **2.3.0**: introduce `ConfigOptions<T>` aggregate initialization (breaking style update) + dynamic `showIf` visibility + improved front-end auto-refresh
-- **2.3.1**: added multiple `startWebServer` static IP overloads, refactored connection logic, suppressed noisy NOT_FOUND NVS messages when keys absent, updated README
-- **2.4.0**: added live values over json and websocket (async build only)
-  - Added runtime metadata (`/runtime_meta.json`) for units / precision / thresholds / boolean semantics
-  - Added boolean alarm styling & safe/alarm states
-  - Added cross‑field alarm registry (`defineRuntimeAlarm`)
-  - Added relay control example via alarm callbacks
-- **2.4.1**: removed compile-time feature flags (async/WebSocket/runtime always available); added publish stub environment
-- **2.4.2**: added runtime string fields, dividers, and ordering; minor frontend tweaks
-- **2.5.0**: OptionGroup + visibility helpers, runtime field styling metadata, boolean dot styling refinements, hybrid theming (disable style meta + `/user_theme.css`), OTA flash UI improvements.
-- **2.6.0**: Restyling of web interface, Grouped code in different Blocks, that can be deaktivated by #define derectives. (see docs/FEATURE_FLAGS.md) to reduce code size. Some Bugfixes. Reorder Documentation. (remove some info into extra docs files)
-- **2.6.1**: some Bugfixes, reorganaize Readme, new Screenshots, Installation instructions
-- **2.6.2**: some Bugfixes
-- **2.7.0**: Refactoring from one big ConfigManager class into multiple classes for better maintainability. Added **Smart WiFi Roaming** feature to automatically switch to stronger APs in mesh networks based on configurable signal strength thresholds. Refactor Runtime Provider into its own class. Improved logging messages and added more detailed status updates. (breaking changes!) note: Settings page now requires password authentication (default: "cf")
-- **2.7.1-2**: Bugfixes for smart generation of the index.html from project - move devDependencies to dependencies, refactor the precompile_wrapper.py.
-- **2.7.3**: Fixed critical bug where `CM_ENABLE_RUNTIME_META` was incorrectly dependent on `CM_ENABLE_SYSTEM_PROVIDER`, causing runtime metadata to be disabled when system provider was turned off. Runtime metadata is now always enabled for proper WebUI functionality.
-- **2.7.4**: **Major improvement:** Tools folder is now included in the library package! No more manual copying required - reference the precompile script directly from the library installation path: `extra_scripts = pre:.pio/libdeps/your_env/ESP32 Configuration Manager/tools/precompile_wrapper.py`. Updated all documentation to reflect the simplified setup process.
-- **2.7.5**: Added XOR-based password encryption for HTTP transmission (removed again in v3.0.0).
-- **2.7.6**: Minor bugfixes and documentation updates.
+- **1.x**: initial release, basic settings UI, logging callback.
+- **2.0.0**: OTA support + examples; UI naming improvements.
+- **2.3.0**: `ConfigOptions<T>` aggregate init + `showIf` visibility (major API style update).
+- **2.4.0**: runtime JSON + WebSocket live values + runtime metadata + alarm styling.
+- **2.7.0**: modular managers + Smart WiFi Roaming + runtime provider improvements.
+- **2.7.4**: tools folder included in the library package (no manual copying).
 - **3.0.0**: v3 release: removed most build-time feature flags, embedded WebUI committed, docs reorganized.
 - **3.1.0**: v3 stabilization: runtime/UI improvements, ordering fixes in Settings/Live views, WebSocket/OTA fixes.
 - **3.1.1**: WebUI header vs tab title split (`setAppName` vs `setAppTitle` via `/appinfo`), improved settings password prompt for passwordless setups, WiFi reconnect-storm mitigation during scans.
+- **3.2.0**: minor bump / maintenance release.
+- **3.3.0**: IOManager module (digital IO + analog IO incl. alarms + DAC outputs) + core settings templates/injection + runtime/WebUI robustness improvements.
 
 ## Smart WiFi Roaming Feature
 
 Version 2.7.0 introduces **Smart WiFi Roaming** - a game-changing feature for mesh networks and multi-AP environments:
 
-### 🎯 **Key Benefits**
+### Key Benefits
 
 - **Automatic AP switching** when signal strength drops below threshold
 - **Intelligent roaming** with configurable signal improvement requirements
@@ -584,7 +559,7 @@ Version 2.7.0 introduces **Smart WiFi Roaming** - a game-changing feature for me
 - **Static IP preservation** during roaming transitions
 - **FRITZ!Box Mesh optimized** - perfect for complex home networks
 
-### 🔧 **Simple Configuration**
+### Simple Configuration
 
 ```cpp
 // Enable with defaults (works great out-of-the-box)
@@ -596,7 +571,7 @@ ConfigManager.setRoamingCooldown(120);     // Wait 2 minutes between attempts
 ConfigManager.setRoamingImprovement(10);   // Require 10+ dBm improvement
 ```
 
-### 📊 **Real-world Performance**
+### Real-world Performance
 
 - Signal improved from **-90 dBm (very weak)** to **-45 dBm (good)**
 - Automatic switching between FRITZ!Box main router and repeaters
@@ -606,16 +581,5 @@ See `docs/SMART_ROAMING.md` for complete documentation and optimization guides.
 
 ## ToDo / Issues
 
-### Planned
+- [see TODO.md in docs folder](docs/TODO.md)
 
-- HTTPS Support (original async lib does not support HTTPS)
-- add reset to default for single settings
-
-### maybe in future
-
-- i18n Support
-- make c++ V11 support
-
-### known Issues
-
-- please see the TODO.md file in docs folder.

@@ -23,49 +23,16 @@
 - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
   - Suggested implementation order (one side-branch per item)
     - Test target: use `IO-Full-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.
-    1) IOManager module (buttons + digital IO + analog IO)
+    1) **[COMPLETED][TESTED]** IOManager module (digital IO + analog IO)
        - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
        - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
          - GUI label must be `"I/O"` (display only); do not bake `"I/O"` into the persisted category token.
-       - Prefer stable IDs: each IO item/provider uses an `id` that is also used for settings key-prefixing (e.g. `io.<id>.*`) and runtime keys.
-       - [COMPLETED] Buttons
-         - API idea: `io.addButton({ .id=..., .name=..., .pin=..., ... })`
-         - Settings: GPIO pin, active-low/high, pull-up/down., longpress in ms
-         - Callbacks: pressed, double-pressed, long-pressed.
-       - [COMPLETED] Digital outputs (relay-style)
-         - API idea: `io.addDigitalOutput({ .id=..., .name=..., .pin=..., ... })`
-         - Settings: GPIO pin, active-low/high, enabled.
-         - Runtime API: `set(bool)` / `get()`.
-       - [COMPLETED] Analog inputs
-         - **[COMPLETED][TESTED]** Analog inputs (raw + scaled mapping, deadband + minEvent)
-         - **[COMPLETED][TESTED]** Runtime UI: raw/scaled values can be shown on different cards/groups
-         - **[COMPLETED][TESTED]** Alarms: optional min/max thresholds (min-only/max-only/both) with callbacks + runtime indicators
-      - **[COMPLETED][TESTED]** Analog outputs (DAC-only initial)
-        - API: `addAnalogOutput(...)` + `setValue/getValue` (mapped) + `setRawValue/getRawValue` (0..3.3V) + `setDACValue/getDACValue` (0..255)
-        - Settings: GPIO pin (DAC pins 25/26 on ESP32)
-        - Demo: `examples/IO-Full-Demo` registers runtime sliders + value displays; note only 2 physical DAC outputs exist (GPIO25/26)
-         - Follow-ups / options (pick later)
-           - PWM/LEDC backend (most boards): channel allocation, frequency, resolution, attach/detach lifecycle
-             - register 2 runtime sliders per output: mapped value 0-100% + raw PWM duty cycle
-             - settings include pin, frequency, channel (optional, auto-allocated if unset), resolution (bits)
-             - on startup on/off, and on/off as runtime control over the slider (can use existing checkbox control)
-             - Range/precision: configurable raw range (board Vref, calibration), output min/max clamp
-             - Extended-range semantics: allow custom raw range, or higher PWM resolution, or "engineering units" mapping
-           - Output smoothing/ramp: slew-rate limiting, step size, min update period, optional easing
-           - Fail-safe: startup default, watchdog to reset outputs on comm loss, safe-state on reboot
-           - Multi-provider design: `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`, external DAC (I2C/SPI)
-           - Per-output enable flag + UI visibility toggles + runtime readback
-       - Capability differences (important)
-         - Not all boards support full ADC resolution, not all support PWM, and not all support both input and output.
-         - Design should be provider-based (like runtime providers): users add only what the board supports, e.g. `.addAnalogInputProvider(...)`, `.addPwmOutputProvider(...)`, `.addDacOutputProvider(...)`.
-       - Key length caution (ESP32 Preferences)
-         - ID-based key prefixing must respect the 15 character key-name limit (including category prefixing).
-         - IDs therefore must be short, and generated keys must be validated via `checkSettingsForErrors()`.
-
-       - [COMPLETED] Docs: IO inputs/outputs
-         - docs/IO-DigitalInputs.md
-         - docs/IO-DigitalOutputs.md
-         - docs/IO-AnalogInputs.md
+       - Demo: `examples/IO-Full-Demo`
+       - Docs:
+         - `docs/IO-DigitalInputs.md`
+         - `docs/IO-DigitalOutputs.md`
+         - `docs/IO-AnalogInputs.md`
+         - `docs/IO-AnalogOutputs.md`
     2) [TODO] Remove Settings List view; keep Tabs only.
     3) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
@@ -101,7 +68,7 @@
   - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
 - **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
 - **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
-- consolidate the Version-History before v3.0.0 into less detailed summary
+- [COMPLETED] consolidate the Version-History before v3.0.0 into less detailed summary
 - **[FEATURE]** v3 follow-ups
   - Extract modules that can be imported separately:
     - Logger: split into 4 extras (serial, MQTT, display, sdcard) (also use more, then one logger at once?) (eg. log->Printf([Serial,Display,SDCard,GUI],Module, "Check and start BME280!").Debug();) - so i can use multiple loggers at once, but with diffrent loglevels (eg. log->Printf([Serial,SDCard,GUI],Module, "Check and start BME280!").Debug();log->Printf([Serial,SDCard],Module,"Temperature: %2.1lf °C", temperature).Debug(); ) - eg. module is an String local, or global defined, like "[MAIN]", "[BME280]", "[MQTT]", etc. | Serial,Display,SDCard,GUI are defines or enums for the different loggers depends on how we implement it.
@@ -111,6 +78,14 @@
     - MQTT manager (got it from solarinverter project = latest version)
 
 ### Low Priority Bugs/Features (Prio 10)
+
+- **[FEATURE]** IOManager follow-ups (after DAC)
+  - PWM/LEDC backend (channel allocation, frequency, resolution, attach/detach lifecycle)
+  - Output smoothing/ramp (slew-rate limiting)
+  - Fail-safe defaults + safe-state on reboot/comm loss
+  - Stable persistence: switch from slot-based keys to ID-based keys (requires migration/versioning)
+  - Provider/backends: DAC + PWM + external DAC (I2C/SPI)
+  - Per-output enable flag + UI visibility toggles + runtime readback
 
 - **[FEATURE]** Card layout/grid improvement
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
@@ -165,6 +140,9 @@
 - **[COMPLETED][TESTED]** IOManager Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
 - **[COMPLETED][TESTED]** IOManager Digital inputs: non-blocking events (press/release/click/double/long)
 - **[COMPLETED][TESTED]** IOManager Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
+
+- **[COMPLETED][TESTED]** IOManager Digital outputs: GPIO + polarity + runtime controls (checkbox/state/momentary)
+- **[COMPLETED][TESTED]** IOManager Analog outputs (DAC): runtime slider + value readouts (scaled/DAC/volts)
 
 - **[COMPLETED][TESTED]** IOManager Analog inputs: raw/scaled mapping + deadband/minEvent + runtime multi-card registration
 - **[COMPLETED][TESTED]** IOManager Analog alarms: dynamic min/max thresholds via settings + separate min/max callbacks + runtime flags (`<id>_alarm_min/_alarm_max`)

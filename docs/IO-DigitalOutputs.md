@@ -7,10 +7,14 @@ This document describes how **digital outputs** work in `cm::IOManager`.
 `IOManager` digital outputs are settings-driven and provide:
 
 - GPIO configuration via Settings (pin, polarity, enabled)
+- GPIO configuration via Settings (pin, polarity)
 - A consistent API to set and read output state
 - Optional runtime controls (checkbox/state button/momentary button)
 
-For analog channels (ADC), see `docs/IO-AnalogInputs.md`.
+For analog channels, see:
+
+- `docs/IO-AnalogInputs.md`
+- `docs/IO-AnalogOutputs.md`
 
 ## Creating an Output
 
@@ -33,7 +37,8 @@ Each output has settings for:
 - `GPIO` (`P`): which GPIO pin to use
 - `Active LOW` (`L`): logic inversion
 
-Outputs also have an enable concept (`defaultEnabled`), which is applied before first preferences load.
+Outputs also have an enable concept (`defaultEnabled`), which is applied before the first preferences load.
+Note: currently the enable flag is not persisted as a setting (defaults only).
 
 ### Key format (ESP32 NVS safe)
 
@@ -108,3 +113,12 @@ ioManager.addIOtoGUI(
 - Inputs and outputs can share the same runtime group (`"inputs"`, `"controls"`, etc.).
 - Use short IDs and keep the number of IO items stable to avoid slot key drift.
 - If you need stable persisted mapping independent of add-order, the next step is to switch from slot keys to ID-based keys (requires migration strategy).
+
+## Lifecycle
+
+Typical sketch order:
+
+1. `addDigitalOutput(...)` / `addIOtoGUI(...)` (settings + optional runtime control)
+2. `ConfigManager.loadAll()` (loads persisted pins/polarity)
+3. `ioManager.begin()` (applies `pinMode(...)` and initializes states)
+4. In `loop()`: `ioManager.update()` continuously applies desired output states

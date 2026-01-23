@@ -1,110 +1,118 @@
-# IO Analog Outputs (DAC)
+# IO Analog Outputs (IOManager)
 
-This document describes the **IOManager analog output** feature.
+This document describes how **analog outputs** work in `cm::IOManager`.
 
 ## Overview
 
-- Analog outputs in this project are **DAC-based** (initial implementation).
-- On ESP32 (WROOM/WROVER family), there are only **two hardware DAC channels**:
-  - **GPIO25 = DAC1**
-  - **GPIO26 = DAC2**
-- Because there are only two DAC pins, you can only have **two independent physical analog outputs** at a time.
+`IOManager` analog outputs are settings-driven and provide:
 
-## Hardware Constraints (ESP32)
+- DAC pin configuration via Settings (GPIO)
+- Optional value mapping (engineering units -> volts -> DAC)
+- Runtime UI controls (slider)
+- Runtime UI readouts (scaled value, volts, DAC 0..255)
 
-- DAC resolution is **8-bit**.
-  - Raw range: **0..255**
-- The project maps DAC values to a “voltage-like” range:
-  - **0..255** is treated as **0..3.3 V** (approx.)
-  - Voltage step is approximately $3.3/255 \approx 0.01294$ V per step.
+Note: the initial implementation is **DAC-only**. PWM/LEDC is a planned follow-up.
 
-Important behavior:
+## Creating an Analog Output
 
-- If two IOManager analog outputs are configured to the **same GPIO (25 or 26)**, then:
-  - They will **overwrite each other**.
-  - The physical output voltage will always match the **last value written**.
+Example (scaled 0..100% mapped to 0..3.3V):
 
-## IOManager API
+```cpp
+ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
+    .id = "dac1",
+    .name = "DAC 1",
+    .defaultPin = 25,
+    .defaultEnabled = true,
+    .valueMin = 0.0f,
+    .valueMax = 100.0f,
+    .reverse = false,
+});
+```
 
-### Register an analog output
+## Settings (GPIO)
 
-- Register one output item:
-  - `addAnalogOutput({ .id, .name, .defaultPin, .valueMin, .valueMax, .reverse })`
+Analog outputs use short, slot-based keys (ESP32 Preferences safe).
 
-Notes:
+### Key format (ESP32 NVS safe)
 
-- `defaultPin` should be **25 or 26** (ESP32 DAC pins).
-- `valueMin`/`valueMax` define the **engineering unit range** for `setValue()`/`getValue()`.
-- `reverse=true` inverts the mapping.
+To keep keys short (ESP32 Preferences limit), IOManager uses **slot-based keys**:
 
-### Set/Get in different representations
+- Analog outputs: `AO%02uX` (e.g. `AO00P`)
+
+Suffix meanings for analog outputs:
+
+- `P` = pin
+
+Important: slot-based keys depend on the order of `addAnalogOutput(...)` calls.
+If you reorder outputs in code, previously stored pins may appear to "move" to another output.
+
+## Set/Get in different representations
 
 IOManager exposes three representations:
 
 - Scaled engineering value:
   - `setValue(id, value)` / `getValue(id)`
-- Raw volts-like value:
+  - Range: `valueMin..valueMax`
+- Volts-like value:
   - `setRawValue(id, volts)` / `getRawValue(id)`
-  - Range is expected to be **0..3.3**
+  - Range: `0..3.3`
 - Raw DAC value:
   - `setDACValue(id, dac)` / `getDACValue(id)`
-  - Range is **0..255**
+  - Range: `0..255`
 
-## GUI Helpers (recommended naming)
+## Runtime controls and readouts (UI)
 
-IOManager provides explicit helper methods for analog outputs:
+Slider (writes scaled value via `setValue/getValue`):
 
-- Slider (writes scaled value):
-  - `addAnalogOutputSliderToGUI(...)`
-- Read-only value display (scaled value + unit):
-  - `addAnalogOutputValueToGUI(...)`
-- Read-only value display (raw DAC 0..255):
-  - `addAnalogOutputValueRawToGUI(...)`
-- Read-only value display (volts):
-  - `addAnalogOutputValueVoltToGUI(...)`
+```cpp
+ioManager.addAnalogOutputSliderToGUI(
+    "dac1",
+    nullptr,
+    10,
+    0.0f,
+    100.0f,
+    1.0f,
+    0,
+    "DAC 1",
+    "controls",
+    "%"
+);
+```
 
-These helpers are designed to mirror the naming style of analog input helpers (e.g. `addAnalogInputToGUI`).
+Read-only value displays:
 
-## Demo Notes (examples/IO-Full-Demo)
+```cpp
+ioManager.addAnalogOutputValueToGUI("dac1", nullptr, 11, "DAC 1", "controls", "%", 0);
+ioManager.addAnalogOutputValueVoltToGUI("dac1", nullptr, 12, "DAC 1 (V)", "controls", 3);
+ioManager.addAnalogOutputValueRawToGUI("dac1", nullptr, 13, "DAC 1 (0..255)", "controls");
+```
 
-The IO-Full-Demo example demonstrates analog outputs.
+## Hardware constraints (ESP32)
 
-Key points:
+- On ESP32 (WROOM/WROVER family), there are only **two hardware DAC channels**:
+  - **GPIO25 = DAC1**
+  - **GPIO26 = DAC2**
+- DAC resolution is **8-bit**:
+  - Raw range: **0..255**
+  - Voltage step is approximately $3.3/255 \approx 0.01294$ V per step
 
-- The demo shows sliders plus additional readouts (scaled value, DAC value, volts).
-- The demo intentionally keeps the number of active analog outputs aligned with the **two physical DAC pins**.
-  - Additional mapping modes can be enabled, but must not share pins unless you explicitly accept overwrites.
+Important behavior:
 
-## Troubleshooting
+- If two IOManager analog outputs are configured to the **same GPIO (25 or 26)**, they will overwrite each other.
+  - The physical output voltage will always match the **last value written**.
 
-### Slider value “jumps back” in UI
+## Lifecycle
 
-Symptoms:
+Typical sketch order:
 
-- You move a slider, hardware output changes, but UI snaps back to a previous/default value.
-
-Typical cause:
-
-- The runtime group that contains the slider does not exist in `runtime.json` (no provider), so the frontend can’t read back current state.
-
-Fix:
-
-- Ensure runtime values include interactive controls for groups even without explicit providers.
-
-### Output voltage does not match expectation
-
-Checklist:
-
-- Verify which physical DAC pin is used (25 vs 26).
-- Ensure you are not writing multiple outputs to the same pin.
-- Compare readouts:
-  - scaled value
-  - DAC 0..255
-  - volts
+1. `addAnalogOutput(...)` / `addAnalogOutputSliderToGUI(...)` / optional value readouts
+2. `ConfigManager.loadAll()` (loads persisted pin)
+3. `ioManager.begin()`
+4. In `loop()`: `ioManager.update()` continuously applies desired output values
 
 ## Recommendations
 
 - Use **at most 2 physical DAC outputs** on ESP32.
 - If you need more than 2 analog outputs:
-  - Use PWM/LEDC + filtering (RC) (future extension)
-  - Use an external DAC via I2C/SPI (future extension)
+  - Use PWM/LEDC + filtering (RC) (planned follow-up)
+  - Use an external DAC via I2C/SPI (planned follow-up)

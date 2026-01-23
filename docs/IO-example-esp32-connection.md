@@ -1,4 +1,13 @@
- ESP32-WROOM-32 – Pin Usage Overview (Project Specific)
+# IO Example ESP32 Connection (ESP32-WROOM-32)
+
+This document is a **project-specific** GPIO reference for an ESP32-WROOM-32 board.
+
+## Overview
+
+- Helps picking safe GPIOs for digital inputs/outputs, ADC and DAC
+- Highlights ESP32 constraints (ADC2 with WiFi, BOOT strap pins, RO-only pins)
+
+## Board info
 
 Board:
 - Module: ESP32-WROOM-32
@@ -9,9 +18,13 @@ Board:
 - On-board LED: GPIO2
 - Power LED: fixed (no GPIO)
 
+## Orientation
+
 Orientation:
 - Antenna: TOP
 - USB connector: BOTTOM
+
+## Legend
 
 Legend:
 - [x] = used
@@ -20,6 +33,8 @@ Legend:
 - (DI/DO/ADC1/ADC2/DAC1/DAC2/PWM) = capabilities
 - {…} = constraints / warnings
 - (RO) = read-only input (no output, no pullups)
+
+## Pin map (ASCII)
 
 ```text
 
@@ -61,10 +76,7 @@ Legend:
 
 
 ```
-
-
-
-## Pin Capability Table
+## Pin capability table
 
 | GPIO | [x] | Current Use            | Capabilities                    | Constraints |
 |-----:|:--:|------------------------|---------------------------------|-------------|
@@ -92,9 +104,9 @@ Legend:
 | 15   | x  | Factory Reset Button   | (DI/DO)                         | BOOT: must be LOW |
 | 2    | x  | On-board LED           | (DO)                            | affects boot visuals |
 
---------------------------------------------------------------------------
+---
 
-## Pin Swap Hints
+## Pin swap hints
 
 - Prefer **ADC1 pins (GPIO32–39)** for analog inputs when WiFi or BT is enabled.
 - **ADC2 pins cannot be reliably used for analogRead while WiFi/BT is active**.
@@ -102,4 +114,4 @@ Legend:
 - Use **PWM + RC filter** on free GPIOs if more “analog outputs” are required instead of DAC.
 - GPIO34–39 are **(RO)**: input only, no output, no internal pullups.
 
---------------------------------------------------------------------------
+---
