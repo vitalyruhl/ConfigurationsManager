@@ -134,7 +134,7 @@ Each example is a standalone PlatformIO project:
 
 - [examples/minimal](examples/minimal) - minimal demo
 - [examples/BME280-Temp-Sensor](examples/BME280-Temp-Sensor) - BME280 temp sensor
-- [examples/BME280-Full-GUI-Demo](examples/BME280-Full-GUI-Demo) - full feature demo
+- [examples/Full-GUI-Demo](examples/Full-GUI-Demo) - full GUI demo
 - [examples/IO-Full-Demo](examples/IO-Full-Demo) - IOManager demo (incl. core settings templates)
 - [examples/ChipInfo](examples/ChipInfo) - device/chip information demo
 - [examples/SolarInverterLimiter](examples/SolarInverterLimiter) - real-world larger project using this library

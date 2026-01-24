@@ -73,7 +73,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Mock implementations for testing
 
 - ESP32 / PlatformIO Project Guidelines:
-  - Build target rule: For testing/flashing, use the example `examples/BME280-Full-GUI-Demo` by default unless the user explicitly requests another target. For publishing/release verification, build the minimal/root project first.
+  - Build target rule: For testing/flashing, use the example `examples/Full-GUI-Demo` by default unless the user explicitly requests another target. For publishing/release verification, build the minimal/root project first.
   - Build validation: Always run the relevant PlatformIO build for at least one ESP32 environment from platformio.ini (e.g. "pio run -e <env>"). If tests are affected, also run "pio test -e <env>".
   - Memory/flash safety: After changes to WebUI/HTML content or large strings, verify binary size and memory behavior (heap/PSRAM) to avoid runtime instability on ESP32.
   - Settings migration: Any change to the settings structure must be backwards-compatible (defensive defaults) and should include a migration/versioning strategy to prevent OTA updates from breaking existing devices.
