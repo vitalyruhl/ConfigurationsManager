@@ -9,7 +9,6 @@
 
   - `order` / sorting: metadata for live cards and settings categories (stable ordering).
   - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
-  - [COMPLETED] Runtime: add `MomentaryButton` (press-and-hold) control type (no label heuristics).
 - Architecture / API
   - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
   - Settings schema versioning/migration (when new fields/structure are introduced).
@@ -22,19 +21,9 @@
 - **[IDK]** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
 - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
   - Suggested implementation order (one side-branch per item)
-    - Test target: use `Full-IO-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.
-    1) **COMPLETED / TESTED** IOManager module (digital IO + analog IO)
-       - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
-       - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
-         - GUI label must be `"I/O"` (display only); do not bake `"I/O"` into the persisted category token.
-      - Demo: `examples/Full-IO-Demo`
-       - Docs:
-         - `docs/IO-DigitalInputs.md`
-         - `docs/IO-DigitalOutputs.md`
-         - `docs/IO-AnalogInputs.md`
-         - `docs/IO-AnalogOutputs.md`
-    2) [TODO] Remove Settings List view; keep Tabs only.
-    3) MQTT manager module (+ baseline settings + ordering/injection)
+    - Test target: use `Full-IO-Demo` for steps 1–3; switch to `SolarInverterLimiter` at step 4.
+    1) [TODO] Remove Settings List view; keep Tabs only.
+    2) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.
        - Core settings auto-load (when the module is used)
@@ -47,17 +36,17 @@
        - Publish items ordering / injection
          - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
          - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
-    4) Logging (lightweight core + optional advanced module)
+    3) Logging (lightweight core + optional advanced module)
        - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
        - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
          - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
          - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
          - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
-    5) Refactor `SolarInverterLimiter` example to consume modules
+    4) Refactor `SolarInverterLimiter` example to consume modules
        - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
-    6) Documentation for all modules
+    5) Documentation for all modules
        - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
-    7) Update other examples to use the new core settings/modules where applicable
+    6) Update other examples to use the new core settings/modules where applicable
 
 ### Medium Priority Bugs/Features (Prio 5)
 
@@ -66,9 +55,15 @@
 - **[FEATURE]** add sdcard support for logging data to csv files and logger extension to log to sdcard
 - **[FEATURE]** Add separated Alarm handling for Analog-Inputs and shorthands for creation of Alarms
   - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
+- **[FEATURE]** IOManager follow-ups (after DAC)
+  - PWM/LEDC backend (channel allocation, frequency, resolution, attach/detach lifecycle)
+  - Output smoothing/ramp (slew-rate limiting)
+  - Fail-safe defaults + safe-state on reboot/comm loss
+  - Stable persistence: switch from slot-based keys to ID-based keys (requires migration/versioning)
+  - Provider/backends: DAC + PWM + external DAC (I2C/SPI)
+  - Per-output enable flag + UI visibility toggles + runtime readback
 - **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
 - **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
-- [COMPLETED] consolidate the Version-History before v3.0.0 into less detailed summary
 - **[FEATURE]** v3 follow-ups
   - Extract modules that can be imported separately:
     - Logger: split into 4 extras (serial, MQTT, display, sdcard) (also use more, then one logger at once?) (eg. log->Printf([Serial,Display,SDCard,GUI],Module, "Check and start BME280!").Debug();) - so i can use multiple loggers at once, but with diffrent loglevels (eg. log->Printf([Serial,SDCard,GUI],Module, "Check and start BME280!").Debug();log->Printf([Serial,SDCard],Module,"Temperature: %2.1lf °C", temperature).Debug(); ) - eg. module is an String local, or global defined, like "[MAIN]", "[BME280]", "[MQTT]", etc. | Serial,Display,SDCard,GUI are defines or enums for the different loggers depends on how we implement it.
@@ -79,20 +74,10 @@
 
 ### Low Priority Bugs/Features (Prio 10)
 
-- **[FEATURE]** IOManager follow-ups (after DAC)
-  - PWM/LEDC backend (channel allocation, frequency, resolution, attach/detach lifecycle)
-  - Output smoothing/ramp (slew-rate limiting)
-  - Fail-safe defaults + safe-state on reboot/comm loss
-  - Stable persistence: switch from slot-based keys to ID-based keys (requires migration/versioning)
-  - Provider/backends: DAC + PWM + external DAC (I2C/SPI)
-  - Per-output enable flag + UI visibility toggles + runtime readback
-
 - **[FEATURE]** Card layout/grid improvement
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
 - **[FEATURE]** Automated component testing
 - **[FEATURE]** add templates for common Settings, like
-  - [COMPLETED] WiFi,
-  - [COMPLETED] System,
   - [Todo] non blocking blinking LED, etc.
 - **[FEATURE]** Failover Wifi native support
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
@@ -105,6 +90,19 @@
 
 
 ### Done / Resolved (but not tested yet)
+
+- [COMPLETED] Runtime: add `MomentaryButton` (press-and-hold) control type (no label heuristics).
+- [COMPLETED] consolidate the Version-History before v3.0.0 into less detailed summary
+- [COMPLETED] WiFi
+- [COMPLETED] System
+- **COMPLETED / Bug** Settings password prompt when password is unset
+- **COMPLETED / Bug** Browser tab title is configurable
+  - H1 uses `.setAppName(APP_NAME)`
+  - Browser tab uses `.setAppTitle("...")`
+  - If `.setVersion(VERSION)` is set: it is appended to both
+- **COMPLETED / Bug/Design** "WifiConnected" in system card --> "Wifi Connected", and position at first place
+- **COMPLETED / Bug/Design** Live-view cards are not sorted by `order`
+- Add divider (hr-like) in full demo.
 
 - **[Tooling]** WebUI debug logging toggle (v3.3.x)
   - Add a build-time flag (e.g. `VITE_CM_DEBUG`) and route noisy logs through a `dbg(...)` helper.
@@ -120,30 +118,3 @@
 
 ### Done / Resolved
 
-- **COMPLETED / Bug** Settings password prompt when password is unset
-- **COMPLETED / Bug** Browser tab title is configurable
-  - H1 uses `.setAppName(APP_NAME)`
-  - Browser tab uses `.setAppTitle("...")`
-  - If `.setVersion(VERSION)` is set: it is appended to both
-- **COMPLETED / Bug/Design** "WifiConnected" in system card --> "Wifi Connected", and position at first place
-- **COMPLETED / Bug/Design** Live-view cards are not sorted by `order`
-- Add divider (hr-like) in full demo.
-- **COMPLETED / TESTED** Core settings templates / injection (WiFi/System/Buttons + optional NTP)
-  - Implemented core settings templates (WiFi/System/Buttons + optional NTP) and a dedicated core demo example.
-  - Validated via PlatformIO build and flashed to ESP32.
-  - Documented category merge/injection behavior in `docs/SETTINGS.md` and added `cm::CoreCategories::*` constants to avoid typos.
-
-- **COMPLETED / TESTED** Custom runtime provider named `system` overrides built-in System provider
-  - Fixed by merging runtime providers that share the same group name ("system" etc.) instead of overwriting.
-  - Validated by injecting `system.testValue` into the System card (with a divider).
-
-- **COMPLETED / TESTED** IOManager Digital inputs: GPIO + polarity + pull-up/pull-down + runtime bool-dot
-- **COMPLETED / TESTED** IOManager Digital inputs: non-blocking events (press/release/click/double/long)
-- **COMPLETED / TESTED** IOManager Digital inputs: startup-only long press (`onLongPressOnStartup`, 10s window)
-
-- **COMPLETED / TESTED** IOManager Digital outputs: GPIO + polarity + runtime controls (checkbox/state/momentary)
-- **COMPLETED / TESTED** IOManager Analog outputs (DAC): runtime slider + value readouts (scaled/DAC/volts)
-
-- **COMPLETED / TESTED** IOManager Analog inputs: raw/scaled mapping + deadband/minEvent + runtime multi-card registration
-- **COMPLETED / TESTED** IOManager Analog alarms: dynamic min/max thresholds via settings + separate min/max callbacks + runtime flags (`<id>_alarm_min/_alarm_max`)
-- **COMPLETED / TESTED** WebUI Runtime: numeric alarm highlighting prefers runtime alarm flags when present; WS frames validated + polling fallback prevents stuck UI
