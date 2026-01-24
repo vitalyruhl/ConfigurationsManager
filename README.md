@@ -133,7 +133,7 @@ Details: see `docs/SECURITY.md`.
 Each example is a standalone PlatformIO project:
 
 - [examples/minimal](examples/minimal) - minimal demo
-- [examples/bme280](examples/bme280) - BME280 (light)
+- [examples/BME280-Temp-Sensor](examples/BME280-Temp-Sensor) - BME280 temp sensor
 - [examples/BME280-Full-GUI-Demo](examples/BME280-Full-GUI-Demo) - full feature demo
 - [examples/IO-Full-Demo](examples/IO-Full-Demo) - IOManager demo (incl. core settings templates)
 - [examples/ChipInfo](examples/ChipInfo) - device/chip information demo
@@ -142,13 +142,13 @@ Each example is a standalone PlatformIO project:
 Build an example:
 
 ```bash
-pio run -d examples/bme280 -e usb
+pio run -d examples/BME280-Temp-Sensor -e usb
 ```
 
 Upload (USB example):
 
 ```bash
-pio run -d examples/bme280 -e usb -t upload --upload-port COM5
+pio run -d examples/BME280-Temp-Sensor -e usb -t upload --upload-port COM5
 ```
 
 If you use a fork / local clone of this repo, you can build and upload any example the same way (the `-d examples/<name>` flag points PlatformIO to the example project directory).

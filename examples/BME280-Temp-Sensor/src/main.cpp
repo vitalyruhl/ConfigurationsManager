@@ -6,14 +6,19 @@
 
 #include "ConfigManager.h"
 
-#include "secret/wifiSecret.h"
+#include "core/CoreSettings.h"
+#include "core/CoreWiFiServices.h"
 
 #ifndef BME280_ADDRESS
 #define BME280_ADDRESS 0x76
 #endif
 
 #define VERSION CONFIGMANAGER_VERSION
-#define APP_NAME "CM-BME280-Demo"
+#define APP_NAME "CM-BME280-Temp-Sensor"
+
+// Minimal skeleton: do not hardcode WiFi credentials in code.
+// Leave SSID empty to start in AP mode and configure via Web UI.
+static const char SETTINGS_PASSWORD[] = "cm";
 
 // I2C pins for the BME280 sensor
 #define I2C_SDA 21
@@ -24,6 +29,13 @@ static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
 
 extern ConfigManagerClass ConfigManager;
 
+// Built-in core settings templates.
+static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
+static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
+static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
+static cm::CoreWiFiServices wifiServices;
+
 static BME280_I2C bme280;
 static Ticker temperatureTicker;
 
@@ -32,87 +44,12 @@ static float dewPoint = 0.0f;
 static float humidity = 0.0f;
 static float pressure = 0.0f;
 
-struct SystemSettings
-{
-    Config<bool> allowOTA;
-    Config<String> otaPassword;
-    Config<String> version;
-
-    SystemSettings()
-        : allowOTA(ConfigOptions<bool>{
-              .key = "OTAEn",
-              .name = "Allow OTA Updates",
-              .category = "System",
-              .defaultValue = true,
-              .callback = [](bool newValue) {
-                  Serial.printf("[MAIN] OTA setting changed to: %s\n", newValue ? "enabled" : "disabled");
-                  ConfigManager.getOTAManager().enable(newValue);
-              },
-          }),
-          otaPassword(ConfigOptions<String>{
-              .key = "OTAPass",
-              .name = "OTA Password",
-              .category = "System",
-              .defaultValue = String(OTA_PASSWORD),
-              .showInWeb = true,
-              .isPassword = true,
-          }),
-          version(ConfigOptions<String>{
-              .key = "P_Version",
-              .name = "Program Version",
-              .category = "System",
-              .defaultValue = String(VERSION),
-          })
-    {
-    }
-
-    void init()
-    {
-        ConfigManager.addSetting(&allowOTA);
-        ConfigManager.addSetting(&otaPassword);
-        ConfigManager.addSetting(&version);
-    }
-};
-
-static SystemSettings systemSettings;
-
-struct WiFiSettings
-{
-    Config<String> wifiSsid;
-    Config<String> wifiPassword;
-    Config<bool> useDhcp;
-    Config<String> staticIp;
-    Config<String> gateway;
-    Config<String> subnet;
-    Config<String> dnsPrimary;
-    Config<String> dnsSecondary;
-
-    WiFiSettings()
-        : wifiSsid(ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = "WiFi", .defaultValue = "", .showInWeb = true, .sortOrder = 1}),
-          wifiPassword(ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = "WiFi", .defaultValue = "secretpass", .showInWeb = true, .isPassword = true, .sortOrder = 2}),
-          useDhcp(ConfigOptions<bool>{.key = "WiFiUseDHCP", .name = "Use DHCP", .category = "WiFi", .defaultValue = true, .showInWeb = true, .sortOrder = 3}),
-          staticIp(ConfigOptions<String>{.key = "WiFiStaticIP", .name = "Static IP", .category = "WiFi", .defaultValue = "192.168.0.100", .sortOrder = 4, .showIf = [this]() { return !useDhcp.get(); }}),
-          gateway(ConfigOptions<String>{.key = "WiFiGateway", .name = "Gateway", .category = "WiFi", .defaultValue = "192.168.0.1", .sortOrder = 5, .showIf = [this]() { return !useDhcp.get(); }}),
-          subnet(ConfigOptions<String>{.key = "WiFiSubnet", .name = "Subnet Mask", .category = "WiFi", .defaultValue = "255.255.255.0", .sortOrder = 6, .showIf = [this]() { return !useDhcp.get(); }}),
-          dnsPrimary(ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = "WiFi", .defaultValue = "192.168.0.1", .sortOrder = 7, .showIf = [this]() { return !useDhcp.get(); }}),
-          dnsSecondary(ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = "WiFi", .defaultValue = "8.8.8.8", .sortOrder = 8, .showIf = [this]() { return !useDhcp.get(); }})
-    {
-    }
-
-    void init()
-    {
-        ConfigManager.addSetting(&wifiSsid);
-        ConfigManager.addSetting(&wifiPassword);
-        ConfigManager.addSetting(&useDhcp);
-        ConfigManager.addSetting(&staticIp);
-        ConfigManager.addSetting(&gateway);
-        ConfigManager.addSetting(&subnet);
-        ConfigManager.addSetting(&dnsPrimary);
-        ConfigManager.addSetting(&dnsSecondary);
-    }
-};
-
-static WiFiSettings wifiSettings;
+// Global WiFi event hooks used by ConfigManager.
+// These are invoked internally by ConfigManager's WiFi manager on state transitions.
+// If you don't provide them, the library provides weak no-op defaults (see src/default_hooks.cpp).
+void onWiFiConnected();
+void onWiFiDisconnected();
+void onWiFiAPMode();
 
 struct TempSettings
 {
@@ -184,48 +121,6 @@ static void setupRuntimeUI()
     pressureMeta.precision = 1;
     pressureMeta.order = 13;
     CRM().addRuntimeMeta(pressureMeta);
-}
-
-static bool startWebServer()
-{
-    Serial.println("[MAIN] Starting web server...");
-
-    if (WiFi.getMode() == WIFI_AP)
-    {
-        return false;
-    }
-
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        if (wifiSettings.useDhcp.get())
-        {
-            Serial.println("[MAIN] DHCP enabled");
-            ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-        }
-        else
-        {
-            Serial.println("[MAIN] DHCP disabled - using static IP");
-            IPAddress staticIP, gateway, subnet, dns1, dns2;
-            staticIP.fromString(wifiSettings.staticIp.get());
-            gateway.fromString(wifiSettings.gateway.get());
-            subnet.fromString(wifiSettings.subnet.get());
-
-            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
-            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
-            if (!dnsPrimaryStr.isEmpty())
-            {
-                dns1.fromString(dnsPrimaryStr);
-            }
-            if (!dnsSecondaryStr.isEmpty())
-            {
-                dns2.fromString(dnsSecondaryStr);
-            }
-
-            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
-        }
-    }
-
-    return true;
 }
 
 static void readBme280()
@@ -307,27 +202,30 @@ void setup()
     ConfigManager.setAppTitle(APP_NAME);
     ConfigManager.setVersion(VERSION);
 
-    systemSettings.init();
-    wifiSettings.init();
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
+    ConfigManager.enableBuiltinSystemProvider();
+
+    coreSettings.attachWiFi(ConfigManager);
+    coreSettings.attachSystem(ConfigManager);
+    coreSettings.attachNtp(ConfigManager);
+
+    // Keep OTA enable flag reactive (optional), even though OTA init happens in wifiServices.onConnected().
+    systemSettings.allowOTA.setCallback([](bool enabled) {
+        Serial.printf("[MAIN] OTA setting changed to: %s\n", enabled ? "enabled" : "disabled");
+        ConfigManager.getOTAManager().enable(enabled);
+    });
+
     tempSettings.init();
 
     ConfigManager.loadAll();
 
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
-        Serial.println("-------------------------------------------------------------");
-        Serial.println("[SETUP] SSID is empty, setting default values");
-        Serial.println("-------------------------------------------------------------");
+    // Ensure OTAManager state matches the persisted setting.
+    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-        wifiSettings.staticIp.set(MY_WIFI_IP);
-        wifiSettings.useDhcp.set(false);
-        ConfigManager.saveAll();
-        delay(1000);
-    }
+    // Settings-driven WiFi startup (DHCP/static/AP fallback).
+    ConfigManager.startWebServer();
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
 
-    startWebServer();
     setupRuntimeUI();
 
     ConfigManager.enableWebSocketPush();
@@ -350,6 +248,24 @@ void setup()
     }
 
     Serial.println("[MAIN] Setup completed successfully. Starting main loop...");
+}
+
+void onWiFiConnected()
+{
+    wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
+    Serial.printf("[INFO] Station Mode: http://%s\n", WiFi.localIP().toString().c_str());
+}
+
+void onWiFiDisconnected()
+{
+    wifiServices.onDisconnected();
+    Serial.println("[ERROR] WiFi disconnected");
+}
+
+void onWiFiAPMode()
+{
+    wifiServices.onAPMode();
+    Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
 }
 
 void loop()
