@@ -24,7 +24,11 @@
 // ---------------------------------------------------------------------------------------------------------------------
 
 // Demo defaults (do not store real credentials in repo)
-static const char SETTINGS_PASSWORD[] = ""; // emty settings deaktivates password protection for settings-tab
+// NOTE: Empty string disables password protection for the Settings tab.
+static const char SETTINGS_PASSWORD[] = "";
+
+// NOTE: OTA password is currently taken from the System settings bundle (systemSettings.otaPassword).
+// This constant is not used unless you explicitly wire it into setupOTA().
 static const char OTA_PASSWORD[] = "ota";
 
 #include <WiFi.h>
@@ -81,6 +85,10 @@ void setFanState(bool on);
 void setHoldButtonState(bool on);
 void setupGUI();
 bool SetupStartWebServer();
+
+// Global WiFi event hooks used by ConfigManager.
+// These are invoked internally by ConfigManager's WiFi manager on state transitions.
+// If you don't provide them, the library provides weak no-op defaults (see src/default_hooks.cpp).
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
@@ -326,58 +334,9 @@ static void createAnalogInputs()
     // Note: These pins are input-only, which is fine for analog sensors.
 
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
-        .id = "ldr_n",
-        .name = "LDR North",
-        .defaultPin = 34,
-        .defaultRawMin = 0,
-        .defaultRawMax = 4095,
-        .defaultOutMin = 0.0f,
-        .defaultOutMax = 100.0f,
-        .defaultUnit = "%",
-        .defaultPrecision = 1,
-    });
-    ioManager.addAnalogInputToGUIWithAlarm(
-        "ldr_n",
-        nullptr,
-        13,
-        NAN,
-        90.0f,
-        cm::IOManager::AnalogAlarmCallbacks{
-            .onStateChanged = [](bool inAlarm) {
-                // The raw ADC signal can be noisy and may chatter around the threshold.
-                // Throttle logging to keep Serial output readable.
-                static uint32_t lastLogMs = 0;
-                const uint32_t now = millis();
-                if (static_cast<int32_t>(now - lastLogMs) < 3000) {
-                    return;
-                }
-                lastLogMs = now;
-                Serial.printf("[ALARM][ldr_n] state=%s\n", inAlarm ? "ON" : "OFF");
-            },
-        },
-        "LDR North",
-        "sensors"
-    );
-    ioManager.addAnalogInputToGUI("ldr_n", nullptr, 13, "LDR North", "raw-values", true);
-
-    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
-        .id = "ldr_e",
-        .name = "LDR East",
-        .defaultPin = 35,
-        .defaultRawMin = 0,
-        .defaultRawMax = 4095,
-        .defaultOutMin = 0.0f,
-        .defaultOutMax = 100.0f,
-        .defaultUnit = "%",
-        .defaultPrecision = 1,
-    });
-    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "sensors");
-    ioManager.addAnalogInputToGUI("ldr_e", nullptr, 15, "LDR East", "raw-values", true);
-
-    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_s",
-        .name = "LDR South",
-        .defaultPin = 36,
+        .name = "LDR EN",
+        .defaultPin = 36,//en
         .defaultRawMin = 0,
         .defaultRawMax = 4095,
         .defaultOutMin = 0.0f,
@@ -388,7 +347,7 @@ static void createAnalogInputs()
     ioManager.addAnalogInputToGUIWithAlarm(
         "ldr_s",
         nullptr,
-        17,
+        10,
         30.0f,
         NAN,
         cm::IOManager::AnalogAlarmCallbacks{
@@ -399,15 +358,23 @@ static void createAnalogInputs()
                 Serial.println("[ALARM][ldr_s] exit");
             },
         },
-        "LDR South",
+        "LDR EN",
         "sensors"
     );
-    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 17, "LDR South", "raw-values", true);
+    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 11, "LDR EN RAW", "sensors", true);
+
+    RuntimeFieldMeta divider1;
+    divider1.group = "sensors";
+    divider1.key = "s_divider";
+    divider1.label = "s_divider";
+    divider1.isDivider = true;
+    divider1.order = 20;
+    CRM().addRuntimeMeta(divider1);
 
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_w",
-        .name = "LDR West",
-        .defaultPin = 39,
+        .name = "LDR VP",
+        .defaultPin = 39,//VP
         .defaultRawMin = 0,
         .defaultRawMax = 4095,
         .defaultOutMin = 0.0f,
@@ -415,12 +382,12 @@ static void createAnalogInputs()
         .defaultUnit = "%",
         .defaultPrecision = 1,
     });
-    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "sensors");
-    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 19, "LDR West", "raw-values", true);
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 21, "LDR VP", "sensors");
+    ioManager.addAnalogInputToGUI("ldr_w", nullptr, 22, "LDR VP RAW", "sensors", true);
     ioManager.addAnalogInputToGUIWithAlarm(
     "ldr_w",
     nullptr,
-    30,
+    23,
     30.0f,
     95.0f,
     cm::IOManager::AnalogAlarmCallbacks{
@@ -431,8 +398,8 @@ static void createAnalogInputs()
                 Serial.println("[ALARM][ldr_w] exit");
             },
         },
-        "LDR West",
-        "Min_Max Alarms"
+        "LDR VP",
+        "Min Max Alarms Extra Card"
     );
 }
 
@@ -455,6 +422,18 @@ static void createAnalogOutputs()
         .reverse = false,
     });
 
+
+    // 0..3.3V direct
+    // Note: DAC has only two pins. This uses GPIO25 by default so you can compare scaling modes.
+    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
+        .id = "ao_v",
+        .name = "AO 0..3.3V",
+        .defaultPin = 25,
+        .valueMin = 0.0f,
+        .valueMax = 3.3f,
+        .reverse = false,
+    });
+
     // -100..100 % -> 0..3.3V (0% is mid = ~1.65V)
     // Disabled by default to keep the demo deterministic with only 2 physical outputs.
     // If you want this mapping mode, enable it and ensure it does NOT share a pin with another analog output.
@@ -467,16 +446,6 @@ static void createAnalogOutputs()
     //     .reverse = false,
     // });
 
-    // 0..3.3V direct
-    // Note: DAC has only two pins. This uses GPIO25 by default so you can compare scaling modes.
-    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
-        .id = "ao_v",
-        .name = "AO 0..3.3V",
-        .defaultPin = 25,
-        .valueMin = 0.0f,
-        .valueMax = 3.3f,
-        .reverse = false,
-    });
 }
 
 static void registerAnalogOutputsGui()
@@ -485,7 +454,7 @@ static void registerAnalogOutputsGui()
     ioManager.addAnalogOutputSliderToGUI(
         "ao_pct",
         nullptr,
-        40,
+        41,
         0.0f,
         100.0f,
         1.0f,
@@ -499,28 +468,18 @@ static void registerAnalogOutputsGui()
     ioManager.addAnalogOutputValueRawToGUI("ao_pct", nullptr, 44, "AO 0..100% (DAC 0..255)", "analog-outputs");
     ioManager.addAnalogOutputValueVoltToGUI("ao_pct", nullptr, 45, "AO 0..100% (Volts)", "analog-outputs", 3);
 
-    // NOTE: ao_sym (-100..100%) is disabled by default (see createAnalogOutputs()).
-    // If you enable it, also enable the GUI block below and make sure it uses a free DAC pin.
-    // ioManager.addAnalogOutputSliderToGUI(
-    //     "ao_sym",
-    //     nullptr,
-    //     41,
-    //     -100.0f,
-    //     100.0f,
-    //     1.0f,
-    //     0,
-    //     "AO -100..100%",
-    //     "analog-outputs",
-    //     "%"
-    // );
-    // ioManager.addAnalogOutputValueToGUI("ao_sym", nullptr, 46, "AO -100..100% (Value)", "analog-outputs", "%", 1);
-    // ioManager.addAnalogOutputValueRawToGUI("ao_sym", nullptr, 47, "AO -100..100% (DAC 0..255)", "analog-outputs");
-    // ioManager.addAnalogOutputValueVoltToGUI("ao_sym", nullptr, 48, "AO -100..100% (Volts)", "analog-outputs", 3);
+    RuntimeFieldMeta divider2;
+    divider2.group = "analog-outputs";
+    divider2.key = "ao2_divider";
+    divider2.label = "Analog Output 2 divider";
+    divider2.isDivider = true;
+    divider2.order = 50;
+    CRM().addRuntimeMeta(divider2);
 
     ioManager.addAnalogOutputSliderToGUI(
         "ao_v",
         nullptr,
-        42,
+        52,
         0.0f,
         3.3f,
         0.05f,
@@ -530,9 +489,29 @@ static void registerAnalogOutputsGui()
         "V"
     );
 
-    ioManager.addAnalogOutputValueToGUI("ao_v", nullptr, 49, "AO 0..3.3V (Value)", "analog-outputs", "V", 2);
-    ioManager.addAnalogOutputValueRawToGUI("ao_v", nullptr, 50, "AO 0..3.3V (DAC 0..255)", "analog-outputs");
-    ioManager.addAnalogOutputValueVoltToGUI("ao_v", nullptr, 51, "AO 0..3.3V (Volts)", "analog-outputs", 3);
+    ioManager.addAnalogOutputValueToGUI("ao_v", nullptr, 53, "AO 0..3.3V (Value)", "analog-outputs", "V", 2);
+    ioManager.addAnalogOutputValueRawToGUI("ao_v", nullptr, 54, "AO 0..3.3V (DAC 0..255)", "analog-outputs");
+    ioManager.addAnalogOutputValueVoltToGUI("ao_v", nullptr, 55, "AO 0..3.3V (Volts)", "analog-outputs", 3);
+
+    // NOTE: ao_sym (-100..100%) is disabled by default (see createAnalogOutputs()).
+    // If you enable it, also enable the GUI block below and make sure it uses a free DAC pin.
+    // ioManager.addAnalogOutputSliderToGUI(
+    //     "ao_sym",
+    //     nullptr,
+    //     60,
+    //     -100.0f,
+    //     100.0f,
+    //     1.0f,
+    //     0,
+    //     "AO -100..100%",
+    //     "analog-outputs",
+    //     "%"
+    // );
+    // ioManager.addAnalogOutputValueToGUI("ao_sym", nullptr, 61, "AO -100..100% (Value)", "analog-outputs", "%", 1);
+    // ioManager.addAnalogOutputValueRawToGUI("ao_sym", nullptr, 62, "AO -100..100% (DAC 0..255)", "analog-outputs");
+    // ioManager.addAnalogOutputValueVoltToGUI("ao_sym", nullptr, 63, "AO -100..100% (Volts)", "analog-outputs", 3);
+
+
 }
 
 static void demoAnalogOutputApi()
@@ -741,37 +720,14 @@ bool SetupStartWebServer()
         return false; // Skip webserver setup in AP mode
     }
 
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        if (wifiSettings.useDhcp.get())
-        {
-            Serial.println("[MAIN] startWebServer: DHCP enabled");
-            ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
-        }
-        else
-        {
-            Serial.println("[MAIN] startWebServer: DHCP disabled - using static IP");
-            IPAddress staticIP, gateway, subnet, dns1, dns2;
-            staticIP.fromString(wifiSettings.staticIp.get());
-            gateway.fromString(wifiSettings.gateway.get());
-            subnet.fromString(wifiSettings.subnet.get());
-
-            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
-            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
-            if (!dnsPrimaryStr.isEmpty())
-            {
-                dns1.fromString(dnsPrimaryStr);
-            }
-            if (!dnsSecondaryStr.isEmpty())
-            {
-                dns2.fromString(dnsSecondaryStr);
-            }
-
-            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
-            ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
-        }
-    }
+    // Always initialize ConfigManager modules and WiFi callbacks.
+    // Even if WiFi.status() is already WL_CONNECTED (fast reconnect after reset), skipping startWebServer()
+    // would leave routes/OTA/runtime/callback wiring uninitialized.
+    //
+    // Standard behavior: ConfigManager reads the persisted WiFi settings (DHCP vs. static) and starts WiFi.
+    Serial.println("[MAIN] startWebServer: auto (WiFi settings)");
+    ConfigManager.startWebServer();
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
 
     return true; // Webserver setup completed
 }

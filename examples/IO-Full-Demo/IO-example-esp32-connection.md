@@ -44,9 +44,9 @@ Legend:
                                               | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
                                               | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
                                               | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-[LDR]          (DI/ADC1/RO) {RO}       GPIO36 | [x]                        [x] | GPIO23 (DO/PWM)        [Fan Relay]
+[LDR]          (DI/ADC1/RO) {RO}     PIO36/EN | [x]                        [x] | GPIO23 (DO/PWM)        [Fan Relay]
                                               |                                |
-[LDR]          (DI/ADC1/RO) {RO}       GPIO39 | [x]                        [x] | GPIO22 (DI/DO)         [I2C SCL]
+[LDR]          (DI/ADC1/RO) {RO}    GPIO39/VP | [x]                        [x] | GPIO22 (DI/DO)         [I2C SCL]
                                               |                                |
 [LDR]          (DI/ADC1/RO) {RO}       GPIO34 | [x]                        [ ] | GPIO1  (DO)            [free]
                                               |                                |

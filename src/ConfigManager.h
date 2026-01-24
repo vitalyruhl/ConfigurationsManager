@@ -995,6 +995,104 @@ public:
     }
     
     // WiFi management - NON-BLOCKING!
+    // Convenience overload: start WiFi using persisted/registered Core WiFi settings.
+    //
+    // Expected settings (category: "WiFi"):
+    // - WiFiSSID, WiFiPassword
+    // - WiFiUseDHCP
+    // - WiFiStaticIP, WiFiGateway, WiFiSubnet, WiFiDNS1, WiFiDNS2
+    //
+    // If these settings are not registered (or SSID is empty), this will fall back to AP mode.
+    void startWebServer()
+    {
+        auto getString = [this](const char *category, const char *key, const String &fallback) -> String
+        {
+            BaseSetting *s = findSetting(category, key);
+            if (!s)
+            {
+                return fallback;
+            }
+            if (s->getType() != SettingType::STRING && s->getType() != SettingType::PASSWORD)
+            {
+                return fallback;
+            }
+            return static_cast<Config<String> *>(s)->get();
+        };
+
+        auto getBool = [this](const char *category, const char *key, bool fallback) -> bool
+        {
+            BaseSetting *s = findSetting(category, key);
+            if (!s)
+            {
+                return fallback;
+            }
+            if (s->getType() != SettingType::BOOL)
+            {
+                return fallback;
+            }
+            return static_cast<Config<bool> *>(s)->get();
+        };
+
+        const String ssid = getString("WiFi", "WiFiSSID", "");
+        const String password = getString("WiFi", "WiFiPassword", "");
+        const bool useDhcp = getBool("WiFi", "WiFiUseDHCP", true);
+
+        if (ssid.length() == 0)
+        {
+            CM_LOG("[W] startWebServer(): WiFi SSID is empty or not registered -> starting AP mode");
+            startAccessPoint();
+            return;
+        }
+
+        if (useDhcp)
+        {
+            startWebServer(ssid, password);
+            return;
+        }
+
+        IPAddress staticIP;
+        IPAddress gateway;
+        IPAddress subnet;
+        IPAddress dns1;
+        IPAddress dns2;
+
+        const String staticIpStr = getString("WiFi", "WiFiStaticIP", "");
+        const String gatewayStr = getString("WiFi", "WiFiGateway", "");
+        const String subnetStr = getString("WiFi", "WiFiSubnet", "");
+        const String dns1Str = getString("WiFi", "WiFiDNS1", "");
+        const String dns2Str = getString("WiFi", "WiFiDNS2", "");
+
+        const bool okStatic = staticIP.fromString(staticIpStr);
+        const bool okGw = gateway.fromString(gatewayStr);
+        const bool okSubnet = subnet.fromString(subnetStr);
+
+        if (!dns1Str.isEmpty())
+        {
+            if (!dns1.fromString(dns1Str))
+            {
+                CM_LOG("[W] startWebServer(): invalid Primary DNS: %s", dns1Str.c_str());
+                dns1 = IPAddress();
+            }
+        }
+        if (!dns2Str.isEmpty())
+        {
+            if (!dns2.fromString(dns2Str))
+            {
+                CM_LOG("[W] startWebServer(): invalid Secondary DNS: %s", dns2Str.c_str());
+                dns2 = IPAddress();
+            }
+        }
+
+        if (!okStatic || !okGw || !okSubnet)
+        {
+            CM_LOG("[W] startWebServer(): invalid static networking settings -> falling back to DHCP");
+            startWebServer(ssid, password);
+            return;
+        }
+
+        startWebServer(staticIP, gateway, subnet, ssid, password, dns1, dns2);
+    }
+
     void startWebServer(const String &ssid, const String &password)
     {
         CM_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());

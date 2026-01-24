@@ -1653,6 +1653,8 @@ defineExpose({ startFlash });
   font-size: 0.95rem;
   letter-spacing: 0.5px;
   font-weight: 600;
+  text-decoration: underline;
+  color: darkorange;
 }
 .tbl {
   display: block;
