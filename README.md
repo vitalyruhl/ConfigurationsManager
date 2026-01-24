@@ -82,13 +82,13 @@ Each folder in `examples/` is a standalone PlatformIO project.
 Build:
 
 ```sh
-pio run -d examples/example_min -e usb
+pio run -d examples/minimal -e usb
 ```
 
 Upload:
 
 ```sh
-pio run -d examples/example_min -e usb -t upload --upload-port COM5
+pio run -d examples/minimal -e usb -t upload --upload-port COM5
 ```
 
 ### 2) Use as a library in your own project
@@ -132,7 +132,7 @@ Details: see `docs/SECURITY.md`.
 
 Each example is a standalone PlatformIO project:
 
-- [examples/example_min](examples/example_min) - minimal demo
+- [examples/minimal](examples/minimal) - minimal demo
 - [examples/bme280](examples/bme280) - BME280 (light)
 - [examples/BME280-Full-GUI-Demo](examples/BME280-Full-GUI-Demo) - full feature demo
 - [examples/IO-Full-Demo](examples/IO-Full-Demo) - IOManager demo (incl. core settings templates)

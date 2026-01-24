@@ -98,7 +98,7 @@ ConfigurationsManager provides overloads to start WiFi + web server:
 - Static IP:
   - `startWebServer(staticIP, gateway, subnet, ssid, password, dns1, dns2)`
 
-If you prefer explicit control (as shown in examples/example_min), you can do:
+If you prefer explicit control (as shown in examples/minimal), you can do:
 
 ```cpp
 const String ssid = wifiSettings.wifiSsid.get();

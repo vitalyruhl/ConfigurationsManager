@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide is a practical starting point that mirrors the `examples/example_min` pattern.
+This guide is a practical starting point that mirrors the `examples/minimal` pattern.
 
 If you prefer a full working project, open one of the example projects in `examples/` (each example is a standalone PlatformIO project).
 
@@ -11,11 +11,11 @@ If you prefer a full working project, open one of the example projects in `examp
 3. Build / upload it with PlatformIO:
 
 ```sh
-pio run -d examples/example_min -e usb
-pio run -d examples/example_min -e usb -t upload --upload-port COM5
+pio run -d examples/minimal -e usb
+pio run -d examples/minimal -e usb -t upload --upload-port COM5
 ```
 
-> Tip: You can also open `examples/example_min` directly as a PlatformIO project in VS Code.
+> Tip: You can also open `examples/minimal` directly as a PlatformIO project in VS Code.
 
 ## Minimal pattern (ESPAsyncWebServer)
 

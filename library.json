@@ -17,7 +17,7 @@
   "platforms": "espressif32",
   "export": {
     "include": [
-      "src/*",
+      "src/**",
       "tools/*",
       "docs/*",
       "examples/*",
