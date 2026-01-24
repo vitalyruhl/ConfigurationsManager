@@ -22,7 +22,7 @@ If you use the built-in core settings templates, you can keep your sketch very s
 3. Start WiFi using the settings-driven overload `startWebServer()`
 4. Implement optional global WiFi hooks for OTA/NTP/your services
 
-Example (based on examples/IO-Full-Demo):
+Example (based on examples/Full-IO-Demo):
 
 ```cpp
 #include "ConfigManager.h"
@@ -227,7 +227,7 @@ That document covers:
 - how to tune thresholds/cooldowns
 - how to disable roaming
 
-Quick configuration example (see examples/IO-Full-Demo):
+Quick configuration example (see examples/Full-IO-Demo):
 
 ```cpp
 ConfigManager.enableSmartRoaming(true);

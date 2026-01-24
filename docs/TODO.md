@@ -22,12 +22,12 @@
 - **[IDK]** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
 - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
   - Suggested implementation order (one side-branch per item)
-    - Test target: use `IO-Full-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.
+    - Test target: use `Full-IO-Demo` for steps 1–4; switch to `SolarInverterLimiter` at step 5.
     1) **COMPLETED / TESTED** IOManager module (digital IO + analog IO)
        - Goal: a single, general IO abstraction that auto-registers its settings into a dedicated category/card.
        - Category token: use a stable constant `cm::CoreCategories::IO` with value `"IO"`.
          - GUI label must be `"I/O"` (display only); do not bake `"I/O"` into the persisted category token.
-       - Demo: `examples/IO-Full-Demo`
+      - Demo: `examples/Full-IO-Demo`
        - Docs:
          - `docs/IO-DigitalInputs.md`
          - `docs/IO-DigitalOutputs.md`

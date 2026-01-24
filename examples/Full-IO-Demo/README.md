@@ -1,4 +1,4 @@
-# IO Full Demo (IO-Full-Demo)
+# Full IO Demo (Full-IO-Demo)
 
 This example demonstrates IO-related features (via `IOManager`) plus a rich runtime GUI.
 

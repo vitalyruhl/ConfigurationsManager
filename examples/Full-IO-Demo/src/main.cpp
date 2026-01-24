@@ -51,7 +51,7 @@ static const char OTA_PASSWORD[] = "ota";
 #include "io/IOManager.h"
 
 #define VERSION CONFIGMANAGER_VERSION
-#define APP_NAME "CM-IO-Full-Demo"
+#define APP_NAME "CM-Full-IO-Demo"
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
