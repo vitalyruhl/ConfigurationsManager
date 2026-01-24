@@ -18,6 +18,9 @@
       <button class="flash-btn" @click="startFlash" :disabled="!canFlash">
         Flash
       </button>
+      <button class="theme-btn" type="button" @click="toggleTheme">
+        Theme: {{ themeMode === 'dark' ? 'Dark' : 'Light' }}
+      </button>
     </div>
     <div v-if="showHttpOnlyHint" class="http-only-hint" role="note" aria-label="HTTP only hint">
       <div class="http-only-hint__text">
@@ -71,26 +74,7 @@
       @can-flash-change="handleCanFlashChange"
     />
     <section v-else-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
-      <div class="settings-view-mode">
-        <button
-          class="svm-btn"
-          :class="{ active: settingsViewMode === 'list' }"
-          type="button"
-          @click="settingsViewMode = 'list'"
-        >
-          List
-        </button>
-        <button
-          class="svm-btn"
-          :class="{ active: settingsViewMode === 'tabs' }"
-          type="button"
-          @click="settingsViewMode = 'tabs'"
-        >
-          Tabs
-        </button>
-      </div>
-
-      <div v-if="settingsViewMode === 'tabs'" class="category-tabs" role="tablist" aria-label="Settings categories">
+      <div class="category-tabs" role="tablist" aria-label="Settings categories">
         <button
           v-for="c in settingsCategories"
           :key="c.key"
@@ -106,33 +90,19 @@
       </div>
 
       <div id="settingsContainer" :key="refreshKey">
-        <template v-if="settingsViewMode === 'tabs'">
-          <template v-for="c in settingsCategories" :key="c.key + '_' + refreshKey">
-            <template v-if="c.key === selectedSettingsCategory">
-              <template v-for="card in extractSettingsCardsFromCategory(c.key, c.settings)" :key="c.key + '_' + (card.cardKey || card.title) + '_' + refreshKey">
-                <Category
-                  :category="c.key"
-                  :settings="card.settings"
-                  :title="card.title"
-                  :busy-map="opBusy"
-                  @apply-single="applySingle"
-                  @save-single="saveSingle"
-                />
-              </template>
+        <template v-for="c in settingsCategories" :key="c.key + '_' + refreshKey">
+          <template v-if="c.key === selectedSettingsCategory">
+            <template v-for="card in extractSettingsCardsFromCategory(c.key, c.settings)" :key="c.key + '_' + (card.cardKey || card.title) + '_' + refreshKey">
+              <Category
+                :category="c.key"
+                :settings="card.settings"
+                :title="card.title"
+                :busy-map="opBusy"
+                @apply-single="applySingle"
+                @save-single="saveSingle"
+              />
             </template>
           </template>
-        </template>
-        <template v-else>
-          <Category
-            v-for="card in orderedSettingsCards"
-            :key="card.category + '_' + (card.cardKey || card.title) + '_' + refreshKey"
-            :category="card.category"
-            :settings="card.settings"
-            :title="card.title"
-            :busy-map="opBusy"
-            @apply-single="applySingle"
-            @save-single="saveSingle"
-          />
         </template>
       </div>
       <div class="action-buttons">
@@ -315,15 +285,6 @@ function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
   return cards;
 }
 
-const orderedSettingsCards = computed(() => {
-  const result = [];
-  for (const [categoryKey, settingsObj] of (orderedSettingsCategories.value || [])) {
-    const cards = extractSettingsCardsFromCategory(categoryKey, settingsObj);
-    // If a category expands into multiple cards, keep them adjacent.
-    for (const c of cards) result.push(c);
-  }
-  return result;
-});
 const activeTab = ref("live");
 const runtimeDashboard = ref(null);
 const canFlash = ref(false);
@@ -349,9 +310,49 @@ const settingsAuthToken = ref("");
 const settingsAuthTokenExpiresAtMs = ref(0);
 const settingsAuthPasswordRequired = ref(true);
 
-// Settings view display mode: list vs tabbed categories
-const settingsViewMode = ref('list');
 const selectedSettingsCategory = ref('');
+
+const THEME_COOKIE_KEY = 'cm.theme.v1';
+const themeMode = ref(resolveInitialTheme());
+
+function readCookie(name) {
+  try {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function writeCookie(name, value, maxAgeSec) {
+  try {
+    const parts = [`${name}=${encodeURIComponent(String(value))}`, 'path=/'];
+    if (typeof maxAgeSec === 'number') parts.push(`max-age=${Math.max(0, Math.floor(maxAgeSec))}`);
+    document.cookie = parts.join('; ');
+  } catch (e) {}
+}
+
+function resolveInitialTheme() {
+  const stored = (readCookie(THEME_COOKIE_KEY) || '').toLowerCase();
+  if (stored === 'dark' || stored === 'light') return stored;
+  try {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } catch (e) {
+    return 'light';
+  }
+}
+
+function applyTheme(mode) {
+  const m = (mode === 'dark') ? 'dark' : 'light';
+  document.documentElement.dataset.theme = m;
+}
+
+function toggleTheme() {
+  themeMode.value = (themeMode.value === 'dark') ? 'light' : 'dark';
+  writeCookie(THEME_COOKIE_KEY, themeMode.value, 60 * 60 * 24 * 365);
+  applyTheme(themeMode.value);
+}
 
 const settingsCategories = computed(() => {
   return (orderedSettingsCategories.value || []).map(([categoryKey, settingsObj]) => {
@@ -364,9 +365,8 @@ const settingsCategories = computed(() => {
 });
 
 watch(
-  [() => settingsViewMode.value, () => settingsCategories.value],
+  [() => settingsCategories.value],
   () => {
-    if (settingsViewMode.value !== 'tabs') return;
     if (settingsCategories.value.length === 0) return;
     const exists = settingsCategories.value.some((c) => c.key === selectedSettingsCategory.value);
     if (!exists) selectedSettingsCategory.value = settingsCategories.value[0].key;
@@ -990,6 +990,7 @@ function handleCanFlashChange(v) {
   canFlash.value = !!v;
 }
 onMounted(() => {
+  applyTheme(themeMode.value);
   if (shouldShowHttpOnlyHint()) {
     httpOnlyHintUrl.value = `http://${window.location.host}/`;
     showHttpOnlyHint.value = true;
@@ -1002,9 +1003,9 @@ onMounted(() => {
 </script>
 <style scoped>
 #mainHeader {
-  color: #034875;
+  color: var(--cm-accent-strong, #034875);
   margin: 0.2rem 0 0;
-  border-bottom: 2px solid #3498db;
+  border-bottom: 2px solid var(--cm-accent, #3498db);
   padding-bottom: 0.2rem;
   font-size: 1.8rem;
   font-weight: 700;
@@ -1054,8 +1055,8 @@ onMounted(() => {
   font-weight: 600;
 }
 .tabs button {
-  background: slategray;
-  color: #f5f5f5;
+  background: var(--cm-tab-bg, slategray);
+  color: var(--cm-tab-fg, #f5f5f5);
   padding: 0.5rem 1.1rem;
   border-radius: 6px;
   border: none;
@@ -1064,8 +1065,12 @@ onMounted(() => {
   transition: background 0.2s;
 }
 .tabs button.active {
-  background: darkorange;
-  color: #fff;
+  background: var(--cm-tab-active-bg, darkorange);
+  color: var(--cm-tab-active-fg, #fff);
+}
+.theme-btn {
+  background: var(--cm-tab-bg, slategray);
+  color: var(--cm-tab-fg, #f5f5f5);
 }
 .flash-btn {
   background: #8e44ad;
@@ -1080,30 +1085,6 @@ onMounted(() => {
   padding: 1rem 0 2rem;
 }
 
-.settings-view-mode {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin: 0 0 0.75rem;
-  padding: 0 10px;
-}
-
-.svm-btn {
-  background: slategray;
-  color: #f5f5f5;
-  padding: 0.4rem 0.8rem;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s;
-}
-
-.svm-btn.active {
-  background: darkorange;
-  color: #fff;
-}
-
 .category-tabs {
   display: flex;
   gap: 0.5rem;
@@ -1114,8 +1095,8 @@ onMounted(() => {
 
 .cat-tab {
   flex: 0 0 auto;
-  background: slategray;
-  color: #f5f5f5;
+  background: var(--cm-tab-bg, slategray);
+  color: var(--cm-tab-fg, #f5f5f5);
   padding: 0.5rem 0.9rem;
   border-radius: 6px;
   border: none;
@@ -1125,8 +1106,8 @@ onMounted(() => {
 }
 
 .cat-tab.active {
-  background: darkorange;
-  color: #fff;
+  background: var(--cm-tab-active-bg, darkorange);
+  color: var(--cm-tab-active-fg, #fff);
 }
 .action-buttons {
   display: flex;

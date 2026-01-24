@@ -1,5 +1,16 @@
 /* Minified runtime controls */
 :root {
+  --cm-bg: #f6f7f9;
+  --cm-fg: #111827;
+  --cm-accent: #3498db;
+  --cm-accent-strong: #034875;
+  --cm-tab-bg: slategray;
+  --cm-tab-fg: #f5f5f5;
+  --cm-tab-active-bg: darkorange;
+  --cm-tab-active-fg: #ffffff;
+  --cm-card-bg: #ffffff;
+  --cm-card-border: rgba(0, 0, 0, .06);
+
   --btn-primary-bg: #1976d2;
   --btn-primary-hover: #125a9f;
   --btn-primary-active: #0d4674;
@@ -8,6 +19,27 @@
   --switch-track-off: #ccc;
   --switch-track-on: #66bb6a;
   --switch-thumb-bg: #fff
+}
+
+[data-theme="dark"] {
+  --cm-bg: #0d1117;
+  --cm-fg: #f0f6fc;
+  --cm-accent: #58a6ff;
+  --cm-accent-strong: #58a6ff;
+  --cm-tab-bg: #30363d;
+  --cm-tab-fg: #f0f6fc;
+  --cm-tab-active-bg: #d97706;
+  --cm-tab-active-fg: #ffffff;
+  --cm-card-bg: #161b22;
+  --cm-card-border: #30363d;
+
+  --switch-track-off: #6b7280;
+  --switch-thumb-bg: #e5e7eb;
+}
+
+body {
+  background: var(--cm-bg);
+  color: var(--cm-fg);
 }
 
 .btn {
@@ -103,14 +135,15 @@
 .category {
   margin: 10px 0;
   padding: 15px;
-  background: #fff;
+  background: var(--cm-card-bg);
+  border: 1px solid var(--cm-card-border);
   border-radius: 10px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, .1)
 }
 
 h2 {
-  color: #3498db;
-  border-bottom: 2px solid #3498db;
+  color: var(--cm-accent);
+  border-bottom: 2px solid var(--cm-accent);
   padding-bottom: 10px;
   font-size: 1.2rem
 }

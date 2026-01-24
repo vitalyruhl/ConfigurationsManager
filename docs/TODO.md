@@ -19,10 +19,22 @@
 ### High Priority Bugs/Features (Prio 1)
 
 - **[IDK]** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
-- Goal: keep `ConfigManager` as small as possible in compile size and dependencies
-  - Suggested implementation order (one side-branch per item)
+
+
+- **[FEATURE]** v3 follow-ups
+  - Extract modules that can be imported separately:
+    - Logger: split into 4 extras (serial, MQTT, display, sdcard) (also use more, then one logger at once?) (eg. log->Printf([Serial,Display,SDCard,GUI],Module, "Check and start BME280!").Debug();) - so i can use multiple loggers at once, but with diffrent loglevels (eg. log->Printf([Serial,SDCard,GUI],Module, "Check and start BME280!").Debug();log->Printf([Serial,SDCard],Module,"Temperature: %2.1lf °C", temperature).Debug(); ) - eg. module is an String local, or global defined, like "[MAIN]", "[BME280]", "[MQTT]", etc. | Serial,Display,SDCard,GUI are defines or enums for the different loggers depends on how we implement it.
+      - or ist it better loke log1 = new Logger([Serial, Display], Debug); log2 = new Logger([Serial, SDCard], Debug); etc. ? - then we can set different loglevels for each logger instance.
+      - Display logger: ensure buffer is cleared even when nothing is sent to the display.
+    - Check where the latest version is (solarinverter project or boilerSaver).
+    - MQTT manager (got it from solarinverter project = latest version)
+
+  - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
+    - Suggested implementation order (one side-branch per item)
     - Test target: use `Full-IO-Demo` for steps 1–3; switch to `SolarInverterLimiter` at step 4.
-    1) [TODO] Remove Settings List view; keep Tabs only.
+
+    1) [TODO] Remove Settings List view; keep Tabs only. Add Darkmode toggle (remember choice in coockie?).
+       - Update vue to latest version 2.5.27?
     2) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.
@@ -46,9 +58,12 @@
        - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
     5) Documentation for all modules
        - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
-    6) Update other examples to use the new core settings/modules where applicable
+    6) Update other examples to use the new core settings/modules where applicable [partialy done]
 
-### Medium Priority Bugs/Features (Prio 5)
+- **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
+- **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
+
+### Medium Priority Bugs/Features (Prio 5) (eg. V3.4+ ?)
 
 - **[FEATURE]** Add logging with simple trend for Analog/digital-Inputs (over time/on logDB)
   - like .addAnalogInputTrend("id", "name", "GUI-Card", interval, logTime in houers?, or max entrys to build an array = better, min, max or auto scale ...);
@@ -62,23 +77,12 @@
   - Stable persistence: switch from slot-based keys to ID-based keys (requires migration/versioning)
   - Provider/backends: DAC + PWM + external DAC (I2C/SPI)
   - Per-output enable flag + UI visibility toggles + runtime readback
-- **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
-- **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
-- **[FEATURE]** v3 follow-ups
-  - Extract modules that can be imported separately:
-    - Logger: split into 4 extras (serial, MQTT, display, sdcard) (also use more, then one logger at once?) (eg. log->Printf([Serial,Display,SDCard,GUI],Module, "Check and start BME280!").Debug();) - so i can use multiple loggers at once, but with diffrent loglevels (eg. log->Printf([Serial,SDCard,GUI],Module, "Check and start BME280!").Debug();log->Printf([Serial,SDCard],Module,"Temperature: %2.1lf °C", temperature).Debug(); ) - eg. module is an String local, or global defined, like "[MAIN]", "[BME280]", "[MQTT]", etc. | Serial,Display,SDCard,GUI are defines or enums for the different loggers depends on how we implement it.
-      - or ist it better loke log1 = new Logger([Serial, Display], Debug); log2 = new Logger([Serial, SDCard], Debug); etc. ? - then we can set different loglevels for each logger instance.
-      - Display logger: ensure buffer is cleared even when nothing is sent to the display.
-    - Check where the latest version is (solarinverter project or boilerSaver).
-    - MQTT manager (got it from solarinverter project = latest version)
+
 
 ### Low Priority Bugs/Features (Prio 10)
 
 - **[FEATURE]** Card layout/grid improvement
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
-- **[FEATURE]** Automated component testing
-- **[FEATURE]** add templates for common Settings, like
-  - [Todo] non blocking blinking LED, etc.
 - **[FEATURE]** Failover Wifi native support
 - **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
 
@@ -91,18 +95,10 @@
 
 ### Done / Resolved (but not tested yet)
 
-- [COMPLETED] Runtime: add `MomentaryButton` (press-and-hold) control type (no label heuristics).
-- [COMPLETED] consolidate the Version-History before v3.0.0 into less detailed summary
-- [COMPLETED] WiFi
-- [COMPLETED] System
-- **COMPLETED / Bug** Settings password prompt when password is unset
 - **COMPLETED / Bug** Browser tab title is configurable
   - H1 uses `.setAppName(APP_NAME)`
   - Browser tab uses `.setAppTitle("...")`
   - If `.setVersion(VERSION)` is set: it is appended to both
-- **COMPLETED / Bug/Design** "WifiConnected" in system card --> "Wifi Connected", and position at first place
-- **COMPLETED / Bug/Design** Live-view cards are not sorted by `order`
-- Add divider (hr-like) in full demo.
 
 - **[Tooling]** WebUI debug logging toggle (v3.3.x)
   - Add a build-time flag (e.g. `VITE_CM_DEBUG`) and route noisy logs through a `dbg(...)` helper.
