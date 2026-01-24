@@ -464,13 +464,14 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
     const String effectiveGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("analog");
     const String effectiveLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    const String runtimeKey = showRaw ? (entry.id + String("_raw")) : entry.id;
     registerAnalogRuntimeField(effectiveGroup, entry.id, showRaw);
     ensureAnalogRuntimeProvider(effectiveGroup);
 
     if (showRaw) {
         addAnalogRuntimeMeta(ConfigManager.getRuntime(),
                              effectiveGroup,
-                             entry.id,
+                             runtimeKey,
                              effectiveLabel,
                              "",
                              0,
@@ -2073,10 +2074,11 @@ void IOManager::ensureAnalogRuntimeProvider(const String& group)
 
             const AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
             if (field.showRaw) {
+                const String rawKey = entry.id + "_raw";
                 if (entry.rawValue < 0) {
-                    data[entry.id] = nullptr;
+                    data[rawKey] = nullptr;
                 } else {
-                    data[entry.id] = entry.rawValue;
+                    data[rawKey] = entry.rawValue;
                 }
             } else {
                 if (isnan(entry.value)) {

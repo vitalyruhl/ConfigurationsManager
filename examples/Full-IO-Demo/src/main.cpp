@@ -1,35 +1,10 @@
 #include <Arduino.h>
 
-// ---------------------------------------------------------------------------------------------------------------------
-// ConfigManager compile-time feature toggles (moved to platformio.ini)
-//
-// To keep the sketch clean and allow per-environment tuning, all feature switches are now defined via
-// PlatformIO build flags instead of #defines in this file.
-//
-// How to use:
-// - Open platformio.ini and add -D flags under each [env] in the build_flags section, e.g.:
-//     -DCM_ENABLE_OTA=1
-//     -DCM_ENABLE_WS_PUSH=1
-//     -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS=1
-// - You can turn features off by setting =0. The extra build script will also prune the Web UI accordingly.
-//
-// See docs/FEATURE_FLAGS.md for the complete list and examples. For convenience, this project enables
-// most features by default in platformio.ini so you can test and then disable what you don’t need.
-// [WARNING] Warning
-//   ESP32 has a limitation of 15 characters for the key name.
-//      The key name is built from the category and the key name (<category>_<key>).
-//      The category is limited to 13 characters, the key name to 1 character.
-// ---------------------------------------------------------------------------------------------------------------------
 #include "ConfigManager.h"
 // ---------------------------------------------------------------------------------------------------------------------
 
-// Demo defaults (do not store real credentials in repo)
 // NOTE: Empty string disables password protection for the Settings tab.
 static const char SETTINGS_PASSWORD[] = "";
-
-// NOTE: OTA password is currently taken from the System settings bundle (systemSettings.otaPassword).
-// This constant is not used unless you explicitly wire it into setupOTA().
-static const char OTA_PASSWORD[] = "ota";
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -332,13 +307,10 @@ static void createDigitalInputs()
 
 static void createAnalogInputs()
 {
-    // LDR cross (solar tracker) - ADC1 pins (WiFi-safe): 34, 35, 36(VP), 39(VN)
-    // Note: These pins are input-only, which is fine for analog sensors.
-
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_s",
-        .name = "LDR EN",
-        .defaultPin = 36,//en
+        .name = "LDR VN",
+        .defaultPin = 39,//vn
         .defaultRawMin = 0,
         .defaultRawMax = 4095,
         .defaultOutMin = 0.0f,
@@ -360,10 +332,10 @@ static void createAnalogInputs()
                 Serial.println("[ALARM][ldr_s] exit");
             },
         },
-        "LDR EN",
+        "LDR VN",
         "sensors"
     );
-    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 11, "LDR EN RAW", "sensors", true);
+    ioManager.addAnalogInputToGUI("ldr_s", nullptr, 11, "LDR VN RAW", "sensors", true);
 
     RuntimeFieldMeta divider1;
     divider1.group = "sensors";
@@ -376,7 +348,7 @@ static void createAnalogInputs()
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_w",
         .name = "LDR VP",
-        .defaultPin = 39,//VP
+        .defaultPin = 36,//VP
         .defaultRawMin = 0,
         .defaultRawMax = 4095,
         .defaultOutMin = 0.0f,
@@ -551,9 +523,6 @@ static void demoAnalogOutputApi()
 
     Serial.println("[DEMO] Analog output API demo end");
 }
-
-
-
 
 void setup()
 {
@@ -806,12 +775,3 @@ void setHoldButtonState(bool on)
         ioManager.set("holdbutton", false);
     }
 }
-
-// ------------------------------------------------------------------
-// Non-blocking status LED pattern
-//  States / patterns:
-//   - AP mode: fast blink (100ms on / 100ms off)
-//   - Connected STA: slow heartbeat (on 60ms every 2s)
-//   - Connecting / disconnected: double blink (2 quick pulses every 1s)
-// ------------------------------------------------------------------
-
