@@ -33,9 +33,7 @@
     - Suggested implementation order (one side-branch per item)
     - Test target: use `Full-IO-Demo` for steps 1–3; switch to `SolarInverterLimiter` at step 4.
 
-    1) [TODO] Remove Settings List view; keep Tabs only. Add Darkmode toggle (remember choice in coockie?).
-       - Update vue to latest version 2.5.27?
-    2) MQTT manager module (+ baseline settings + ordering/injection)
+    1) MQTT manager module (+ baseline settings + ordering/injection)
        - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
        - Ensure the core library does not require MQTT dependencies unless the module is included/used.
        - Core settings auto-load (when the module is used)
@@ -48,17 +46,17 @@
        - Publish items ordering / injection
          - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
          - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
-    3) Logging (lightweight core + optional advanced module)
+    2) Logging (lightweight core + optional advanced module)
        - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
        - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
          - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
          - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
          - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
-    4) Refactor `SolarInverterLimiter` example to consume modules
+    3) Refactor `SolarInverterLimiter` example to consume modules
        - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
-    5) Documentation for all modules
+    4) Documentation for all modules
        - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
-    6) Update other examples to use the new core settings/modules where applicable [partialy done]
+    5) Update other examples to use the new core settings/modules where applicable [partialy done]
 
 - **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
 - **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
@@ -94,6 +92,13 @@
 
 
 ### Done / Resolved (but not tested yet)
+
+- **COMPLETED / Feature** WebUI settings + theming
+  - Settings view: Tabs only (List view removed)
+  - Dark mode toggle added
+  - Cookie persistence for theme: NOT TESTED
+  - Runtime cards: use theme-based card background/border
+  - Vue updated to v3.5.27
 
 - **COMPLETED / Bug** Browser tab title is configurable
   - H1 uses `.setAppName(APP_NAME)`

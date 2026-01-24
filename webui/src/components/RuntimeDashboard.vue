@@ -1641,8 +1641,8 @@ defineExpose({ startFlash });
   align-items: start;
 }
 .card {
-  background: #f5f6f8;
-  border: 1px solid #30363d;
+  background: var(--cm-card-bg);
+  border: 1px solid var(--cm-card-border);
   border-radius: 10px;
   padding: 0.65rem 0.75rem 0.9rem;
   position: relative;
@@ -1654,7 +1654,7 @@ defineExpose({ startFlash });
   letter-spacing: 0.5px;
   font-weight: 600;
   text-decoration: underline;
-  color: darkorange;
+  color: var(--cm-tab-active-bg);
 }
 .tbl {
   display: block;
