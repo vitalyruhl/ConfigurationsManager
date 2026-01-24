@@ -44,6 +44,8 @@ static const char OTA_PASSWORD[] = "ota";
 // from the library to keep the sketch smaller and consistent across projects.
 // -------------------------------------------------------------------
 #include "core/CoreSettings.h"
+// Core helper for OTA+NTP service lifecycle used by WiFi hooks.
+#include "core/CoreWiFiServices.h"
 
 // IO manager demo (settings-driven digital outputs)
 #include "io/IOManager.h"
@@ -62,6 +64,7 @@ static cm::CoreSystemSettings &systemSettings = coreSettings.system;            
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;                     // WiFi: SSID, password, DHCP/static networking
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                        // NTP: sync interval, servers, timezone
 static cm::IOManager ioManager;
+static cm::CoreWiFiServices wifiServices;
 // -------------------------------------------------------------------
 
 static uint32_t testPressPulseUntilMs = 0;
@@ -551,8 +554,7 @@ static void demoAnalogOutputApi()
 }
 
 
-Ticker NtpSyncTicker;
-bool tickerActive = false; // Used as a generic "services active" flag (WiFi/OTA/NTP)
+
 
 void setup()
 {
@@ -736,17 +738,8 @@ void onWiFiConnected()
 {
     Serial.println("[MAIN] WiFi connected! Activating services...");
 
-    if (!tickerActive)
-    {
-        // Ensure ArduinoOTA is initialized once WiFi is connected and OTA is allowed
-        // This runs on every (re)connection to guarantee espota responds
-        if (systemSettings.allowOTA.get() && !ConfigManager.getOTAManager().isInitialized())
-        {
-            ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
-        }
-
-        tickerActive = true;
-    }
+    // Keep service activation centralized (OTA init + NTP ticker lifecycle).
+    wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
 
     // Show correct IP address when connected
     Serial.printf("\n\n[MAIN] Webserver running at: %s (Connected)\n", WiFi.localIP().toString().c_str());
@@ -757,39 +750,18 @@ void onWiFiConnected()
     Serial.printf("[MAIN] BSSID: %s (Channel: %d)\n", bssid.c_str(), WiFi.channel());
     Serial.printf("[MAIN] Local MAC: %s\n\n", WiFi.macAddress().c_str());
 
-    // Start NTP sync now and schedule periodic resyncs
-    auto doNtpSync = []()
-    {
-        // Use TZ-aware sync for correct local time (Berlin: CET/CEST)
-        configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str());
-    };
-    doNtpSync();
-    NtpSyncTicker.detach();
-    int ntpInt = ntpSettings.frequencySec.get();
-    if (ntpInt < 60)
-        ntpInt = 3600; // default to 1 hour
-    NtpSyncTicker.attach(ntpInt, +[]()
-                                 { configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str()); });
 }
 
 void onWiFiDisconnected()
 {
     Serial.println("[MAIN] WiFi disconnected! Deactivating services...");
-    if (tickerActive)
-    {
-        tickerActive = false;
-    }
+    wifiServices.onDisconnected();
 }
 
 void onWiFiAPMode()
 {
     Serial.println("[MAIN] WiFi in AP mode");
-
-    // Ensure services are stopped in AP mode
-    if (tickerActive)
-    {
-        onWiFiDisconnected(); // Reuse disconnected logic
-    }
+    wifiServices.onAPMode();
 }
 
 //----------------------------------------
