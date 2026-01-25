@@ -37,13 +37,21 @@
        - [COMPLETED] Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/MQTTManager.h"`, see `src/mqtt/MQTTManager.h`).
        - [COMPLETED] Ensure the core library does not require MQTT dependencies unless the module is included/used (header-only).
        - Docs: `docs/MQTT.md`
-       - Core settings auto-load (when the module is used)
-         - Provide a module-owned settings bundle that registers a stable, reusable MQTT settings baseline:
-           - `mqtt_port`, `mqtt_server`, `mqtt_username`, `mqtt_password`
-           - `publishTopicBase`
-           - `mqttPublishPeriodSec`, `mqttListenPeriodSec`
-           - `enableMQTT`
-         - Ensure these settings exist immediately after module initialization (no extra boilerplate in user code).
+       - [COMPLETED] Core settings auto-load (when the module is used)
+         - Baseline settings are registered via `MQTTManager::attach(ConfigManager)`.
+         - Note: key naming is currently `MQTT*` (e.g. `MQTTHost`, `MQTTPort`, `MQTTEnable`, `MQTTPubPer`, `MQTTListenMs`); key migration can be done later.
+       - Next / open work (MQTT)
+         - Add publish helpers: `addMQTTTopicSend*` (float/int/bool/string) + retained option.
+         - Implement publish scheduling semantics:
+           - `MQTTPubPer` in seconds
+           - `0` = publish-on-change (track last published value)
+         - Implement publish items ordering / injection
+           - Custom publish items must appear directly after `publishTopicBase` in settings UI.
+           - Provide stable API for registering custom publish items while keeping baseline order stable.
+         - Improve key stability / migration
+           - Decide final key naming (e.g. `mqtt_*` vs `MQTT*`) and add migration path.
+         - Decide multi-instance behavior
+           - Current implementation is singleton-oriented (PubSubClient callback trampoline). Either enforce singleton clearly or support multiple instances safely.
        - Publish items ordering / injection
          - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
          - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.

@@ -1,10 +1,11 @@
 # MQTT Module
 
-This repository provides an **optional** MQTT helper module that is **not auto-enabled**.
+This repository provides an **optional** MQTT helper module.
 
 - Module header: `src/mqtt/MQTTManager.h`
 - You must explicitly include it from your sketch.
 - You must add `PubSubClient` to your project dependencies.
+- The recommended init pattern is **Option A**: call `mqtt.attach(ConfigManager)` from `setup()`.
 
 ## Minimal Usage
 
@@ -22,28 +23,27 @@ lib_deps =
 ```cpp
 #include "mqtt/MQTTManager.h"
 
-static cm::MQTTManager mqtt;
+static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
 ```
 
-### 3) Configure + run
+### 3) Attach + run
 
 ```cpp
 void setup()
 {
-    mqtt.setServer("192.168.1.10", 1883);
-    mqtt.setCredentials("user", "pass");
+    // Registers baseline MQTT settings automatically.
+    mqtt.attach(ConfigManager);
 
-    mqtt.onConnected([]() {
-        mqtt.subscribe("device/cmd");
-        mqtt.publish("device/status", "online", true);
-    });
+    // Optional: runtime card in the GUI
+    mqtt.addToGUI(ConfigManager, "mqtt");
 
-    mqtt.onMessage([](char* topic, byte* payload, unsigned int length) {
-        String msg(reinterpret_cast<const char*>(payload), length);
-        // Handle message
-    });
+    // Optional: hooks
+    mqtt.onMQTTConnect([]() { CM_LOG("[MQTT][INFO] connected"); });
+    mqtt.onMQTTDisconnect([]() { CM_LOG("[MQTT][INFO] disconnected"); });
 
-    mqtt.begin();
+    // You can still override settings from code (optional)
+    // mqtt.setServer("192.168.1.10", 1883);
+    // mqtt.setCredentials("user", "pass");
 }
 
 void loop()
@@ -52,7 +52,30 @@ void loop()
 }
 ```
 
+### 4) Receive topics (plain payload or JSON key-path)
+
+```cpp
+static float powerInW = 0.0f;
+
+void setup()
+{
+    mqtt.attach(ConfigManager);
+
+    // Plain payload example: topic "device/power" => "123.4"
+    mqtt.addMQTTTopicReceiveFloat("power_w", "Power", "device/power", &powerInW, "W", 1, "none");
+
+    // JSON example: topic "tele/tasmota/SENSOR" => {"ENERGY":{"Total":12.34}}
+    mqtt.addMQTTTopicReceiveFloat("energy_total", "Energy Total", "tele/tasmota/SENSOR", &powerInW, "kWh", 3, "ENERGY.Total");
+
+    mqtt.addToGUI(ConfigManager, "mqtt");
+}
+```
+
 ## Notes
 
 - The module uses a non-blocking state machine with retry logic.
-- `configurePowerUsage()` is an optional helper to parse a single watts value from either a plain numeric payload or JSON with a dot-path (e.g. `"sensor.power"`).
+- Settings include:
+    - `MQTTEnable` (bool)
+    - `MQTTHost`, `MQTTPort`, `MQTTUser`, `MQTTPass`, `MQTTClientId`
+    - `MQTTPubPer` (publish interval in seconds; `0` means publish-on-change for send helpers)
+    - `MQTTListenMs` (listen interval in ms; `0` means every loop)
