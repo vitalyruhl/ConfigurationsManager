@@ -16,7 +16,7 @@ ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     : server(webServer)
     , configManager(nullptr)
     , initialized(false)
-    , embedWebUI(true)
+    , embedWebUI(CM_EMBED_WEBUI ? true : false)
     , customHTML(nullptr)
     , customHTMLLen(0)
     , settingsPassword("") // Empty by default - only protect if explicitly set
@@ -738,7 +738,7 @@ void ConfigManagerWeb::handleRootRequest(AsyncWebServerRequest* request) {
         response->addHeader("Content-Encoding", "gzip");
         request->send(response);
 #else
-        request->send(500, "text/html", "<h1>WebUI not embedded</h1><p>Compile with CM_EMBED_WEBUI=1</p>");
+        request->send(404, "text/html", "<h1>WebUI not embedded</h1><p>This firmware was built with CM_EMBED_WEBUI=0</p>");
 #endif
     } else {
         request->send(404, "text/html", "<h1>No WebUI configured</h1>");
@@ -862,7 +862,6 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     });
 #endif
 
-#if CM_ENABLE_RUNTIME_BUTTONS
     // Runtime button press endpoint
     server->on("/runtime_action/button", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -915,9 +914,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 }
             }
         });
-#endif
 
-#if CM_ENABLE_RUNTIME_CHECKBOXES
     // Runtime checkbox change endpoint
     server->on("/runtime_action/checkbox", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -973,9 +970,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 }
             }
         });
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
     // Runtime state button endpoint (toggle or explicit set via value=...)
     server->on("/runtime_action/state_button", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -1040,9 +1035,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 }
             }
         });
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     // Runtime int slider change endpoint
     server->on("/runtime_action/int_slider", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -1098,9 +1091,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 }
             }
         });
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     // Runtime float slider change endpoint
     server->on("/runtime_action/float_slider", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -1159,9 +1150,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 }
             }
         });
-#endif
 
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
     // Runtime int value input endpoint
     server->on("/runtime_action/int_input", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -1270,7 +1259,6 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 }
             }
         });
-#endif
 }
 
 String ConfigManagerWeb::getContentType(const String& path) {

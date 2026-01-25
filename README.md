@@ -176,6 +176,8 @@ More:
 > Settings on mobile
 > ![Settings on mobile 1](examples/screenshots/test-settings-mobile.jpg)
 > ![Settings on mobile 2](examples/screenshots/test-settings-mobile2.jpg)
+> Darkmode
+> ![Darkmode](examples/screenshots/cm-full-io-demo-gui-darkmode.jpg)
 
 ## Version History
 

@@ -18,7 +18,7 @@
 
 ### High Priority Bugs/Features (Prio 1)
 
-- **[IDK]** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
+- [bug] darkmode in settings are cards not dark...
 
 
 - **[FEATURE]** v3 follow-ups
@@ -79,6 +79,11 @@
 
 ### Low Priority Bugs/Features (Prio 10)
 
+- **[FEATURE]** Headless mode: disable HTTP server completely (no GUI, no API routes)
+  - Keep WiFi management usable (STA/AP) so MQTT-only setups remain possible
+  - Likely requires splitting WiFi lifecycle from `startWebServer()` shorthands
+  - Provide clear minimal API surface (core methods only) + docs
+
 - **[FEATURE]** Card layout/grid improvement
   - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
 - **[FEATURE]** Failover Wifi native support
@@ -116,6 +121,10 @@
   - Goal: library consumption must NOT require Node.js/npm by default.
   - Idea: gate WebUI rebuild + `src/html_content.h` regeneration behind a flag (e.g. `CM_WEBUI_REBUILD`).
   - Decide whether `webui/dist/*` should stay tracked or be generated-only (and ensure release workflow covers it).
+
+
+- **COMPLETED / Refactor** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
+
 
 ### Done / Resolved
 

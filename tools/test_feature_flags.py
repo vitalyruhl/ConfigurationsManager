@@ -56,77 +56,35 @@ class FeatureFlagTester:
     # Core feature flags that can be toggled
     CORE_FLAGS = {
         'CM_EMBED_WEBUI': [0, 1],
-        'CM_ENABLE_WS_PUSH': [0, 1], 
-        'CM_ENABLE_SYSTEM_PROVIDER': [0, 1],
-        'CM_ENABLE_OTA': [0, 1],
-        'CM_ENABLE_RUNTIME_BUTTONS': [0, 1],
-        'CM_ENABLE_RUNTIME_CHECKBOXES': [0, 1],
-        'CM_ENABLE_RUNTIME_STATE_BUTTONS': [0, 1],
-        'CM_ENABLE_RUNTIME_ANALOG_SLIDERS': [0, 1],
-        'CM_ENABLE_RUNTIME_ALARMS': [0, 1],
-        'CM_ENABLE_RUNTIME_NUMBER_INPUTS': [0, 1],
-        'CM_ENABLE_STYLE_RULES': [0, 1],
-        'CM_ENABLE_USER_CSS': [0, 1],
         'CM_ENABLE_LOGGING': [0, 1],
         'CM_ENABLE_VERBOSE_LOGGING': [0, 1]
     }
     
     # Essential combinations for quick testing
     ESSENTIAL_COMBINATIONS = [
-        # All disabled (minimal build)
-        {flag: 0 for flag in CORE_FLAGS.keys()},
-        # All enabled (full featured build) 
-        {flag: 1 for flag in CORE_FLAGS.keys()},
-        # Typical production build
+        # Typical default build
         {
             'CM_EMBED_WEBUI': 1,
-            'CM_ENABLE_WS_PUSH': 1,
-            'CM_ENABLE_SYSTEM_PROVIDER': 1,
-            'CM_ENABLE_OTA': 1,
-            'CM_ENABLE_RUNTIME_BUTTONS': 1,
-            'CM_ENABLE_RUNTIME_CHECKBOXES': 1,
-            'CM_ENABLE_RUNTIME_STATE_BUTTONS': 1,
-            'CM_ENABLE_RUNTIME_ANALOG_SLIDERS': 1,
-            'CM_ENABLE_RUNTIME_ALARMS': 0,
-            'CM_ENABLE_RUNTIME_NUMBER_INPUTS': 0,
-            'CM_ENABLE_STYLE_RULES': 0,
-            'CM_ENABLE_USER_CSS': 0,
             'CM_ENABLE_LOGGING': 1,
             'CM_ENABLE_VERBOSE_LOGGING': 0
         },
-        # Minimal web build (no runtime features)
-        {
-            'CM_EMBED_WEBUI': 1,
-            'CM_ENABLE_WS_PUSH': 0,
-            'CM_ENABLE_SYSTEM_PROVIDER': 1,
-            'CM_ENABLE_OTA': 1,
-            'CM_ENABLE_RUNTIME_BUTTONS': 0,
-            'CM_ENABLE_RUNTIME_CHECKBOXES': 0,
-            'CM_ENABLE_RUNTIME_STATE_BUTTONS': 0,
-            'CM_ENABLE_RUNTIME_ANALOG_SLIDERS': 0,
-            'CM_ENABLE_RUNTIME_ALARMS': 0,
-            'CM_ENABLE_RUNTIME_NUMBER_INPUTS': 0,
-            'CM_ENABLE_STYLE_RULES': 0,
-            'CM_ENABLE_USER_CSS': 0,
-            'CM_ENABLE_LOGGING': 1,
-            'CM_ENABLE_VERBOSE_LOGGING': 0
-        },
-        # External UI build (no embedded webui)
+        # No embedded WebUI
         {
             'CM_EMBED_WEBUI': 0,
-            'CM_ENABLE_WS_PUSH': 1,
-            'CM_ENABLE_SYSTEM_PROVIDER': 1,
-            'CM_ENABLE_OTA': 0,
-            'CM_ENABLE_RUNTIME_BUTTONS': 1,
-            'CM_ENABLE_RUNTIME_CHECKBOXES': 1,
-            'CM_ENABLE_RUNTIME_STATE_BUTTONS': 1,
-            'CM_ENABLE_RUNTIME_ANALOG_SLIDERS': 1,
-            'CM_ENABLE_RUNTIME_ALARMS': 1,
-            'CM_ENABLE_RUNTIME_NUMBER_INPUTS': 1,
-            'CM_ENABLE_STYLE_RULES': 1,
-            'CM_ENABLE_USER_CSS': 1,
             'CM_ENABLE_LOGGING': 1,
             'CM_ENABLE_VERBOSE_LOGGING': 0
+        },
+        # Logging disabled
+        {
+            'CM_EMBED_WEBUI': 1,
+            'CM_ENABLE_LOGGING': 0,
+            'CM_ENABLE_VERBOSE_LOGGING': 0
+        },
+        # Verbose logging enabled
+        {
+            'CM_EMBED_WEBUI': 1,
+            'CM_ENABLE_LOGGING': 1,
+            'CM_ENABLE_VERBOSE_LOGGING': 1
         }
     ]
     
@@ -150,7 +108,7 @@ class FeatureFlagTester:
             with open(self.platformio_ini, 'w', encoding='utf-8') as f:
                 f.write(self.original_ini_content)
         except Exception as e:
-            print(f"⚠️  Warning: Failed to restore platformio.ini: {str(e)}")
+            print(f"[WARNING] Failed to restore platformio.ini: {str(e)}")
             print("Please manually restore the file from backup.")
     
     def _update_platformio_ini(self, flags: Dict[str, int]):
@@ -299,7 +257,7 @@ class FeatureFlagTester:
         )
         
         if self.verbose:
-            status = "✅ PASS" if success else "❌ FAIL"
+            status = "[PASS]" if success else "[FAIL]"
             print(f"  {status} - {compile_time:.1f}s - Flash: {flash_percent:.1f}% - RAM: {ram_percent:.1f}%")
             if not success:
                 print(f"  Error: {output.split('error:')[-1][:100] if 'error:' in output else 'Unknown error'}")
@@ -310,7 +268,7 @@ class FeatureFlagTester:
         """Run essential flag combination tests"""
         suite = TestSuite(start_time=datetime.now())
         
-        print("🧪 Running essential feature flag tests...")
+        print("[INFO] Running essential feature flag tests...")
         
         for i, flags in enumerate(self.ESSENTIAL_COMBINATIONS, 1):
             print(f"Test {i}/{len(self.ESSENTIAL_COMBINATIONS)}: ", end="")
@@ -319,10 +277,10 @@ class FeatureFlagTester:
             
             if result.success:
                 suite.passed_tests += 1
-                print("✅")
+                print("[PASS]")
             else:
                 suite.failed_tests += 1
-                print("❌")
+                print("[FAIL]")
         
         suite.total_tests = len(self.ESSENTIAL_COMBINATIONS)
         suite.end_time = datetime.now()
@@ -386,7 +344,7 @@ class FeatureFlagTester:
         
         for i, result in enumerate(suite.results, 1):
             status_class = "success" if result.success else "error"
-            status_text = "✅ PASS" if result.success else "❌ FAIL"
+            status_text = "PASS" if result.success else "FAIL"
             flags_text = ", ".join([f"{k}={v}" for k, v in result.flags.items()])
             error_text = result.error_output[:200] + "..." if len(result.error_output) > 200 else result.error_output
             
@@ -409,7 +367,7 @@ class FeatureFlagTester:
         with open(output_file, 'w') as f:
             f.write(html_content)
         
-        print(f"📊 Test report generated: {output_file}")
+        print(f"[INFO] Test report generated: {output_file}")
 
 def main():
     parser = argparse.ArgumentParser(description='Test ConfigManager feature flag combinations')
@@ -423,25 +381,25 @@ def main():
     project_dir = script_dir.parent
     
     if not (project_dir / 'platformio.ini').exists():
-        print("❌ Error: platformio.ini not found. Run from ConfigManager project root.")
+        print("[ERROR] platformio.ini not found. Run from ConfigManager project root.")
         sys.exit(1)
     
-    print("🚀 ConfigManager Feature Flag Tester")
-    print(f"📁 Project: {project_dir}")
+    print("ConfigManager Feature Flag Tester")
+    print(f"Project: {project_dir}")
     
     tester = FeatureFlagTester(project_dir, verbose=args.verbose)
     
     try:
         # Run tests
         if args.quick:
-            print("⚡ Running quick essential tests...")
+            print("[INFO] Running quick essential tests...")
             suite = tester.run_essential_tests()
         else:
-            print("🔍 Running comprehensive tests...")
+            print("[INFO] Running comprehensive tests...")
             suite = tester.run_comprehensive_tests()
         
         # Print summary
-        print("\n📊 Test Summary:")
+        print("\nTest Summary:")
         print(f"   Total: {suite.total_tests}")
         print(f"   Passed: {suite.passed_tests}")
         print(f"   Failed: {suite.failed_tests}")
@@ -456,15 +414,15 @@ def main():
         
         # Exit with error code if any tests failed
         if suite.failed_tests > 0:
-            print(f"\n❌ {suite.failed_tests} test(s) failed!")
+            print(f"\n[ERROR] {suite.failed_tests} test(s) failed!")
             sys.exit(1)
         else:
-            print("\n✅ All tests passed!")
+            print("\n[SUCCESS] All tests passed!")
             
     finally:
         # Always restore original platformio.ini
         tester._restore_platformio_ini()
-        print("🔄 Restored original platformio.ini")
+        print("[INFO] Restored original platformio.ini")
 
 if __name__ == '__main__':
     main()

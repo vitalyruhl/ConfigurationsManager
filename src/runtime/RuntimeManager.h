@@ -60,7 +60,6 @@ struct RuntimeFieldMeta {
 };
 
 // Interactive control structures
-#if CM_ENABLE_RUNTIME_BUTTONS
 struct RuntimeButton {
     String group;
     String key;
@@ -69,9 +68,7 @@ struct RuntimeButton {
     RuntimeButton(const String& g, const String& k, std::function<void()> press)
         : group(g), key(k), onPress(press) {}
 };
-#endif
 
-#if CM_ENABLE_RUNTIME_CHECKBOXES
 struct RuntimeCheckbox {
     String group;
     String key;
@@ -81,9 +78,7 @@ struct RuntimeCheckbox {
     RuntimeCheckbox(const String& g, const String& k, std::function<bool()> get, std::function<void(bool)> set)
         : group(g), key(k), getter(get), setter(set) {}
 };
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
 struct RuntimeStateButton {
     String group;
     String key;
@@ -93,9 +88,7 @@ struct RuntimeStateButton {
     RuntimeStateButton(const String& g, const String& k, std::function<bool()> get, std::function<void(bool)> set)
         : group(g), key(k), getter(get), setter(set) {}
 };
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 struct RuntimeIntSlider {
     String group;
     String key;
@@ -107,9 +100,7 @@ struct RuntimeIntSlider {
     RuntimeIntSlider(const String& g, const String& k, std::function<int()> get, std::function<void(int)> set, int min, int max)
         : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
 };
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 struct RuntimeFloatSlider {
     String group;
     String key;
@@ -121,9 +112,7 @@ struct RuntimeFloatSlider {
     RuntimeFloatSlider(const String& g, const String& k, std::function<float()> get, std::function<void(float)> set, float min, float max)
         : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
 };
-#endif
 
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
 struct RuntimeIntInput {
     String group;
     String key;
@@ -147,9 +136,7 @@ struct RuntimeFloatInput {
     RuntimeFloatInput(const String& g, const String& k, std::function<float()> get, std::function<void(float)> set, float min, float max)
         : group(g), key(k), getter(get), setter(set), minV(min), maxV(max) {}
 };
-#endif
 
-#if CM_ENABLE_RUNTIME_ALARMS
 struct RuntimeAlarm {
     String name;
     bool active = false;
@@ -158,7 +145,6 @@ struct RuntimeAlarm {
     std::function<void()> onTrigger = nullptr;
     std::function<void()> onClear = nullptr;
 };
-#endif
 
 class ConfigManagerRuntime {
 public:
@@ -172,34 +158,20 @@ private:
     std::vector<RuntimeValueProvider> runtimeProviders;
     std::vector<RuntimeFieldMeta> runtimeMeta;
 
-#if CM_ENABLE_RUNTIME_BUTTONS
     std::vector<RuntimeButton> runtimeButtons;
-#endif
 
-#if CM_ENABLE_RUNTIME_CHECKBOXES
     std::vector<RuntimeCheckbox> runtimeCheckboxes;
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
     std::vector<RuntimeStateButton> runtimeStateButtons;
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     std::vector<RuntimeIntSlider> runtimeIntSliders;
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     std::vector<RuntimeFloatSlider> runtimeFloatSliders;
-#endif
 
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
     std::vector<RuntimeIntInput> runtimeIntInputs;
     std::vector<RuntimeFloatInput> runtimeFloatInputs;
-#endif
 
-#if CM_ENABLE_RUNTIME_ALARMS
     std::vector<RuntimeAlarm> runtimeAlarms;
-#endif
 
     // System provider data
 #if CM_ENABLE_SYSTEM_PROVIDER
@@ -215,10 +187,8 @@ private:
     void log(const char* format, ...) const;
     void sortProviders();
     void sortMeta();
-#if CM_ENABLE_RUNTIME_ALARMS
     RuntimeAlarm* findAlarm(const String& name);
     const RuntimeAlarm* findAlarm(const String& name) const;
-#endif
 
 public:
     ConfigManagerRuntime();
@@ -255,7 +225,6 @@ public:
 #endif
 
     // Alarms
-#if CM_ENABLE_RUNTIME_ALARMS
     void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction);
     void addRuntimeAlarm(const String& name, std::function<bool()> checkFunction,
                          std::function<void()> onTrigger, std::function<void()> onClear = nullptr);
@@ -265,16 +234,6 @@ public:
     void updateAlarms();
     bool hasActiveAlarms() const;
     std::vector<String> getActiveAlarms() const;
-#else
-    void addRuntimeAlarm(const String&, std::function<bool()>) {}
-    void addRuntimeAlarm(const String&, std::function<bool()>, std::function<void()>, std::function<void()> = nullptr) {}
-    void registerRuntimeAlarm(const String&, std::function<void()> = nullptr, std::function<void()> = nullptr) {}
-    void setRuntimeAlarmActive(const String&, bool, bool = true) {}
-    bool isRuntimeAlarmActive(const String&) const { return false; }
-    void updateAlarms() {}
-    bool hasActiveAlarms() const { return false; }
-    std::vector<String> getActiveAlarms() const { return {}; }
-#endif
 
     // Development support
 #ifdef development
@@ -285,26 +244,15 @@ public:
 #endif
 
     // Interactive runtime controls
-#if CM_ENABLE_RUNTIME_BUTTONS
     void defineRuntimeButton(const String& group, const String& key, const String& label,
                            std::function<void()> onPress, const String& card = String(), int order = 100);
     void handleButtonPress(const String& group, const String& key);
-#else
-    void defineRuntimeButton(const String&, const String&, const String&, std::function<void()>, const String& = String(), int = 100) {}
-    void handleButtonPress(const String&, const String&) {}
-#endif
 
-#if CM_ENABLE_RUNTIME_CHECKBOXES
     void defineRuntimeCheckbox(const String& group, const String& key, const String& label,
                              std::function<bool()> getter, std::function<void(bool)> setter,
                              const String& card = String(), int order = 100);
     void handleCheckboxChange(const String& group, const String& key, bool value);
-#else
-    void defineRuntimeCheckbox(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, const String& = String(), int = 100) {}
-    void handleCheckboxChange(const String&, const String&, bool) {}
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
     void defineRuntimeStateButton(const String& group, const String& key, const String& label,
                                 std::function<bool()> getter, std::function<void(bool)> setter,
                                 bool initState = false, const String& card = String(), int order = 100,
@@ -315,37 +263,20 @@ public:
                                       const String& onLabel = String(), const String& offLabel = String());
     void handleStateButtonToggle(const String& group, const String& key);
     void handleStateButtonSet(const String& group, const String& key, bool value);
-#else
-    void defineRuntimeStateButton(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, bool = false, const String& = String(), int = 100, const String& = String(), const String& = String()) {}
-    void defineRuntimeMomentaryButton(const String&, const String&, const String&, std::function<bool()>, std::function<void(bool)>, const String& = String(), int = 100, const String& = String(), const String& = String()) {}
-    void handleStateButtonToggle(const String&, const String&) {}
-    void handleStateButtonSet(const String&, const String&, bool) {}
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     void defineRuntimeIntSlider(const String& group, const String& key, const String& label,
                               int minValue, int maxValue, int initValue,
                               std::function<int()> getter, std::function<void(int)> setter,
                               const String& unit = String(), const String& card = String(), int order = 100);
     void handleIntSliderChange(const String& group, const String& key, int value);
-#else
-    void defineRuntimeIntSlider(const String&, const String&, const String&, int, int, int, std::function<int()>, std::function<void(int)>, const String& = String(), const String& = String(), int = 100) {}
-    void handleIntSliderChange(const String&, const String&, int) {}
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     void defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
                                 float minValue, float maxValue, float initValue, int precision,
                                 std::function<float()> getter, std::function<void(float)> setter,
                                 const String& unit = String(), const String& card = String(), int order = 100);
     void handleFloatSliderChange(const String& group, const String& key, float value);
-#else
-    void defineRuntimeFloatSlider(const String&, const String&, const String&, float, float, float, int, std::function<float()>, std::function<void(float)>, const String& = String(), const String& = String(), int = 100) {}
-    void handleFloatSliderChange(const String&, const String&, float) {}
-#endif
 
     // Numeric value inputs (separate from sliders)
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
     void defineRuntimeIntValue(const String& group, const String& key, const String& label,
                                int minValue, int maxValue, int initValue,
                                std::function<int()> getter, std::function<void(int)> setter,
@@ -357,10 +288,4 @@ public:
                                  std::function<float()> getter, std::function<void(float)> setter,
                                  const String& unit = String(), const String& card = String(), int order = 100);
     void handleFloatInputChange(const String& group, const String& key, float value);
-#else
-    void defineRuntimeIntValue(const String&, const String&, const String&, int, int, int, std::function<int()>, std::function<void(int)>, const String& = String(), const String& = String(), int = 100) {}
-    void handleIntInputChange(const String&, const String&, int) {}
-    void defineRuntimeFloatValue(const String&, const String&, const String&, float, float, float, int, std::function<float()>, std::function<void(float)>, const String& = String(), const String& = String(), int = 100) {}
-    void handleFloatInputChange(const String&, const String&, float) {}
-#endif
 };

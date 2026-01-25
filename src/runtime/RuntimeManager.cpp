@@ -60,7 +60,6 @@ RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, con
     return nullptr;
 }
 
-#if CM_ENABLE_RUNTIME_ALARMS
 RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) {
     for (auto& alarm : runtimeAlarms) {
         if (alarm.name == name) {
@@ -78,7 +77,6 @@ const RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) const {
     }
     return nullptr;
 }
-#endif
 
 void ConfigManagerRuntime::sortProviders() {
     std::sort(runtimeProviders.begin(), runtimeProviders.end(),
@@ -123,39 +121,30 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         }
 
         // Add interactive control states for this provider/group
-#if CM_ENABLE_RUNTIME_CHECKBOXES
         for (auto& checkbox : runtimeCheckboxes) {
             if (checkbox.group == prov.name && checkbox.getter) {
                 slot[checkbox.key] = checkbox.getter();
             }
         }
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
         for (auto& button : runtimeStateButtons) {
             if (button.group == prov.name && button.getter) {
                 slot[button.key] = button.getter();
             }
         }
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
         for (auto& slider : runtimeIntSliders) {
             if (slider.group == prov.name && slider.getter) {
                 slot[slider.key] = slider.getter();
             }
         }
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
         for (auto& slider : runtimeFloatSliders) {
             if (slider.group == prov.name && slider.getter) {
                 slot[slider.key] = slider.getter();
             }
         }
-#endif
 
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
         for (auto& input : runtimeIntInputs) {
             if (input.group == prov.name && input.getter) {
                 slot[input.key] = input.getter();
@@ -167,7 +156,6 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
                 slot[input.key] = input.getter();
             }
         }
-#endif
     }
 
     // Ensure interactive controls are present even when no runtime provider exists for their group.
@@ -187,25 +175,20 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         return slot;
     };
 
-#if CM_ENABLE_RUNTIME_CHECKBOXES
     for (auto& checkbox : runtimeCheckboxes) {
         if (checkbox.getter) {
             JsonObject slot = getOrCreateSlot(checkbox.group);
             slot[checkbox.key] = checkbox.getter();
         }
     }
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
     for (auto& button : runtimeStateButtons) {
         if (button.getter) {
             JsonObject slot = getOrCreateSlot(button.group);
             slot[button.key] = button.getter();
         }
     }
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
     for (auto& slider : runtimeIntSliders) {
         if (slider.getter) {
             JsonObject slot = getOrCreateSlot(slider.group);
@@ -219,9 +202,7 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
             slot[slider.key] = slider.getter();
         }
     }
-#endif
 
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
     for (auto& input : runtimeIntInputs) {
         if (input.getter) {
             JsonObject slot = getOrCreateSlot(input.group);
@@ -235,16 +216,13 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
             slot[input.key] = input.getter();
         }
     }
-#endif
 
-#if CM_ENABLE_RUNTIME_ALARMS
     if (!runtimeAlarms.empty()) {
         JsonObject alarms = root.createNestedObject("alarms");
         for (auto& a : runtimeAlarms) {
             alarms[a.name] = a.active;
         }
     }
-#endif
 
     String out;
     out.reserve(2048);
@@ -257,9 +235,6 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 }
 
 String ConfigManagerRuntime::runtimeMetaToJSON() {
-#if !CM_ENABLE_RUNTIME_META
-    return "[]";
-#else
     DynamicJsonDocument d(4096);
     JsonArray arr = d.to<JsonArray>();
 
@@ -352,10 +327,8 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     String out;
     serializeJson(d, out);
     return out;
-#endif
 }
 
-#if CM_ENABLE_RUNTIME_NUMBER_INPUTS
 void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const String& key, const String& label,
                                                  int minValue, int maxValue, int initValue,
                                                  std::function<int()> getter, std::function<void(int)> setter,
@@ -427,7 +400,6 @@ void ConfigManagerRuntime::handleFloatInputChange(const String& group, const Str
     }
     RUNTIME_LOG("[RT] Float input not found: %s.%s", group.c_str(), key.c_str());
 }
-#endif
 
 #if CM_ENABLE_SYSTEM_PROVIDER
 
@@ -612,8 +584,6 @@ void ConfigManagerRuntime::updateLoopTiming() {
 
 #endif // CM_ENABLE_SYSTEM_PROVIDER
 
-#if CM_ENABLE_RUNTIME_ALARMS
-
 void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction) {
     RuntimeAlarm alarm;
     alarm.name = name;
@@ -746,8 +716,6 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
     return active;
 }
 
-#endif // CM_ENABLE_RUNTIME_ALARMS
-
 #ifdef development
 
 void ConfigManagerRuntime::setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override) {
@@ -779,7 +747,6 @@ void ConfigManagerRuntime::log(const char* format, ...) const {
 
 // Interactive runtime control implementations
 
-#if CM_ENABLE_RUNTIME_BUTTONS
 void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label,
                                               std::function<void()> onPress, const String& card, int order) {
     RuntimeFieldMeta meta;
@@ -807,9 +774,7 @@ void ConfigManagerRuntime::handleButtonPress(const String& group, const String& 
     }
     RUNTIME_LOG("[RT] Button not found: %s.%s", group.c_str(), key.c_str());
 }
-#endif
 
-#if CM_ENABLE_RUNTIME_CHECKBOXES
 void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const String& key, const String& label,
                                                 std::function<bool()> getter, std::function<void(bool)> setter,
                                                 const String& card, int order) {
@@ -838,9 +803,7 @@ void ConfigManagerRuntime::handleCheckboxChange(const String& group, const Strin
     }
     RUNTIME_LOG("[RT] Checkbox not found: %s.%s", group.c_str(), key.c_str());
 }
-#endif
 
-#if CM_ENABLE_RUNTIME_STATE_BUTTONS
 void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const String& key, const String& label,
                                                    std::function<bool()> getter, std::function<void(bool)> setter,
                                                    bool initState, const String& card, int order,
@@ -907,9 +870,7 @@ void ConfigManagerRuntime::handleStateButtonSet(const String& group, const Strin
     }
     RUNTIME_LOG("[RT] State button not found: %s.%s", group.c_str(), key.c_str());
 }
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const String& key, const String& label,
                                                  int minValue, int maxValue, int initValue,
                                                  std::function<int()> getter, std::function<void(int)> setter,
@@ -945,9 +906,7 @@ void ConfigManagerRuntime::handleIntSliderChange(const String& group, const Stri
     }
     RUNTIME_LOG("[RT] Int slider not found: %s.%s", group.c_str(), key.c_str());
 }
-#endif
 
-#if CM_ENABLE_RUNTIME_ANALOG_SLIDERS
 void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
                                                    float minValue, float maxValue, float initValue, int precision,
                                                    std::function<float()> getter, std::function<void(float)> setter,
@@ -985,4 +944,3 @@ void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const St
     }
     RUNTIME_LOG("[RT] Float slider not found: %s.%s", group.c_str(), key.c_str());
 }
-#endif

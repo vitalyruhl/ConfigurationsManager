@@ -8,10 +8,7 @@ Usage:
   python tools/build_feature_matrix.py --env usb
 
 Flags covered (per [env:<name>] build_flags):
-    -DCM_ENABLE_RUNTIME_ANALOG_SLIDERS
-  -DCM_ENABLE_RUNTIME_STATE_BUTTONS
-  -DCM_ENABLE_RUNTIME_BUTTONS
-  -DCM_ENABLE_RUNTIME_CHECKBOXES
+    -DCM_EMBED_WEBUI
 """
 
 import argparse
@@ -27,10 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PIO_INI = ROOT / 'platformio.ini'
 
 FLAGS = [
-    'CM_ENABLE_RUNTIME_ANALOG_SLIDERS',
-    'CM_ENABLE_RUNTIME_STATE_BUTTONS',
-    'CM_ENABLE_RUNTIME_BUTTONS',
-    'CM_ENABLE_RUNTIME_CHECKBOXES',
+    'CM_EMBED_WEBUI',
 ]
 
 
@@ -175,8 +169,7 @@ def parse_metrics(output: str) -> Dict[str, str]:
 def format_config_label(cfg: Dict[str, int]) -> str:
     parts = []
     for f in FLAGS:
-        short = f.replace('CM_ENABLE_RUNTIME_', '').lower()
-        parts.append(f"{short}={'on' if cfg.get(f, 0) else 'off'}")
+        parts.append(f"{f.lower()}={'on' if cfg.get(f, 0) else 'off'}")
     return ', '.join(parts)
 
 
