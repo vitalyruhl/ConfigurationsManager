@@ -34,8 +34,9 @@
     - Test target: use `Full-IO-Demo` for steps 1–3; switch to `SolarInverterLimiter` at step 4.
 
     1) MQTT manager module (+ baseline settings + ordering/injection)
-       - Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/mqtt_manager.h"`).
-       - Ensure the core library does not require MQTT dependencies unless the module is included/used.
+       - [COMPLETED] Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/MQTTManager.h"`, see `src/mqtt/MQTTManager.h`).
+       - [COMPLETED] Ensure the core library does not require MQTT dependencies unless the module is included/used (header-only).
+       - Docs: `docs/MQTT.md`
        - Core settings auto-load (when the module is used)
          - Provide a module-owned settings bundle that registers a stable, reusable MQTT settings baseline:
            - `mqtt_port`, `mqtt_server`, `mqtt_username`, `mqtt_password`
