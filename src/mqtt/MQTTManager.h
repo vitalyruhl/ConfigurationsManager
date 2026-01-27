@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -72,7 +73,7 @@ public:
     void attach(ConfigManagerClass& configManager);
 
     // One-liner helper similar to IOManager GUI helpers.
-    // Adds a runtime provider and runtime metadata.
+    // Registers the MQTT runtime provider (no GUI fields are auto-added).
     void addToGUI(ConfigManagerClass& configManager,
                   const char* runtimeGroup = "mqtt",
                   int providerOrder = 2,
@@ -82,12 +83,28 @@ public:
     void addLastTopicToGUI(ConfigManagerClass& configManager,
                            const char* runtimeGroup = "mqtt",
                            int order = 20,
-                           const char* label = "Last Topic");
+                           const char* label = "Last Topic",
+                           const char* card = nullptr);
 
     void addLastPayloadToGUI(ConfigManagerClass& configManager,
                              const char* runtimeGroup = "mqtt",
                              int order = 21,
-                             const char* label = "Last Payload");
+                             const char* label = "Last Payload",
+                             const char* card = nullptr);
+
+    void addLastMessageAgeToGUI(ConfigManagerClass& configManager,
+                                const char* runtimeGroup = "mqtt",
+                                int order = 22,
+                                const char* label = "Last Message Age",
+                                const char* unit = "ms",
+                                const char* card = nullptr);
+
+    // Explicit GUI opt-in for MQTT receive items.
+    void addMQTTTopicTooGUI(ConfigManagerClass& configManager,
+                            const char* id,
+                            const char* card = nullptr,
+                            int order = -1,
+                            const char* runtimeGroup = "mqtt");
 
     // Hooks (names preferred by you). Old onConnected/onDisconnected/onMessage remain available.
     void onMQTTConnect(ConnectedCallback callback) { onMqttConnect_ = std::move(callback); }
@@ -143,7 +160,7 @@ public:
     };
 
     // System info publishing helper:
-    // Topic: <publishTopicBase>/System-Info
+    // Topics: <publishTopicBase>/System-Info/ESP and /WiFi
     String getSystemInfoTopic() const;
     SystemInfo collectSystemInfo() const;
     bool publishSystemInfo(const SystemInfo& info, bool retained = false);
@@ -154,8 +171,8 @@ public:
     bool subscribe(const char* topic, uint8_t qos = 0);
     bool unsubscribe(const char* topic);
 
-    // Topic receive helpers: creates Settings entries (topic + optional json key path), stores the parsed value,
-    // and includes the value in addToGUI().
+    // Topic receive helpers: creates Settings entries (topic + optional json key path), stores the parsed value.
+    // GUI entries are explicit via addMQTTTopicTooGUI().
     // - If jsonKeyPath is empty or "none": payload is interpreted as plain value.
     // - If payload is JSON and jsonKeyPath is set (example: "E320.Power_in"): value is extracted.
     void addMQTTTopicReceiveFloat(const char* id,
@@ -228,7 +245,8 @@ private:
     Settings settings_;
     ConfigManagerClass* configManager_ = nullptr;
     bool settingsRegistered_ = false;
-    bool guiRegistered_ = false;
+    bool runtimeProviderRegistered_ = false;
+    bool systemGuiRegistered_ = false;
 
     // Connection behavior
     uint16_t keepAliveSec_ = 60;
@@ -244,6 +262,7 @@ private:
     // Throttling
     unsigned long lastClientLoopMs_ = 0;
     unsigned long lastPublishMs_ = 0;
+    unsigned long lastSystemInfoPublishMs_ = 0;
 
     // Runtime info
     String lastTopic_;
@@ -268,6 +287,7 @@ private:
     void configureFromSettings_();
     void applySettingsCallbacks_();
     void maybePublishSendItems_();
+    void maybePublishSystemInfo_();
     void maybeClientLoop_();
 
     void attemptConnection_();
@@ -309,8 +329,10 @@ private:
     void ensureReceiveSettingsRegistered_();
     void registerReceiveItemSettings_(ReceiveItem& item);
     void registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
+                                        ReceiveItem& item,
                                         const char* runtimeGroup,
-                                        int baseOrder);
+                                        int order,
+                                        const char* card);
 
     static std::unique_ptr<char[]> makeCString_(const String& value)
     {
@@ -428,17 +450,18 @@ inline void MQTTManager::addToGUI(ConfigManagerClass& configManager,
                                   int providerOrder,
                                   int baseOrder)
 {
-    (void)configManager;
+    (void)baseOrder;
 
     if (!configManager_) {
         configManager_ = &configManager;
     }
 
-    if (!guiRegistered_) {
-        // Provider contains baseline + all registered receive values.
+    if (!runtimeProviderRegistered_) {
+        // Provider contains runtime values only. GUI fields are opt-in.
         configManager.getRuntime().addRuntimeProvider(runtimeGroup, [this](JsonObject& data) {
             data["enabled"] = settings_.enableMQTT.get();
             data["wifi"] = WiFi.isConnected();
+            data["connected"] = isConnected();
             data["state"] = static_cast<int>(getState());
             data["reconnects"] = getReconnectCount();
             data["retry"] = getCurrentRetry();
@@ -468,93 +491,163 @@ inline void MQTTManager::addToGUI(ConfigManagerClass& configManager,
             }
         }, providerOrder);
 
-        // Baseline meta
-        RuntimeFieldMeta enabledMeta;
-        enabledMeta.group = runtimeGroup;
-        enabledMeta.key = "enabled";
-        enabledMeta.label = "MQTT Enabled";
-        enabledMeta.order = baseOrder + 0;
-        enabledMeta.isBool = true;
-        configManager.getRuntime().addRuntimeMeta(enabledMeta);
+        runtimeProviderRegistered_ = true;
+    }
 
-        RuntimeFieldMeta wifiMeta;
-        wifiMeta.group = runtimeGroup;
-        wifiMeta.key = "wifi";
-        wifiMeta.label = "WiFi Connected";
-        wifiMeta.order = baseOrder + 1;
-        wifiMeta.isBool = true;
-        configManager.getRuntime().addRuntimeMeta(wifiMeta);
+    if (!systemGuiRegistered_) {
+        configManager.getRuntime().addRuntimeProvider("system", [this](JsonObject& data) {
+            data["mqttEnabled"] = settings_.enableMQTT.get();
+            data["mqttConnected"] = isConnected();
+            data["mqttReconnects"] = getReconnectCount();
+        }, 1);
 
-        RuntimeFieldMeta stateMeta;
-        stateMeta.group = runtimeGroup;
-        stateMeta.key = "state";
-        stateMeta.label = "State (0=disc,1=conn,2=ok,3=fail)";
-        stateMeta.order = baseOrder + 2;
-        configManager.getRuntime().addRuntimeMeta(stateMeta);
+        auto upsertSystemMeta = [&configManager](const String& key,
+                                                 const String& label,
+                                                 int order,
+                                                 bool isBool,
+                                                 int precision = 0) {
+            RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta("system", key);
+            if (existing) {
+                existing->label = label;
+                existing->order = order;
+                if (isBool) {
+                    existing->isBool = true;
+                }
+                existing->precision = precision;
+                return;
+            }
+            RuntimeFieldMeta meta;
+            meta.group = "system";
+            meta.key = key;
+            meta.label = label;
+            meta.order = order;
+            meta.isBool = isBool;
+            meta.precision = precision;
+            configManager.getRuntime().addRuntimeMeta(meta);
+        };
 
-        RuntimeFieldMeta reconnectsMeta;
-        reconnectsMeta.group = runtimeGroup;
-        reconnectsMeta.key = "reconnects";
-        reconnectsMeta.label = "Reconnect Count";
-        reconnectsMeta.order = baseOrder + 3;
-        configManager.getRuntime().addRuntimeMeta(reconnectsMeta);
+        upsertSystemMeta("mqttEnabled", "MQTT Enabled", 4, true);
+        upsertSystemMeta("mqttConnected", "MQTT Connected", 5, true);
+        upsertSystemMeta("mqttReconnects", "MQTT Reconnect Count", 6, false, 0);
 
-        RuntimeFieldMeta retryMeta;
-        retryMeta.group = runtimeGroup;
-        retryMeta.key = "retry";
-        retryMeta.label = "Current Retry";
-        retryMeta.order = baseOrder + 4;
-        configManager.getRuntime().addRuntimeMeta(retryMeta);
-
-        RuntimeFieldMeta uptimeMeta;
-        uptimeMeta.group = runtimeGroup;
-        uptimeMeta.key = "uptimeMs";
-        uptimeMeta.label = "MQTT Uptime";
-        uptimeMeta.unit = "ms";
-        uptimeMeta.order = baseOrder + 5;
-        configManager.getRuntime().addRuntimeMeta(uptimeMeta);
-
-        addLastTopicToGUI(configManager, runtimeGroup, baseOrder + 10);
-        addLastPayloadToGUI(configManager, runtimeGroup, baseOrder + 11);
-
-        RuntimeFieldMeta lastAgeMeta;
-        lastAgeMeta.group = runtimeGroup;
-        lastAgeMeta.key = "lastMsgAgeMs";
-        lastAgeMeta.label = "Last Message Age";
-        lastAgeMeta.unit = "ms";
-        lastAgeMeta.order = baseOrder + 12;
-        configManager.getRuntime().addRuntimeMeta(lastAgeMeta);
-
-        registerReceiveItemRuntimeMeta_(configManager, runtimeGroup, baseOrder);
-
-        guiRegistered_ = true;
+        systemGuiRegistered_ = true;
     }
 }
 
 inline void MQTTManager::addLastTopicToGUI(ConfigManagerClass& configManager,
                                            const char* runtimeGroup,
                                            int order,
-                                           const char* label)
+                                           const char* label,
+                                           const char* card)
 {
+    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, "lastTopic");
+    if (existing) {
+        existing->label = label;
+        existing->order = order;
+        if (card && card[0]) {
+            existing->card = card;
+        }
+        return;
+    }
+
     RuntimeFieldMeta lastTopicMeta;
     lastTopicMeta.group = runtimeGroup;
     lastTopicMeta.key = "lastTopic";
     lastTopicMeta.label = label;
     lastTopicMeta.order = order;
+    if (card && card[0]) {
+        lastTopicMeta.card = card;
+    }
     configManager.getRuntime().addRuntimeMeta(lastTopicMeta);
 }
 
 inline void MQTTManager::addLastPayloadToGUI(ConfigManagerClass& configManager,
                                              const char* runtimeGroup,
                                              int order,
-                                             const char* label)
+                                             const char* label,
+                                             const char* card)
 {
+    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, "lastPayload");
+    if (existing) {
+        existing->label = label;
+        existing->order = order;
+        existing->isString = true;
+        if (card && card[0]) {
+            existing->card = card;
+        }
+        return;
+    }
+
     RuntimeFieldMeta lastPayloadMeta;
     lastPayloadMeta.group = runtimeGroup;
     lastPayloadMeta.key = "lastPayload";
     lastPayloadMeta.label = label;
     lastPayloadMeta.order = order;
+    lastPayloadMeta.isString = true;
+    if (card && card[0]) {
+        lastPayloadMeta.card = card;
+    }
     configManager.getRuntime().addRuntimeMeta(lastPayloadMeta);
+}
+
+inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManager,
+                                                const char* runtimeGroup,
+                                                int order,
+                                                const char* label,
+                                                const char* unit,
+                                                const char* card)
+{
+    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, "lastMsgAgeMs");
+    if (existing) {
+        existing->label = label;
+        existing->order = order;
+        if (unit && unit[0]) {
+            existing->unit = unit;
+        }
+        existing->precision = 0;
+        if (card && card[0]) {
+            existing->card = card;
+        }
+        return;
+    }
+
+    RuntimeFieldMeta lastAgeMeta;
+    lastAgeMeta.group = runtimeGroup;
+    lastAgeMeta.key = "lastMsgAgeMs";
+    lastAgeMeta.label = label;
+    lastAgeMeta.unit = unit ? unit : "";
+    lastAgeMeta.precision = 0;
+    lastAgeMeta.order = order;
+    if (card && card[0]) {
+        lastAgeMeta.card = card;
+    }
+    configManager.getRuntime().addRuntimeMeta(lastAgeMeta);
+}
+
+inline void MQTTManager::addMQTTTopicTooGUI(ConfigManagerClass& configManager,
+                                            const char* id,
+                                            const char* card,
+                                            int order,
+                                            const char* runtimeGroup)
+{
+    if (!runtimeProviderRegistered_) {
+        addToGUI(configManager, runtimeGroup);
+    }
+
+    if (!id || !id[0]) {
+        CM_LOG("[MQTTManager][WARNING] addMQTTTopicTooGUI: id is empty");
+        return;
+    }
+
+    auto it = std::find_if(receiveItems_.begin(), receiveItems_.end(),
+                           [id](const ReceiveItem& item) { return item.id == id; });
+    if (it == receiveItems_.end()) {
+        CM_LOG("[MQTTManager][WARNING] addMQTTTopicTooGUI: id not found: %s", id);
+        return;
+    }
+
+    const int resolvedOrder = (order >= 0) ? order : it->runtimeOrder;
+    registerReceiveItemRuntimeMeta_(configManager, *it, runtimeGroup, resolvedOrder, card);
 }
 
 inline void MQTTManager::setServer(const char* server, uint16_t port)
@@ -661,6 +754,7 @@ inline void MQTTManager::loop()
         } else {
             maybeClientLoop_();
             maybePublishSendItems_();
+            maybePublishSystemInfo_();
         }
         break;
 
@@ -699,6 +793,9 @@ inline bool MQTTManager::publish(const char* topic, const char* payload, bool re
 {
     if (!isConnected()) {
         return false;
+    }
+    if (topic && topic[0]) {
+        CM_LOG_VERBOSE("[MQTT][TX] %s", topic);
     }
     return mqttClient_.publish(topic, payload, retained);
 }
@@ -752,43 +849,54 @@ inline MQTTManager::SystemInfo MQTTManager::collectSystemInfo() const
 
 inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained)
 {
-    const String topic = getSystemInfoTopic();
-    if (topic.isEmpty()) {
+    const String baseTopic = getSystemInfoTopic();
+    if (baseTopic.isEmpty()) {
         return false;
     }
 
-    StaticJsonDocument<768> doc;
-    doc["uptimeMs"] = info.uptimeMs;
-    doc["freeHeap"] = info.freeHeap;
-    if (info.minFreeHeap > 0) doc["minFreeHeap"] = info.minFreeHeap;
-    if (info.maxAllocHeap > 0) doc["maxAllocHeap"] = info.maxAllocHeap;
+    auto publishPayload = [this, retained](const String& topic, const String& payload) -> bool {
+        // PubSubClient has a fixed internal buffer (default ~256 bytes). System-Info JSON can be bigger.
+        // Grow the buffer on demand to avoid publish failures.
+        const size_t required = payload.length() + 1; // include null terminator
+        if (required > 0) {
+            const size_t desired = required + 64; // headroom for topic + overhead
+            const size_t capped = desired > 2048 ? 2048 : desired;
+            mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
+        }
+        return publish(topic.c_str(), payload, retained);
+    };
 
-    JsonObject chip = doc.createNestedObject("chip");
-    chip["model"] = info.chipModel;
-    chip["revision"] = info.chipRevision;
-    chip["cpuMHz"] = info.cpuFreqMHz;
-    chip["sdk"] = info.sdkVersion;
-    chip["flashSize"] = info.flashSizeBytes;
+    StaticJsonDocument<512> espDoc;
+    espDoc["uptimeMs"] = info.uptimeMs;
+    espDoc["freeHeap"] = info.freeHeap;
+    if (info.minFreeHeap > 0) espDoc["minFreeHeap"] = info.minFreeHeap;
+    if (info.maxAllocHeap > 0) espDoc["maxAllocHeap"] = info.maxAllocHeap;
+    espDoc["flashSizeBytes"] = info.flashSizeBytes;
+    espDoc["cpuFreqMHz"] = info.cpuFreqMHz;
+    espDoc["chipModel"] = info.chipModel;
+    espDoc["chipRevision"] = info.chipRevision;
+    espDoc["sdkVersion"] = info.sdkVersion;
 
-    JsonObject wifi = doc.createNestedObject("wifi");
-    wifi["hostname"] = info.hostname;
-    wifi["ssid"] = info.ssid;
-    wifi["rssi"] = info.rssi;
-    wifi["ip"] = info.ip;
-    wifi["mac"] = info.mac;
+    String espPayload;
+    serializeJson(espDoc, espPayload);
+    const String espTopic = baseTopic + "/ESP";
+    const bool okEsp = publishPayload(espTopic, espPayload);
 
-    String payload;
-    serializeJson(doc, payload);
+    StaticJsonDocument<512> wifiDoc;
+    wifiDoc["uptimeMs"] = info.uptimeMs;
+    wifiDoc["hostname"] = info.hostname;
+    wifiDoc["ssid"] = info.ssid;
+    wifiDoc["rssi"] = info.rssi;
+    wifiDoc["ip"] = info.ip;
+    wifiDoc["mac"] = info.mac;
+    wifiDoc["connected"] = WiFi.isConnected();
 
-    // PubSubClient has a fixed internal buffer (default ~256 bytes). System-Info JSON can be bigger.
-    // Grow the buffer on demand to avoid publish failures.
-    const size_t required = payload.length() + 1; // include null terminator
-    if (required > 0) {
-        const size_t desired = required + 64; // headroom for topic + overhead
-        const size_t capped = desired > 2048 ? 2048 : desired;
-        mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
-    }
-    return publish(topic.c_str(), payload, retained);
+    String wifiPayload;
+    serializeJson(wifiDoc, wifiPayload);
+    const String wifiTopic = baseTopic + "/WiFi";
+    const bool okWiFi = publishPayload(wifiTopic, wifiPayload);
+
+    return okEsp && okWiFi;
 }
 
 inline bool MQTTManager::publishSystemInfoNow(bool retained)
@@ -1047,6 +1155,20 @@ inline void MQTTManager::maybePublishSendItems_()
     }
 }
 
+inline void MQTTManager::maybePublishSystemInfo_()
+{
+    if (!isConnected()) {
+        return;
+    }
+
+    const unsigned long now = millis();
+    const unsigned long intervalMs = 60000;
+    if (lastSystemInfoPublishMs_ == 0 || (now - lastSystemInfoPublishMs_ >= intervalMs)) {
+        lastSystemInfoPublishMs_ = now;
+        publishSystemInfoNow(true);
+    }
+}
+
 inline void MQTTManager::attemptConnection_()
 {
     setState_(ConnectionState::Connecting);
@@ -1075,6 +1197,7 @@ inline void MQTTManager::handleConnection_()
     connectionStartMs_ = millis();
     currentRetry_ = 0;
     reconnectCount_++;
+    lastSystemInfoPublishMs_ = 0;
 
     // Subscribe all receive topics.
     for (auto& item : receiveItems_) {
@@ -1119,6 +1242,10 @@ inline void MQTTManager::setState_(ConnectionState newState)
 
 inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length)
 {
+    if (topic && topic[0]) {
+        CM_LOG_VERBOSE("[MQTT][RX] %s", topic);
+    }
+
     lastTopic_ = topic ? String(topic) : String();
     lastPayload_ = String(reinterpret_cast<const char*>(payload), length);
     lastMessageMs_ = millis();
@@ -1363,22 +1490,43 @@ inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item)
 }
 
 inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
+                                                        ReceiveItem& item,
                                                         const char* runtimeGroup,
-                                                        int baseOrder)
+                                                        int order,
+                                                        const char* card)
 {
-    for (auto& item : receiveItems_) {
-        RuntimeFieldMeta meta;
-        meta.group = runtimeGroup;
-        meta.key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
-        meta.label = item.labelC ? item.labelC.get() : item.label.c_str();
-        meta.order = baseOrder + item.runtimeOrder;
-        meta.unit = item.unit;
-        meta.precision = item.precision;
-        if (item.type == ValueType::Bool) {
-            meta.isBool = true;
+    const char* key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
+    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, key);
+    if (existing) {
+        existing->label = item.labelC ? item.labelC.get() : item.label.c_str();
+        existing->order = order;
+        existing->unit = item.unit ? item.unit : "";
+        existing->precision = item.precision;
+        existing->isBool = (item.type == ValueType::Bool);
+        existing->isString = (item.type == ValueType::String);
+        if (card && card[0]) {
+            existing->card = card;
         }
-        configManager.getRuntime().addRuntimeMeta(meta);
+        return;
     }
+
+    RuntimeFieldMeta meta;
+    meta.group = runtimeGroup;
+    meta.key = key;
+    meta.label = item.labelC ? item.labelC.get() : item.label.c_str();
+    meta.order = order;
+    meta.unit = item.unit ? item.unit : "";
+    meta.precision = item.precision;
+    if (item.type == ValueType::Bool) {
+        meta.isBool = true;
+    }
+    if (item.type == ValueType::String) {
+        meta.isString = true;
+    }
+    if (card && card[0]) {
+        meta.card = card;
+    }
+    configManager.getRuntime().addRuntimeMeta(meta);
 }
 
 inline void MQTTManager::mqttCallbackTrampoline_(char* topic, byte* payload, unsigned int length)

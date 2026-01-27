@@ -22,7 +22,7 @@
 
 ## High Priority (Prio 1)
 
-### MQTT – Core & GUI
+### [COMPLETED] MQTT – Core & GUI
 
 - GUI population
   - `addMQTTTopicReceive*` must NOT auto-add GUI entries
