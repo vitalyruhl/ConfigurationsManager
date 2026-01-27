@@ -49,7 +49,7 @@
 
 ---
 
-### examples/Full-MQTT-Demo/src/main.cpp
+### [COMPLETED] examples/Full-MQTT-Demo/src/main.cpp
 
 - GUI examples using `addMQTTTopicTooGUI`
   - "MQTT-Received":
@@ -79,7 +79,7 @@
 
 ---
 
-### MQTT Documentation
+### [COMPLETED] MQTT Documentation
 
 - Explain purpose of "Client ID"
 - Complete `docs/MQTT.md`
