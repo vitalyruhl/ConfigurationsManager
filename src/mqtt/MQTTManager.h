@@ -368,7 +368,7 @@ inline MQTTManager::Settings::Settings()
           .key = "MQTTBaseTopic",
           .name = "Base Topic",
           .category = "MQTT",
-          .defaultValue = String(""),
+          .defaultValue = String("MQTT"),
           .sortOrder = 10})
     , publishIntervalSec(ConfigOptions<float>{
           .key = "MQTTPubPer",

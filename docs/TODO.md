@@ -1,138 +1,184 @@
-# TODO / Errors / Ideas
+# TODO / Roadmap / Issues
 
 ## Current Focus
 
-### v3 stabilization & roadmap
+### v3 Stabilization & Roadmap (UI / Core)
 
-- As of: 2026-01-09
-- UI/UX (Settings & Runtime)
+- Goal: keep `ConfigManager` minimal (compile size & dependencies)
 
-  - `order` / sorting: metadata for live cards and settings categories (stable ordering).
-  - Analog: separate input (NumberInput) vs slider; adjust slider current-value styling.
-- Architecture / API
-  - Unified JSON handlers: route all POST/PUT config endpoints through robust JSON parsing (no manual body accumulation).
-  - Settings schema versioning/migration (when new fields/structure are introduced).
+- UI / UX
+  - Stable ordering for settings & live cards (metadata-based)
+  - Separate NumberInput vs Slider (incl. current-value styling)
+
+- Architecture
+  - Unified JSON handling for all POST/PUT config endpoints
+  - Settings schema versioning & migration support
+
 - Test & CI
-  - Minimal: unit/integration test for auth + password reveal + bulk save/apply.
-  - PlatformIO CI: build matrix for at least one ESP32 env + WebUI build step.
+  - Minimal auth + bulk-save tests
+  - PlatformIO CI (ESP32 env + WebUI build)
 
-### High Priority Bugs/Features (Prio 1)
+---
 
-- [COMPLETED][bug] darkmode in settings are cards not dark... (2026-01-27)
+## High Priority (Prio 1)
 
+### MQTT – Core & GUI
 
-- **[FEATURE]** v3 follow-ups
-  - Extract modules that can be imported separately:
-    - Logger: split into 4 extras (serial, MQTT, display, sdcard) (also use more, then one logger at once?) (eg. log->Printf([Serial,Display,SDCard,GUI],Module, "Check and start BME280!").Debug();) - so i can use multiple loggers at once, but with diffrent loglevels (eg. log->Printf([Serial,SDCard,GUI],Module, "Check and start BME280!").Debug();log->Printf([Serial,SDCard],Module,"Temperature: %2.1lf °C", temperature).Debug(); ) - eg. module is an String local, or global defined, like "[MAIN]", "[BME280]", "[MQTT]", etc. | Serial,Display,SDCard,GUI are defines or enums for the different loggers depends on how we implement it.
-      - or ist it better loke log1 = new Logger([Serial, Display], Debug); log2 = new Logger([Serial, SDCard], Debug); etc. ? - then we can set different loglevels for each logger instance.
-      - Display logger: ensure buffer is cleared even when nothing is sent to the display.
-    - Check where the latest version is (solarinverter project or boilerSaver).
-    - MQTT manager (got it from solarinverter project = latest version)
+- GUI population
+  - `addMQTTTopicReceive*` must NOT auto-add GUI entries
+  - GUI entries only via `addMQTTTopicTooGUI`
 
-  - Goal: keep `ConfigManager` as small as possible in compile size and dependencies
-    - Suggested implementation order (one side-branch per item)
-    - Test target: use `Full-IO-Demo` for steps 1–3; switch to `SolarInverterLimiter` at step 4.
+- System card
+  - Move `settings_.enableMQTT.get()` under "WiFi Connected"
+  - Add "MQTT Connected"
+  - Show `getReconnectCount()` (integer only)
 
-    1) MQTT manager module (+ baseline settings + ordering/injection)
-       - [COMPLETED] Add an optional, separately importable `MQTTManager` module (e.g. `#include "mqtt/MQTTManager.h"`, see `src/mqtt/MQTTManager.h`).
-       - [COMPLETED] Ensure the core library does not require MQTT dependencies unless the module is included/used (header-only).
-       - Docs: `docs/MQTT.md`
-       - [COMPLETED] Core settings auto-load (when the module is used)
-         - Baseline settings are registered via `MQTTManager::attach(ConfigManager)`.
-         - Note: key naming is currently `MQTT*` (e.g. `MQTTHost`, `MQTTPort`, `MQTTEnable`, `MQTTPubPer`, `MQTTListenMs`); key migration can be done later.
-       - Next / open work (MQTT)
-         - Add publish helpers: `addMQTTTopicSend*` (float/int/bool/string) + retained option.
-         - Implement publish scheduling semantics:
-           - `MQTTPubPer` in seconds
-           - `0` = publish-on-change (track last published value)
-         - Implement publish items ordering / injection
-           - Custom publish items must appear directly after `publishTopicBase` in settings UI.
-           - Provide stable API for registering custom publish items while keeping baseline order stable.
-         - Improve key stability / migration
-           - Decide final key naming (e.g. `mqtt_*` vs `MQTT*`) and add migration path.
-         - Decide multi-instance behavior
-           - Current implementation is singleton-oriented (PubSubClient callback trampoline). Either enforce singleton clearly or support multiple instances safely.
-       - Publish items ordering / injection
-         - Custom, user-defined MQTT publish items must appear directly after `publishTopicBase` in the settings category.
-         - Provide an API to register additional publish items (and/or dynamic topics) while keeping the baseline order stable.
-    2) Logging (lightweight core + optional advanced module)
-       - Replace the default logger in the core library with a lightweight implementation (do not require `SigmaLogger` in the default build).
-       - Add an optional, separately importable advanced logging module (e.g. `#include "logging/AdvancedLogger.h"`).
-         - Provide a dedicated class that encapsulates the display logging logic (queue/buffer, update loop) and allows different display backends.
-         - Can internally use `SigmaLogger`, but only inside the optional module (core must not depend on it).
-         - Outputs: Serial and one or more display outputs (and optionally MQTT as an extra sink).
-    3) Refactor `SolarInverterLimiter` example to consume modules
-       - Keep `Smoother` and RS232/RS485 parts inside the example for now; only extract reusable parts (logging, MQTT manager, relay manager, helpers).
-    4) Documentation for all modules
-       - Add docs for the new modules (how to include, minimal example, dependencies, memory/flash impact).
-    5) Update other examples to use the new core settings/modules where applicable [partialy done]
+- Cleanup
+  - Remove all other MQTT GUI elements
 
-- **[FEATURE]** Bybass an Error/Info into live-view form code (toast or similar)
-- **[FEATURE]** Bybass an Error/Info into live-view form code (as a overlay between buttons and cards - allways visible until deactivated from code)
+- Logging
+  - Log all send/receive topics
+  - Only if verbose flag is enabled
 
-### Medium Priority Bugs/Features (Prio 5) (eg. V3.4+ ?)
+- System info publishing
+  - Publish every 60s (not only on reboot)
+  - `info.uptimeMs = millis()` as standalone tag
+  - Split into JSON payloads:
+    - ESP (chip + memory)
+    - WiFi (connection info)
 
-- **[FEATURE]** Add logging with simple trend for Analog/digital-Inputs (over time/on logDB)
-  - like .addAnalogInputTrend("id", "name", "GUI-Card", interval, logTime in houers?, or max entrys to build an array = better, min, max or auto scale ...);
-- **[FEATURE]** add sdcard support for logging data to csv files and logger extension to log to sdcard
-- **[FEATURE]** Add separated Alarm handling for Analog-Inputs and shorthands for creation of Alarms
-  - e.g. ioManager.addAnalogInputMaxAlarm("id", "name", "GUI-Card", maxValue, callback, ...);
-- **[FEATURE]** IOManager follow-ups (after DAC)
-  - PWM/LEDC backend (channel allocation, frequency, resolution, attach/detach lifecycle)
-  - Output smoothing/ramp (slew-rate limiting)
-  - Fail-safe defaults + safe-state on reboot/comm loss
-  - Stable persistence: switch from slot-based keys to ID-based keys (requires migration/versioning)
-  - Provider/backends: DAC + PWM + external DAC (I2C/SPI)
-  - Per-output enable flag + UI visibility toggles + runtime readback
+---
 
+### examples/Full-MQTT-Demo/src/main.cpp
 
-### Low Priority Bugs/Features (Prio 10)
+- GUI examples using `addMQTTTopicTooGUI`
+  - "MQTT-Received":
+    - `boiler_temp_c`
+    - `powermeter_power_in_w`
 
-- **[FEATURE]** Headless mode: disable HTTP server completely (no GUI, no API routes)
-  - Keep WiFi management usable (STA/AP) so MQTT-only setups remain possible
-  - Likely requires splitting WiFi lifecycle from `startWebServer()` shorthands
-  - Provide clear minimal API surface (core methods only) + docs
+  - "MQTT Other Infos":
+    - `lastTopic`
+    - `lastPayload`
+    - `lastMsgAgeMs`
 
-- **[FEATURE]** Card layout/grid improvement
-  - If there are more cards, the card layout breaks under the longest card above; make the grid more flexible.
-- **[FEATURE]** Failover Wifi native support
-- **[FEATURE] add HTTPS support, because its not in core ESP32 WiFi lib yet.** (Prio: not yet, wait for updates)
+- Callback examples
+  - `onMQTTConnect`
+  - `onMQTTDisconnect`
+  - `onNewMQTTMessage`
+  - `onMQTTStateChanged`
 
-### Ideas / Suggestions
+- Explain difference vs classic callbacks:
+  - `onConnected(callback)`
+  - `onDisconnected(callback)`
+  - `onMessage(callback)`
 
-- **[IDEA]** what about Matter - the new standard for smart home devices?
-  - maybe add a Matter component to the library in the future?
-- **[IDEA]** what about bacNet? send data to a bacNet server like mqtt?
+- Calculation example
+  - Convert `washing_machine_energy_total` (kWh → MWh)
+  - Export as MQTT topic
+  - Show in GUI (2 decimal places)
 
+---
 
-### Done / Resolved (but not tested yet)
+### MQTT Documentation
 
-- **COMPLETED / Feature** WebUI settings + theming
-  - Settings view: Tabs only (List view removed)
-  - Dark mode toggle added
-  - Cookie persistence for theme: NOT TESTED
-  - Runtime cards: use theme-based card background/border
-  - Vue updated to v3.5.27
+- Explain purpose of "Client ID"
+- Complete `docs/MQTT.md`
+  - All methods
+  - Minimal + advanced examples
 
-- **COMPLETED / Bug** Browser tab title is configurable
-  - H1 uses `.setAppName(APP_NAME)`
-  - Browser tab uses `.setAppTitle("...")`
-  - If `.setVersion(VERSION)` is set: it is appended to both
+---
 
-- **[Tooling]** WebUI debug logging toggle (v3.3.x)
-  - Add a build-time flag (e.g. `VITE_CM_DEBUG`) and route noisy logs through a `dbg(...)` helper.
-- **COMPLETED / Bug/Design** Uptime shows always seconds -> for mat it to human readable format (days, hours, minutes, seconds)
-  - days is not tetsed yet
-- Library does not include the docs folder.
-- **COMPLETED / Bug** check restart behavior, sometimes the device restarts multiple times if wifi also good
+### Wi-Fi / WebServer Defaults
 
-- **[Tooling/Design]** Revisit "advanced opt-in" WebUI rebuild (v3.3.x)
-  - Goal: library consumption must NOT require Node.js/npm by default.
-  - Idea: gate WebUI rebuild + `src/html_content.h` regeneration behind a flag (e.g. `CM_WEBUI_REBUILD`).
-  - Decide whether `webui/dist/*` should stay tracked or be generated-only (and ensure release workflow covers it).
+- Auto reboot timeout
+  - Initialize by default
+  - Move setting from System → WiFi
 
+- WebSocket defaults
+  - Initialize inside `ConfigManager.startWebServer()`
+    - `enableWebSocketPush`
+    - `setWebSocketInterval(1000)`
+    - `setPushOnConnect(true)`
 
-- **COMPLETED / Refactor** remove all unnessesary switshes fom configmanager and GUI, leabe only logging and verboselogging - all other switches are not needed any more.
+---
+
+## Feature Follow-ups (v3.x)
+
+### Modularization
+
+- Extract optional modules:
+  - MQTTManager (already mostly done)
+  - Logging module (advanced, optional)
+
+#### Logging redesign
+- Lightweight core logger
+- Optional advanced logger module
+  - Multiple outputs (Serial, Display, SD, MQTT)
+  - Independent log levels per instance
+  - Display buffer must clear even without updates
+
+---
+
+### Module Migration Plan
+
+1) MQTTManager
+   - Publish helpers (typed, retained)
+   - Publish scheduling:
+     - Interval
+     - Publish-on-change
+   - Stable publish item ordering
+   - Decide singleton vs multi-instance
+
+2) Logging module
+   - Core: minimal logger
+   - Optional: advanced logger (SigmaLogger internal only)
+
+3) Refactor examples
+   - Start with Full-IO-Demo
+   - Later: SolarInverterLimiter
+
+4) Documentation
+   - Include, dependencies, memory impact
+
+---
+
+## Medium Priority (Prio 5)
+
+- Input logging with trends (analog/digital)
+- SD card logging (CSV)
+- Alarm helpers for IOManager
+- IOManager improvements
+  - PWM/LEDC backend
+  - Output ramping
+  - Fail-safe states
+  - ID-based persistence + migration
+
+---
+
+## Low Priority (Prio 10)
+
+- Headless mode (no HTTP server)
+- Card layout/grid improvements
+- WiFi failover
+- HTTPS support (wait for ESP32 core)
+
+---
+
+## Ideas
+
+- Matter support
+- BACnet integration
+
+---
+
+## Done (not fully tested)
+
+- WebUI redesign (Vue 3, theming, tabs)
+- Configurable browser title
+- WebUI debug logging flag
+- Human-readable uptime
+- Restart-loop bug fixed
+- Remove obsolete config switches
 
 
 ### Done / Resolved
