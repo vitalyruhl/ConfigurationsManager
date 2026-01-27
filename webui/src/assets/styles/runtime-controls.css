@@ -42,6 +42,24 @@ body {
   color: var(--cm-fg);
 }
 
+/* Browser autofill (Chrome/Edge) can force a yellow background even in dark mode.
+   Override it to match our theme variables. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--cm-fg) !important;
+  caret-color: var(--cm-fg);
+  box-shadow: 0 0 0px 1000px var(--cm-bg) inset !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--cm-bg) inset !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 .btn {
   background: var(--btn-primary-bg);
   color: #fff;

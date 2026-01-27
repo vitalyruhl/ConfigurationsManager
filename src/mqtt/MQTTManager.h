@@ -124,6 +124,31 @@ public:
     const String& getLastPayload() const { return lastPayload_; }
     unsigned long getLastMessageAgeMs() const { return lastMessageMs_ > 0 ? (millis() - lastMessageMs_) : 0; }
 
+    struct SystemInfo {
+        uint32_t uptimeMs = 0;
+        uint32_t freeHeap = 0;
+        uint32_t minFreeHeap = 0;
+        uint32_t maxAllocHeap = 0;
+        uint32_t flashSizeBytes = 0;
+        uint32_t cpuFreqMHz = 0;
+        String chipModel;
+        uint32_t chipRevision = 0;
+        String sdkVersion;
+
+        String hostname;
+        String ssid;
+        int rssi = 0;
+        String ip;
+        String mac;
+    };
+
+    // System info publishing helper:
+    // Topic: <publishTopicBase>/System-Info
+    String getSystemInfoTopic() const;
+    SystemInfo collectSystemInfo() const;
+    bool publishSystemInfo(const SystemInfo& info, bool retained = false);
+    bool publishSystemInfoNow(bool retained = false);
+
     bool publish(const char* topic, const char* payload, bool retained = false);
     bool publish(const char* topic, const String& payload, bool retained = false);
     bool subscribe(const char* topic, uint8_t qos = 0);
@@ -681,6 +706,94 @@ inline bool MQTTManager::publish(const char* topic, const char* payload, bool re
 inline bool MQTTManager::publish(const char* topic, const String& payload, bool retained)
 {
     return publish(topic, payload.c_str(), retained);
+}
+
+inline String MQTTManager::getSystemInfoTopic() const
+{
+    String base = settings_.publishTopicBase.get();
+    base.trim();
+    if (base.isEmpty()) {
+        base = settings_.clientId.get();
+        base.trim();
+    }
+    if (base.isEmpty()) {
+        return String();
+    }
+    while (base.endsWith("/")) {
+        base.remove(base.length() - 1);
+    }
+    return base + "/System-Info";
+}
+
+inline MQTTManager::SystemInfo MQTTManager::collectSystemInfo() const
+{
+    SystemInfo info;
+    info.uptimeMs = millis();
+    info.freeHeap = static_cast<uint32_t>(ESP.getFreeHeap());
+#if defined(ESP32)
+    info.minFreeHeap = static_cast<uint32_t>(ESP.getMinFreeHeap());
+    info.maxAllocHeap = static_cast<uint32_t>(ESP.getMaxAllocHeap());
+#endif
+    info.flashSizeBytes = static_cast<uint32_t>(ESP.getFlashChipSize());
+    info.cpuFreqMHz = static_cast<uint32_t>(ESP.getCpuFreqMHz());
+    info.chipModel = String(ESP.getChipModel());
+    info.chipRevision = static_cast<uint32_t>(ESP.getChipRevision());
+    info.sdkVersion = String(ESP.getSdkVersion());
+
+    const char* hn = WiFi.getHostname();
+    info.hostname = hn ? String(hn) : String();
+    info.ssid = WiFi.SSID();
+    info.rssi = WiFi.RSSI();
+    info.ip = WiFi.isConnected() ? WiFi.localIP().toString() : String();
+    info.mac = WiFi.macAddress();
+
+    return info;
+}
+
+inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained)
+{
+    const String topic = getSystemInfoTopic();
+    if (topic.isEmpty()) {
+        return false;
+    }
+
+    StaticJsonDocument<768> doc;
+    doc["uptimeMs"] = info.uptimeMs;
+    doc["freeHeap"] = info.freeHeap;
+    if (info.minFreeHeap > 0) doc["minFreeHeap"] = info.minFreeHeap;
+    if (info.maxAllocHeap > 0) doc["maxAllocHeap"] = info.maxAllocHeap;
+
+    JsonObject chip = doc.createNestedObject("chip");
+    chip["model"] = info.chipModel;
+    chip["revision"] = info.chipRevision;
+    chip["cpuMHz"] = info.cpuFreqMHz;
+    chip["sdk"] = info.sdkVersion;
+    chip["flashSize"] = info.flashSizeBytes;
+
+    JsonObject wifi = doc.createNestedObject("wifi");
+    wifi["hostname"] = info.hostname;
+    wifi["ssid"] = info.ssid;
+    wifi["rssi"] = info.rssi;
+    wifi["ip"] = info.ip;
+    wifi["mac"] = info.mac;
+
+    String payload;
+    serializeJson(doc, payload);
+
+    // PubSubClient has a fixed internal buffer (default ~256 bytes). System-Info JSON can be bigger.
+    // Grow the buffer on demand to avoid publish failures.
+    const size_t required = payload.length() + 1; // include null terminator
+    if (required > 0) {
+        const size_t desired = required + 64; // headroom for topic + overhead
+        const size_t capped = desired > 2048 ? 2048 : desired;
+        mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
+    }
+    return publish(topic.c_str(), payload, retained);
+}
+
+inline bool MQTTManager::publishSystemInfoNow(bool retained)
+{
+    return publishSystemInfo(collectSystemInfo(), retained);
 }
 
 inline bool MQTTManager::subscribe(const char* topic, uint8_t qos)

@@ -62,7 +62,16 @@ void setup()
 
     mqtt.attach(ConfigManager);
 
-    mqtt.onMQTTConnect([]() { CM_LOG("[Full-MQTT-Demo][INFO] MQTT connected"); });
+    mqtt.onMQTTConnect([]() {
+        CM_LOG("[Full-MQTT-Demo][INFO] MQTT connected");
+        if (mqtt.settings().publishTopicBase.get().isEmpty()) {
+            mqtt.settings().publishTopicBase.set(mqtt.settings().clientId.get());
+        }
+        const bool ok = mqtt.publishSystemInfoNow(true);
+        if (!ok) {
+            CM_LOG("[Full-MQTT-Demo][WARNING] Failed to publish System-Info (missing base topic or not connected)");
+        }
+    });
     mqtt.onMQTTDisconnect([]() { CM_LOG("[Full-MQTT-Demo][INFO] MQTT disconnected"); });
     mqtt.onNewMQTTMessage([](const cm::MQTTManager::MqttMessageView& msg) {
         String payload(reinterpret_cast<const char*>(msg.payload), msg.length);

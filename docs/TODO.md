@@ -18,7 +18,7 @@
 
 ### High Priority Bugs/Features (Prio 1)
 
-- [bug] darkmode in settings are cards not dark...
+- [COMPLETED][bug] darkmode in settings are cards not dark... (2026-01-27)
 
 
 - **[FEATURE]** v3 follow-ups
