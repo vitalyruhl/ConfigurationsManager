@@ -2,9 +2,26 @@
 
 > Version 3.3.0
 
+## Why this exists
+
+Most ESP32 projects start the same way:
+you need a web server, persistent configuration storage, WiFi handling, OTA updates, and some way to inspect or control runtime values.
+
+Individually, none of these problems are difficult.
+But together they quickly turn into repetitive boilerplate that distracts from the actual purpose of your project.
+
+This library exists to solve that once.
+
+It provides a structured, type-safe way to define settings, persist them, expose them through a responsive Web UI, and interact with live runtime data — without forcing you to design yet another custom web server or configuration layer.
+
+You focus on your application logic.
+The infrastructure is already there.
+
 ## Overview
 
-ConfigurationsManager is a C++17 helper library + example firmware for managing persistent configuration values on ESP32 (NVS / Preferences) and exposing them via a responsive Vue 3 single‑page web UI (settings + live runtime dashboard + OTA flashing). It focuses on:
+> Focus on your project logic — not on web servers, storage, or configuration plumbing.
+
+ConfigurationsManager is a C++17 helper library and example firmware for ESP32 projects that need persistent configuration, a web-based UI, and live runtime visibility — without building custom infrastructure from scratch. It focuses on:
 
 - Type‑safe templated `Config<T>` wrappers
 - Central registration + bulk load/save functions
@@ -15,26 +32,31 @@ ConfigurationsManager is a C++17 helper library + example firmware for managing 
 - OTA update integration
 - Static or DHCP WiFi startup helpers (multiple overloads)
 
-## Note: This is a C++17 Project
+## Note: C++17 Required
 
-> Requires `-std=gnu++17` (or newer) in `platformio.ini` or Arduino IDE settings. The library uses C++17 features like inline variables, structured bindings, lambdas with captures in unevaluated contexts, and `std::function` for callbacks.
+>This project requires `-std=gnu++17` (or newer).
+>It intentionally uses modern C++ features such as inline variables, structured bindings, and `std::function` to keep the API expressive and type-safe.
 
 ## Features
 
-- Non-Volatile Storage (NVS) integration (ESP Preferences)
-- Declarative config registration with a `ConfigOptions<T>` aggregate
+### Core
+- Non-Volatile Storage (NVS / Preferences)
+- Type-safe `Config<T>` wrappers
+- Central registration + bulk load/save
+
+### Web UI & Runtime
 - Responsive WebUI (embedded in flash)
-- OTA firmware upload endpoint + flashing directly from the WebUI
-- Dynamic visibility of settings via `showIf` lambda (e.g. hide static IP fields while DHCP enabled)
-- Password masking & selective exposure
-- Live-Values theming: per-field JSON style metadata or global `/user_theme.css` override
-- Per-setting callbacks (`cb` / `setCallback`) on value changes
-- AP Mode fallback / captive portal style entry
-- Smart WiFi Roaming (mesh / multi-AP)
-- Live runtime values (`/runtime.json`) + WebSocket updates (`/ws`) with polling fallback
-- Boilerplate reduction helpers: `OptionGroup` factory + `showIfTrue()/showIfFalse()`
-- Core settings templates / injection: standard WiFi/System/Buttons settings to keep `main.cpp` small (see examples)
-- IOManager module: settings-driven Digital/Analog IO with immediate Settings + WebUI handling (runtime controls + live readouts)
+- Live runtime values (`/runtime.json`, WebSocket)
+- Per-setting styling & theming
+
+### Device & Connectivity
+- WiFi helpers (DHCP / static / AP fallback)
+- OTA firmware upload via WebUI
+
+### Extensibility
+- Conditional visibility (`showIf`)
+- Callbacks on value change
+- Core settings templates & IOManager module
 
 ## Documentation Index
 
@@ -165,6 +187,8 @@ More:
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 
 ## Screenshots
+
+### The embedded Web UI automatically adapts to desktop and mobile devices.
 
 > Example on Monitor HD
 > ![Example on Monitor HD](examples/screenshots/test-hd.jpg)
