@@ -1,13 +1,34 @@
 <template>
   <div class="category">
     <h2>{{ prettyName }}</h2>
-    <template v-for="[key, settingData] in sortedSettings" :key="key">
+    <template v-for="item in groupedSettings" :key="item.key">
+      <div v-if="item.type === 'pair'" class="setting-pair">
+        <Setting
+          v-if="shouldShow(item.left.data)"
+          :category="category"
+          :keyName="item.left.key"
+          :settingData="item.left.data"
+          :busy="!!busyMap[category + '.' + item.left.key]"
+          @apply="onApply"
+          @save="onSave"
+        />
+        <Setting
+          v-if="shouldShow(item.right.data)"
+          :category="category"
+          :keyName="item.right.key"
+          :settingData="item.right.data"
+          :busy="!!busyMap[category + '.' + item.right.key]"
+          @apply="onApply"
+          @save="onSave"
+        />
+      </div>
       <Setting
-        v-if="shouldShow(settingData)"
+        v-else
+        v-if="shouldShow(item.data)"
         :category="category"
-        :keyName="key"
-        :settingData="settingData"
-        :busy="!!busyMap[category + '.' + key]"
+        :keyName="item.key"
+        :settingData="item.data"
+        :busy="!!busyMap[category + '.' + item.key]"
         @apply="onApply"
         @save="onSave"
       />
@@ -16,6 +37,34 @@
 </template>
 <style scoped>
 /* Intentionally minimized: styles provided globally or in parent. */
+:deep(.setting-pair){
+  margin:15px 0;
+  padding:15px;
+  background:var(--cm-card-bg);
+  border:1px solid var(--cm-card-border);
+  border-radius:5px;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:12px;
+  color:var(--cm-fg)
+}
+:deep(.setting-pair > div){width:100%}
+:deep(.setting-pair .setting){
+  margin:0;
+  padding:0;
+  background:transparent;
+  border:none;
+  width:100%;
+  max-width:none;
+  flex-direction:column;
+  align-items:stretch
+}
+:deep(.setting-pair .input-area){flex:1}
+:deep(.setting-pair .actions){width:auto}
+@media (min-width:768px){
+  :deep(.setting-pair){grid-template-columns:1fr 1fr;gap:16px}
+}
+:deep(.setting-pair .actions){width:100%}
 </style>
 <script setup>
 import { computed } from 'vue';
@@ -51,6 +100,60 @@ const sortedSettings = computed(() => {
     return aKey.localeCompare(bKey);
   });
   return entries;
+});
+
+function resolveSettingLabel(settingKey, settingData) {
+  return String(settingData.displayName || settingData.name || settingKey);
+}
+
+const groupedSettings = computed(() => {
+  const entries = sortedSettings.value || [];
+  const labelToEntry = new Map();
+  entries.forEach(([key, data]) => {
+    labelToEntry.set(resolveSettingLabel(key, data), { key, data });
+  });
+
+  const used = new Set();
+  const result = [];
+
+  for (const [key, data] of entries) {
+    if (used.has(key)) continue;
+    const label = resolveSettingLabel(key, data);
+    const isTopic = label.endsWith(' Topic');
+    const isJsonKey = label.endsWith(' JSON Key');
+
+    if (isTopic) {
+      const base = label.slice(0, -' Topic'.length);
+      const matchLabel = `${base} JSON Key`;
+      const match = labelToEntry.get(matchLabel);
+      if (match && !used.has(match.key) && shouldShow(data) && shouldShow(match.data)) {
+        used.add(key);
+        used.add(match.key);
+        result.push({
+          type: 'pair',
+          key: `${key}__${match.key}`,
+          left: { key, data },
+          right: { key: match.key, data: match.data },
+        });
+        continue;
+      }
+    }
+
+    if (isJsonKey) {
+      const base = label.slice(0, -' JSON Key'.length);
+      const matchLabel = `${base} Topic`;
+      const match = labelToEntry.get(matchLabel);
+      if (match && !used.has(match.key) && shouldShow(data) && shouldShow(match.data)) {
+        // Let the Topic entry render the pair to keep ordering stable.
+        continue;
+      }
+    }
+
+    used.add(key);
+    result.push({ type: 'single', key, data });
+  }
+
+  return result;
 });
 function shouldShow(settingData){
   // Firmware can provide dynamic visibility via showIfResolved or showIf; fallback to always true

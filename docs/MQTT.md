@@ -181,6 +181,7 @@ Publish / subscribe:
 - `publish(...)`, `subscribe(...)`, `unsubscribe(...)`
 - `clearRetain(topic)`
 - `publishSystemInfo(...)`, `publishSystemInfoNow(...)`
+- `publishAllNow(...)`
 - `publishTopic(...)`, `publishTopicImmediately(...)`
 - `publishExtraTopic(...)`, `publishExtraTopicImmediately(...)`
 

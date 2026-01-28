@@ -216,6 +216,7 @@ public:
     SystemInfo collectSystemInfo() const;
     bool publishSystemInfo(const SystemInfo& info, bool retained = false);
     bool publishSystemInfoNow(bool retained = false);
+    bool publishAllNow(bool retained = true);
 
     bool publish(const char* topic, const char* payload, bool retained = false);
     bool publish(const char* topic, const String& payload, bool retained = false);
@@ -1325,6 +1326,21 @@ inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained
 inline bool MQTTManager::publishSystemInfoNow(bool retained)
 {
     return publishSystemInfo(collectSystemInfo(), retained);
+}
+
+inline bool MQTTManager::publishAllNow(bool retained)
+{
+    bool ok = true;
+    ok = publishSystemInfoNow(retained) && ok;
+
+    for (auto& item : receiveItems_) {
+        if (!item.target) {
+            continue;
+        }
+        const bool itemOk = publishTopicInternal_(item.id.c_str(), retained, 0, true);
+        ok = itemOk && ok;
+    }
+    return ok;
 }
 
 inline bool MQTTManager::clearRetain(const char* topic)

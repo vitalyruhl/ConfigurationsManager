@@ -88,7 +88,7 @@ void setup()
     Serial.begin(115200);
 
     ConfigManagerClass::setLogger([](const char *msg) {
-        Serial.print("[ConfigManager] ");
+        Serial.print("[USER-LOG]");
         Serial.println(msg);
     });
 
@@ -108,7 +108,7 @@ void setup()
     ConfigManager.loadAll();
 
     systemSettings.allowOTA.setCallback([](bool enabled) {
-        Serial.printf("[MAIN] OTA setting changed to: %s\n", enabled ? "enabled" : "disabled");
+        Serial.printf("OTA setting changed to: %s\n", enabled ? "enabled" : "disabled");
         ConfigManager.getOTAManager().enable(enabled);
     });
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
@@ -123,7 +123,8 @@ void setup()
     ConfigManager.setWebSocketInterval(1000);
     ConfigManager.setPushOnConnect(true);
 
-    Serial.println("[MAIN] Setup completed successfully. Starting main loop...");
+    mqtt.publishAllNow();
+    Serial.println("Setup completed successfully. Starting main loop...");
 }
 
 void loop()
