@@ -5,12 +5,7 @@
 #include <time.h>
 
 // Logging support
-#if CM_ENABLE_LOGGING
-extern std::function<void(const char*)> ConfigManagerClass_logger;
-#define RUNTIME_LOG(...) if(ConfigManagerClass_logger) { char buf[256]; snprintf(buf, sizeof(buf), __VA_ARGS__); ConfigManagerClass_logger(buf); }
-#else
-#define RUNTIME_LOG(...)
-#endif
+#define RUNTIME_LOG(...) CM_LOG(__VA_ARGS__)
 
 ConfigManagerRuntime::ConfigManagerRuntime()
     : configManager(nullptr)

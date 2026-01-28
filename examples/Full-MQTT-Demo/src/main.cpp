@@ -162,6 +162,17 @@ void loop()
 
     mqtt.loop();
 
+    static unsigned long lastLoopLogMs = 0;
+    const unsigned long now = millis();
+    if (now - lastLoopLogMs >= 10000) {
+        lastLoopLogMs = now;
+        CM_LOG("[Full-MQTT-Demo][INFO] Loop: wifi=%s mqtt=%s base=%s lastTopic=%s",
+               WiFi.isConnected() ? "connected" : "disconnected",
+               mqtt.isConnected() ? "connected" : "disconnected",
+               mqtt.getMqttBaseTopic().c_str(),
+               mqtt.getLastTopic().c_str());
+    }
+
     static bool buttonStateInitialized = false;
     static bool lastButtonState = false;
     const bool buttonState = (digitalRead(BUTTON_PIN) == HIGH);

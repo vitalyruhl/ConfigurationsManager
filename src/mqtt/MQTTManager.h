@@ -1690,6 +1690,11 @@ inline void MQTTManager::attemptConnection_()
     setState_(ConnectionState::Connecting);
     lastConnectionAttemptMs_ = millis();
 
+    CM_LOG_VERBOSE("[MQTT] Connecting to %s:%d (clientId=%s)",
+                   settings_.server.get().c_str(),
+                   settings_.port.get(),
+                   settings_.clientId.get().c_str());
+
     bool connected = false;
     String willTopic = resolveWillTopic_();
     const bool useWill = !willTopic.isEmpty();
@@ -1725,6 +1730,9 @@ inline void MQTTManager::attemptConnection_()
         handleConnection_();
     } else {
         currentRetry_++;
+        CM_LOG_VERBOSE("[MQTT] Connection failed (retry %u/%u)",
+                       currentRetry_,
+                       maxRetries_);
         setState_(ConnectionState::Disconnected);
     }
 }
@@ -1763,6 +1771,9 @@ inline void MQTTManager::handleConnection_()
         onConnected_();
     }
     onMQTTConnected();
+
+    CM_LOG_VERBOSE("[MQTT] Connected, subscribed to %u receive topics",
+                   static_cast<unsigned int>(receiveItems_.size()));
 }
 
 inline void MQTTManager::handleDisconnection_()

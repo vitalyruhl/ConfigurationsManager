@@ -1,20 +1,11 @@
 #include "WiFiManager.h"
+#include "../ConfigManager.h"
 #include <ESP.h>
 #include <esp_wifi.h>
 
 // Logging support with verbosity levels
-#if CM_ENABLE_LOGGING
-extern std::function<void(const char*)> ConfigManagerClass_logger;
-#define WIFI_LOG(...) if(ConfigManagerClass_logger) { char buf[256]; snprintf(buf, sizeof(buf), __VA_ARGS__); ConfigManagerClass_logger(buf); }
-#if CM_ENABLE_VERBOSE_LOGGING
-#define WIFI_LOG_VERBOSE(...) WIFI_LOG(__VA_ARGS__)
-#else
-#define WIFI_LOG_VERBOSE(...)
-#endif
-#else
-#define WIFI_LOG(...)
-#define WIFI_LOG_VERBOSE(...)
-#endif
+#define WIFI_LOG(...) CM_LOG(__VA_ARGS__)
+#define WIFI_LOG_VERBOSE(...) CM_LOG_VERBOSE(__VA_ARGS__)
 
 ConfigManagerWiFi::ConfigManagerWiFi()
   : currentState(WIFI_STATE_DISCONNECTED)

@@ -7,13 +7,9 @@ ConfigManagerClass ConfigManager;
 // Static logger instance
 std::function<void(const char*)> ConfigManagerClass::logger = nullptr;
 
-// Export logger for modules
 #if CM_ENABLE_LOGGING
-std::function<void(const char*)> ConfigManagerClass_logger = nullptr;
-
 void ConfigManagerClass::setLogger(LogCallback cb) {
     logger = cb;
-    ConfigManagerClass_logger = cb; // Export for modules
 }
 
 void ConfigManagerClass::log_message(const char *format, ...)

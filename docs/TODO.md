@@ -45,7 +45,7 @@
   - Logging module (advanced, optional)
 
 #### Logging redesign
-- Lightweight core logger
+- [COMPLETED] Lightweight core logger (all modules route through CM_LOG/CM_LOG_VERBOSE)
 - Optional advanced logger module
   - Multiple outputs (Serial, Display, SD, MQTT)
   - Independent log levels per instance

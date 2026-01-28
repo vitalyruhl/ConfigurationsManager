@@ -5,12 +5,7 @@
 #include <AsyncJson.h>
 
 // Logging support
-#if CM_ENABLE_LOGGING
-extern std::function<void(const char*)> ConfigManagerClass_logger;
-#define WEB_LOG(...) if(ConfigManagerClass_logger) { char buf[256]; snprintf(buf, sizeof(buf), __VA_ARGS__); ConfigManagerClass_logger(buf); }
-#else
-#define WEB_LOG(...)
-#endif
+#define WEB_LOG(...) CM_LOG(__VA_ARGS__)
 
 ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     : server(webServer)
@@ -1271,16 +1266,12 @@ String ConfigManagerWeb::getContentType(const String& path) {
 }
 
 void ConfigManagerWeb::log(const char* format, ...) const {
-#if CM_ENABLE_LOGGING
-    if (ConfigManagerClass_logger) {
-        char buffer[256];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-        ConfigManagerClass_logger(buffer);
-    }
-#endif
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    CM_LOG("%s", buffer);
 }
 
 void ConfigManagerWeb::setSettingsPassword(const String& password) {
