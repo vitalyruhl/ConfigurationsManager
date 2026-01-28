@@ -30,6 +30,8 @@ static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
 static constexpr int BUTTON_PIN = 33;
 static const char BUTTON_TOPIC[] = "test_topic_Bool_send";
 static const char BUTTON_ID[] = "test_topic_bool_send";
+static const char TEST_PUBLISH_TOPIC[] = "test_topic_publish_immediately";
+static const char TASMOTA_ERRORS_FILTER[] = "/main/error";
 
 // Receive demo values
 static float boilerTemperatureC = 0.0f;
@@ -41,6 +43,8 @@ static float powerMeterPowerInW = 0.0f;
 static float washingMachineEnergyTotal = 0.0f;
 static float washingMachineEnergyYesterday = 0.0f;
 static float washingMachineEnergyTotalMWh = 0.0f;
+static int solarLimiterSetValueW = 0;
+static String tasmotaLastError;
 
 
 void onWiFiConnected();
@@ -54,6 +58,11 @@ namespace cm {
         CM_LOG("[Full-MQTT-Demo][INFO] MQTT connected");
         if (mqtt.settings().publishTopicBase.get().isEmpty()) {
             mqtt.settings().publishTopicBase.set(mqtt.settings().clientId.get());
+        }
+        const String base = mqtt.getMqttBaseTopic();
+        if (!base.isEmpty()) {
+            const String statusTopic = base + "/System-Info/status";
+            mqtt.publishExtraTopicImmediately("mqtt_status_aus_Main_Callback", statusTopic.c_str(), "online", true);
         }
         const bool ok = mqtt.publishSystemInfoNow(true);
         if (!ok) {
@@ -80,6 +89,11 @@ namespace cm {
         String payloadString(payload, length);
         payloadString.trim();
         CM_LOG((String("[Full-MQTT-Demo][INFO] MQTT RX: ") + topic + " => " + payloadString).c_str());
+
+        if (String(topic).endsWith(TASMOTA_ERRORS_FILTER)) {
+            tasmotaLastError = String(topic) + " => " + payloadString;
+            CM_LOG((String("[TASMOTA][ERROR] ") + tasmotaLastError).c_str());
+        }
     }
 } // namespace cm
 
@@ -123,7 +137,11 @@ void setup()
     ConfigManager.setWebSocketInterval(1000);
     ConfigManager.setPushOnConnect(true);
 
+    mqtt.clearRetain("test_topic_publish_immediately");
     mqtt.publishAllNow();
+
+    mqtt.publishExtraTopicImmediately("test_topic_publish_immediately", TEST_PUBLISH_TOPIC, "1", false);
+    mqtt.publishTopicImmediately("solar_limiter_set_value_w");
     Serial.println("Setup completed successfully. Starting main loop...");
 }
 
@@ -151,7 +169,11 @@ void loop()
         lastButtonState = buttonState;
         buttonStateInitialized = true;
         const char* payload = buttonState ? "1" : "0";
-        mqtt.publishExtraTopicImmediately(BUTTON_ID, BUTTON_TOPIC, payload, false);
+        const String base = mqtt.getMqttBaseTopic();
+        if (!base.isEmpty()) {
+            const String topic = base + "/" + BUTTON_TOPIC;
+            mqtt.publishExtraTopicImmediately(BUTTON_ID, topic.c_str(), payload, false);
+        }
     }
 
     washingMachineEnergyTotalMWh = washingMachineEnergyTotal / 1000.0f;
@@ -185,15 +207,19 @@ void setupMqtt()
 
     mqtt.addMQTTTopicReceiveFloat("washing_machine_energy_total", "Washing Machine Energy Total", "tele/tasmota_F0C5AC/SENSOR", &washingMachineEnergyTotal, "kWh", 3, "ENERGY.Total", true);
     mqtt.addMQTTTopicReceiveFloat("washing_machine_energy_yesterday", "Washing Machine Energy Yesterday", "tele/tasmota_1DEE45/SENSOR", &washingMachineEnergyYesterday, "kWh", 3, "ENERGY.Yesterday", true);
+    mqtt.addMQTTTopicReceiveInt("solar_limiter_set_value_w", "Solar Limiter Set Value", "SolarLimiter/SetValue", &solarLimiterSetValueW, "W", "none", false);
 
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
     mqtt.addMQTTReceiveSettingsToGUI(ConfigManager); // Register receive-topic settings in MQTT tab (only addToSettings=true)
+
+    mqtt.subscribeWildcard("tasmota/+/main/error");
 
     // GUI examples: explicitly opt-in the receive fields
     mqtt.addMQTTTopicTooGUI(ConfigManager, "boiler_temp_c", "MQTT-Received", 1);
     mqtt.addMQTTTopicTooGUI(ConfigManager, "powermeter_power_in_w", "MQTT-Received", 2);
     mqtt.addMQTTTopicTooGUI(ConfigManager, "washing_machine_energy_total", "MQTT-Received", 3);
     mqtt.addMQTTTopicTooGUI(ConfigManager, "washing_machine_energy_yesterday", "MQTT-Received", 4);
+    mqtt.addMQTTTopicTooGUI(ConfigManager, "solar_limiter_set_value_w", "MQTT-Received", 5);
 
     // GUI examples: other infos via runtime provider
     ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject& data) {
@@ -201,6 +227,7 @@ void setupMqtt()
         data["lastPayload"] = mqtt.getLastPayload();
         data["lastMsgAgeMs"] = mqtt.getLastMessageAgeMs();
         data["washing_machine_energy_total_mwh"] = washingMachineEnergyTotalMWh;
+        data["tasmotaLastError"] = tasmotaLastError;
     }, 3);
 
     RuntimeFieldMeta lastTopicMeta;
@@ -238,6 +265,14 @@ void setupMqtt()
     mwhMeta.order = 4;
     mwhMeta.card = "MQTT-Received";
     ConfigManager.getRuntime().addRuntimeMeta(mwhMeta);
+
+    RuntimeFieldMeta tasmotaErrorMeta;
+    tasmotaErrorMeta.group = "mqtt";
+    tasmotaErrorMeta.key = "tasmotaLastError";
+    tasmotaErrorMeta.label = "Tasmota Last Error";
+    tasmotaErrorMeta.isString = true;
+    tasmotaErrorMeta.order = 30;
+    ConfigManager.getRuntime().addRuntimeMeta(tasmotaErrorMeta);
 }
 
 // Global WiFi event hooks used by ConfigManager.

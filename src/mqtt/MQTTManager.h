@@ -222,6 +222,7 @@ public:
     bool publish(const char* topic, const String& payload, bool retained = false);
     bool clearRetain(const char* topic);
     bool subscribe(const char* topic, uint8_t qos = 0);
+    bool subscribeWildcard(const char* topicFilter, uint8_t qos = 0);
     bool unsubscribe(const char* topic);
 
     // Topic receive helpers: creates Settings entries (topic + optional json key path), stores the parsed value.
@@ -417,6 +418,7 @@ private:
     PublishOptions getDefaultPublishOptions_(bool isBool, bool immediate) const;
     bool publishWithQos_(const char* topic, const char* payload, bool retained, uint8_t qos);
     String getDefaultWillTopic_() const;
+    String resolveWillTopic_() const;
     bool publishTopicInternal_(const char* id, bool retained, uint8_t qos, bool immediate);
     bool publishExtraTopicInternal_(const char* id,
                                    const char* topic,
@@ -1360,6 +1362,15 @@ inline bool MQTTManager::subscribe(const char* topic, uint8_t qos)
     return mqttClient_.subscribe(topic, qos);
 }
 
+inline bool MQTTManager::subscribeWildcard(const char* topicFilter, uint8_t qos)
+{
+    if (!topicFilter || !topicFilter[0]) {
+        CM_LOG("[MQTTManager][WARNING] subscribeWildcard: topic filter is empty");
+        return false;
+    }
+    return subscribe(topicFilter, qos);
+}
+
 inline bool MQTTManager::unsubscribe(const char* topic)
 {
     if (!isConnected()) {
@@ -1680,10 +1691,7 @@ inline void MQTTManager::attemptConnection_()
     lastConnectionAttemptMs_ = millis();
 
     bool connected = false;
-    String willTopic = lastWillTopic_;
-    if (willTopic.isEmpty() && useDefaultLastWillTopic_) {
-        willTopic = getDefaultWillTopic_();
-    }
+    String willTopic = resolveWillTopic_();
     const bool useWill = !willTopic.isEmpty();
     const uint8_t willQos = (lastWillQos_ > 2) ? 2 : lastWillQos_;
 
@@ -1728,6 +1736,14 @@ inline void MQTTManager::handleConnection_()
     currentRetry_ = 0;
     reconnectCount_++;
     lastSystemInfoPublishMs_ = 0;
+
+    const String willTopic = resolveWillTopic_();
+    if (!willTopic.isEmpty()) {
+        const bool ok = publishWithQos_(willTopic.c_str(), "online", true, lastWillQos_);
+        if (!ok) {
+            CM_LOG("[MQTTManager][WARNING] Failed to publish online status to %s", willTopic.c_str());
+        }
+    }
 
     // Subscribe all receive topics.
     for (auto& item : receiveItems_) {
@@ -2248,7 +2264,18 @@ inline String MQTTManager::getDefaultWillTopic_() const
     if (base.isEmpty()) {
         return String();
     }
-    return base + "/status";
+    return base + "/System-Info/status";
+}
+
+inline String MQTTManager::resolveWillTopic_() const
+{
+    if (!lastWillTopic_.isEmpty()) {
+        return lastWillTopic_;
+    }
+    if (useDefaultLastWillTopic_) {
+        return getDefaultWillTopic_();
+    }
+    return String();
 }
 
 inline void MQTTManager::mqttCallbackTrampoline_(char* topic, byte* payload, unsigned int length)

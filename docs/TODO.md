@@ -22,72 +22,6 @@
 
 ## High Priority (Prio 1)
 
-### [COMPLETED] MQTT – Core & GUI
-
-- GUI population
-  - `addMQTTTopicReceive*` must NOT auto-add GUI entries
-  - GUI entries only via `addMQTTTopicTooGUI`
-
-- System card
-  - Move `settings_.enableMQTT.get()` under "WiFi Connected"
-  - Add "MQTT Connected"
-  - Show `getReconnectCount()` (integer only)
-
-- Cleanup
-  - Remove all other MQTT GUI elements
-
-- Logging
-  - Log all send/receive topics
-  - Only if verbose flag is enabled
-
-- System info publishing
-  - Publish every 60s (not only on reboot)
-  - `info.uptimeMs = millis()` as standalone tag
-  - Split into JSON payloads:
-    - ESP (chip + memory)
-    - WiFi (connection info)
-
----
-
-### [COMPLETED] examples/Full-MQTT-Demo/src/main.cpp
-
-- GUI examples using `addMQTTTopicTooGUI`
-  - "MQTT-Received":
-    - `boiler_temp_c`
-    - `powermeter_power_in_w`
-
-  - "MQTT Other Infos":
-    - `lastTopic`
-    - `lastPayload`
-    - `lastMsgAgeMs`
-
-- Callback examples
-  - `onMQTTConnect`
-  - `onMQTTDisconnect`
-  - `onNewMQTTMessage`
-  - `onMQTTStateChanged`
-
-- Explain difference vs classic callbacks:
-  - `onConnected(callback)`
-  - `onDisconnected(callback)`
-  - `onMessage(callback)`
-
-- Calculation example
-  - Convert `washing_machine_energy_total` (kWh → MWh)
-  - Export as MQTT topic
-  - Show in GUI (2 decimal places)
-
----
-
-### [COMPLETED] MQTT Documentation
-
-- Explain purpose of "Client ID"
-- Complete `docs/MQTT.md`
-  - All methods
-  - Minimal + advanced examples
-
----
-
 ### Wi-Fi / WebServer Defaults
 
 - Auto reboot timeout
@@ -183,3 +117,81 @@
 
 ### Done / Resolved
 
+
+### [COMPLETED] MQTT – Core & GUI
+
+- GUI population
+  - `addMQTTTopicReceive*` must NOT auto-add GUI entries
+  - GUI entries only via `addMQTTTopicTooGUI`
+  - MQTT Topics settings tab via `addMQTTReceiveSettingsToGUI`
+
+- System card
+  - Move `settings_.enableMQTT.get()` under "WiFi Connected"
+  - Add "MQTT Connected"
+  - Show `getReconnectCount()` (integer only)
+
+- Cleanup
+  - Remove all other MQTT GUI elements
+
+- Logging
+  - Log all send/receive topics
+  - Only if verbose flag is enabled
+
+- System info publishing
+  - Publish every 60s (not only on reboot)
+  - `info.uptimeMs = millis()` as standalone tag
+  - Split into JSON payloads:
+    - ESP (chip + memory)
+    - WiFi (connection info)
+
+- Publish helpers / controls
+  - `publishTopic*`, `publishExtraTopic*`, `publishAllNow`
+  - `clearRetain`
+  - Last-Will defaults + `setLastWill`
+  - Wildcard subscribe helper
+
+---
+
+### [COMPLETED] examples/Full-MQTT-Demo/src/main.cpp
+
+- GUI examples using `addMQTTTopicTooGUI`
+  - "MQTT-Received":
+    - `boiler_temp_c`
+    - `powermeter_power_in_w`
+    - `washing_machine_energy_total`
+    - `washing_machine_energy_yesterday`
+    - `solar_limiter_set_value_w`
+
+  - "MQTT Other Infos":
+    - `lastTopic`
+    - `lastPayload`
+    - `lastMsgAgeMs`
+
+- Callback examples
+  - `onMQTTConnect`
+  - `onMQTTDisconnect`
+  - `onNewMQTTMessage`
+  - `onMQTTStateChanged`
+  - Tasmota wildcard subscribe + error filter
+
+- Explain difference vs classic callbacks:
+  - `onConnected(callback)`
+  - `onDisconnected(callback)`
+  - `onMessage(callback)`
+
+- Calculation example
+  - Convert `washing_machine_energy_total` (kWh → MWh)
+  - Export as MQTT topic
+  - Show in GUI (2 decimal places)
+  - Button publish example (GPIO33 → `test_topic_Bool_send`)
+
+---
+
+### [COMPLETED] MQTT Documentation
+
+- Explain purpose of "Client ID"
+- Complete `docs/MQTT.md`
+  - All methods
+  - Minimal + advanced examples
+
+---

@@ -52,6 +52,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 ### Device & Connectivity
 - WiFi helpers (DHCP / static / AP fallback)
 - OTA firmware upload via WebUI
+- Optional MQTT module (PubSubClient-based)
 
 ### Extensibility
 - Conditional visibility (`showIf`)
@@ -75,6 +76,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | Styling (per-field metadata)              | [docs/STYLING.md](docs/STYLING.md)                     |
 | Theming (global CSS + disabling metadata) | [docs/THEMING.md](docs/THEMING.md)                     |
 | Troubleshooting                           | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)     |
+| MQTT Module                               | [docs/MQTT.md](docs/MQTT.md)                           |
 | Changelog                                 | [docs/CHANGELOG.md](docs/CHANGELOG.md)                 |
 | Build Options (v3 change note)            | [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)         |
 

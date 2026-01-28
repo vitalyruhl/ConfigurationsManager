@@ -90,7 +90,7 @@ All `addMQTTTopicReceive*` methods accept `addToSettings` (default: `false`).
 - `addMQTTRuntimeProviderToGUI(...)` registers the runtime provider only.
 - Receive items are shown **only** when explicitly added via `addMQTTTopicTooGUI(...)`.
 - `getLastTopic()`, `getLastPayload()`, `getLastMessageAgeMs()` can be exposed via runtime providers.
-- `addMQTTReceiveSettingsToGUI(...)` registers the MQTT receive-topic settings in the Settings UI (MQTT tab).
+- `addMQTTReceiveSettingsToGUI(...)` registers the MQTT receive-topic settings in the Settings UI (MQTT Topics tab).
 
 ## Callbacks
 
@@ -125,10 +125,10 @@ void onMQTTConnected()
 ## Last Will (LWT)
 
 - Default last-will message: `"offline"`
-- Default topic: `<MQTTBaseTopic>/status`
+- Default topic: `<MQTTBaseTopic>/System-Info/status`
 - Default: retain=true, qos=0
-- Default for Bool: retain=false, qos=0 (it will publish qos=1, but PubSubClient only supports qos=0)
 - Override via `setLastWill(topic, message, retained, qos)`
+- On successful connect, the module publishes `online` (retained) to the same will topic to clear stale `offline`.
 
 ## System info publishing
 
@@ -151,6 +151,33 @@ void onMQTTConnected()
   - Immediately variants: qos=1
 - You can override retain/qos via overloads that accept `(retained, qos)`.
 - PubSubClient only supports QoS 0 for publish. If qos != 0 is requested, a warning is logged and QoS 0 is used.
+- `publishAllNow(retained)` publishes System-Info and all receive items immediately.
+- `clearRetain(topic)` clears the retained message by publishing an empty retained payload.
+
+## Wildcard subscribe example (Tasmota errors)
+
+MQTT wildcard rules:
+- `+` matches a single topic level
+- `#` matches all remaining levels (must be the last token)
+
+Example: subscribe to all Tasmota error topics and filter in the callback:
+
+```cpp
+mqtt.subscribeWildcard("tasmota/#");
+
+namespace cm {
+void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)
+{
+    if (!topic || !payload || length == 0) return;
+    String t(topic);
+    if (!t.endsWith("/main/error")) return;
+
+    String msg(payload, length);
+    msg.trim();
+    CM_LOG((String("[TASMOTA][ERROR] ") + t + " => " + msg).c_str());
+}
+} // namespace cm
+```
 
 ## Advanced example
 
@@ -178,25 +205,28 @@ Settings + connection:
 - `setKeepAlive(...)`, `setMaxRetries(...)`, `setRetryInterval(...)`, `setBufferSize(...)`
 
 Publish / subscribe:
-- `publish(...)`, `subscribe(...)`, `unsubscribe(...)`
-- `clearRetain(topic)`
-- `publishSystemInfo(...)`, `publishSystemInfoNow(...)`
-- `publishAllNow(...)`
-- `publishTopic(...)`, `publishTopicImmediately(...)`
-- `publishExtraTopic(...)`, `publishExtraTopicImmediately(...)`
+- `publish(...)` (2 overloads), `subscribe(...)` (2 overloads), `unsubscribe(...)` (1 overload)
+- `subscribeWildcard(...)` (1 overload)
+- `clearRetain(topic)` (1 overload)
+- `publishSystemInfo(...)` (1 overload), `publishSystemInfoNow(...)` (1 overload)
+- `publishAllNow(...)` (1 overload)
+- `publishTopic(...)` (6 overloads), `publishTopicImmediately(...)` (6 overloads)
+- `publishExtraTopic(...)` (6 overloads), `publishExtraTopicImmediately(...)` (6 overloads)
+  - Overloads cover `(retained, qos)` and `ConfigManager` variants where applicable.
 
 Receive helpers:
-- `addMQTTTopicReceiveFloat(...)`
-- `addMQTTTopicReceiveInt(...)`
-- `addMQTTTopicReceiveBool(...)`
-- `addMQTTTopicReceiveString(...)`
+- `addMQTTTopicReceiveFloat(...)` (1 overload)
+- `addMQTTTopicReceiveInt(...)` (1 overload)
+- `addMQTTTopicReceiveBool(...)` (1 overload)
+- `addMQTTTopicReceiveString(...)` (1 overload)
 
 GUI helpers:
-- `addMQTTRuntimeProviderToGUI(...)`
-- `addMQTTTopicTooGUI(...)`
-- `addLastTopicToGUI(...)`
-- `addLastPayloadToGUI(...)`
-- `addLastMessageAgeToGUI(...)`
+- `addMQTTRuntimeProviderToGUI(...)` (1 overload)
+- `addMQTTReceiveSettingsToGUI(...)` (1 overload)
+- `addMQTTTopicTooGUI(...)` (1 overload)
+- `addLastTopicToGUI(...)` (1 overload)
+- `addLastPayloadToGUI(...)` (1 overload)
+- `addLastMessageAgeToGUI(...)` (1 overload)
 
 ## Notes
 

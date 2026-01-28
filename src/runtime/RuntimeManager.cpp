@@ -515,33 +515,32 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         };
 
         // Orders 0-2 are used by app_name/app_version/build_date defined in main.cpp
-        upsertMeta("wifiConnected", "Wifi Connected", "", 3, true);
-        upsertMeta("rssi", "WiFi RSSI", "dBm", 4, false, false, 0);
-        upsertMeta("rssiTxt", "Signal", "", 5, false, true, 0);
-        upsertMeta("localIP", "Local IP", "", 6, false, true, 0);
-        upsertMeta("gateway", "Gateway", "", 7, false, true, 0);
-        upsertMeta("routerMAC", "Router MAC", "", 8, false, true, 0);
-        upsertMeta("channel", "WiFi Channel", "", 9, false, false, 0);
-
+        upsertMeta("wifiConnected", "Wifi Connected", "", 10, true);
+        upsertMeta("channel", "WiFi Channel", "", 11, false, false, 0);
+        upsertMeta("rssiTxt", "Signal", "", 12, false, true, 0);
+        upsertMeta("rssi", "WiFi RSSI", "dBm", 13, false, false, 0);
+        upsertMeta("localIP", "Local IP", "", 14, false, true, 0);
+        upsertMeta("gateway", "Gateway", "", 15, false, true, 0);
+        upsertMeta("routerMAC", "Router MAC", "", 16, false, true, 0);
         // Connectivity and OTA state (booleans)
-        upsertMeta("allowOTA", "AllowOTA", "", 10, true);
-        upsertMeta("otaActive", "OtaActive", "", 11, true);
+        upsertMeta("allowOTA", "AllowOTA", "", 20, true);
+        upsertMeta("otaActive", "OtaActive", "", 21, true);
 
 #if CM_ENABLE_SYSTEM_TIME
-        upsertMeta("dateTime", "Date/Time", "", 12, false, true, 0);
+        upsertMeta("dateTime", "Date/Time", "", 22, false, true, 0);
 #endif
 
         // System numeric stats
         // todo: make heap settable to show or not....
-        upsertMeta("cpuFreqMHz", "CpuFreqMHz", "", 20, false, false, 0);
-        upsertMeta("flashSize", "FlashSize", "", 21, false, false, 0);
-        upsertMeta("sketchSize", "SketchSize", "", 22, false, false, 0);
-        upsertMeta("freeSketchSpace", "FreeSketchSpace", "", 23, false, false, 0);
-        upsertMeta("heapFragmentation", "HeapFragmentation", "", 24, false, false, 0);
-        upsertMeta("totalHeap", "TotalHeap", "", 30, false, false, 0);
-        upsertMeta("usedHeap", "UsedHeap", "", 31, false, false, 0);
+        upsertMeta("cpuFreqMHz", "CpuFreqMHz", "", 30, false, false, 0);
+        upsertMeta("flashSize", "FlashSize", "", 31, false, false, 0);
+        upsertMeta("sketchSize", "SketchSize", "", 32, false, false, 0);
+        upsertMeta("freeSketchSpace", "FreeSketchSpace", "", 33, false, false, 0);
+        upsertMeta("heapFragmentation", "HeapFragmentation", "", 34, false, false, 0);
+        upsertMeta("totalHeap", "TotalHeap", "", 35, false, false, 0);
+        upsertMeta("usedHeap", "UsedHeap", "", 36, false, false, 0);
         // Keep unit empty to avoid conflicting with pre-existing meta; value is in bytes currently
-        upsertMeta("freeHeap", "FreeHeap", "", 32, false, false, 0);
+        upsertMeta("freeHeap", "FreeHeap", "", 37, false, false, 0);
     }
 
     builtinSystemProviderRegistered = true;
