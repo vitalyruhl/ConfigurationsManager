@@ -1,4 +1,4 @@
-# IO Example ESP32 Connection (ESP32-WROOM-32)
+# ESP32 Connection overwiew (ESP32-WROOM-32 - my development board)
 
 This document is a **project-specific** GPIO reference for an ESP32-WROOM-32 board.
 
@@ -18,91 +18,88 @@ Board:
 - On-board LED: GPIO2
 - Power LED: fixed (no GPIO)
 
-## Orientation
-
-Orientation:
-- Antenna: TOP
-- USB connector: BOTTOM
-
 ## Legend
 
 Legend:
-- [x] = used
+- [x] = used = current project usage
 - [ ] = free
-- [Current Use] = current project usage
-- (DI/DO/ADC1/ADC2/DAC1/DAC2/PWM) = capabilities
+- (DI/DO/ADC1/ADC2/DAC1/DAC2/PWM) = capabilities (ADC2 unusable with WiFi/BT!)
 - {…} = constraints / warnings
 - (RO) = read-only input (no output, no pullups)
+- [current usage description] = what is connected in this project
 
 ## Pin map (ASCII)
 
 ```text
 
-                                              _________________________________
-                                              | .---------------------------.  |
-                                              | .   ~~~~~~ Antenna ~~~~~~   .  |
-                                              | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-                                          EN  | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-                                              | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-[LDR]          (DI/ADC1/RO) {RO}     PIO36/VP | [x]                        [x] | GPIO23 (DO/PWM)        [Fan Relay]
-                                              |                                |
-[LDR]          (DI/ADC1/RO) {RO}    GPIO39/VN | [x]                        [x] | GPIO22 (DI/DO)         [I2C SCL]
-                                              |                                |
-[LDR]          (DI/ADC1/RO) {RO}       GPIO34 | [x]                        [ ] | GPIO1  (DO)            [free]
-                                              |                                |
-[LDR]          (DI/ADC1/RO) {RO}       GPIO35 | [x]                        [ ] | GPIO3  (DI)            [free]
-                                              |                                |
-[DS18B20]      (DI/DO/ADC1)            GPIO32 | [x]                        [x] | GPIO21 (DI/DO)         [I2C SDA]
-                                              |                                |
-[Test Btn]     (DI/DO/ADC1)            GPIO33 | [x]                        [ ] | GPIO19 (DI/DO/PWM)     [PWM test]
-                                              |                                |
-[Analog 1]     (DI/DO/DAC1/ADC2/PWM)   GPIO25 | [x]                        [ ] | GPIO18 (DI/DO/PWM)     [PWM test]           {ADC2!}
-                                              |                                |
-[Analog 2]     (DI/DO/DAC2/ADC2/PWM)   GPIO26 | [x]                        [ ] | GPIO5  (DI/DO/PWM)     [free]               {ADC2!}{BOOT}
-                                              |                                |
-[Hold Relay]   (DO/ADC2/PWM)           GPIO27 | [x]                        [ ] | GPIO17 (DO/PWM)        [UART2 TX]           {ADC2!}
-                                              |                                |
-[Reset-Button] (DO/ADC2/PWM)           GPIO14 | [x]                        [ ] | GPIO16 (DI/DO/PWM)     [UART2 RX]           {ADC2!}
-                                              |                                |
-[free]         (DI/DO/ADC2/PWM)        GPIO12 | [ ]                        [ ] | GPIO4  (DO/PWM)        [Heater-Relay]       {BOOT}
-                                              |                                |
-[AP Btn]       (DI/DO)                 GPIO13 | [x]                        [ ] | GPIO15 (DI/DO)         [Factory]            {BOOT}
-                                              |                                |
-                                              |      [pwr-LED]  [GPIO2-LED]    |
-                                              |                                |
-                                              |            _______             |
-                                              |            |     |             |
-                                              '------------|-----|------------'
+                                                               __________________________________
+                                                               | .---------------------------.  |
+                                                               | .   ~~~~~~ Antenna ~~~~~~   .  |
+                                                               | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
+                                                               | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
+                                                           EN  | [x]                        [x] | GPIO23 (DO/PWM)                                [Relay 2]
+                                                               |                                |
+[LDR]           {RO/no-Pull!}   (DI/ADC1)             PIO36/VP | [x]                        [x] | GGPIO22 (DI/DO)                                [I2C SCL]
+                                                               |                                |
+[free]          {RO/no-Pull!}   (DI/ADC1)            GPIO39/VN | [x]                        [ ] | GPIO1  (DO)               {UART1 TX only}      [free]
+                                                               |                                |
+[free]          {RO/no-Pull!}   (DI/ADC1)               GPIO34 | [x]                        [ ] | GPIO3  (DI)               {UART1 RX only}      [free]
+                                                               |                                |
+[free]          {RO/no-Pull!}   (DI/ADC1)               GPIO35 | [x]                        [x] | GPIO21 (DI/DO)                                 [I2C SDA]
+                                                               |                                |
+[free]                          (DI/DO/ADC1)            GPIO32 | [ ]                        [ ] | GPIO19 (DI/DO/PWM)                             [free]
+                                                               |                                |
+[Test Btn]                      (DI/DO/ADC1)            GPIO33 | [x]                        [ ] | GPIO18 (DI/DO/PWM)         {ADC2!}             [DS18B20 (3v3-->4,7k-->yellow)-->pin]
+                                                               |                                |
+[Analog 1(LED)] {ADC2!}         (DI/DO/DAC1/PWM)        GPIO25 | [x]                        [x] | GPIO5  (DI/DO/PWM)         {ADC2!}{BOOT}       [free]
+                                                               |                                |
+[Analog 2]      {ADC2!}         (DI/DO/DAC2/PWM)        GPIO26 | [x]                        [x] | GPIO17 (DO/PWM)            {ADC2!}             [UART2 TX - RS485]
+                                                               |                                |
+[Relay-1]       {ADC2!}         (DO/PWM)                GPIO27 | [x]                        [x] | GPIO16 (DI/DO/PWM)         {ADC2!}             [UART2 RX - RS485]
+                                                               |                                |
+[Reset-Button]  {ADC2!}         (DO/PWM)                GPIO14 | [x]                        [ ] | GPIO4  (DO/PWM)            {BOOT}              [free]
+                                                               |                                |
+[free]          {BOOT/ADC2!}    (DI/DO/ADC2!/PWM)       GPIO12 | [ ]                        [x] | GPIO2  (DO)                {Build-In LED only}
+                                                               |                                |
+[AP Btn]                        (DI/DO)                 GPIO13 | [x]                        [x] | GPIO15 (DI/DO)             {LOW on BOOT!}      [Buzzer]
+                                                               |                                |
+                                                          GND  | [x]  [pwr-LED] [GPIO2-LED] [x] | GND
+                                                               |                                |
+                                                          5V   | [ ]                        [x] | 3,3V
+                                                               |            _______             |
+                                                               |  [EN/RST]  |     |   [Boot]    |
+                                                               |            |     |             |
+                                                               '------------|-----|------------'
 
 
 ```
 ## Pin capability table
 
-| GPIO | [x] | Current Use            | Capabilities                    | Constraints |
-|-----:|:--:|------------------------|---------------------------------|-------------|
-| 36   | x  | LDR Input              | (DI/ADC1/RO)                    | no pullups |
-| 39   | x  | LDR Input              | (DI/ADC1/RO)                    | no pullups |
-| 34   | x  | LDR Input              | (DI/ADC1/RO)                    | no pullups |
-| 35   | x  | LDR Input              | (DI/ADC1/RO)                    | no pullups |
-| 32   | x  | DS18B20                | (DI/DO/ADC1/PWM)                | — |
-| 33   | x  | Test Button            | (DI/DO/ADC1/PWM)                | — |
-| 25   | x  | Analog Out 1           | (DI/DO/ADC2/DAC1/PWM)           | ADC2 unusable on WiFi |
-| 26   | x  | Analog Out 2           | (DI/DO/ADC2/DAC2/PWM)           | ADC2 unusable on WiFi |
-| 27   | x  | Hold Relay             | (DO/ADC2/PWM)                   | ADC2 unusable on WiFi |
-| 14   | x  | Heater Relay           | (DO/ADC2/PWM)                   | ADC2 unusable on WiFi |
-| 12   |    | free                   | (DI/DO/ADC2/PWM)                | BOOT strap |
-| 13   | x  | AP Mode Button         | (DI/DO)                         | — |
-| 23   | x  | Fan Relay              | (DO/PWM)                        | — |
-| 22   | x  | I2C SCL                | (DI/DO)                         | I2C pullups |
-| 21   | x  | I2C SDA                | (DI/DO)                         | I2C pullups |
-| 19   |    | planned: PWM test      | (DI/DO/PWM)                     | — |
-| 18   |    | planned: PWM test      | (DI/DO/PWM)                     | — |
-| 5    |    | free                   | (DI/DO/PWM)                     | BOOT strap |
-| 17   |    | UART2 TX (planned)     | (DO/PWM)                        | — |
-| 16   |    | UART2 RX (planned)     | (DI/DO/PWM)                     | — |
-| 4    |    | free                   | (DO/PWM)                        | BOOT strap |
-| 15   | x  | Factory Reset Button   | (DI/DO)                         | BOOT: must be LOW |
-| 2    | x  | On-board LED           | (DO)                            | affects boot visuals |
+| GPIO | Capabilities                    | Constraints |
+|-----:|---------------------------------|-------------|
+| 36   | (DI/ADC1/RO)                    | no pullups |
+| 39   | (DI/ADC1/RO)                    | no pullups |
+| 34   | (DI/ADC1/RO)                    | no pullups |
+| 35   | (DI/ADC1/RO)                    | no pullups |
+| 32   | (DI/DO/ADC1/PWM)                | — |
+| 33   | (DI/DO/ADC1/PWM)                | — |
+| 25   | (DI/DO/ADC2/DAC1/PWM)           | ADC2 unusable on WiFi |
+| 26   | (DI/DO/ADC2/DAC2/PWM)           | ADC2 unusable on WiFi |
+| 27   | (DO/ADC2/PWM)                   | ADC2 unusable on WiFi |
+| 14   | (DO/ADC2/PWM)                   | ADC2 unusable on WiFi |
+| 12   | (DI/DO/ADC2/PWM)                | BOOT strap |
+| 13   | (DI/DO)                         | — |
+| 23   | (DO/PWM)                        | — |
+| 22   | (DI/DO)                         | I2C pullups |
+| 21   | (DI/DO)                         | I2C pullups |
+| 19   | (DI/DO/PWM)                     | — |
+| 18   | (DI/DO/PWM)                     | — |
+| 5    | (DI/DO/PWM)                     | BOOT strap |
+| 17   | (DO/PWM)                        | — |
+| 16   | (DI/DO/PWM)                     | — |
+| 4    | (DO/PWM)                        | BOOT strap |
+| 15   | (DI/DO)                         | BOOT: must be LOW |
+| 2    | (DO)                            | affects boot visuals |
 
 ---
 

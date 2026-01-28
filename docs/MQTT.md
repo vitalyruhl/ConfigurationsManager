@@ -35,11 +35,10 @@ void setup()
     mqtt.attach(ConfigManager);
 
     // Registers runtime provider only (no GUI fields are auto-added).
-    mqtt.addToGUI(ConfigManager, "mqtt");
+    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
 
-    // Optional: hooks
-    mqtt.onMQTTConnect([]() { CM_LOG("[MQTT][INFO] connected"); });
-    mqtt.onMQTTDisconnect([]() { CM_LOG("[MQTT][INFO] disconnected"); });
+    // Optional: global hooks (define them in your sketch)
+    // See "Callbacks" section below.
 }
 
 void loop()
@@ -64,7 +63,7 @@ void setup()
     mqtt.addMQTTTopicReceiveFloat("energy_total", "Energy Total", "tele/tasmota/SENSOR", &powerInW, "kWh", 3, "ENERGY.Total", true);
 
     // GUI entries are explicit
-    mqtt.addToGUI(ConfigManager, "mqtt");
+    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
     mqtt.addMQTTTopicTooGUI(ConfigManager, "power_w", "MQTT-Received");
     mqtt.addMQTTTopicTooGUI(ConfigManager, "energy_total", "MQTT-Received");
 }
@@ -88,17 +87,12 @@ All `addMQTTTopicReceive*` methods accept `addToSettings` (default: `false`).
 
 ## GUI / Runtime helpers
 
-- `addToGUI(...)` registers the runtime provider only.
+- `addMQTTRuntimeProviderToGUI(...)` registers the runtime provider only.
 - Receive items are shown **only** when explicitly added via `addMQTTTopicTooGUI(...)`.
 - `getLastTopic()`, `getLastPayload()`, `getLastMessageAgeMs()` can be exposed via runtime providers.
+- `addMQTTReceiveSettingsToGUI(...)` registers the MQTT receive-topic settings in the Settings UI (MQTT tab).
 
 ## Callbacks
-
-Preferred hooks (typed and consistent naming):
-- `onMQTTConnect(...)`
-- `onMQTTDisconnect(...)`
-- `onNewMQTTMessage(...)`
-- `onMQTTStateChanged(...)`
 
 Classic (PubSubClient-style) hooks remain available:
 - `onConnected(...)`
@@ -110,6 +104,31 @@ Optional global hook voids (define in your sketch if you want them):
 - `void onMQTTDisconnected()`
 - `void onMQTTStateChanged(int state)`
 - `void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)`
+
+If you implement these hooks in the same translation unit (Arduino sketch), define this before including the header:
+
+```cpp
+#define CM_MQTT_NO_DEFAULT_HOOKS
+```
+
+Example:
+
+```cpp
+namespace cm {
+void onMQTTConnected()
+{
+    CM_LOG("[MQTT][INFO] connected");
+}
+} // namespace cm
+```
+
+## Last Will (LWT)
+
+- Default last-will message: `"offline"`
+- Default topic: `<MQTTBaseTopic>/status`
+- Default: retain=true, qos=0
+- Default for Bool: retain=false, qos=0 (it will publish qos=1, but PubSubClient only supports qos=0)
+- Override via `setLastWill(topic, message, retained, qos)`
 
 ## System info publishing
 
@@ -126,12 +145,18 @@ Optional global hook voids (define in your sketch if you want them):
 - `publishTopic(id)` publishes a receive item value to `<base>/<id>`
 - `publishExtraTopic(id, topic, value)` publishes a custom value to a custom topic
 - Interval is taken from `MQTTPubPer` (seconds). Use the `Immediately` variants to bypass it.
+- Defaults (unless overridden by parameters):
+  - Non-bool: retain=true, qos=0
+  - Bool: retain=false, qos=1
+  - Immediately variants: qos=1
+- You can override retain/qos via overloads that accept `(retained, qos)`.
+- PubSubClient only supports QoS 0 for publish. If qos != 0 is requested, a warning is logged and QoS 0 is used.
 
 ## Advanced example
 
 ```cpp
 // Register runtime provider
-mqtt.addToGUI(ConfigManager, "mqtt");
+mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
 
 // Explicit GUI entries
 mqtt.addMQTTTopicTooGUI(ConfigManager, "boiler_temp_c", "MQTT-Received");
@@ -149,11 +174,12 @@ ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject& data) {
 
 Settings + connection:
 - `attach(...)`, `begin()`, `loop()`, `disconnect()`
-- `setServer(...)`, `setCredentials(...)`, `setClientId(...)`
+- `setServer(...)`, `setCredentials(...)`, `setClientId(...)`, `setLastWill(...)`
 - `setKeepAlive(...)`, `setMaxRetries(...)`, `setRetryInterval(...)`, `setBufferSize(...)`
 
 Publish / subscribe:
 - `publish(...)`, `subscribe(...)`, `unsubscribe(...)`
+- `clearRetain(topic)`
 - `publishSystemInfo(...)`, `publishSystemInfoNow(...)`
 - `publishTopic(...)`, `publishTopicImmediately(...)`
 - `publishExtraTopic(...)`, `publishExtraTopicImmediately(...)`
@@ -165,7 +191,7 @@ Receive helpers:
 - `addMQTTTopicReceiveString(...)`
 
 GUI helpers:
-- `addToGUI(...)`
+- `addMQTTRuntimeProviderToGUI(...)`
 - `addMQTTTopicTooGUI(...)`
 - `addLastTopicToGUI(...)`
 - `addLastPayloadToGUI(...)`
