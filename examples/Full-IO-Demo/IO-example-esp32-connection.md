@@ -66,7 +66,7 @@ Legend:
                                               |                                |
 [free]         (DI/DO/ADC2/PWM)        GPIO12 | [ ]                        [ ] | GPIO4  (DO/PWM)        [Heater-Relay]       {BOOT}
                                               |                                |
-[AP Btn]       (DI/DO)                 GPIO13 | [x]                        [x] | GPIO15 (DI/DO)         [Factory]            {BOOT}
+[AP Btn]       (DI/DO)                 GPIO13 | [x]                        [ ] | GPIO15 (DI/DO)         [Factory]            {BOOT}
                                               |                                |
                                               |      [pwr-LED]  [GPIO2-LED]    |
                                               |                                |
