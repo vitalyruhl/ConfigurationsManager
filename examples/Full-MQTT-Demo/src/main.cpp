@@ -8,6 +8,9 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 
+// Optional logging module
+#include "logging/LoggingManager.h"
+
 // Optional MQTT module (requires PubSubClient in the consuming project)
 #define CM_MQTT_NO_DEFAULT_HOOKS
 #include "mqtt/MQTTManager.h"
@@ -26,6 +29,7 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
 static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
+static cm::LoggingManager& logManager = cm::LoggingManager::instance();
 
 static constexpr int BUTTON_PIN = 33;
 static const char BUTTON_TOPIC[] = "test_topic_Bool_send";
@@ -101,10 +105,9 @@ void setup()
 {
     Serial.begin(115200);
 
-    ConfigManagerClass::setLogger([](const char *msg) {
-        Serial.print("[USER-LOG]");
-        Serial.println(msg);
-    });
+    logManager.addOutput(std::make_unique<cm::LoggingManager::SerialOutput>(Serial));
+    logManager.setGlobalLevel(cm::LoggingManager::Level::Info);
+    logManager.attachToConfigManager(cm::LoggingManager::Level::Info, "CM");
 
     ConfigManager.setAppName(APP_NAME);
     ConfigManager.setAppTitle(APP_NAME);
@@ -122,7 +125,7 @@ void setup()
     ConfigManager.loadAll();
 
     systemSettings.allowOTA.setCallback([](bool enabled) {
-        Serial.printf("OTA setting changed to: %s\n", enabled ? "enabled" : "disabled");
+        CM_LOG("[Full-MQTT-Demo][INFO] OTA setting changed to: %s", enabled ? "enabled" : "disabled");
         ConfigManager.getOTAManager().enable(enabled);
     });
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
@@ -142,7 +145,7 @@ void setup()
 
     mqtt.publishExtraTopicImmediately("test_topic_publish_immediately", TEST_PUBLISH_TOPIC, "1", false);
     mqtt.publishTopicImmediately("solar_limiter_set_value_w");
-    Serial.println("Setup completed successfully. Starting main loop...");
+    CM_LOG("[Full-MQTT-Demo][INFO] Setup completed successfully. Starting main loop...");
 }
 
 void loop()
@@ -161,6 +164,7 @@ void loop()
     }
 
     mqtt.loop();
+    logManager.loop();
 
     static unsigned long lastLoopLogMs = 0;
     const unsigned long now = millis();
@@ -290,7 +294,7 @@ void setupMqtt()
 void onWiFiConnected()
 {
     wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
-    Serial.printf("[INFO] Station Mode: http://%s\n", WiFi.localIP().toString().c_str());
+    CM_LOG("[Full-MQTT-Demo][INFO] Station Mode: http://%s", WiFi.localIP().toString().c_str());
 }
 
 void onWiFiDisconnected()
@@ -301,5 +305,5 @@ void onWiFiDisconnected()
 void onWiFiAPMode()
 {
     wifiServices.onAPMode();
-    Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
+    CM_LOG("[Full-MQTT-Demo][INFO] AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
