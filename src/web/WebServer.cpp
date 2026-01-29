@@ -171,6 +171,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
         out["appName"] = (configManager && configManager->getAppName().length()) ? configManager->getAppName() : String("");
         out["appTitle"] = (configManager && configManager->getAppTitle().length()) ? configManager->getAppTitle() : String("");
         out["version"] = (configManager && configManager->getVersion().length()) ? configManager->getVersion() : String("");
+        out["guiLogging"] = (configManager && configManager->isGuiLoggingEnabled()) ? true : false;
         String resp;
         serializeJson(out, resp);
 

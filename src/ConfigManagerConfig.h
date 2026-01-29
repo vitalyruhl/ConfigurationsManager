@@ -6,6 +6,7 @@
 // - CM_EMBED_WEBUI (1)
 // - CM_ENABLE_LOGGING (0)
 // - CM_ENABLE_VERBOSE_LOGGING (0)
+// - CM_DISABLE_GUI_LOGGING (0)
 // - CM_ENABLE_OTA (1)
 // - CM_ENABLE_SYSTEM_PROVIDER (1)
 // - CM_ENABLE_SYSTEM_TIME (1)
@@ -55,6 +56,12 @@
 
 #ifndef CM_ENABLE_VERBOSE_LOGGING
 #define CM_ENABLE_VERBOSE_LOGGING 0
+#endif
+
+// GUI log output (LoggingManager::GuiOutput)
+// GUI logging is enabled by default; set to 1 to fully remove GUI logging support.
+#ifndef CM_DISABLE_GUI_LOGGING
+#define CM_DISABLE_GUI_LOGGING 0
 #endif
 
 // --- Logging level defaults (override with -DCM_LOGGING_LEVEL=CM_LOG_LEVEL_*) ---

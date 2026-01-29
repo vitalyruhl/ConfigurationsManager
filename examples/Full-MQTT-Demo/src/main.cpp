@@ -29,7 +29,8 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
 static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
-static cm::LoggingManager& logManager = cm::LoggingManager::instance();
+static cm::LoggingManager& lmg = cm::LoggingManager::instance();
+using LL = cm::LoggingManager::Level;
 
 static constexpr int BUTTON_PIN = 33;
 static const char BUTTON_TOPIC[] = "test_topic_Bool_send";
@@ -55,11 +56,12 @@ void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
 void setupMqtt();
+void Initial_logging_Serial();
 
 namespace cm {
     void onMQTTConnected()
     {
-        CM_LOG("[Full-MQTT-Demo][INFO] MQTT connected");
+        lmg.logTag(LL::Info, "MQTT", "Connected");
         if (mqtt.settings().publishTopicBase.get().isEmpty()) {
             mqtt.settings().publishTopicBase.set(mqtt.settings().clientId.get());
         }
@@ -70,19 +72,19 @@ namespace cm {
         }
         const bool ok = mqtt.publishSystemInfoNow(true);
         if (!ok) {
-            CM_LOG("[Full-MQTT-Demo][WARNING] Failed to publish System-Info (missing base topic or not connected)");
+            lmg.logTag(LL::Warn, "MQTT", "Failed to publish System-Info (missing base topic or not connected)");
         }
     }
 
     void onMQTTDisconnected()
     {
-        CM_LOG("[Full-MQTT-Demo][INFO] MQTT disconnected");
+        lmg.logTag(LL::Info, "MQTT", "Disconnected");
     }
 
     void onMQTTStateChanged(int state)
     {
         auto mqttState = static_cast<MQTTManager::ConnectionState>(state);
-        CM_LOG("[Full-MQTT-Demo][INFO] MQTT state changed: %s", MQTTManager::mqttStateToString(mqttState));
+        lmg.logTag(LL::Info, "MQTT", "State changed: %s", MQTTManager::mqttStateToString(mqttState));
     }
 
     void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)
@@ -92,22 +94,18 @@ namespace cm {
         }
         String payloadString(payload, length);
         payloadString.trim();
-        CM_LOG((String("[Full-MQTT-Demo][INFO] MQTT RX: ") + topic + " => " + payloadString).c_str());
+        lmg.logTag(LL::Info, "MQTT", "RX: %s => %s", topic, payloadString.c_str());
 
         if (String(topic).endsWith(TASMOTA_ERRORS_FILTER)) {
             tasmotaLastError = String(topic) + " => " + payloadString;
-            CM_LOG((String("[TASMOTA][ERROR] ") + tasmotaLastError).c_str());
+            lmg.logTag(LL::Error, "TASMOTA", "%s", tasmotaLastError.c_str());
         }
     }
 } // namespace cm
 
 void setup()
 {
-    Serial.begin(115200);
-
-    logManager.addOutput(std::make_unique<cm::LoggingManager::SerialOutput>(Serial));
-    logManager.setGlobalLevel(cm::LoggingManager::Level::Info);
-    logManager.attachToConfigManager(cm::LoggingManager::Level::Info, "CM");
+    Initial_logging_Serial();
 
     ConfigManager.setAppName(APP_NAME);
     ConfigManager.setAppTitle(APP_NAME);
@@ -125,7 +123,7 @@ void setup()
     ConfigManager.loadAll();
 
     systemSettings.allowOTA.setCallback([](bool enabled) {
-        CM_LOG("[Full-MQTT-Demo][INFO] OTA setting changed to: %s", enabled ? "enabled" : "disabled");
+        lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
         ConfigManager.getOTAManager().enable(enabled);
     });
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
@@ -145,7 +143,7 @@ void setup()
 
     mqtt.publishExtraTopicImmediately("test_topic_publish_immediately", TEST_PUBLISH_TOPIC, "1", false);
     mqtt.publishTopicImmediately("solar_limiter_set_value_w");
-    CM_LOG("[Full-MQTT-Demo][INFO] Setup completed successfully. Starting main loop...");
+    lmg.logTag(LL::Info, "SETUP", "Completed successfully. Starting main loop...");
 }
 
 void loop()
@@ -164,17 +162,17 @@ void loop()
     }
 
     mqtt.loop();
-    logManager.loop();
+    lmg.loop();
 
     static unsigned long lastLoopLogMs = 0;
     const unsigned long now = millis();
     if (now - lastLoopLogMs >= 10000) {
         lastLoopLogMs = now;
-        CM_LOG("[Full-MQTT-Demo][INFO] Loop: wifi=%s mqtt=%s base=%s lastTopic=%s",
-               WiFi.isConnected() ? "connected" : "disconnected",
-               mqtt.isConnected() ? "connected" : "disconnected",
-               mqtt.getMqttBaseTopic().c_str(),
-               mqtt.getLastTopic().c_str());
+        lmg.logTag(LL::Info, "Loop", "wifi=%s mqtt=%s base=%s lastTopic=%s",
+                   WiFi.isConnected() ? "connected" : "disconnected",
+                   mqtt.isConnected() ? "connected" : "disconnected",
+                   mqtt.getMqttBaseTopic().c_str(),
+                   mqtt.getLastTopic().c_str());
     }
 
     static bool buttonStateInitialized = false;
@@ -290,20 +288,35 @@ void setupMqtt()
     ConfigManager.getRuntime().addRuntimeMeta(tasmotaErrorMeta);
 }
 
+void Initial_logging_Serial()
+{
+    Serial.begin(115200);
+    auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
+    serialOut->setLevel(LL::Trace);
+    serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis);
+    serialOut->setRateLimitMs(2);
+    lmg.addOutput(std::move(serialOut));
+
+    lmg.setGlobalLevel(LL::Trace);
+    auto scopedSetup = lmg.scopedTag("SETUP");
+    lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+}
+
 // Global WiFi event hooks used by ConfigManager.
 void onWiFiConnected()
 {
     wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
-    CM_LOG("[Full-MQTT-Demo][INFO] Station Mode: http://%s", WiFi.localIP().toString().c_str());
+    lmg.logTag(LL::Info, "WiFi", "Station Mode: http://%s", WiFi.localIP().toString().c_str());
 }
 
 void onWiFiDisconnected()
 {
     wifiServices.onDisconnected();
+    lmg.logTag(LL::Warn, "WiFi", "Disconnected");
 }
 
 void onWiFiAPMode()
 {
     wifiServices.onAPMode();
-    CM_LOG("[Full-MQTT-Demo][INFO] AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
+    lmg.logTag(LL::Info, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }

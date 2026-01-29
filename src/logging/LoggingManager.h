@@ -103,6 +103,7 @@ public:
         Print& serial_;
     };
 
+#if !CM_DISABLE_GUI_LOGGING
     class GuiOutput : public Output {
     public:
         GuiOutput(ConfigManagerClass& configManager, size_t startupBufferSize = 30);
@@ -127,6 +128,7 @@ public:
         static String escapeJson_(const char* value);
         String makePayload_(Level level, const char* tag, const char* message, unsigned long timestampMs) const;
     };
+#endif
 
     static LoggingManager& instance()
     {

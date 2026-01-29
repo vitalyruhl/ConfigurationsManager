@@ -27,6 +27,7 @@ Logging is controlled via build flags:
 
 - `CM_ENABLE_LOGGING` (default: `1`)
 - `CM_ENABLE_VERBOSE_LOGGING` (default: `0`)
+- `CM_DISABLE_GUI_LOGGING` (default: `0`, set to `1` to remove `GuiOutput`)
 - `CM_LOGGING_LEVEL` (default: `CM_LOG_LEVEL_INFO` in release, `CM_LOG_LEVEL_TRACE` in debug)
 
 Available levels:

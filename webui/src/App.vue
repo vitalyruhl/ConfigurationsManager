@@ -19,7 +19,7 @@
         Flash
       </button>
       <button
-        v-if="hasLiveContent"
+        v-if="hasLiveContent && guiLoggingEnabled"
         :class="{ active: activeTab === 'log' }"
         @click="activeTab = 'log'"
       >
@@ -296,6 +296,7 @@ function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
 const activeTab = ref("live");
 const runtimeDashboard = ref(null);
 const canFlash = ref(false);
+const guiLoggingEnabled = ref(false);
 const toasts = ref([]); // {id,message,type,sticky,ts}
 let toastCounter = 0;
 
@@ -381,6 +382,12 @@ watch(
   },
   { immediate: true }
 );
+
+watch(guiLoggingEnabled, (enabled) => {
+  if (!enabled && activeTab.value === "log") {
+    activeTab.value = "live";
+  }
+});
 
 function isSettingsAuthTokenValid() {
   return (
@@ -740,6 +747,7 @@ async function injectVersion() {
       appName.value = info && typeof info.appName === 'string' ? info.appName.trim() : "";
       appTitle.value = info && typeof info.appTitle === 'string' ? info.appTitle.trim() : "";
       version.value = info && typeof info.version === 'string' ? info.version.trim() : "";
+      guiLoggingEnabled.value = !!(info && info.guiLogging);
 
       const tabBase = (appTitle.value && appTitle.value.length)
         ? appTitle.value
@@ -762,6 +770,7 @@ async function injectVersion() {
     appName.value = "";
     appTitle.value = "";
     version.value = "";
+    guiLoggingEnabled.value = false;
     document.title = "ESP32 Configuration";
   }
 }

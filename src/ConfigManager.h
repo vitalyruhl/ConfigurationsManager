@@ -632,6 +632,8 @@ private:
     const char* customCss = nullptr;
     size_t customCssLen = 0; // 0 -> treat as null-terminated string
 
+    bool guiLoggingEnabled = false;
+
     // WebSocket support
 #if CM_ENABLE_WS_PUSH
     AsyncWebSocket *ws = nullptr;
@@ -702,6 +704,8 @@ public:
 
     // Runtime manager accessor (for GUI/runtime integrations)
     ConfigManagerRuntime& getRuntime() { return runtimeManager; }
+    void setGuiLoggingEnabled(bool enabled) { guiLoggingEnabled = enabled; }
+    bool isGuiLoggingEnabled() const { return guiLoggingEnabled; }
 
     // Settings management
     BaseSetting *findSetting(const String &category, const String &key)

@@ -79,10 +79,12 @@ void LoggingManager::SerialOutput::log(Level level, const char* tag, const char*
     serial_.println(message ? message : "");
 }
 
+#if !CM_DISABLE_GUI_LOGGING
 LoggingManager::GuiOutput::GuiOutput(ConfigManagerClass& configManager, size_t startupBufferSize)
     : configManager_(configManager)
     , bufferLimit_(startupBufferSize)
 {
+    configManager_.setGuiLoggingEnabled(true);
 #if CM_ENABLE_WS_PUSH
     const String readyPayload = makeReadyPayload_();
     configManager_.addWebSocketConnectListener([this](AsyncWebSocketClient* client) {
@@ -260,6 +262,7 @@ String LoggingManager::GuiOutput::makePayload_(Level level, const char* tag, con
     payload += "\"}";
     return payload;
 }
+#endif
 
 void LoggingManager::addOutput(std::unique_ptr<Output> output)
 {
