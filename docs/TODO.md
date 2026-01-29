@@ -26,10 +26,10 @@
 
 - Auto reboot timeout
   - Initialize by default
-  - Move setting from System → WiFi
+  - Move [Reboot if WiFi lost (min):] setting from System → WiFi
 
 - WebSocket defaults
-  - Initialize inside `ConfigManager.startWebServer()`
+  - Initialize inside `ConfigManager.startWebServer()` by default
     - `enableWebSocketPush`
     - `setWebSocketInterval(1000)`
     - `setPushOnConnect(true)`
@@ -43,13 +43,6 @@
 - Extract optional modules:
   - MQTTManager (already mostly done)
   - Logging module (advanced, optional)
-
-#### Logging redesign
-- [COMPLETED] Lightweight core logger (all modules route through CM_LOG/CM_LOG_VERBOSE)
-- Optional advanced logger module
-  - Multiple outputs (Serial, Display, SD, MQTT)
-  - Independent log levels per instance
-  - Display buffer must clear even without updates
 
 ---
 
@@ -65,7 +58,7 @@
 
 2) Logging module
    - Core: minimal logger
-   - Optional: advanced logger (SigmaLogger internal only)
+   - Optional: advanced logger
 
 3) Refactor examples
    - Start with Full-IO-Demo
@@ -86,6 +79,11 @@
   - Output ramping
   - Fail-safe states
   - ID-based persistence + migration
+- Remove unused WebUI runtime templates (`webui/src/components/runtime/templates/*.enabled.vue`)
+- Deactivate Settings UI via build flag or runtime config
+- Deactivate OTA UI when OTA is disabled (auto-hide or build flag)
+- Add explicit switch to disable OTA UI
+- Verify external WebUI hosting switch (CM_EMBED_WEBUI) and document; if missing, add a switch
 
 ---
 
@@ -95,6 +93,7 @@
 - Card layout/grid improvements
 - WiFi failover
 - HTTPS support (wait for ESP32 core)
+- WebUI ToastStack feature planned but unused (put back into TODO / decide keep/remove)
 
 ---
 
@@ -105,93 +104,15 @@
 
 ---
 
-## Done (not fully tested)
-
-- WebUI redesign (Vue 3, theming, tabs)
-- Configurable browser title
-- WebUI debug logging flag
-- Human-readable uptime
-- Restart-loop bug fixed
-- Remove obsolete config switches
-
-
 ### Done / Resolved
 
-
-### [COMPLETED] MQTT – Core & GUI
-
-- GUI population
-  - `addMQTTTopicReceive*` must NOT auto-add GUI entries
-  - GUI entries only via `addMQTTTopicTooGUI`
-  - MQTT Topics settings tab via `addMQTTReceiveSettingsToGUI`
-
-- System card
-  - Move `settings_.enableMQTT.get()` under "WiFi Connected"
-  - Add "MQTT Connected"
-  - Show `getReconnectCount()` (integer only)
-
-- Cleanup
-  - Remove all other MQTT GUI elements
-
-- Logging
-  - Log all send/receive topics
-  - Only if verbose flag is enabled
-
-- System info publishing
-  - Publish every 60s (not only on reboot)
-  - `info.uptimeMs = millis()` as standalone tag
-  - Split into JSON payloads:
-    - ESP (chip + memory)
-    - WiFi (connection info)
-
-- Publish helpers / controls
-  - `publishTopic*`, `publishExtraTopic*`, `publishAllNow`
-  - `clearRetain`
-  - Last-Will defaults + `setLastWill`
-  - Wildcard subscribe helper
-
----
-
-### [COMPLETED] examples/Full-MQTT-Demo/src/main.cpp
-
-- GUI examples using `addMQTTTopicTooGUI`
-  - "MQTT-Received":
-    - `boiler_temp_c`
-    - `powermeter_power_in_w`
-    - `washing_machine_energy_total`
-    - `washing_machine_energy_yesterday`
-    - `solar_limiter_set_value_w`
-
-  - "MQTT Other Infos":
-    - `lastTopic`
-    - `lastPayload`
-    - `lastMsgAgeMs`
-
-- Callback examples
-  - `onMQTTConnect`
-  - `onMQTTDisconnect`
-  - `onNewMQTTMessage`
-  - `onMQTTStateChanged`
-  - Tasmota wildcard subscribe + error filter
-
-- Explain difference vs classic callbacks:
-  - `onConnected(callback)`
-  - `onDisconnected(callback)`
-  - `onMessage(callback)`
-
-- Calculation example
-  - Convert `washing_machine_energy_total` (kWh → MWh)
-  - Export as MQTT topic
-  - Show in GUI (2 decimal places)
-  - Button publish example (GPIO33 → `test_topic_Bool_send`)
-
----
-
-### [COMPLETED] MQTT Documentation
-
-- Explain purpose of "Client ID"
-- Complete `docs/MQTT.md`
-  - All methods
-  - Minimal + advanced examples
-
----
+- [COMPLETED] Logging redesign (core logger + advanced LoggingManager baseline)
+  - Multiple outputs with independent levels
+  - GUI log output buffer flush on WebSocket connect
+- [COMPLETED] WebUI log tab (live logging view)
+- [COMPLETED] Human-readable uptime
+- [COMPLETED] Restart-loop bug fixed
+- [COMPLETED] Remove obsolete config switches
+- [COMPLETED] WebUI redesign (Vue 3, theming, tabs)
+- [COMPLETED] Configurable browser title
+- [COMPLETED] WebUI debug logging flag

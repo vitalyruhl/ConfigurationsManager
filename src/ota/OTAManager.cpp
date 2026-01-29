@@ -2,7 +2,7 @@
 #include "../ConfigManager.h"
 
 // Logging support
-#define OTA_LOG(...) CM_LOG(__VA_ARGS__)
+#define OTA_LOG(...) CM_LOG("[OTA] " __VA_ARGS__)
 
 ConfigManagerOTA::ConfigManagerOTA()
     : otaEnabled(false)
@@ -21,7 +21,7 @@ ConfigManagerOTA::~ConfigManagerOTA() {
 
 void ConfigManagerOTA::begin(ConfigManagerClass* cm) {
     configManager = cm;
-    OTA_LOG("[OTA] OTA manager initialized");
+    OTA_LOG("OTA manager initialized");
 }
 
 void ConfigManagerOTA::setCallbacks(RebootCallback reboot, LogCallback logger) {
@@ -36,7 +36,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     otaPassword = password;
 
     if (WiFi.status() != WL_CONNECTED) {
-        OTA_LOG("[OTA] WiFi not connected, skipping OTA setup");
+        OTA_LOG("WiFi not connected, skipping OTA setup");
         return;
     }
 
@@ -45,19 +45,19 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
 
         if (!otaPassword.isEmpty()) {
             ArduinoOTA.setPassword(otaPassword.c_str());
-            OTA_LOG("[OTA] Password protection enabled");
+            OTA_LOG("Password protection enabled");
         }
 
         ArduinoOTA.onStart([this]() {
             String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-            OTA_LOG("[OTA] Start updating %s", type.c_str());
+            OTA_LOG("Start updating %s", type.c_str());
         });
 
         ArduinoOTA.onEnd([this]() {
-            OTA_LOG("[OTA] Update complete");
+            OTA_LOG("Update complete");
             // Some ESP32/LwIP combinations can hit a TCP assert shortly after OTA completes.
             // Reboot immediately after a successful update to leave the network stack in a clean state.
-            OTA_LOG("[OTA] Rebooting after OTA...");
+            OTA_LOG("Rebooting after OTA...");
             if (rebootCallback) {
                 rebootCallback();
             } else {
@@ -69,7 +69,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
             static unsigned int lastPercent = 0;
             unsigned int percent = (progress / (total / 100));
             if (percent != lastPercent && percent % 10 == 0) {
-                OTA_LOG("[OTA] Progress: %u%%", percent);
+                OTA_LOG("Progress: %u%%", percent);
                 lastPercent = percent;
             }
         });
@@ -83,12 +83,12 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
                 case OTA_RECEIVE_ERROR: errorStr = "Receive Failed"; break;
                 case OTA_END_ERROR: errorStr = "End Failed"; break;
             }
-            OTA_LOG("[OTA] Error[%u]: %s", error, errorStr);
+            OTA_LOG("Error[%u]: %s", error, errorStr);
         });
 
         ArduinoOTA.begin();
         otaInitialized = true;
-        OTA_LOG("[OTA] Arduino OTA started on %s", otaHostname.c_str());
+        OTA_LOG("Arduino OTA started on %s", otaHostname.c_str());
     }
 
     otaEnabled = true;
@@ -96,7 +96,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
 
 void ConfigManagerOTA::enable(bool enabled) {
     otaEnabled = enabled;
-    OTA_LOG("[OTA] %s", enabled ? "Enabled" : "Disabled");
+    OTA_LOG("%s", enabled ? "Enabled" : "Disabled");
 }
 
 void ConfigManagerOTA::setPassword(const String& password) {
@@ -149,7 +149,7 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
         }
     );
 
-    OTA_LOG("[OTA] Web routes configured");
+    OTA_LOG("Web routes configured");
 }
 
 void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
@@ -172,7 +172,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
     }
 
     if (ctx->hasError) {
-        OTA_LOG("[OTA] Upload failed: %s", ctx->errorReason.c_str());
+        OTA_LOG("Upload failed: %s", ctx->errorReason.c_str());
         request->send(ctx->statusCode, "application/json",
             String("{\"status\":\"error\",\"reason\":\"") + ctx->errorReason + "\"}");
         cleanup(request);
@@ -180,7 +180,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
     }
 
     if (!ctx->success) {
-        OTA_LOG("[OTA] Upload incomplete");
+        OTA_LOG("Upload incomplete");
         request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"incomplete\"}");
         cleanup(request);
         return;
@@ -191,7 +191,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
     response->addHeader("Connection", "close");
 
     request->onDisconnect([this]() {
-        OTA_LOG("[OTA] HTTP client disconnected, rebooting...");
+        OTA_LOG("HTTP client disconnected, rebooting...");
         delay(500);
         if (rebootCallback) {
             rebootCallback();
@@ -200,7 +200,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
 
     size_t uploaded = ctx->written;
     request->send(response);
-    OTA_LOG("[OTA] HTTP upload success (%lu bytes)", static_cast<unsigned long>(uploaded));
+    OTA_LOG("HTTP upload success (%lu bytes)", static_cast<unsigned long>(uploaded));
     cleanup(request);
 }
 
@@ -213,7 +213,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
         request->_tempObject = ctx;
 
         if (Update.isRunning()) {
-            OTA_LOG("[OTA] Existing update in progress, aborting prior session");
+            OTA_LOG("Existing update in progress, aborting prior session");
             Update.abort();
         }
 
@@ -258,7 +258,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
         }
 
         ctx->began = true;
-        OTA_LOG("[OTA] HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
+        OTA_LOG("HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
     }
 
     if (!ctx || ctx->hasError || !ctx->authorized) {
@@ -316,7 +316,7 @@ void ConfigManagerOTA::cleanup(AsyncWebServerRequest* request) {
     }
 
     if (ctx->began && !ctx->success) {
-        OTA_LOG("[OTA] Aborting incomplete update");
+        OTA_LOG("Aborting incomplete update");
         Update.abort();
     }
 

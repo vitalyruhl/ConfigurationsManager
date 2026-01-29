@@ -96,6 +96,9 @@ class ConfigManagerClass;
     } while (0)
 #endif
 
+#define CM_CORE_LOG(...) CM_LOG("[CM] " __VA_ARGS__)
+#define CM_CORE_LOG_VERBOSE(...) CM_LOG_VERBOSE("[CM] " __VA_ARGS__)
+
 // Setting types and base classes (keeping existing implementation)
 enum class SettingType
 {
@@ -638,6 +641,8 @@ private:
     uint32_t wsInterval = 2000;
     unsigned long wsLastPush = 0;
     std::function<String()> customPayloadBuilder;
+    std::vector<std::function<void(AsyncWebSocketClient*)>> wsConnectCallbacks;
+    std::vector<std::function<void(AsyncWebSocketClient*)>> wsDisconnectCallbacks;
     // Manual heartbeat tracking
     struct WsClientInfo { uint32_t id; unsigned long lastSeen; };
     std::vector<WsClientInfo> wsClients;
@@ -724,12 +729,12 @@ public:
     {
         if (setting->hasError())
         {
-            CM_LOG("[E] Setting error: %s", setting->getError());
+            CM_CORE_LOG("[E] Setting error: %s", setting->getError());
             return;
         }
         settings.push_back(setting);
         setting->setLogger([](const char *msg)
-                           { CM_LOG("%s", msg); });
+                           { CM_CORE_LOG("%s", msg); });
     }
 
     // Debug method to check registered settings count
@@ -737,10 +742,10 @@ public:
 
     void debugPrintSettings() const
     {
-        CM_LOG("[DEBUG] Total registered settings: %d", settings.size());
+        CM_CORE_LOG("[DEBUG] Total registered settings: %d", settings.size());
         for (size_t i = 0; i < settings.size(); i++) {
             const auto* s = settings[i];
-            CM_LOG("[DEBUG] Setting %d: name='%s', category='%s', key='%s', visible=%s",
+            CM_CORE_LOG("[DEBUG] Setting %d: name='%s', category='%s', key='%s', visible=%s",
                    i, s->getDisplayName(), s->getCategory(), s->getKey(),
                    s->isVisible() ? "true" : "false");
         }
@@ -779,7 +784,7 @@ public:
                     const String pwd = cs->get();
                     if (pwd.length() > 0) {
                         otaManager.setPassword(pwd);
-                        CM_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
+                        CM_CORE_LOG("[DEBUG] OTA password applied from persisted settings at boot (len=%d)", (int)pwd.length());
                     }
                 }
             }
@@ -790,7 +795,7 @@ public:
     {
         if (!prefs.begin("ConfigManager", false))
         {
-            CM_LOG("[E] Failed to open preferences for writing");
+            CM_CORE_LOG("[E] Failed to open preferences for writing");
             return;
         }
 
@@ -807,17 +812,17 @@ public:
     // Apply setting to memory only (temporary, lost after reboot)
     bool applySetting(const String &category, const String &key, const String &value)
     {
-        CM_LOG("[DEBUG] applySetting called (memory only): category='%s', key='%s', value='%s'",
+        CM_CORE_LOG("[DEBUG] applySetting called (memory only): category='%s', key='%s', value='%s'",
                category.c_str(), key.c_str(), value.c_str());
 
         BaseSetting *setting = findSetting(category, key);
         if (!setting)
         {
-            CM_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
+            CM_CORE_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
             return false;
         }
 
-        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
+        CM_CORE_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
@@ -860,38 +865,38 @@ public:
             if (containsNoCase(category, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
                 // Apply immediately to OTA manager; this affects both HTTP OTA (/ota_update) and ArduinoOTA if initialized
                 otaManager.setPassword(value);
-                CM_LOG("[DEBUG] OTA password (memory) updated via setting '%s.%s' (len=%d)", category.c_str(), key.c_str(), (int)value.length());
+                CM_CORE_LOG("[DEBUG] OTA password (memory) updated via setting '%s.%s' (len=%d)", category.c_str(), key.c_str(), (int)value.length());
             }
         }
 
-        CM_LOG("[DEBUG] Setting apply result (memory only): %s", result ? "SUCCESS" : "FAILED");
+        CM_CORE_LOG("[DEBUG] Setting apply result (memory only): %s", result ? "SUCCESS" : "FAILED");
         return result;
     }
 
     // Update setting and save to flash (persistent)
     bool updateSetting(const String &category, const String &key, const String &value)
     {
-        CM_LOG("[DEBUG] updateSetting called (save to flash): category='%s', key='%s', value='%s'",
+        CM_CORE_LOG("[DEBUG] updateSetting called (save to flash): category='%s', key='%s', value='%s'",
                category.c_str(), key.c_str(), value.c_str());
 
         BaseSetting *setting = findSetting(category, key);
         if (!setting)
         {
-            CM_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
+            CM_CORE_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
             return false;
         }
 
-        CM_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
+        CM_CORE_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
         DynamicJsonDocument doc(256);
 
         // Convert string value to appropriate JSON type based on setting type
         if (value == "true") {
-            CM_LOG("[DEBUG] Converting string 'true' to boolean true");
+            CM_CORE_LOG("[DEBUG] Converting string 'true' to boolean true");
             doc.set(true);
         } else if (value == "false") {
-            CM_LOG("[DEBUG] Converting string 'false' to boolean false");
+            CM_CORE_LOG("[DEBUG] Converting string 'false' to boolean false");
             doc.set(false);
         } else {
             // Try to parse as number first, then fallback to string
@@ -899,40 +904,40 @@ public:
             long longVal = strtol(value.c_str(), &endPtr, 10);
             if (*endPtr == '\0') {
                 // Successfully parsed as integer
-                CM_LOG("[DEBUG] Converting string '%s' to integer %ld", value.c_str(), longVal);
+                CM_CORE_LOG("[DEBUG] Converting string '%s' to integer %ld", value.c_str(), longVal);
                 doc.set((int)longVal);
             } else {
                 // Try as float
                 float floatVal = strtof(value.c_str(), &endPtr);
                 if (*endPtr == '\0') {
                     // Successfully parsed as float
-                    CM_LOG("[DEBUG] Converting string '%s' to float %.2f", value.c_str(), floatVal);
+                    CM_CORE_LOG("[DEBUG] Converting string '%s' to float %.2f", value.c_str(), floatVal);
                     doc.set(floatVal);
                 } else {
                     // Use as string
-                    CM_LOG("[DEBUG] Using value '%s' as string", value.c_str());
+                    CM_CORE_LOG("[DEBUG] Using value '%s' as string", value.c_str());
                     doc.set(value);
                 }
             }
         }
 
-        CM_LOG("[DEBUG] JSON document created. Calling fromJSON...");
+        CM_CORE_LOG("[DEBUG] JSON document created. Calling fromJSON...");
         bool result = setting->fromJSON(doc.as<JsonVariant>());
 
         if (result) {
             // Save the updated setting to flash storage immediately
-            CM_LOG("[DEBUG] Saving setting to flash storage");
+            CM_CORE_LOG("[DEBUG] Saving setting to flash storage");
 
             // Save only this specific setting to flash
             if (!prefs.begin("ConfigManager", false))
             {
-                CM_LOG("[ERROR] Failed to open preferences for saving");
+                CM_CORE_LOG("[ERROR] Failed to open preferences for saving");
                 return false;
             }
             setting->save(prefs);
             prefs.end();
 
-            CM_LOG("[DEBUG] Setting saved to flash successfully");
+            CM_CORE_LOG("[DEBUG] Setting saved to flash successfully");
 
             // Side-effects: keep runtime subsystems in sync with specific settings
             // Heuristic: treat keys containing both "ota" and "pass" (case-insensitive) as OTA password
@@ -943,11 +948,11 @@ public:
             };
             if (containsNoCase(category, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
                 otaManager.setPassword(value);
-                CM_LOG("[DEBUG] OTA password (persisted) updated via setting '%s.%s' (len=%d)", category.c_str(), key.c_str(), (int)value.length());
+                CM_CORE_LOG("[DEBUG] OTA password (persisted) updated via setting '%s.%s' (len=%d)", category.c_str(), key.c_str(), (int)value.length());
             }
         }
 
-        CM_LOG("[DEBUG] Setting update result: %s", result ? "SUCCESS" : "FAILED");
+        CM_CORE_LOG("[DEBUG] Setting update result: %s", result ? "SUCCESS" : "FAILED");
         return result;
     }
 
@@ -957,7 +962,7 @@ public:
         {
             if (s->hasError())
             {
-                CM_LOG("[E] Setting error: %s", s->getError());
+                CM_CORE_LOG("[E] Setting error: %s", s->getError());
             }
         }
     }
@@ -966,7 +971,7 @@ public:
     void setAppName(const String &name)
     {
         appName = name;
-        CM_LOG("[I] App name set: %s", name.c_str());
+        CM_CORE_LOG("[I] App name set: %s", name.c_str());
     }
 
     const String &getAppName() const { return appName; }
@@ -974,7 +979,7 @@ public:
     void setAppTitle(const String &title)
     {
         appTitle = title;
-        CM_LOG("[I] App title set: %s", title.c_str());
+        CM_CORE_LOG("[I] App title set: %s", title.c_str());
     }
 
     const String &getAppTitle() const { return appTitle; }
@@ -982,7 +987,7 @@ public:
     void setVersion(const String &version)
     {
         appVersion = version;
-        CM_LOG("[I] App version set: %s", version.c_str());
+        CM_CORE_LOG("[I] App version set: %s", version.c_str());
     }
 
     const String &getVersion() const { return appVersion; }
@@ -991,7 +996,7 @@ public:
     void setSettingsPassword(const String &password)
     {
         webManager.setSettingsPassword(password);
-        CM_LOG("[I] Settings password configured");
+        CM_CORE_LOG("[I] Settings password configured");
     }
     
     // WiFi management - NON-BLOCKING!
@@ -1039,7 +1044,7 @@ public:
 
         if (ssid.length() == 0)
         {
-            CM_LOG("[W] startWebServer(): WiFi SSID is empty or not registered -> starting AP mode");
+            CM_CORE_LOG("[W] startWebServer(): WiFi SSID is empty or not registered -> starting AP mode");
             startAccessPoint();
             return;
         }
@@ -1070,7 +1075,7 @@ public:
         {
             if (!dns1.fromString(dns1Str))
             {
-                CM_LOG("[W] startWebServer(): invalid Primary DNS: %s", dns1Str.c_str());
+                CM_CORE_LOG("[W] startWebServer(): invalid Primary DNS: %s", dns1Str.c_str());
                 dns1 = IPAddress();
             }
         }
@@ -1078,14 +1083,14 @@ public:
         {
             if (!dns2.fromString(dns2Str))
             {
-                CM_LOG("[W] startWebServer(): invalid Secondary DNS: %s", dns2Str.c_str());
+                CM_CORE_LOG("[W] startWebServer(): invalid Secondary DNS: %s", dns2Str.c_str());
                 dns2 = IPAddress();
             }
         }
 
         if (!okStatic || !okGw || !okSubnet)
         {
-            CM_LOG("[W] startWebServer(): invalid static networking settings -> falling back to DHCP");
+            CM_CORE_LOG("[W] startWebServer(): invalid static networking settings -> falling back to DHCP");
             startWebServer(ssid, password);
             return;
         }
@@ -1095,14 +1100,14 @@ public:
 
     void startWebServer(const String &ssid, const String &password)
     {
-        CM_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
+        CM_CORE_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
 
         // Start WiFi connection non-blocking
         wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout
         wifiManager.setCallbacks(
             [this]()
             {
-                CM_LOG("[WiFi] Connected! Starting web server...");
+                CM_CORE_LOG("Connected! Starting web server...");
                 webManager.defineAllRoutes();
                 otaManager.setupWebRoutes(webManager.getServer());
                 // Call external connected callback if available
@@ -1111,14 +1116,14 @@ public:
             },
             [this]()
             {
-                CM_LOG("[WiFi] Disconnected");
+                CM_CORE_LOG("Disconnected");
                 // Call external disconnected callback if available
                 extern void onWiFiDisconnected();
                 onWiFiDisconnected();
             },
             [this]()
             {
-                CM_LOG("[WiFi] AP Mode active");
+                CM_CORE_LOG("AP Mode active");
                 // Call external AP mode callback if available
                 extern void onWiFiAPMode();
                 onWiFiAPMode();
@@ -1137,18 +1142,18 @@ public:
         enableWebSocketPush();
     #endif
 
-        CM_LOG("[I] ConfigManager modules initialized - WiFi connecting in background");
+        CM_CORE_LOG("ConfigManager modules initialized - WiFi connecting in background");
     }
 
     void startWebServer(const IPAddress &staticIP, const IPAddress &gateway, const IPAddress &subnet, const String &ssid, const String &password, const IPAddress &dns1 = IPAddress(), const IPAddress &dns2 = IPAddress())
     {
-        CM_LOG("[I] Starting web server with static IP %s", staticIP.toString().c_str());
+        CM_CORE_LOG("Starting web server with static IP %s", staticIP.toString().c_str());
 
         wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout
         wifiManager.setCallbacks(
             [this]()
             {
-                CM_LOG("[WiFi] Connected! Starting web server...");
+                CM_CORE_LOG("Connected! Starting web server...");
                 webManager.defineAllRoutes();
                 otaManager.setupWebRoutes(webManager.getServer());
                 // Call external connected callback if available
@@ -1157,14 +1162,14 @@ public:
             },
             [this]()
             {
-                CM_LOG("[WiFi] Disconnected");
+                CM_CORE_LOG("Disconnected");
                 // Call external disconnected callback if available
                 extern void onWiFiDisconnected();
                 onWiFiDisconnected();
             },
             [this]()
             {
-                CM_LOG("[WiFi] AP Mode active");
+                CM_CORE_LOG("AP Mode active");
                 // Call external AP mode callback if available
                 extern void onWiFiAPMode();
                 onWiFiAPMode();
@@ -1184,7 +1189,7 @@ public:
     void startAccessPoint(const String &apSSID = "", const String &apPassword = "")
     {
         String ssid = apSSID.isEmpty() ? (appName + "_AP") : apSSID;
-        CM_LOG("[I] Starting Access Point: %s", ssid.c_str());
+        CM_CORE_LOG("[I] Starting Access Point: %s", ssid.c_str());
 
         wifiManager.begin();
         wifiManager.setCallbacks(
@@ -1230,7 +1235,7 @@ public:
     // System control
     void reboot()
     {
-        CM_LOG_VERBOSE("[R] Rebooting...");
+        CM_CORE_LOG_VERBOSE("[R] Rebooting...");
         delay(1000);
         ESP.restart();
     }
@@ -1240,7 +1245,7 @@ public:
     {
         customCss = css;
         customCssLen = len;
-        CM_LOG("[I] Custom CSS registered (len=%u)", (unsigned)len);
+        CM_CORE_LOG("[I] Custom CSS registered (len=%u)", (unsigned)len);
     }
 
     const char* getCustomCss() const { return customCss; }
@@ -1252,7 +1257,7 @@ public:
         {
             setting->setDefault(); // Reset to default values
         }
-        CM_LOG("[I] All settings cleared from preferences");
+        CM_CORE_LOG("[I] All settings cleared from preferences");
     }
 
     // Runtime methods - simplified for new modular structure
@@ -1376,7 +1381,7 @@ public:
     void stopOTA()
     {
         // Note: stop() method not implemented in OTAManager
-        CM_LOG("[W] stopOTA not implemented in OTAManager");
+        CM_CORE_LOG("[W] stopOTA not implemented in OTAManager");
     }
 
     // JSON export
@@ -1493,7 +1498,7 @@ public:
             if (includeSecrets || !s->isSecret())
             {
                 if (s->isSecret()) {
-                    CM_LOG("[DEBUG] Including secret field: %s.%s (includeSecrets=%s)",
+                    CM_CORE_LOG("[DEBUG] Including secret field: %s.%s (includeSecrets=%s)",
                            s->getCategory(), s->getDisplayName(),
                            includeSecrets ? "true" : "false");
                 }
@@ -1501,7 +1506,7 @@ public:
             }
             else
             {
-                CM_LOG("[DEBUG] Skipping secret field: %s.%s (includeSecrets=%s)",
+                CM_CORE_LOG("[DEBUG] Skipping secret field: %s.%s (includeSecrets=%s)",
                        s->getCategory(), s->getDisplayName(),
                        includeSecrets ? "true" : "false");
             }
@@ -1551,6 +1556,32 @@ public:
 
     // WebSocket push
 #if CM_ENABLE_WS_PUSH
+    void addWebSocketConnectListener(std::function<void(AsyncWebSocketClient*)> cb)
+    {
+        wsConnectCallbacks.push_back(std::move(cb));
+    }
+    void addWebSocketDisconnectListener(std::function<void(AsyncWebSocketClient*)> cb)
+    {
+        wsDisconnectCallbacks.push_back(std::move(cb));
+    }
+    bool sendWebSocketText(const String& payload)
+    {
+        if (!wsEnabled || !ws) {
+            return false;
+        }
+        ws->textAll(payload);
+        return true;
+    }
+    bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload)
+    {
+        if (!client) {
+            return false;
+        }
+        client->text(payload);
+        return true;
+    }
+    size_t getWebSocketClientCount() const { return wsClients.size(); }
+
     void handleWebsocketPush()
     {
         if (!wsEnabled)
@@ -1589,19 +1620,25 @@ public:
                         {
                 switch (type) {
                 case WS_EVT_CONNECT:
-                    CM_LOG_VERBOSE("[WS] Client connect %u", client->id());
+                    CM_CORE_LOG_VERBOSE("[WS] Client connect %u", client->id());
                     wsMarkSeen(client->id());
                     if (pushOnConnect) handleWebsocketPush();
+                    for (auto& cb : wsConnectCallbacks) {
+                        if (cb) cb(client);
+                    }
                     break;
                 case WS_EVT_DISCONNECT:
-                    CM_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
+                    CM_CORE_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
                     wsRemove(client->id());
+                    for (auto& cb : wsDisconnectCallbacks) {
+                        if (cb) cb(client);
+                    }
                     break;
                 case WS_EVT_ERROR:
-                    CM_LOG_VERBOSE("[WS] Error on client %u", client->id());
+                    CM_CORE_LOG_VERBOSE("[WS] Error on client %u", client->id());
                     break;
                 case WS_EVT_PONG:
-                    CM_LOG_VERBOSE("[WS] Pong from %u", client->id());
+                    CM_CORE_LOG_VERBOSE("[WS] Pong from %u", client->id());
                     wsMarkSeen(client->id());
                     break;
                 case WS_EVT_DATA:
@@ -1627,11 +1664,11 @@ public:
             });
             webManager.getServer()->addHandler(ws);
             wsInitialized = true;
-            CM_LOG_VERBOSE("[WS] Handler registered");
+            CM_CORE_LOG_VERBOSE("[WS] Handler registered");
         }
         wsInterval = intervalMs;
         wsEnabled = true;
-        CM_LOG_VERBOSE("[WS] Push enabled i=%lu ms", (unsigned long)wsInterval);
+        CM_CORE_LOG_VERBOSE("[WS] Push enabled i=%lu ms", (unsigned long)wsInterval);
     }
 
     void disableWebSocketPush() { wsEnabled = false; }
@@ -1660,7 +1697,7 @@ public:
     static void log_verbose_message(const char *, ...) {}
 #endif
 
-    void triggerLoggerTest() { CM_LOG("[I] Logger test message"); }
+    void triggerLoggerTest() { CM_CORE_LOG("[I] Logger test message"); }
 
     // Access to modules for advanced usage
     ConfigManagerWiFi &getWiFiManager() { return wifiManager; }

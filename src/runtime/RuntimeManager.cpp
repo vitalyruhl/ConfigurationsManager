@@ -5,7 +5,7 @@
 #include <time.h>
 
 // Logging support
-#define RUNTIME_LOG(...) CM_LOG(__VA_ARGS__)
+#define RUNTIME_LOG(...) CM_LOG("[Runtime] " __VA_ARGS__)
 
 ConfigManagerRuntime::ConfigManagerRuntime()
     : configManager(nullptr)
@@ -25,7 +25,7 @@ ConfigManagerRuntime::~ConfigManagerRuntime() {
 
 void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
     configManager = cm;
-    RUNTIME_LOG("[RT] Runtime manager initialized");
+    RUNTIME_LOG("Runtime manager initialized");
 }
 
 void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
@@ -34,7 +34,7 @@ void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
 
 void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider& provider) {
     runtimeProviders.push_back(provider);
-    RUNTIME_LOG("[RT] Added provider: %s (order: %d)", provider.name.c_str(), provider.order);
+    RUNTIME_LOG("Added provider: %s (order: %d)", provider.name.c_str(), provider.order);
 }
 
 void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order) {
@@ -43,7 +43,7 @@ void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<
 
 void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
     runtimeMeta.push_back(meta);
-    RUNTIME_LOG("[RT] Added meta: %s.%s", meta.group.c_str(), meta.key.c_str());
+    RUNTIME_LOG("Added meta: %s.%s", meta.group.c_str(), meta.key.c_str());
 }
 
 RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {
@@ -342,7 +342,7 @@ void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const Stri
     addRuntimeMeta(meta);
 
     runtimeIntInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
-    RUNTIME_LOG("[RT] Added int input: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
+    RUNTIME_LOG("Added int input: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
 void ConfigManagerRuntime::handleIntInputChange(const String& group, const String& key, int value) {
@@ -351,12 +351,12 @@ void ConfigManagerRuntime::handleIntInputChange(const String& group, const Strin
             if (input.setter) {
                 int clampedValue = max(input.minV, min(input.maxV, value));
                 input.setter(clampedValue);
-                RUNTIME_LOG("[RT] Int input changed: %s.%s = %d", group.c_str(), key.c_str(), clampedValue);
+                RUNTIME_LOG("Int input changed: %s.%s = %d", group.c_str(), key.c_str(), clampedValue);
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] Int input not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Int input not found: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::defineRuntimeFloatValue(const String& group, const String& key, const String& label,
@@ -379,7 +379,7 @@ void ConfigManagerRuntime::defineRuntimeFloatValue(const String& group, const St
     addRuntimeMeta(meta);
 
     runtimeFloatInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
-    RUNTIME_LOG("[RT] Added float input: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
+    RUNTIME_LOG("Added float input: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
 void ConfigManagerRuntime::handleFloatInputChange(const String& group, const String& key, float value) {
@@ -388,12 +388,12 @@ void ConfigManagerRuntime::handleFloatInputChange(const String& group, const Str
             if (input.setter) {
                 float clampedValue = max(input.minV, min(input.maxV, value));
                 input.setter(clampedValue);
-                RUNTIME_LOG("[RT] Float input changed: %s.%s = %.2f", group.c_str(), key.c_str(), clampedValue);
+                RUNTIME_LOG("Float input changed: %s.%s = %.2f", group.c_str(), key.c_str(), clampedValue);
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] Float input not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Float input not found: %s.%s", group.c_str(), key.c_str());
 }
 
 #if CM_ENABLE_SYSTEM_PROVIDER
@@ -540,7 +540,7 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
 
     builtinSystemProviderRegistered = true;
     builtinSystemProviderEnabled = true;
-    RUNTIME_LOG("[RT] Built-in system provider enabled");
+    RUNTIME_LOG("Built-in system provider enabled");
 }
 
 void ConfigManagerRuntime::refreshSketchInfoCache() {
@@ -584,7 +584,7 @@ void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<boo
     alarm.checkFunction = checkFunction;
     alarm.manual = false;
     runtimeAlarms.push_back(std::move(alarm));
-    RUNTIME_LOG("[RT] Added alarm: %s", name.c_str());
+    RUNTIME_LOG("Added alarm: %s", name.c_str());
 }
 
 void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction,
@@ -596,7 +596,7 @@ void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<boo
     alarm.onClear = onClear;
     alarm.manual = false;
     runtimeAlarms.push_back(std::move(alarm));
-    RUNTIME_LOG("[RT] Added alarm with triggers: %s", name.c_str());
+    RUNTIME_LOG("Added alarm with triggers: %s", name.c_str());
 }
 
 void ConfigManagerRuntime::registerRuntimeAlarm(const String& name, std::function<void()> onTrigger, std::function<void()> onClear) {
@@ -606,7 +606,7 @@ void ConfigManagerRuntime::registerRuntimeAlarm(const String& name, std::functio
         alarm->checkFunction = nullptr;
         if (onTrigger) alarm->onTrigger = onTrigger;
         if (onClear) alarm->onClear = onClear;
-        RUNTIME_LOG("[RT] Updated manual alarm registration: %s", name.c_str());
+        RUNTIME_LOG("Updated manual alarm registration: %s", name.c_str());
         return;
     }
 
@@ -616,7 +616,7 @@ void ConfigManagerRuntime::registerRuntimeAlarm(const String& name, std::functio
     newAlarm.onTrigger = onTrigger;
     newAlarm.onClear = onClear;
     runtimeAlarms.push_back(std::move(newAlarm));
-    RUNTIME_LOG("[RT] Registered manual alarm: %s", name.c_str());
+    RUNTIME_LOG("Registered manual alarm: %s", name.c_str());
 }
 
 void ConfigManagerRuntime::setRuntimeAlarmActive(const String& name, bool active, bool fireCallbacks) {
@@ -628,10 +628,10 @@ void ConfigManagerRuntime::setRuntimeAlarmActive(const String& name, bool active
         newAlarm.active = active;
         runtimeAlarms.push_back(std::move(newAlarm));
         alarm = &runtimeAlarms.back();
-        RUNTIME_LOG("[RT] Lazily created manual alarm entry: %s", name.c_str());
+        RUNTIME_LOG("Lazily created manual alarm entry: %s", name.c_str());
 
         if (fireCallbacks && alarm->active && alarm->onTrigger) {
-            RUNTIME_LOG("[RT] Manual trigger callback for alarm: %s", name.c_str());
+            RUNTIME_LOG("Manual trigger callback for alarm: %s", name.c_str());
             alarm->onTrigger();
         }
         return;
@@ -644,7 +644,7 @@ void ConfigManagerRuntime::setRuntimeAlarmActive(const String& name, bool active
     }
 
     alarm->active = active;
-    RUNTIME_LOG("[RT] Alarm %s manually set to %s", name.c_str(), active ? "ACTIVE" : "cleared");
+    RUNTIME_LOG("Alarm %s manually set to %s", name.c_str(), active ? "ACTIVE" : "cleared");
 
     if (!fireCallbacks) {
         return;
@@ -652,12 +652,12 @@ void ConfigManagerRuntime::setRuntimeAlarmActive(const String& name, bool active
 
     if (active) {
         if (alarm->onTrigger) {
-            RUNTIME_LOG("[RT] Manual trigger callback for alarm: %s", name.c_str());
+            RUNTIME_LOG("Manual trigger callback for alarm: %s", name.c_str());
             alarm->onTrigger();
         }
     } else {
         if (alarm->onClear) {
-            RUNTIME_LOG("[RT] Manual clear callback for alarm: %s", name.c_str());
+            RUNTIME_LOG("Manual clear callback for alarm: %s", name.c_str());
             alarm->onClear();
         }
     }
@@ -678,14 +678,14 @@ void ConfigManagerRuntime::updateAlarms() {
             bool newState = alarm.checkFunction();
             if (newState != alarm.active) {
                 alarm.active = newState;
-                RUNTIME_LOG("[RT] Alarm %s: %s", alarm.name.c_str(), newState ? "ACTIVE" : "cleared");
+                RUNTIME_LOG("Alarm %s: %s", alarm.name.c_str(), newState ? "ACTIVE" : "cleared");
 
                 // Call trigger callbacks
                 if (newState && alarm.onTrigger) {
-                    RUNTIME_LOG("[RT] Calling onTrigger for alarm: %s", alarm.name.c_str());
+                    RUNTIME_LOG("Calling onTrigger for alarm: %s", alarm.name.c_str());
                     alarm.onTrigger();
                 } else if (!newState && alarm.onClear) {
-                    RUNTIME_LOG("[RT] Calling onClear for alarm: %s", alarm.name.c_str());
+                    RUNTIME_LOG("Calling onClear for alarm: %s", alarm.name.c_str());
                     alarm.onClear();
                 }
             }
@@ -715,13 +715,13 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
 void ConfigManagerRuntime::setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override) {
     runtimeMetaOverride = override;
     runtimeMetaOverrideActive = true;
-    RUNTIME_LOG("[RT] Meta override set (%d entries)", override.size());
+    RUNTIME_LOG("Meta override set (%d entries)", override.size());
 }
 
 void ConfigManagerRuntime::clearRuntimeMetaOverride() {
     runtimeMetaOverride.clear();
     runtimeMetaOverrideActive = false;
-    RUNTIME_LOG("[RT] Meta override cleared");
+    RUNTIME_LOG("Meta override cleared");
 }
 
 #endif
@@ -753,7 +753,7 @@ void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String
     addRuntimeMeta(meta);
 
     runtimeButtons.emplace_back(group, key, onPress);
-    RUNTIME_LOG("[RT] Added button: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Added button: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::handleButtonPress(const String& group, const String& key) {
@@ -761,12 +761,12 @@ void ConfigManagerRuntime::handleButtonPress(const String& group, const String& 
         if (button.group == group && button.key == key) {
             if (button.onPress) {
                 button.onPress();
-                RUNTIME_LOG("[RT] Button pressed: %s.%s", group.c_str(), key.c_str());
+                RUNTIME_LOG("Button pressed: %s.%s", group.c_str(), key.c_str());
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] Button not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Button not found: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const String& key, const String& label,
@@ -782,7 +782,7 @@ void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const Stri
     addRuntimeMeta(meta);
 
     runtimeCheckboxes.emplace_back(group, key, getter, setter);
-    RUNTIME_LOG("[RT] Added checkbox: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Added checkbox: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::handleCheckboxChange(const String& group, const String& key, bool value) {
@@ -790,12 +790,12 @@ void ConfigManagerRuntime::handleCheckboxChange(const String& group, const Strin
         if (checkbox.group == group && checkbox.key == key) {
             if (checkbox.setter) {
                 checkbox.setter(value);
-                RUNTIME_LOG("[RT] Checkbox changed: %s.%s = %s", group.c_str(), key.c_str(), value ? "true" : "false");
+                RUNTIME_LOG("Checkbox changed: %s.%s = %s", group.c_str(), key.c_str(), value ? "true" : "false");
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] Checkbox not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Checkbox not found: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const String& key, const String& label,
@@ -815,7 +815,7 @@ void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const S
     addRuntimeMeta(meta);
 
     runtimeStateButtons.emplace_back(group, key, getter, setter);
-    RUNTIME_LOG("[RT] Added state button: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Added state button: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::defineRuntimeMomentaryButton(const String& group, const String& key, const String& label,
@@ -834,7 +834,7 @@ void ConfigManagerRuntime::defineRuntimeMomentaryButton(const String& group, con
     addRuntimeMeta(meta);
 
     runtimeStateButtons.emplace_back(group, key, getter, setter);
-    RUNTIME_LOG("[RT] Added momentary button: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Added momentary button: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const String& key) {
@@ -844,12 +844,12 @@ void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const St
                 bool currentState = button.getter();
                 bool newState = !currentState;
                 button.setter(newState);
-                RUNTIME_LOG("[RT] State button toggled: %s.%s = %s", group.c_str(), key.c_str(), newState ? "true" : "false");
+                RUNTIME_LOG("State button toggled: %s.%s = %s", group.c_str(), key.c_str(), newState ? "true" : "false");
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] State button not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("State button not found: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::handleStateButtonSet(const String& group, const String& key, bool value) {
@@ -857,12 +857,12 @@ void ConfigManagerRuntime::handleStateButtonSet(const String& group, const Strin
         if (button.group == group && button.key == key) {
             if (button.setter) {
                 button.setter(value);
-                RUNTIME_LOG("[RT] State button set: %s.%s = %s", group.c_str(), key.c_str(), value ? "true" : "false");
+                RUNTIME_LOG("State button set: %s.%s = %s", group.c_str(), key.c_str(), value ? "true" : "false");
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] State button not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("State button not found: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const String& key, const String& label,
@@ -883,7 +883,7 @@ void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const Str
     addRuntimeMeta(meta);
 
     runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
-    RUNTIME_LOG("[RT] Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
+    RUNTIME_LOG("Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
 void ConfigManagerRuntime::handleIntSliderChange(const String& group, const String& key, int value) {
@@ -893,12 +893,12 @@ void ConfigManagerRuntime::handleIntSliderChange(const String& group, const Stri
                 // Clamp value to range
                 int clampedValue = max(slider.minV, min(slider.maxV, value));
                 slider.setter(clampedValue);
-                RUNTIME_LOG("[RT] Int slider changed: %s.%s = %d", group.c_str(), key.c_str(), clampedValue);
+                RUNTIME_LOG("Int slider changed: %s.%s = %d", group.c_str(), key.c_str(), clampedValue);
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] Int slider not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Int slider not found: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const String& key, const String& label,
@@ -921,7 +921,7 @@ void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const S
     addRuntimeMeta(meta);
 
     runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
-    RUNTIME_LOG("[RT] Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
+    RUNTIME_LOG("Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
 void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const String& key, float value) {
@@ -931,10 +931,10 @@ void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const St
                 // Clamp value to range
                 float clampedValue = max(slider.minV, min(slider.maxV, value));
                 slider.setter(clampedValue);
-                RUNTIME_LOG("[RT] Float slider changed: %s.%s = %.2f", group.c_str(), key.c_str(), clampedValue);
+                RUNTIME_LOG("Float slider changed: %s.%s = %.2f", group.c_str(), key.c_str(), clampedValue);
             }
             return;
         }
     }
-    RUNTIME_LOG("[RT] Float slider not found: %s.%s", group.c_str(), key.c_str());
+    RUNTIME_LOG("Float slider not found: %s.%s", group.c_str(), key.c_str());
 }

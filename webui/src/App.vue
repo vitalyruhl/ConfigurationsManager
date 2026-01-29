@@ -18,6 +18,13 @@
       <button class="flash-btn" @click="startFlash" :disabled="!canFlash">
         Flash
       </button>
+      <button
+        v-if="hasLiveContent"
+        :class="{ active: activeTab === 'log' }"
+        @click="activeTab = 'log'"
+      >
+        Log
+      </button>
       <button class="theme-btn" type="button" @click="toggleTheme">
         Theme: {{ themeMode === 'dark' ? 'Dark' : 'Light' }}
       </button>
@@ -68,9 +75,10 @@
     </div>
 
     <RuntimeDashboard
-      v-if="activeTab === 'live' && hasLiveContent"
+      v-if="activeTab !== 'settings' && hasLiveContent"
       ref="runtimeDashboard"
       :config="config"
+      :view="activeTab"
       @can-flash-change="handleCanFlashChange"
     />
     <section v-else-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">

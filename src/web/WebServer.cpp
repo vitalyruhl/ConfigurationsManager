@@ -5,7 +5,7 @@
 #include <AsyncJson.h>
 
 // Logging support
-#define WEB_LOG(...) CM_LOG(__VA_ARGS__)
+#define WEB_LOG(...) CM_LOG("[Web] " __VA_ARGS__)
 
 ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     : server(webServer)
@@ -28,7 +28,7 @@ ConfigManagerWeb::~ConfigManagerWeb() {
 void ConfigManagerWeb::begin(ConfigManagerClass* cm) {
     configManager = cm;
     initialized = true;
-    WEB_LOG("[Web] Web server module initialized");
+    WEB_LOG("Web server module initialized");
 }
 
 void ConfigManagerWeb::setCallbacks(
@@ -64,7 +64,7 @@ bool ConfigManagerWeb::isStarted() const {
 
 void ConfigManagerWeb::defineAllRoutes() {
     if (!initialized || !server) {
-        WEB_LOG("[Web] Cannot define routes - not initialized");
+        WEB_LOG("Cannot define routes - not initialized");
         return;
     }
 
@@ -72,11 +72,11 @@ void ConfigManagerWeb::defineAllRoutes() {
     setupAPIRoutes();
     setupRuntimeRoutes();
 
-    WEB_LOG("[Web] All routes defined");
+    WEB_LOG("All routes defined");
 
     // Start the server
     server->begin();
-    WEB_LOG("[Web] Server started on port 80");
+    WEB_LOG("Server started on port 80");
 }
 
 void ConfigManagerWeb::setupStaticRoutes() {
@@ -198,18 +198,18 @@ void ConfigManagerWeb::setupAPIRoutes() {
             body->concat(String((const char*)data).substring(0, len));
 
             if (index + len == total) {
-                WEB_LOG("[Web] POST /config with body");
+                WEB_LOG("POST /config with body");
 
                 // Debug: List all parameters
-                WEB_LOG("[Web] Total params: %d", request->params());
+                WEB_LOG("Total params: %d", request->params());
                 for (int i = 0; i < request->params(); i++) {
                     AsyncWebParameter* p = request->getParam(i);
-                    WEB_LOG("[Web] Param %d: name='%s', value='%s', isPost=%s, isFile=%s",
+                    WEB_LOG("Param %d: name='%s', value='%s', isPost=%s, isFile=%s",
                             i, p->name().c_str(), p->value().c_str(),
                             p->isPost() ? "true" : "false", p->isFile() ? "true" : "false");
                 }
 
-                WEB_LOG("[Web] Body content: '%s'", body->c_str());
+                WEB_LOG("Body content: '%s'", body->c_str());
 
                 // Check for new format: category + key as URL params, value in JSON body
                 bool hasCategory = request->hasParam("category");
@@ -240,7 +240,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                         }
                     }
 
-                    WEB_LOG("[Web] Parsed: category='%s', key='%s', value='%s'",
+                    WEB_LOG("Parsed: category='%s', key='%s', value='%s'",
                             category.c_str(), key.c_str(), value.c_str());
 
                     // Passwords are transmitted in plaintext over HTTP.
@@ -252,7 +252,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"update_failed\"}");
                     }
                 } else {
-                    WEB_LOG("[Web] Missing URL params: category=%s, key=%s",
+                    WEB_LOG("Missing URL params: category=%s, key=%s",
                             hasCategory ? "yes" : "no", hasKey ? "yes" : "no");
                     request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_url_params\"}");
                 }
@@ -270,17 +270,17 @@ void ConfigManagerWeb::setupAPIRoutes() {
                 size_t jsonSize = json.length();
 
                 // Log the JSON size for debugging
-                Serial.printf("[WebServer] Sending config.json - Size: %zu bytes\n", jsonSize);
+                WEB_LOG("Sending config.json - Size: %u bytes", (unsigned)jsonSize);
 
                 // Check if JSON is empty or too large
                 if (jsonSize == 0) {
-                    Serial.println("[WebServer] Error: Generated JSON is empty!");
+                    WEB_LOG("Error: Generated JSON is empty!");
                     request->send(500, "application/json", "{\"error\":\"empty_json\"}");
                     return;
                 }
 
                 if (jsonSize > 16384) { // 16KB limit - use chunked response for large JSON
-                    Serial.printf("[WebServer] Using chunked response for large JSON (%zu bytes)\n", jsonSize);
+                    WEB_LOG("Using chunked response for large JSON (%u bytes)", (unsigned)jsonSize);
 
                     AsyncWebServerResponse* response = request->beginChunkedResponse("application/json",
                         [json](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
@@ -300,12 +300,12 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     request->send(response);
                 }
 
-                Serial.printf("[WebServer] config.json sent successfully (%zu bytes)\n", jsonSize);
+                WEB_LOG("config.json sent successfully (%u bytes)", (unsigned)jsonSize);
             } catch (const std::exception& e) {
-                Serial.printf("[WebServer] Exception in config.json: %s\n", e.what());
+                WEB_LOG("Exception in config.json: %s", e.what());
                 request->send(500, "application/json", "{\"error\":\"json_generation_failed\"}");
             } catch (...) {
-                Serial.println("[WebServer] Unknown exception in config.json generation");
+                WEB_LOG("Unknown exception in config.json generation");
                 request->send(500, "application/json", "{\"error\":\"unknown_error\"}");
             }
         } else {
@@ -317,7 +317,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     server->on("/config/apply", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             // Response is sent in body handler
-            Serial.println("[WebServer] /config/apply request received");
+            WEB_LOG("/config/apply request received");
         },
         NULL,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
@@ -332,13 +332,13 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
             // Process when all data received
             if (index + len == total) {
-                Serial.printf("[WebServer] /config/apply body complete (%u bytes)\n", (unsigned)total);
+                WEB_LOG("/config/apply body complete (%u bytes)", (unsigned)total);
                 // Get URL parameters
                 AsyncWebParameter* pCategory = request->getParam("category");
                 AsyncWebParameter* pKey = request->getParam("key");
 
                 if (!pCategory || !pKey) {
-                    WEB_LOG("[Web] Missing URL params for /config/apply");
+                    WEB_LOG("Missing URL params for /config/apply");
                     request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}");
                     delete body;
                     request->_tempObject = nullptr;
@@ -348,7 +348,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                 String category = pCategory->value();
                 String key = pKey->value();
 
-                WEB_LOG("[Web] Processing /config/apply: category='%s', key='%s'",
+                WEB_LOG("Processing /config/apply: category='%s', key='%s'",
                         category.c_str(), key.c_str());
 
                 // Parse JSON body to get value
@@ -368,7 +368,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     value = *body;
                 }
 
-                WEB_LOG("[Web] Extracted value: '%s'", value.c_str());
+                WEB_LOG("Extracted value: '%s'", value.c_str());
 
                 // Passwords are transmitted in plaintext over HTTP.
                 String finalValue = value;
@@ -392,12 +392,12 @@ void ConfigManagerWeb::setupAPIRoutes() {
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
     {
         auto* handler = new AsyncCallbackJsonWebHandler("/config/save", [this](AsyncWebServerRequest* request, JsonVariant& json) {
-            WEB_LOG("[WebServer] /config/save request received");
+            WEB_LOG("/config/save request received");
 
             const String category = request->hasParam("category") ? request->getParam("category")->value() : "";
             const String key = request->hasParam("key") ? request->getParam("key")->value() : "";
             if (category.isEmpty() || key.isEmpty()) {
-                WEB_LOG("[Web] Missing URL params for /config/save");
+                WEB_LOG("Missing URL params for /config/save");
                 AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
                     "{\"status\":\"error\",\"action\":\"save\",\"reason\":\"missing_params\"}");
                 enableCORS(response);
@@ -433,8 +433,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
                 value = "";
             }
 
-            WEB_LOG("[Web] Processing /config/save: category='%s', key='%s'", category.c_str(), key.c_str());
-            WEB_LOG("[Web] Extracted value for save: '%s'", value.c_str());
+            WEB_LOG("Processing /config/save: category='%s', key='%s'", category.c_str(), key.c_str());
+            WEB_LOG("Extracted value for save: '%s'", value.c_str());
 
             // Passwords are transmitted in plaintext over HTTP.
             const String finalValue = value;
@@ -461,7 +461,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
     {
         auto* handler = new AsyncCallbackJsonWebHandler("/config/auth", [this](AsyncWebServerRequest* request, JsonVariant& json) {
-            WEB_LOG("[WebServer] /config/auth request received");
+            WEB_LOG("/config/auth request received");
 
             if (!json.is<JsonObject>()) {
                 AsyncWebServerResponse* response = request->beginResponse(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
@@ -474,7 +474,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
             const String provided = obj.containsKey("password") ? obj["password"].as<String>() : String("");
             const bool required = isSettingsAuthRequired();
             const bool match = (!required) || (provided == settingsPassword);
-            WEB_LOG("[Web] /config/auth required=%s providedLen=%d configuredLen=%d match=%s",
+            WEB_LOG("/config/auth required=%s providedLen=%d configuredLen=%d match=%s",
                 required ? "true" : "false",
                 (int)provided.length(),
                 (int)settingsPassword.length(),
@@ -560,7 +560,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
     {
         auto* handler = new AsyncCallbackJsonWebHandler("/config/apply_all", [this](AsyncWebServerRequest* request, JsonVariant& json) {
-            WEB_LOG("[Web] Processing /config/apply_all");
+            WEB_LOG("Processing /config/apply_all");
 
             if (!json.is<JsonObject>()) {
                 AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
@@ -601,10 +601,10 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                     if (settingApplyCallback && settingApplyCallback(category, key, value)) {
                         totalApplied++;
-                        WEB_LOG("[Web] Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                        WEB_LOG("Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
                     } else {
                         allSuccess = false;
-                        WEB_LOG("[Web] Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                        WEB_LOG("Failed to apply %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
                     }
                 }
             }
@@ -629,7 +629,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
     {
         auto* handler = new AsyncCallbackJsonWebHandler("/config/save_all", [this](AsyncWebServerRequest* request, JsonVariant& json) {
-            WEB_LOG("[Web] Processing /config/save_all");
+            WEB_LOG("Processing /config/save_all");
 
             if (!json.is<JsonObject>()) {
                 AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
@@ -670,10 +670,10 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                     if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
                         totalSaved++;
-                        WEB_LOG("[Web] Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                        WEB_LOG("Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
                     } else {
                         allSuccess = false;
-                        WEB_LOG("[Web] Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
+                        WEB_LOG("Failed to save %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
                     }
                 }
             }
@@ -759,7 +759,7 @@ void ConfigManagerWeb::handleJSRequest(AsyncWebServerRequest* request) {
 }
 
 void ConfigManagerWeb::handleNotFound(AsyncWebServerRequest* request) {
-    WEB_LOG("[Web] 404: %s %s",
+    WEB_LOG("404: %s %s",
             request->methodToString(),
             request->url().c_str());
     request->send(404, "text/plain", "Not Found");
@@ -793,7 +793,7 @@ void ConfigManagerWeb::enableCORSForAll(bool enable) {
 
 #ifdef development
 void ConfigManagerWeb::addDevelopmentRoutes() {
-    WEB_LOG("[Web] Adding development routes");
+    WEB_LOG("Adding development routes");
 
     // Development export route
     server->on("/dev/export", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -811,7 +811,7 @@ void ConfigManagerWeb::addDevelopmentRoutes() {
 #endif
 
 void ConfigManagerWeb::setupRuntimeRoutes() {
-    WEB_LOG("[Web] Setting up runtime routes");
+    WEB_LOG("Setting up runtime routes");
 
     // Runtime JSON endpoint
     server->on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -1271,12 +1271,12 @@ void ConfigManagerWeb::log(const char* format, ...) const {
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    CM_LOG("%s", buffer);
+    WEB_LOG("%s", buffer);
 }
 
 void ConfigManagerWeb::setSettingsPassword(const String& password) {
     settingsPassword = password;
-    WEB_LOG("[Web] Settings password configured (length: %d)", password.length());
+    WEB_LOG("Settings password configured (length: %d)", password.length());
 }
 
 bool ConfigManagerWeb::isSettingsAuthRequired() const {
@@ -1294,7 +1294,7 @@ String ConfigManagerWeb::issueSettingsAuthToken() {
              (unsigned long)r0, (unsigned long)r1, (unsigned long)r2, (unsigned long)r3);
     settingsAuthToken = String(buf);
     settingsAuthIssuedAtMs = millis();
-    WEB_LOG("[Web] Settings auth token issued (ttl=%lus)", (unsigned long)(SETTINGS_AUTH_TTL_MS / 1000UL));
+    WEB_LOG("Settings auth token issued (ttl=%lus)", (unsigned long)(SETTINGS_AUTH_TTL_MS / 1000UL));
     return settingsAuthToken;
 }
 

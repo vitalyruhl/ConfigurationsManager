@@ -4,8 +4,8 @@
 #include <esp_wifi.h>
 
 // Logging support with verbosity levels
-#define WIFI_LOG(...) CM_LOG(__VA_ARGS__)
-#define WIFI_LOG_VERBOSE(...) CM_LOG_VERBOSE(__VA_ARGS__)
+#define WIFI_LOG(...) CM_LOG("[WiFi] " __VA_ARGS__)
+#define WIFI_LOG_VERBOSE(...) CM_LOG_VERBOSE("[WiFi] " __VA_ARGS__)
 
 ConfigManagerWiFi::ConfigManagerWiFi()
   : currentState(WIFI_STATE_DISCONNECTED)
@@ -44,14 +44,14 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
   // Determine initial state
   if (WiFi.getMode() == WIFI_AP) {
     currentState = WIFI_STATE_AP_MODE;
-    WIFI_LOG("[WiFi] Starting in AP mode");
+    WIFI_LOG("Starting in AP mode");
   } else if (WiFi.status() == WL_CONNECTED) {
     currentState = WIFI_STATE_CONNECTED;
     lastGoodConnectionMillis = millis();
-    WIFI_LOG_VERBOSE("[WiFi] Already connected to %s", WiFi.SSID().c_str());
+    WIFI_LOG_VERBOSE("Already connected to %s", WiFi.SSID().c_str());
   } else {
     currentState = WIFI_STATE_DISCONNECTED;
-    WIFI_LOG_VERBOSE("[WiFi] Starting disconnected");
+    WIFI_LOG_VERBOSE("Starting disconnected");
   }
 
   initialized = true;
@@ -70,7 +70,7 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   dns1 = IPAddress();
   dns2 = IPAddress();
 
-  WIFI_LOG_VERBOSE("[WiFi] Starting DHCP connection to %s", ssid.c_str());
+  WIFI_LOG_VERBOSE("Starting DHCP connection to %s", ssid.c_str());
 
   // Start phased connection attempts
   connectAttempts = 0;
@@ -87,7 +87,7 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
   dns2 = secondaryDNS;
   useDHCP = false;
 
-  WIFI_LOG_VERBOSE("[WiFi] Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
+  WIFI_LOG_VERBOSE("Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
            ssid.c_str(),
            staticIP.toString().c_str(),
            (dns1 == IPAddress()) ? "0.0.0.0" : dns1.toString().c_str(),
@@ -113,7 +113,7 @@ void ConfigManagerWiFi::applyStaticConfig() {
 }
 
 void ConfigManagerWiFi::startAccessPoint(const String& apSSID, const String& apPassword) {
-  WIFI_LOG_VERBOSE("[WiFi] Starting Access Point: %s", apSSID.c_str());
+  WIFI_LOG_VERBOSE("Starting Access Point: %s", apSSID.c_str());
 
   WiFi.mode(WIFI_AP);
   if (apPassword.length() > 0) {
@@ -134,7 +134,7 @@ void ConfigManagerWiFi::update() {
   // static int debugCounter = 0;
   // debugCounter++;
   // if (debugCounter % 50 == 0) { // Every 50 calls (~every 0.5 second for more frequent debugging)
-  //   WIFI_LOG("[WiFi] DEBUG Update - Current State: %s, WiFi.status(): %d (%s)", 
+  //   WIFI_LOG("DEBUG Update - Current State: %s, WiFi.status(): %d (%s)", 
   //          getStatusString().c_str(), 
   //          WiFi.status(), 
   //          getWiFiStatusString(WiFi.status()).c_str());
@@ -148,7 +148,7 @@ void ConfigManagerWiFi::update() {
   } else if (WiFi.status() == WL_CONNECTED) {
     if (currentState != WIFI_STATE_CONNECTED) {
       // Log detailed connection info when first connecting
-      WIFI_LOG_VERBOSE("[WiFi] WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s",
+      WIFI_LOG_VERBOSE("WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s",
                WiFi.localIP().toString().c_str(),
                WiFi.gatewayIP().toString().c_str(),
                WiFi.dnsIP().toString().c_str());
@@ -164,18 +164,18 @@ void ConfigManagerWiFi::update() {
     // even while the link is still up (e.g. during scans/roaming). If we were connected before,
     // treat this as a transient state to avoid false disconnect transitions and reconnect storms.
     if (currentState == WIFI_STATE_CONNECTED && (wifiStatus == WL_SCAN_COMPLETED || wifiStatus == WL_IDLE_STATUS)) {
-      WIFI_LOG_VERBOSE("[WiFi] Transient status while connected: %d (%s)",
+      WIFI_LOG_VERBOSE("Transient status while connected: %d (%s)",
                        wifiStatus, getWiFiStatusString(wifiStatus).c_str());
       lastGoodConnectionMillis = millis();
     } else {
       if (currentState == WIFI_STATE_CONNECTED) {
-        WIFI_LOG("[WiFi] Connection lost! WiFi.status() = %d", wifiStatus);
+        WIFI_LOG("Connection lost! WiFi.status() = %d", wifiStatus);
         transitionToState(WIFI_STATE_DISCONNECTED);
       } else if (currentState == WIFI_STATE_CONNECTING) {
         // Still trying to connect, log status periodically
         static unsigned long lastStatusLog = 0;
         if (millis() - lastStatusLog > 5000) { // Log every 5 seconds
-          WIFI_LOG_VERBOSE("[WiFi] Still connecting... WiFi.status() = %d (%s)",
+          WIFI_LOG_VERBOSE("Still connecting... WiFi.status() = %d (%s)",
                            wifiStatus, getWiFiStatusString(wifiStatus).c_str());
           lastStatusLog = millis();
         }
@@ -223,13 +223,13 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
   currentState = newState;
 
   // Log state transitions (with correct old and new state)
-  WIFI_LOG_VERBOSE("[WiFi] State: %s -> %s", oldStateStr.c_str(), newStateStr.c_str());
+  WIFI_LOG_VERBOSE("State: %s -> %s", oldStateStr.c_str(), newStateStr.c_str());
 
   // Execute callbacks based on state transitions
   switch (newState) {
     case WIFI_STATE_CONNECTED:
       if (oldState != WIFI_STATE_CONNECTED) {
-        WIFI_LOG_VERBOSE("[WiFi] Connected! IP: %s", WiFi.localIP().toString().c_str());
+        WIFI_LOG_VERBOSE("Connected! IP: %s", WiFi.localIP().toString().c_str());
         // Reset connection attempt counter on success
         connectAttempts = 0;
         if (onConnectedCallback) {
@@ -241,7 +241,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
     case WIFI_STATE_DISCONNECTED:
     case WIFI_STATE_RECONNECTING:
       if (oldState == WIFI_STATE_CONNECTED) {
-        WIFI_LOG_VERBOSE("[WiFi] Disconnected from %s", ssid.c_str());
+        WIFI_LOG_VERBOSE("Disconnected from %s", ssid.c_str());
         if (onDisconnectedCallback) {
           onDisconnectedCallback();
         }
@@ -250,7 +250,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
 
     case WIFI_STATE_AP_MODE:
       if (oldState != WIFI_STATE_AP_MODE) {
-        WIFI_LOG_VERBOSE("[WiFi] Access Point mode active");
+        WIFI_LOG_VERBOSE("Access Point mode active");
         if (onAPModeCallback) {
           onAPModeCallback();
         }
@@ -258,7 +258,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
       break;
 
     case WIFI_STATE_CONNECTING:
-      WIFI_LOG_VERBOSE("[WiFi] Connecting to %s...", ssid.c_str());
+      WIFI_LOG_VERBOSE("Connecting to %s...", ssid.c_str());
       break;
 
     default:
@@ -297,7 +297,7 @@ void ConfigManagerWiFi::checkAutoReboot() {
 
   if (timeSinceLastConnection >= autoRebootTimeoutMs) {
     // Time for auto-reboot
-    WIFI_LOG("[WiFi] Auto-reboot triggered after %lu ms without connection", timeSinceLastConnection);
+    WIFI_LOG("Auto-reboot triggered after %lu ms without connection", timeSinceLastConnection);
     ESP.restart();
   }
 }
@@ -345,13 +345,13 @@ void ConfigManagerWiFi::forceReconnect() {
   lastReconnectAttempt = 0; // Reset timer to trigger immediate reconnect
 }
 void ConfigManagerWiFi::reconnect() {
-  WIFI_LOG("[WiFi] Manual reconnect requested");
+  WIFI_LOG("Manual reconnect requested");
   WiFi.disconnect();
   forceReconnect();
 }
 
 void ConfigManagerWiFi::disconnect() {
-  WIFI_LOG("[WiFi] Manual disconnect requested");
+  WIFI_LOG("Manual disconnect requested");
   WiFi.disconnect();
   transitionToState(WIFI_STATE_DISCONNECTED);
 }
@@ -403,7 +403,7 @@ void ConfigManagerWiFi::attemptConnect() {
   uint8_t phase = connectAttempts;
 
   if (phase == 0) {
-    WIFI_LOG_VERBOSE("[WiFi] Attempt 1: normal connect (no stack reset)");
+    WIFI_LOG_VERBOSE("Attempt 1: normal connect (no stack reset)");
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
@@ -412,13 +412,13 @@ void ConfigManagerWiFi::attemptConnect() {
       applyStaticConfig();
     }
   } else if (phase == 1) {
-    WIFI_LOG("[WiFi] Attempt 2: performing WiFi stack reset, then reconnect");
+    WIFI_LOG("Attempt 2: performing WiFi stack reset, then reconnect");
     performWiFiStackReset();
     if (!useDHCP) {
       applyStaticConfig();
     }
   } else {
-    WIFI_LOG("[WiFi] Attempt %d: restarting ESP due to repeated connection failures", phase + 1);
+    WIFI_LOG("Attempt %d: restarting ESP due to repeated connection failures", phase + 1);
     ESP.restart();
     return; // restart should not return
   }
@@ -426,7 +426,7 @@ void ConfigManagerWiFi::attemptConnect() {
   // BSSID selection if configured
   String targetBSSID = findBestBSSID();
   if (!targetBSSID.isEmpty()) {
-    WIFI_LOG("[WiFi] Using specific BSSID: %s", targetBSSID.c_str());
+    WIFI_LOG("Using specific BSSID: %s", targetBSSID.c_str());
     uint8_t bssid[6];
     unsigned int tmp[6];
     int matched = sscanf(targetBSSID.c_str(), "%2x:%2x:%2x:%2x:%2x:%2x",
@@ -435,7 +435,7 @@ void ConfigManagerWiFi::attemptConnect() {
       for (int i = 0; i < 6; ++i) bssid[i] = static_cast<uint8_t>(tmp[i] & 0xFF);
       WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
     } else {
-      WIFI_LOG("[WiFi] Invalid BSSID format '%s', falling back to auto BSSID", targetBSSID.c_str());
+      WIFI_LOG("Invalid BSSID format '%s', falling back to auto BSSID", targetBSSID.c_str());
       WiFi.begin(ssid.c_str(), password.c_str());
     }
   } else {
@@ -451,22 +451,22 @@ void ConfigManagerWiFi::attemptConnect() {
 // Smart WiFi Roaming implementation
 void ConfigManagerWiFi::enableSmartRoaming(bool enable) {
   smartRoamingEnabled = enable;
-  WIFI_LOG_VERBOSE("[WiFi] Smart Roaming %s", enable ? "enabled" : "disabled");
+  WIFI_LOG_VERBOSE("Smart Roaming %s", enable ? "enabled" : "disabled");
 }
 
 void ConfigManagerWiFi::setRoamingThreshold(int thresholdDbm) {
   roamingThreshold = thresholdDbm;
-  WIFI_LOG_VERBOSE("[WiFi] Roaming threshold set to %d dBm", thresholdDbm);
+  WIFI_LOG_VERBOSE("Roaming threshold set to %d dBm", thresholdDbm);
 }
 
 void ConfigManagerWiFi::setRoamingCooldown(unsigned long cooldownSeconds) {
   roamingCooldown = cooldownSeconds * 1000; // Convert to milliseconds
-  WIFI_LOG_VERBOSE("[WiFi] Roaming cooldown set to %lu seconds", cooldownSeconds);
+  WIFI_LOG_VERBOSE("Roaming cooldown set to %lu seconds", cooldownSeconds);
 }
 
 void ConfigManagerWiFi::setRoamingImprovement(int improvementDbm) {
   roamingImprovement = improvementDbm;
-  WIFI_LOG_VERBOSE("[WiFi] Roaming improvement threshold set to %d dBm", improvementDbm);
+  WIFI_LOG_VERBOSE("Roaming improvement threshold set to %d dBm", improvementDbm);
 }
 
 bool ConfigManagerWiFi::isSmartRoamingEnabled() const {
@@ -497,13 +497,13 @@ void ConfigManagerWiFi::checkSmartRoaming() {
     return;
   }
 
-  WIFI_LOG_VERBOSE("[WiFi] Current RSSI (%d dBm) below threshold (%d dBm), scanning for better APs...", 
+  WIFI_LOG_VERBOSE("Current RSSI (%d dBm) below threshold (%d dBm), scanning for better APs...", 
            currentRSSI, roamingThreshold);
 
   // Scan for networks
   int networkCount = WiFi.scanNetworks();
   if (networkCount <= 0) {
-    WIFI_LOG_VERBOSE("[WiFi] No networks found during roaming scan");
+    WIFI_LOG_VERBOSE("No networks found during roaming scan");
     return;
   }
 
@@ -557,7 +557,7 @@ void ConfigManagerWiFi::checkSmartRoaming() {
     
     // Don't roam to the same AP
     if (bestBSSID != currentBSSID) {
-      WIFI_LOG_VERBOSE("[WiFi] Found better AP: %s (RSSI: %d dBm, improvement: %d dBm)", 
+      WIFI_LOG_VERBOSE("Found better AP: %s (RSSI: %d dBm, improvement: %d dBm)", 
                bestBSSID.c_str(), bestRSSI, bestRSSI - currentRSSI);
       
       // Disconnect and reconnect to trigger roaming
@@ -572,10 +572,10 @@ void ConfigManagerWiFi::checkSmartRoaming() {
       }
       
       lastRoamingAttempt = currentTime;
-      WIFI_LOG_VERBOSE("[WiFi] Initiated roaming to better access point");
+      WIFI_LOG_VERBOSE("Initiated roaming to better access point");
     }
   } else {
-    WIFI_LOG_VERBOSE("[WiFi] No better AP found (current: %d dBm)", currentRSSI);
+    WIFI_LOG_VERBOSE("No better AP found (current: %d dBm)", currentRSSI);
   }
 
   // Clean up scan results
@@ -587,26 +587,26 @@ void ConfigManagerWiFi::setWifiAPMacFilter(const String& macAddress) {
   filterMac = macAddress;
   macFilterEnabled = true;
   macPriorityEnabled = false; // Filter mode disables priority mode
-  WIFI_LOG("[WiFi] MAC Filter enabled for: %s", macAddress.c_str());
+  WIFI_LOG("MAC Filter enabled for: %s", macAddress.c_str());
 }
 
 void ConfigManagerWiFi::setWifiAPMacPriority(const String& macAddress) {
   priorityMac = macAddress;
   macPriorityEnabled = true;
   macFilterEnabled = false; // Priority mode disables filter mode
-  WIFI_LOG("[WiFi] MAC Priority enabled for: %s", macAddress.c_str());
+  WIFI_LOG("MAC Priority enabled for: %s", macAddress.c_str());
 }
 
 void ConfigManagerWiFi::clearMacFilter() {
   macFilterEnabled = false;
   filterMac = "";
-  WIFI_LOG("[WiFi] MAC Filter disabled");
+  WIFI_LOG("MAC Filter disabled");
 }
 
 void ConfigManagerWiFi::clearMacPriority() {
   macPriorityEnabled = false;
   priorityMac = "";
-  WIFI_LOG("[WiFi] MAC Priority disabled");
+  WIFI_LOG("MAC Priority disabled");
 }
 
 bool ConfigManagerWiFi::isMacFilterEnabled() const {
@@ -628,17 +628,17 @@ String ConfigManagerWiFi::getPriorityMac() const {
 // Helper method to find the best BSSID considering MAC filter/priority
 String ConfigManagerWiFi::findBestBSSID() {
   if (ssid.isEmpty()) {
-    WIFI_LOG("[WiFi] No SSID set, skipping BSSID selection");
+    WIFI_LOG("No SSID set, skipping BSSID selection");
     return "";
   }
 
   // If no MAC filtering/priority is enabled, let WiFi auto-connect
   if (!macFilterEnabled && !macPriorityEnabled) {
-    WIFI_LOG_VERBOSE("[WiFi] No MAC filter/priority enabled, using auto-connect");
+    WIFI_LOG_VERBOSE("No MAC filter/priority enabled, using auto-connect");
     return "";
   }
 
-  WIFI_LOG_VERBOSE("[WiFi] Scanning for networks to apply MAC filter/priority...");
+  WIFI_LOG_VERBOSE("Scanning for networks to apply MAC filter/priority...");
   
   // Clear any previous scan results first
   WiFi.scanDelete();
@@ -646,12 +646,12 @@ String ConfigManagerWiFi::findBestBSSID() {
   int networkCount = WiFi.scanNetworks(false, false, false, 300); // Reduced scan time
   
   if (networkCount <= 0) {
-    WIFI_LOG("[WiFi] No networks found during scan (count: %d), falling back to auto-connect", networkCount);
+    WIFI_LOG("No networks found during scan (count: %d), falling back to auto-connect", networkCount);
     WiFi.scanDelete(); // Ensure cleanup even on failure
     return "";
   }
 
-  WIFI_LOG_VERBOSE("[WiFi] Found %d networks during scan", networkCount);
+  WIFI_LOG_VERBOSE("Found %d networks during scan", networkCount);
 
   String bestBSSID = "";
   int bestRSSI = -100; // Very weak signal as starting point
@@ -665,7 +665,7 @@ String ConfigManagerWiFi::findBestBSSID() {
       String networkBSSID = WiFi.BSSIDstr(i);
       int networkRSSI = WiFi.RSSI(i);
       
-      WIFI_LOG_VERBOSE("[WiFi] Found matching network: SSID=%s, BSSID=%s, RSSI=%d", 
+      WIFI_LOG_VERBOSE("Found matching network: SSID=%s, BSSID=%s, RSSI=%d", 
                        networkSSID.c_str(), networkBSSID.c_str(), networkRSSI);
 
       // MAC Filter mode: only connect to specific MAC
@@ -674,7 +674,7 @@ String ConfigManagerWiFi::findBestBSSID() {
           if (networkRSSI > bestRSSI) {
             bestBSSID = networkBSSID;
             bestRSSI = networkRSSI;
-            WIFI_LOG("[WiFi] Filter match found: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
+            WIFI_LOG("Filter match found: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
           }
         }
         continue; // Skip all other APs when filter is enabled
@@ -687,14 +687,14 @@ String ConfigManagerWiFi::findBestBSSID() {
           bestBSSID = networkBSSID;
           bestRSSI = networkRSSI;
           priorityFound = true;
-          WIFI_LOG("[WiFi] Found priority AP: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
+          WIFI_LOG("Found priority AP: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
           break; // Stop searching once priority AP is found
         } else if (!priorityFound) {
           // Fallback option: use best available if no priority found yet
           if (networkRSSI > bestRSSI) {
             bestBSSID = networkBSSID;
             bestRSSI = networkRSSI;
-            WIFI_LOG_VERBOSE("[WiFi] Fallback candidate: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
+            WIFI_LOG_VERBOSE("Fallback candidate: %s (RSSI: %d dBm)", networkBSSID.c_str(), networkRSSI);
           }
         }
       }
@@ -704,19 +704,19 @@ String ConfigManagerWiFi::findBestBSSID() {
   // Clean up scan results
   WiFi.scanDelete();
 
-  WIFI_LOG("[WiFi] Scan complete: %d matching networks found", matchingNetworks);
+  WIFI_LOG("Scan complete: %d matching networks found", matchingNetworks);
 
   if (!bestBSSID.isEmpty()) {
-    WIFI_LOG_VERBOSE("[WiFi] Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);
+    WIFI_LOG_VERBOSE("Selected BSSID: %s (RSSI: %d dBm)", bestBSSID.c_str(), bestRSSI);
     // If priority was configured but not found, make that explicit even when we have a fallback
     if (macPriorityEnabled && !priorityFound) {
-      WIFI_LOG("[WiFi] MAC Priority target %s not found; using best available AP %s (RSSI: %d dBm)",
+      WIFI_LOG("MAC Priority target %s not found; using best available AP %s (RSSI: %d dBm)",
                priorityMac.c_str(), bestBSSID.c_str(), bestRSSI);
     }
   } else if (macFilterEnabled) {
-    WIFI_LOG("[WiFi] MAC Filter enabled but target AP %s not found", filterMac.c_str());
+    WIFI_LOG("MAC Filter enabled but target AP %s not found", filterMac.c_str());
   } else if (macPriorityEnabled) {
-    WIFI_LOG("[WiFi] MAC Priority enabled but target AP %s not found, will use auto-connect", priorityMac.c_str());
+    WIFI_LOG("MAC Priority enabled but target AP %s not found, will use auto-connect", priorityMac.c_str());
   }
 
   return bestBSSID;
@@ -736,7 +736,7 @@ String ConfigManagerWiFi::getWiFiStatusString(int status) const {
 }
 
 void ConfigManagerWiFi::performWiFiStackReset() {
-  WIFI_LOG("[WiFi] Performing complete WiFi stack reset for connectivity fix...");
+  WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
   
   // 1. Complete WiFi shutdown
   WiFi.disconnect(true);
@@ -763,6 +763,6 @@ void ConfigManagerWiFi::performWiFiStackReset() {
   WiFi.persistent(true);      // Store WiFi configuration in flash
   WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Set specific power level
   
-  WIFI_LOG("[WiFi] WiFi stack reset complete - WiFi.mode() = %d, WiFi.status() = %d", 
+  WIFI_LOG("WiFi stack reset complete - WiFi.mode() = %d, WiFi.status() = %d", 
          WiFi.getMode(), WiFi.status());
 }

@@ -67,6 +67,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | WiFi (DHCP/static/AP/reconnect)           | [docs/WIFI.md](docs/WIFI.md)                           |
 | Settings & OptionGroup                    | [docs/SETTINGS.md](docs/SETTINGS.md)                   |
 | Runtime Providers & Alarms                | [docs/RUNTIME.md](docs/RUNTIME.md)                     |
+| Logging                                  | [docs/LOGGING.md](docs/LOGGING.md)                     |
 | IOManager: Digital Inputs                 | [docs/IO-DigitalInputs.md](docs/IO-DigitalInputs.md)   |
 | IOManager: Digital Outputs                | [docs/IO-DigitalOutputs.md](docs/IO-DigitalOutputs.md) |
 | IOManager: Analog Inputs                  | [docs/IO-AnalogInputs.md](docs/IO-AnalogInputs.md)     |

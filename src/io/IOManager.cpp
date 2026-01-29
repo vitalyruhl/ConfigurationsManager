@@ -1,4 +1,6 @@
 #include "IOManager.h"
+
+#define IO_LOG(...) CM_LOG("[IO] " __VA_ARGS__)
 #include "core/CoreSettings.h"
 
 #include <cmath>
@@ -64,12 +66,12 @@ float IOManager::mapFloat(float value, float inMin, float inMax, float outMin, f
 void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
 {
     if (!binding.id || !binding.id[0]) {
-        CM_LOG("[IOManager][ERROR] addDigitalOutput: invalid binding");
+        IO_LOG("[ERROR] addDigitalOutput: invalid binding");
         return;
     }
 
     if (findIndex(binding.id) >= 0) {
-        CM_LOG("[IOManager][WARNING] addDigitalOutput: output '%s' already exists", binding.id);
+        IO_LOG("[WARNING] addDigitalOutput: output '%s' already exists", binding.id);
         return;
     }
 
@@ -81,7 +83,7 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
     if (nextDigitalOutputSlot < 99) {
         nextDigitalOutputSlot++;
     } else {
-        CM_LOG("[IOManager][WARNING] addDigitalOutput: exceeded slot range 00..99, keys may not remain stable");
+        IO_LOG("[WARNING] addDigitalOutput: exceeded slot range 00..99, keys may not remain stable");
         nextDigitalOutputSlot++;
     }
 
@@ -100,12 +102,12 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
 void IOManager::addDigitalInput(const DigitalInputBinding& binding)
 {
     if (!binding.id || !binding.id[0]) {
-        CM_LOG("[IOManager][ERROR] addDigitalInput: invalid binding");
+        IO_LOG("[ERROR] addDigitalInput: invalid binding");
         return;
     }
 
     if (findInputIndex(binding.id) >= 0) {
-        CM_LOG("[IOManager][WARNING] addDigitalInput: input '%s' already exists", binding.id);
+        IO_LOG("[WARNING] addDigitalInput: input '%s' already exists", binding.id);
         return;
     }
 
@@ -117,7 +119,7 @@ void IOManager::addDigitalInput(const DigitalInputBinding& binding)
     if (nextDigitalInputSlot < 99) {
         nextDigitalInputSlot++;
     } else {
-        CM_LOG("[IOManager][WARNING] addDigitalInput: exceeded slot range 00..99, keys may not remain stable");
+        IO_LOG("[WARNING] addDigitalInput: exceeded slot range 00..99, keys may not remain stable");
         nextDigitalInputSlot++;
     }
 
@@ -140,12 +142,12 @@ void IOManager::addDigitalInput(const DigitalInputBinding& binding)
 void IOManager::addAnalogInput(const AnalogInputBinding& binding)
 {
     if (!binding.id || !binding.id[0]) {
-        CM_LOG("[IOManager][ERROR] addAnalogInput: invalid binding");
+        IO_LOG("[ERROR] addAnalogInput: invalid binding");
         return;
     }
 
     if (findAnalogInputIndex(binding.id) >= 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogInput: input '%s' already exists", binding.id);
+        IO_LOG("[WARNING] addAnalogInput: input '%s' already exists", binding.id);
         return;
     }
 
@@ -157,7 +159,7 @@ void IOManager::addAnalogInput(const AnalogInputBinding& binding)
     if (nextAnalogInputSlot < 99) {
         nextAnalogInputSlot++;
     } else {
-        CM_LOG("[IOManager][WARNING] addAnalogInput: exceeded slot range 00..99, keys may not remain stable");
+        IO_LOG("[WARNING] addAnalogInput: exceeded slot range 00..99, keys may not remain stable");
         nextAnalogInputSlot++;
     }
 
@@ -187,12 +189,12 @@ void IOManager::addAnalogInput(const AnalogInputBinding& binding)
 void IOManager::addAnalogOutput(const AnalogOutputBinding& binding)
 {
     if (!binding.id || !binding.id[0]) {
-        CM_LOG("[IOManager][ERROR] addAnalogOutput: invalid binding");
+        IO_LOG("[ERROR] addAnalogOutput: invalid binding");
         return;
     }
 
     if (findAnalogOutputIndex(binding.id) >= 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogOutput: output '%s' already exists", binding.id);
+        IO_LOG("[WARNING] addAnalogOutput: output '%s' already exists", binding.id);
         return;
     }
 
@@ -204,7 +206,7 @@ void IOManager::addAnalogOutput(const AnalogOutputBinding& binding)
     if (nextAnalogOutputSlot < 99) {
         nextAnalogOutputSlot++;
     } else {
-        CM_LOG("[IOManager][WARNING] addAnalogOutput: exceeded slot range 00..99, keys may not remain stable");
+        IO_LOG("[WARNING] addAnalogOutput: exceeded slot range 00..99, keys may not remain stable");
         nextAnalogOutputSlot++;
     }
 
@@ -230,13 +232,13 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
 {
     const int idx = findIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addIOtoGUI: unknown output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addIOtoGUI: unknown output '%s'", id ? id : "(null)");
         return;
     }
 
     DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
     if (entry.settingsRegistered) {
-        CM_LOG("[IOManager][WARNING] addIOtoGUI: output '%s' already registered", entry.id.c_str());
+        IO_LOG("[WARNING] addIOtoGUI: output '%s' already registered", entry.id.c_str());
         return;
     }
 
@@ -298,13 +300,13 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
 {
     const int idx = findInputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addInputToGUI: unknown input '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addInputToGUI: unknown input '%s'", id ? id : "(null)");
         return;
     }
 
     DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
     if (entry.settingsRegistered) {
-        CM_LOG("[IOManager][WARNING] addInputToGUI: input '%s' already registered", entry.id.c_str());
+        IO_LOG("[WARNING] addInputToGUI: input '%s' already registered", entry.id.c_str());
         return;
     }
 
@@ -457,7 +459,7 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
 
     const int idx = findAnalogInputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogInputToGUI: unknown analog input '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addAnalogInputToGUI: unknown analog input '%s'", id ? id : "(null)");
         return;
     }
 
@@ -731,7 +733,7 @@ void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardNam
 {
     const int idx = findAnalogInputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogInputToGUIWithAlarm: unknown analog input '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addAnalogInputToGUIWithAlarm: unknown analog input '%s'", id ? id : "(null)");
         return;
     }
 
@@ -941,7 +943,7 @@ void IOManager::configureAnalogInputAlarm(const char* id,
 {
     const int idx = findAnalogInputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] configureAnalogInputAlarm: unknown analog input '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] configureAnalogInputAlarm: unknown analog input '%s'", id ? id : "(null)");
         return;
     }
 
@@ -980,7 +982,7 @@ void IOManager::configureDigitalInputEvents(const char* id,
 {
     const int idx = findInputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] configureDigitalInputEvents: unknown input '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] configureDigitalInputEvents: unknown input '%s'", id ? id : "(null)");
         return;
     }
 
@@ -1020,11 +1022,11 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     const DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
 
     if (type != RuntimeControlType::Button) {
-        CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' uses 1 callback but type is not Button", entry.id.c_str());
+        IO_LOG("[WARNING] addIOtoGUI(runtime): output '%s' uses 1 callback but type is not Button", entry.id.c_str());
         return;
     }
     if (!onPress) {
-        CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' missing onPress callback", entry.id.c_str());
+        IO_LOG("[WARNING] addIOtoGUI(runtime): output '%s' missing onPress callback", entry.id.c_str());
         return;
     }
 
@@ -1050,7 +1052,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     const DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
 
     if (!getter || !setter) {
-        CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' missing getter/setter", entry.id.c_str());
+        IO_LOG("[WARNING] addIOtoGUI(runtime): output '%s' missing getter/setter", entry.id.c_str());
         return;
     }
 
@@ -1070,7 +1072,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
             ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order, onLabel, offLabel);
             break;
         default:
-            CM_LOG("[IOManager][WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());
+            IO_LOG("[WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());
             break;
     }
 }
@@ -1086,7 +1088,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addIOtoGUI(analog): unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addIOtoGUI(analog): unknown analog output '%s'", id ? id : "(null)");
         return;
     }
 
@@ -1172,7 +1174,7 @@ void IOManager::addAnalogOutputValueToGUI(const char* id, const char* cardName, 
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogOutputValueToGUI: unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addAnalogOutputValueToGUI: unknown analog output '%s'", id ? id : "(null)");
         return;
     }
 
@@ -1197,7 +1199,7 @@ void IOManager::addAnalogOutputValueRawToGUI(const char* id, const char* cardNam
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogOutputValueRawToGUI: unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addAnalogOutputValueRawToGUI: unknown analog output '%s'", id ? id : "(null)");
         return;
     }
 
@@ -1221,7 +1223,7 @@ void IOManager::addAnalogOutputValueVoltToGUI(const char* id, const char* cardNa
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] addAnalogOutputValueVoltToGUI: unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] addAnalogOutputValueVoltToGUI: unknown analog output '%s'", id ? id : "(null)");
         return;
     }
 
@@ -1254,7 +1256,7 @@ void IOManager::reconfigureIfNeeded(AnalogOutputEntry& entry)
     const int pin = entry.pin ? entry.pin->get() : entry.defaultPin;
     if (!isValidAnalogOutputPin(pin)) {
         if (!entry.warningLoggedInvalidPin) {
-            CM_LOG("[IOManager][WARNING] AnalogOutput '%s' has invalid/unsupported pin=%d (DAC pins are 25/26)", entry.id.c_str(), pin);
+            IO_LOG("[WARNING] AnalogOutput '%s' has invalid/unsupported pin=%d (DAC pins are 25/26)", entry.id.c_str(), pin);
             entry.warningLoggedInvalidPin = true;
         }
         entry.hasLast = true;
@@ -1295,7 +1297,7 @@ void IOManager::applyDesiredAnalogOutput(AnalogOutputEntry& entry)
     dacWrite(pin, static_cast<uint8_t>(dac));
 #else
     (void)raw;
-    CM_LOG("[IOManager][ERROR] AnalogOutput '%s': DAC output not supported on this platform", entry.id.c_str());
+    IO_LOG("[ERROR] AnalogOutput '%s': DAC output not supported on this platform", entry.id.c_str());
 #endif
 
     entry.rawVolts = raw;
@@ -1390,7 +1392,7 @@ bool IOManager::setValue(const char* id, float value)
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] setValue: unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] setValue: unknown analog output '%s'", id ? id : "(null)");
         return false;
     }
 
@@ -1429,7 +1431,7 @@ bool IOManager::setRawValue(const char* id, float rawVolts)
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] setRawValue: unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] setRawValue: unknown analog output '%s'", id ? id : "(null)");
         return false;
     }
 
@@ -1466,7 +1468,7 @@ bool IOManager::setDACValue(const char* id, int dacValue)
 {
     const int idx = findAnalogOutputIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] setDACValue: unknown analog output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] setDACValue: unknown analog output '%s'", id ? id : "(null)");
         return false;
     }
 
@@ -1643,7 +1645,7 @@ bool IOManager::setState(const char* id, bool on)
 {
     const int idx = findIndex(id);
     if (idx < 0) {
-        CM_LOG("[IOManager][WARNING] setState: unknown output '%s'", id ? id : "(null)");
+        IO_LOG("[WARNING] setState: unknown output '%s'", id ? id : "(null)");
         return false;
     }
 
@@ -1948,7 +1950,7 @@ void IOManager::reconfigureIfNeeded(DigitalInputEntry& entry)
 
     if (pullup && pulldown) {
         // Prefer pull-up to stay deterministic.
-        CM_LOG("[IOManager][WARNING] Input '%s': pull-up and pull-down both enabled, using pull-up", entry.id.c_str());
+        IO_LOG("[WARNING] Input '%s': pull-up and pull-down both enabled, using pull-up", entry.id.c_str());
     }
 
     if (pullup) {
@@ -1980,7 +1982,7 @@ void IOManager::reconfigureIfNeeded(AnalogInputEntry& entry)
     if (!entry.warningLoggedInvalidPin) {
         // Warn once about ADC2 pins (WiFi interaction). GPIO4 is ADC2.
         if (!(pin >= 32 && pin <= 39)) {
-            CM_LOG("[IOManager][WARNING] Analog input '%s' uses ADC2 pin %d; readings may be unreliable while WiFi is active", entry.id.c_str(), pin);
+            IO_LOG("[WARNING] Analog input '%s' uses ADC2 pin %d; readings may be unreliable while WiFi is active", entry.id.c_str(), pin);
         }
         entry.warningLoggedInvalidPin = true;
     }
@@ -1991,7 +1993,7 @@ void IOManager::readAnalogInput(AnalogInputEntry& entry)
     const int pin = getAnalogPinNow(entry);
     if (!isValidAnalogPin(pin)) {
         if (!entry.warningLoggedInvalidPin) {
-            CM_LOG("[IOManager][WARNING] Analog input '%s' pin %d is not ADC-capable on ESP32", entry.id.c_str(), pin);
+            IO_LOG("[WARNING] Analog input '%s' pin %d is not ADC-capable on ESP32", entry.id.c_str(), pin);
             entry.warningLoggedInvalidPin = true;
         }
         entry.rawValue = -1;

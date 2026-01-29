@@ -4,6 +4,7 @@
 .piolibdeps/
 .pio/libdeps/
 .pio/build/
+.pio-build/
 
 # IDEs
 .vscode/

@@ -6,6 +6,8 @@
 #include <functional>
 #include <memory>
 #include <vector>
+
+#define MQTT_LOG(...) CM_LOG("[MQTT] " __VA_ARGS__)
 #include <cstdio>
 
 #include "ConfigManager.h" // Config<> + Runtime + CM_LOG
@@ -528,7 +530,7 @@ inline MQTTManager::MQTTManager()
     : mqttClient_(wifiClient_)
 {
     if (instanceForCallback_ != nullptr && instanceForCallback_ != this) {
-        CM_LOG("[MQTTManager][WARNING] Multiple instances detected; callbacks will target the last created instance");
+        MQTT_LOG("[WARNING] Multiple instances detected; callbacks will target the last created instance");
     }
     instanceForCallback_ = this;
     mqttClient_.setCallback(&MQTTManager::mqttCallbackTrampoline_);
@@ -791,14 +793,14 @@ inline void MQTTManager::addMQTTTopicTooGUI(ConfigManagerClass& configManager,
     }
 
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] addMQTTTopicTooGUI: id is empty");
+        MQTT_LOG("[WARNING] addMQTTTopicTooGUI: id is empty");
         return;
     }
 
     auto it = std::find_if(receiveItems_.begin(), receiveItems_.end(),
                            [id](const ReceiveItem& item) { return item.id == id; });
     if (it == receiveItems_.end()) {
-        CM_LOG("[MQTTManager][WARNING] addMQTTTopicTooGUI: id not found: %s", id);
+        MQTT_LOG("[WARNING] addMQTTTopicTooGUI: id not found: %s", id);
         return;
     }
 
@@ -809,13 +811,13 @@ inline void MQTTManager::addMQTTTopicTooGUI(ConfigManagerClass& configManager,
 inline bool MQTTManager::publishTopic(const char* id)
 {
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishTopic: id is empty");
+        MQTT_LOG("[WARNING] publishTopic: id is empty");
         return false;
     }
 
     ReceiveItem* item = findReceiveItemById_(id);
     if (!item) {
-        CM_LOG("[MQTTManager][WARNING] publishTopic: id not found: %s", id);
+        MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
         return false;
     }
 
@@ -827,13 +829,13 @@ inline bool MQTTManager::publishTopic(const char* id)
 inline bool MQTTManager::publishTopic(const char* id, bool retained)
 {
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishTopic: id is empty");
+        MQTT_LOG("[WARNING] publishTopic: id is empty");
         return false;
     }
 
     ReceiveItem* item = findReceiveItemById_(id);
     if (!item) {
-        CM_LOG("[MQTTManager][WARNING] publishTopic: id not found: %s", id);
+        MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
         return false;
     }
 
@@ -868,13 +870,13 @@ inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const c
 inline bool MQTTManager::publishTopicImmediately(const char* id)
 {
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishTopicImmediately: id is empty");
+        MQTT_LOG("[WARNING] publishTopicImmediately: id is empty");
         return false;
     }
 
     ReceiveItem* item = findReceiveItemById_(id);
     if (!item) {
-        CM_LOG("[MQTTManager][WARNING] publishTopicImmediately: id not found: %s", id);
+        MQTT_LOG("[WARNING] publishTopicImmediately: id not found: %s", id);
         return false;
     }
 
@@ -886,13 +888,13 @@ inline bool MQTTManager::publishTopicImmediately(const char* id)
 inline bool MQTTManager::publishTopicImmediately(const char* id, bool retained)
 {
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishTopicImmediately: id is empty");
+        MQTT_LOG("[WARNING] publishTopicImmediately: id is empty");
         return false;
     }
 
     ReceiveItem* item = findReceiveItemById_(id);
     if (!item) {
-        CM_LOG("[MQTTManager][WARNING] publishTopicImmediately: id not found: %s", id);
+        MQTT_LOG("[WARNING] publishTopicImmediately: id not found: %s", id);
         return false;
     }
 
@@ -997,13 +999,13 @@ inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& config
 inline bool MQTTManager::publishTopicInternal_(const char* id, bool retained, uint8_t qos, bool immediate)
 {
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishTopic: id is empty");
+        MQTT_LOG("[WARNING] publishTopic: id is empty");
         return false;
     }
 
     ReceiveItem* item = findReceiveItemById_(id);
     if (!item) {
-        CM_LOG("[MQTTManager][WARNING] publishTopic: id not found: %s", id);
+        MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
         return false;
     }
 
@@ -1038,11 +1040,11 @@ inline bool MQTTManager::publishExtraTopicInternal_(const char* id,
                                                    bool immediate)
 {
     if (!id || !id[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishExtraTopic: id is empty");
+        MQTT_LOG("[WARNING] publishExtraTopic: id is empty");
         return false;
     }
     if (!topic || !topic[0]) {
-        CM_LOG("[MQTTManager][WARNING] publishExtraTopic: topic is empty");
+        MQTT_LOG("[WARNING] publishExtraTopic: topic is empty");
         return false;
     }
 
@@ -1118,7 +1120,7 @@ inline void MQTTManager::setBufferSize(uint16_t size)
 inline bool MQTTManager::begin()
 {
     if (settings_.server.get().isEmpty()) {
-        CM_LOG("[MQTTManager][ERROR] begin: server is not set");
+        MQTT_LOG("[ERROR] begin: server is not set");
         return false;
     }
 
@@ -1348,7 +1350,7 @@ inline bool MQTTManager::publishAllNow(bool retained)
 inline bool MQTTManager::clearRetain(const char* topic)
 {
     if (!topic || !topic[0]) {
-        CM_LOG("[MQTTManager][WARNING] clearRetain: topic is empty");
+        MQTT_LOG("[WARNING] clearRetain: topic is empty");
         return false;
     }
     return publishWithQos_(topic, "", true, 0);
@@ -1365,7 +1367,7 @@ inline bool MQTTManager::subscribe(const char* topic, uint8_t qos)
 inline bool MQTTManager::subscribeWildcard(const char* topicFilter, uint8_t qos)
 {
     if (!topicFilter || !topicFilter[0]) {
-        CM_LOG("[MQTTManager][WARNING] subscribeWildcard: topic filter is empty");
+        MQTT_LOG("[WARNING] subscribeWildcard: topic filter is empty");
         return false;
     }
     return subscribe(topicFilter, qos);
@@ -1749,7 +1751,7 @@ inline void MQTTManager::handleConnection_()
     if (!willTopic.isEmpty()) {
         const bool ok = publishWithQos_(willTopic.c_str(), "online", true, lastWillQos_);
         if (!ok) {
-            CM_LOG("[MQTTManager][WARNING] Failed to publish online status to %s", willTopic.c_str());
+            MQTT_LOG("[WARNING] Failed to publish online status to %s", willTopic.c_str());
         }
     }
 
@@ -2159,7 +2161,7 @@ inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item)
 
     configManager_->addSetting(item.topic.get());
     configManager_->addSetting(item.jsonKeyPath.get());
-    CM_LOG_VERBOSE("[MQTTManager][INFO] Registered receive setting keys: %s / %s",
+    CM_LOG_VERBOSE("[INFO] Registered receive setting keys: %s / %s",
                    item.topic->getKey(), item.jsonKeyPath->getKey());
     const String itemId = item.id;
     item.topic->setCallback([this, itemId](const String&) {
@@ -2264,7 +2266,7 @@ inline MQTTManager::PublishOptions MQTTManager::getDefaultPublishOptions_(bool i
 inline bool MQTTManager::publishWithQos_(const char* topic, const char* payload, bool retained, uint8_t qos)
 {
     if (qos != 0) {
-        CM_LOG("[MQTTManager][WARNING] publish: requested QoS %u but PubSubClient supports QoS 0 only; sending QoS 0", qos);
+        MQTT_LOG("[WARNING] publish: requested QoS %u but PubSubClient supports QoS 0 only; sending QoS 0", qos);
     }
     return publish(topic, payload, retained);
 }

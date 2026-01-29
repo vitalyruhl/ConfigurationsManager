@@ -29,7 +29,47 @@
       </div>
     </div>
 
-    <div class="live-cards">
+    <div v-if="isLogView" class="log-view">
+      <div class="log-head">
+        <span>{{ logEntries.length ? "Live logging (WebSocket)" : "Waiting for logs..." }}</span>
+        <button type="button" class="clear-btn" @click="clearLogs">Clear</button>
+      </div>
+      <div class="log-list">
+        <table v-if="useLogTable" class="log-table">
+          <thead>
+            <tr>
+              <th v-if="showLogTime" class="col-ts">Time</th>
+              <th class="col-level">Level</th>
+              <th class="col-tag">Tag</th>
+              <th class="col-msg">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(entry, idx) in logEntries" :key="entry.id || idx" :data-level="entry.level">
+              <td v-if="showLogTime" class="log-ts">
+                <span v-if="entry.dt || entry.ts !== null">{{ entry.dt || entry.ts }}</span>
+              </td>
+              <td class="log-level" :class="levelClass(entry.level)" :data-level="entry.level">{{ entry.level }}</td>
+              <td class="log-tag">
+                <span v-if="entry.tag">[{{ entry.tag }}]</span>
+              </td>
+              <td class="log-msg">{{ entry.msg }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-else class="log-list-compact">
+          <div v-for="(entry, idx) in logEntries" :key="entry.id || idx" class="log-row" :data-level="entry.level">
+            <span v-if="showLogTime" class="log-ts">{{ entry.dt || entry.ts }}</span>
+            <span class="log-level" :class="levelClass(entry.level)" :data-level="entry.level">{{ entry.level }}</span>
+            <span v-if="entry.tag" class="log-tag">[{{ entry.tag }}]</span>
+            <span class="log-msg">{{ entry.msg }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="live-cards">
       <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
         <h3>{{ group.title }}</h3>
 
@@ -282,6 +322,10 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  view: {
+    type: String,
+    default: "live",
+  },
 });
 
 const emit = defineEmits(["can-flash-change"]);
@@ -293,11 +337,27 @@ const dismissToast = inject("dismissToast", () => {});
 const runtime = ref({});
 const runtimeMeta = ref([]);
 const runtimeGroups = ref([]);
+const logEntries = ref([]);
+const logEnabled = ref(false);
 const showBoolStateText = ref(false);
 const flashing = ref(false);
 const otaFileInput = ref(null);
 const wsConnected = ref(false);
 const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
+const isLogView = computed(() => props.view === "log");
+const showLogTime = computed(() => logEntries.value.some((e) => e.dt || e.ts !== null));
+const useLogTable = computed(() => {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(min-width: 768px)").matches;
+});
+
+function levelClass(level) {
+  if (!level) return "";
+  const upper = String(level).toUpperCase();
+  if (upper === "WARN") return "lvl-warn";
+  if (upper === "ERROR" || upper === "FATAL") return "lvl-error";
+  return "";
+}
 
 // OTA Password Modal
 const showPasswordModal = ref(false);
@@ -338,6 +398,36 @@ let wsConnecting = false;
 let checkboxDebounceTimer = null;
 
 const rURIComp = encodeURIComponent;
+
+function appendLogEntry(entry) {
+  if (!entry) return;
+  const ts =
+    entry.ts === null
+      ? null
+      : typeof entry.ts === "number"
+        ? entry.ts
+        : Date.now();
+  const level = entry.level || "INFO";
+  const msg = entry.msg || "";
+  const tag = entry.tag || "";
+  const dt = entry.dt || "";
+  logEntries.value.push({
+    id: `${ts}_${logEntries.value.length}`,
+    ts,
+    dt,
+    level,
+    msg,
+    tag,
+  });
+  logEnabled.value = true;
+  if (logEntries.value.length > 200) {
+    logEntries.value.splice(0, logEntries.value.length - 200);
+  }
+}
+
+function clearLogs() {
+  logEntries.value = [];
+}
 
 const displayRuntimeGroups = computed(() => {
   const visible = runtimeGroups.value.filter((group) => groupHasVisibleContent(group));
@@ -712,6 +802,14 @@ function startWebSocket(url) {
           if (!pollTimer) {
             fallbackPolling();
           }
+          return;
+        }
+        if (parsed.type === "log") {
+          appendLogEntry(parsed);
+          return;
+        }
+        if (parsed.type === "logReady") {
+          logEnabled.value = true;
           return;
         }
         runtime.value = parsed;
@@ -1632,6 +1730,7 @@ defineExpose({ startFlash });
 .live-view {
   padding: 0.75rem 0.5rem 2.5rem;
 }
+.runtime-tabs{display:flex;gap:10px;margin:10px 0 14px;flex-wrap:wrap}.rt-tab{padding:8px 16px;border:1px solid var(--cm-card-border);background:var(--cm-bg);color:var(--cm-fg);border-radius:6px;cursor:pointer}.rt-tab.active{background:var(--cm-card-bg);font-weight:600}.log-view{border:1px solid var(--cm-card-border);background:var(--cm-card-bg);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;max-height:calc(100vh - 220px)}.log-head{display:flex;align-items:center;justify-content:space-between;font-weight:600}.clear-btn{border:1px solid var(--cm-card-border);background:var(--cm-bg);color:var(--cm-fg);border-radius:6px;padding:6px 10px;cursor:pointer}.log-list{flex:1;min-height:0;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace;font-size:12px}.log-table{width:100%;border-collapse:collapse}.log-table thead th{position:sticky;top:0;z-index:2;background:var(--cm-card-bg);text-align:left;padding:6px 8px;border-bottom:1px solid var(--cm-card-border);font-weight:600}.log-table tbody td{padding:6px 8px;border-bottom:1px solid var(--cm-card-border);vertical-align:top}.log-table tbody tr:hover{background:rgba(255,255,255,0.03)}.col-ts{width:160px}.col-level{width:70px}.col-tag{width:180px}.log-ts{opacity:.7}.log-level{font-weight:700}.log-level.lvl-warn{background:#fff3cd;color:#8a6d00;padding:2px 6px;border-radius:4px}.log-level.lvl-error{background:#f8d7da;color:#7a1f1f;padding:2px 6px;border-radius:4px}.log-level[data-level=\"DEBUG\"],.log-level[data-level=\"TRACE\"]{color:#6c8af0}.log-tag{opacity:.85}.log-msg{word-break:break-word}.log-row{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}.log-list-compact .log-row{padding:6px 4px;border-bottom:1px solid var(--cm-card-border)}
 .live-cards {
   display: grid;
   gap: 1rem;
