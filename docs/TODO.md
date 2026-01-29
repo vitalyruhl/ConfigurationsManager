@@ -41,9 +41,9 @@
 
 
 1) Refactor examples to newest v3 module structure
-   - Start with BoilerSaver
-     - remove logging module from there and apply new logging module usage from V3.3.0
-     - migrate to newest IO + WiFi + MQTT module usage
+   - [COMPLETED] Start with BoilerSaver
+     - [COMPLETED] remove logging module from there and apply new logging module usage from V3.3.0
+     - [COMPLETED] migrate to newest IO + WiFi + MQTT module usage
    - Later: SolarInverterLimiter
      - the same like above
 

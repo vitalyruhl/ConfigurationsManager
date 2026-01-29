@@ -1,50 +1,58 @@
 #include <Arduino.h>
-#include <esp_task_wdt.h> // for watchdog timer
 #include <Ticker.h>
-#include "Wire.h"
+#include <Wire.h>
 
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-
-#include "settings.h"
-#include "logging/logging.h"
-#include "helpers/helpers.h"
-#include "helpers/relays.h"
-#include "helpers/mqtt_manager.h"
-// Time/NTP support
+#include <WiFi.h>
+#include <Preferences.h>
 #include <time.h>
-// DS18B20
+
 #include <OneWire.h>
 #include <DallasTemperature.h>
-// New non-blocking blinker utility
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#include "ConfigManager.h"
+#include "settings.h"
 #include "binking/Blinker.h"
 
- #include "secret/wifiSecret.h"
+#include "core/CoreSettings.h"
+#include "core/CoreWiFiServices.h"
+#include "io/IOManager.h"
+#include "logging/LoggingManager.h"
+
+#define CM_MQTT_NO_DEFAULT_HOOKS
+#include "mqtt/MQTTManager.h"
+#include "mqtt/MQTTLogOutput.h"
 
 // predeclare the functions (prototypes)
-void SetupStartDisplay();
-void setupGUI();
-void setupMQTT();
-void cb_publishToMQTT();
-void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length);
-void cb_MQTTListener();
-void WriteToDisplay();
-void SetupCheckForResetButton();
-void SetupCheckForAPModeButton();
-bool SetupStartWebServer();
-void CheckButtons();
-void ShowDisplay();
-void ShowDisplayOff();
-void updateStatusLED();
-void PinSetup();
-void handeleBoilerState(bool forceON = false);
-void UpdateBoilerAlarmState();
+static void setupLogging();
+static void setupGUI();
+static void setupMQTT();
+static void updateMqttTopics();
+static void setupMqttCallbacks();
+static void handleMqttMessage(const char* topic, const char* payload, unsigned int length);
+static void publishMqttState(bool retained);
+static void publishMqttStateIfNeeded();
+static void ensureMqttDefaults(bool enableMissing, bool baseMissing, bool publishMissing);
+static void registerIOBindings();
+static void SetupStartDisplay();
+static void WriteToDisplay();
+static bool SetupStartWebServer();
+static void ShowDisplay();
+static void ShowDisplayOff();
+static void updateStatusLED();
+static void handeleBoilerState(bool forceON = false);
+static void UpdateBoilerAlarmState();
+static void setBoilerState(bool on);
+static bool getBoilerState();
 static void cb_readTempSensor();
 static void setupTempSensor();
 static void handleShowerRequest(bool requested);
 
 // Shorthand helper for RuntimeManager access
-static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntimeManager(); }
+static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntime(); }
 
 // Global blinkers: built-in LED and optional buzzer
 static Blinker buildinLED(LED_BUILTIN, Blinker::HIGH_ACTIVE);
@@ -64,24 +72,52 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .rw[data-group="Boiler"][data-key="Bo_Temp"] .un{ color:rgba(150, 2, 10, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
 
-Helpers helpers;
-MQTTManager mqttManager; // Global MQTT Manager instance
+static const char SETTINGS_PASSWORD[] = "";
 
-Ticker PublischMQTTTicker;
-Ticker PublischMQTTTSettingsTicker;
-Ticker ListenMQTTTicker;
-Ticker displayTicker;
-Ticker TempReadTicker;
-Ticker NtpSyncTicker;
-// Ticker WillShowerResetTicker; // no longer used (WillShower acts as switch)
+static cm::LoggingManager &lmg = cm::LoggingManager::instance();
+using LL = cm::LoggingManager::Level;
+static cm::MQTTManager &mqtt = cm::MQTTManager::instance();
+static cm::IOManager ioManager;
+
+static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
+static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
+static cm::CoreWiFiServices wifiServices;
+
+static Adafruit_SSD1306 display(4);
+
+static constexpr char IO_BOILER_ID[] = "boiler";
+static constexpr char IO_RESET_ID[] = "reset_btn";
+static constexpr char IO_AP_ID[] = "ap_btn";
+static constexpr char IO_SHOWER_ID[] = "shower_btn";
+
+static String mqttBaseTopic;
+static String topicSetShowerTime;
+static String topicWillShower;
+static String topicSave;
+static String topicBoilerEnabled;
+static String topicOnThreshold;
+static String topicOffThreshold;
+static String topicBoilerTimeMin;
+static String topicStopTimerOnTarget;
+static String topicOncePerPeriod;
+static String topicYouCanShowerPeriodMin;
+static String topicActualState;
+static String topicActualBoilerTemp;
+static String topicActualTimeRemaining;
+static String topicYouCanShowerNow;
+
+static unsigned long lastMqttPublishMs = 0;
+
+static Ticker displayTicker;
+static Ticker TempReadTicker;
 
 // globale helpers variables
 float temperature = 70.0;    // current temperature in Celsius
 int boilerTimeRemaining = 0; // remaining time for boiler in SECONDS
 bool boilerState = false;    // current state of the heater (on/off)
 
-bool tickerActive = false; // flag to indicate if the ticker is active
-bool displayActive = true; // flag to indicate if the display is active
+static bool displayActive = true; // flag to indicate if the display is active
 
 static bool globalAlarmState = false;// Global alarm state for temperature monitoring
 static constexpr char TEMP_ALARM_ID[] = "temp_low";
@@ -114,111 +150,93 @@ static bool lastMqttConnectedState = false;
 void setup()
 {
 
-    LoggerSetupSerial(); // Initialize the serial logger
-    // currentLogLevel = SIGMALOG_DEBUG; //overwrite the default SIGMALOG_INFO level to debug to see all messages
-    sl->Info("[SETUP] System setup start...");
+    setupLogging();
+    lmg.log(LL::Info, "[SETUP] System setup start...");
 
     ConfigManager.setAppName(APP_NAME);
-    ConfigManager.setVersion(APP_VERSION);                                                  // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
-    ConfigManager.enableBuiltinSystemProvider();                                          // enable the builtin system provider (uptime, freeHeap, rssi etc.)
+    ConfigManager.setAppTitle(APP_NAME);
+    ConfigManager.setVersion(APP_VERSION);
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
+    ConfigManager.enableBuiltinSystemProvider();
 
-    sl->Info("[SETUP] Load configuration...");
-    initializeAllSettings(); // Register all settings BEFORE loading
+    coreSettings.attachWiFi(ConfigManager);
+    coreSettings.attachSystem(ConfigManager);
+    coreSettings.attachNtp(ConfigManager);
 
-    // Setup MQTT publishing callbacks for boiler settings changes via web GUI
-    boilerSettings.setupCallbacks();
+    systemSettings.allowOTA.setCallback([](bool enabled) {
+        lmg.log(LL::Info, "[OTA] Setting changed to: %s", enabled ? "enabled" : "disabled");
+        ConfigManager.getOTAManager().enable(enabled);
+    });
+
+    initializeAllSettings();
+    registerIOBindings();
+
+    bool mqttEnableMissing = false;
+    bool mqttBaseMissing = false;
+    bool mqttPublishMissing = false;
+    {
+        Preferences prefs;
+        if (prefs.begin("ConfigManager", true)) {
+            mqttEnableMissing = !prefs.isKey("MQTTEnable");
+            mqttBaseMissing = !prefs.isKey("MQTTBaseTopic");
+            mqttPublishMissing = !prefs.isKey("MQTTPubPer");
+            prefs.end();
+        }
+    }
+
+    setupMQTT();
 
     ConfigManager.loadAll();
 
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // set wifi settings if not set yet from my secret folder
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
-        Serial.println("-------------------------------------------------------------");
-        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
-        Serial.println("-------------------------------------------------------------");
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-        wifiSettings.staticIp.set(MY_WIFI_IP);
-        wifiSettings.useDhcp.set(false);
-        ConfigManager.saveAll();
-        delay(1000); // Small delay
-    }
-    // Serial.println(ConfigManager.toJSON(false)); // Print full configuration JSON to console
+    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
-    PinSetup(); // Setup GPIO pins for buttons ToDO: move it to Relays and rename it in GPIOSetup()
-    sl->Debug("[SETUP] Check for reset/AP button...");
-    SetupCheckForResetButton();
-    SetupCheckForAPModeButton();
+    // Re-attach to apply loaded values (attach() is idempotent)
+    mqtt.attach(ConfigManager);
 
-    
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
-    ConfigManager.enableSmartRoaming(true);            // Re-enabled now that WiFi stack is fixed
-    ConfigManager.setRoamingThreshold(-75);            // Trigger roaming at -75 dBm
-    ConfigManager.setRoamingCooldown(30);              // Wait 30 seconds between attempts (reduced from 120)
-    ConfigManager.setRoamingImprovement(10);           // Require 10 dBm improvement
-    Serial.println("[MAIN] Smart WiFi Roaming enabled with WiFi stack fix");
+    ioManager.begin();
+    setBoilerState(false);
 
-    //----------------------------------------------------------------------------------------------------------------------------------
-    // Configure WiFi AP MAC filtering/priority (example - customize as needed)
-    // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-    ConfigManager.setWifiAPMacPriority("e0-08-55-92-55-ac");   // Prefer this AP, fallback to others
-
-
-    // init modules...
-    sl->Info("[SETUP] init modules...");
-    SetupStartDisplay();
-    ShowDisplay();
-
-    // Initialize temperature sensor and start periodic reads
-    setupTempSensor();
-
-    //----------------------------------------
-
-    bool startedInStationMode = SetupStartWebServer();
-    sl->Printf("[SETUP] SetupStartWebServer returned: %s", startedInStationMode ? "true" : "false").Debug();
-    sl->Debug("[SETUP] Station mode");
-    // Skip MQTT and OTA setup in AP mode (for initial configuration only)
-    if (startedInStationMode)
-    {
-        setupMQTT();
-    }
-    else
-    {
-    sl->Debug("[SETUP] Skipping MQTT setup in AP mode");
-    sll->Debug("MQTT disabled");
-    }
+    ensureMqttDefaults(mqttEnableMissing, mqttBaseMissing, mqttPublishMissing);
+    updateMqttTopics();
+    setupMqttCallbacks();
 
     setupGUI();
-    // Enhanced WebSocket configuration
-    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-    ConfigManager.setWebSocketInterval(1000); // Faster updates - every 1 second
-    ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
+    ConfigManager.enableWebSocketPush();
+    ConfigManager.setWebSocketInterval(1000);
+    ConfigManager.setPushOnConnect(true);
 
-    //---------------------------------------------------------------------------------------------------
-    sl->Info("[SETUP] System setup completed.");
-    sll->Info("Setup completed.");
+    ConfigManager.enableSmartRoaming(true);
+    ConfigManager.setRoamingThreshold(-75);
+    ConfigManager.setRoamingCooldown(30);
+    ConfigManager.setRoamingImprovement(10);
+    lmg.log(LL::Info, "[MAIN] Smart WiFi Roaming enabled with WiFi stack fix");
+
+    // Configure WiFi AP MAC filtering/priority (example - customize as needed)
+    // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5"); // Only connect to this specific AP
+    ConfigManager.setWifiAPMacPriority("e0-08-55-92-55-ac");
+
+    SetupStartDisplay();
+    ShowDisplay();
+    setupTempSensor();
+
+    const bool startedInStationMode = SetupStartWebServer();
+    lmg.log(LL::Debug, "[SETUP] SetupStartWebServer returned: %s", startedInStationMode ? "true" : "false");
+
+    lmg.log(LL::Info, "[SETUP] System setup completed.");
 }
 
 void loop()
 {
-    CheckButtons();
-    boilerState = Relays::getBoiler(); // get Relay state
+    boilerState = getBoilerState();
 
-    
-    //-------------------------------------------------------------------------------------------------------------
-    // for working with the ConfigManager nessesary in loop
-    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
-    ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
-    ConfigManager.handleClient(); // Handle web server client requests
-    ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
-    ConfigManager.handleOTA();           // Handle OTA updates
-    ConfigManager.handleRuntimeAlarms(); // Handle runtime alarms
-    //-------------------------------------------------------------------------------------------------------------
-
+    ConfigManager.updateLoopTiming();
+    ConfigManager.getWiFiManager().update();
+    ioManager.update();
+    ConfigManager.handleClient();
+    ConfigManager.handleWebsocketPush();
+    ConfigManager.handleOTA();
+    ConfigManager.handleRuntimeAlarms();
 
     // Non-blocking display updates
     if (millis() - lastDisplayUpdate > displayUpdateInterval)
@@ -236,27 +254,29 @@ void loop()
         CRM().updateAlarms();
     }
 
-    mqttManager.loop(); // Handle MQTT Manager loop
+    mqtt.loop();
+    lmg.loop();
+
+    publishMqttStateIfNeeded();
 
     // Monitor MQTT connection status and log periodically
-    bool currentMqttState = mqttManager.isConnected();
+    const bool currentMqttState = mqtt.isConnected();
     if (currentMqttState != lastMqttConnectedState) {
-        // State changed - log immediately
         if (currentMqttState) {
-            sl->Printf("[MAIN] MQTT reconnected - Uptime: %lu ms, Reconnect count: %d",
-                       mqttManager.getUptime(), mqttManager.getReconnectCount()).Info();
+            lmg.log(LL::Info, "[MAIN] MQTT reconnected - Uptime: %lu ms, Reconnect count: %u",
+                    mqtt.getUptime(), mqtt.getReconnectCount());
         } else {
-            sl->Printf("[MAIN] MQTT connection lost - State: %d, Retry: %d",
-                       (int)mqttManager.getState(), mqttManager.getCurrentRetry()).Warn();
+            lmg.log(LL::Warn, "[MAIN] MQTT connection lost - State: %s, Retry: %u",
+                    cm::MQTTManager::mqttStateToString(mqtt.getState()), mqtt.getCurrentRetry());
         }
         lastMqttConnectedState = currentMqttState;
         lastMqttStatusLog = millis();
-    } else if (millis() - lastMqttStatusLog > 60000) { // Log status every 60 seconds
+    } else if (millis() - lastMqttStatusLog > 60000UL) {
         if (currentMqttState) {
-            sl->Printf("[MAIN] MQTT status: Connected, Uptime: %lu ms", mqttManager.getUptime()).Debug();
+            lmg.log(LL::Debug, "[MAIN] MQTT status: Connected, Uptime: %lu ms", mqtt.getUptime());
         } else {
-            sl->Printf("[MAIN] MQTT status: Disconnected, State: %d, Retry: %d/%d",
-                       (int)mqttManager.getState(), mqttManager.getCurrentRetry(), 15).Debug();
+            lmg.log(LL::Debug, "[MAIN] MQTT status: Disconnected, State: %s, Retry: %u/%u",
+                    cm::MQTTManager::mqttStateToString(mqtt.getState()), mqtt.getCurrentRetry(), 15u);
         }
         lastMqttStatusLog = millis();
     }
@@ -264,9 +284,9 @@ void loop()
     // Advance boiler/timer logic once per second (function is self-throttled)
     handeleBoilerState(false);
 
-    updateStatusLED();       // Schedule LED patterns if WiFi state changed
-    Blinker::loopAll();      // Advance all blinker state machines
-    delay(10); // Small delay
+    updateStatusLED();
+    Blinker::loopAll();
+    delay(10);
 }
 
 //----------------------------------------
@@ -308,7 +328,7 @@ void setupGUI()
         [](JsonObject &o)
         {
             o["Bo_EN_Set"] = boilerSettings.enabled.get();
-            o["Bo_EN"] = Relays::getBoiler();
+            o["Bo_EN"] = getBoilerState();
             o["Bo_Temp"] = temperature;
             o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
             // Expose time left both in seconds and formatted HH:MM:SS
@@ -323,7 +343,7 @@ void setupGUI()
                 o["Bo_TimeLeftFmt"] = String(buf);
             }
             // Derived readiness: can shower when current temp >= off threshold
-            bool canShower = (temperature >= boilerSettings.offThreshold.get());
+            bool canShower = (temperature >= boilerSettings.offThreshold.get()) && getBoilerState();
             o["Bo_CanShower"] = canShower;
             youCanShowerNow = canShower; // keep MQTT status aligned
         });
@@ -395,9 +415,9 @@ void setupGUI()
     static float transientFloatVal = temperature; // Initialize with current temperature
     ConfigManager.defineRuntimeFloatSlider("Hand overrides", "f_adj", "Temperature Test", -10.0f, 100.0f, temperature, 1, []()
         { return transientFloatVal; }, [](float v)
-        { transientFloatVal = v;
-            temperature = v;
-            sl->Printf("[MAIN] Temperature manually set to %.1f°C via slider", v).Debug();
+            { transientFloatVal = v;
+                temperature = v;
+                lmg.log(LL::Debug, "[MAIN] Temperature manually set to %.1f°C via slider", v);
     }, String("°C"));
 #endif
 
@@ -439,8 +459,9 @@ void UpdateBoilerAlarmState()
 
     if (globalAlarmState != previousState)
     {
-        sl->Printf("[MAIN] [ALARM] Temperature %.1f°C -> %s", temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF").Debug();
-    CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
+        lmg.log(LL::Debug, "[MAIN] [ALARM] Temperature %.1f°C -> %s",
+                temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF");
+        CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
         handeleBoilerState(true); // Force boiler if the temperature is too low
     }
 }
@@ -454,26 +475,25 @@ void handeleBoilerState(bool forceON)
     {
         lastBoilerCheck = now;
         const bool stopOnTarget = boilerSettings.stopTimerOnTarget.get();
-        const bool wasOn = Relays::getBoiler();
         const int prevTime = boilerTimeRemaining;
 
         // Temperature-based auto control: turn off when upper threshold reached, allow turn-on when below lower threshold
-        if (Relays::getBoiler()) {
+        if (getBoilerState()) {
             if (temperature >= boilerSettings.offThreshold.get()) {
-                Relays::setBoiler(false);
+                setBoilerState(false);
                 if (stopOnTarget) {
                     boilerTimeRemaining = 0;
                     if (willShowerRequested) {
                         willShowerRequested = false;
-                        if (mqttManager.isConnected()) {
-                            mqttManager.publish(mqttSettings.topicWillShower.c_str(), "0", true);
+                        if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+                            mqtt.publish(topicWillShower.c_str(), "0", true);
                         }
                     }
                 }
             }
         } else {
             if ((boilerSettings.enabled.get() || forceON) && (temperature <= boilerSettings.onThreshold.get()) && (boilerTimeRemaining > 0)) {
-                Relays::setBoiler(true);
+                setBoilerState(true);
             }
         }
 
@@ -482,25 +502,25 @@ void handeleBoilerState(bool forceON)
         {
             if (boilerTimeRemaining > 0)
             {
-                if (!Relays::getBoiler())
+                if (!getBoilerState())
                 {
-                    Relays::setBoiler(true); // Turn on the boiler
+                    setBoilerState(true); // Turn on the boiler
                 }
                 boilerTimeRemaining--; // count down in seconds
             }
             else
             {
-                if (Relays::getBoiler())
+                if (getBoilerState())
                 {
-                    Relays::setBoiler(false); // Turn off the boiler
+                    setBoilerState(false); // Turn off the boiler
                 }
             }
         }
         else
         {
-            if (Relays::getBoiler())
+            if (getBoilerState())
             {
-                Relays::setBoiler(false); // Turn off the boiler if disabled
+                setBoilerState(false); // Turn off the boiler if disabled
             }
         }
 
@@ -508,38 +528,26 @@ void handeleBoilerState(bool forceON)
         if (prevTime > 0 && boilerTimeRemaining <= 0) {
             if (willShowerRequested) {
                 willShowerRequested = false;
-                if (mqttManager.isConnected()) {
-                    mqttManager.publish(mqttSettings.topicWillShower.c_str(), "0", true);
+                if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+                    mqtt.publish(topicWillShower.c_str(), "0", true);
                 }
             }
-            if (Relays::getBoiler()) {
-                Relays::setBoiler(false);
+            if (getBoilerState()) {
+                setBoilerState(false);
             }
         }
     }
 }
 
-void PinSetup()
-{
-    analogReadResolution(12); // Use full 12-bit resolution
-    pinMode(buttonSettings.resetDefaultsPin.get(), INPUT_PULLUP);
-    pinMode(buttonSettings.apModePin.get(), INPUT_PULLUP);
-    if (buttonSettings.showerRequestPin.get() > 0) {
-        pinMode(buttonSettings.showerRequestPin.get(), INPUT_PULLUP);
-    }
-    Relays::initPins();
-    Relays::setBoiler(false); // Force known OFF state
-}
-
 
 static void cb_readTempSensor() {
     if (!ds18) {
-        sl->Warn("[TEMP] DS18B20 sensor not initialized");
+        lmg.log(LL::Warn, "[TEMP] DS18B20 sensor not initialized");
         return;
     }
     ds18->requestTemperatures();
     float t = ds18->getTempCByIndex(0);
-    sl->Printf("[TEMP] Raw sensor reading: %.2f°C", t).Debug();
+    lmg.log(LL::Debug, "[TEMP] Raw sensor reading: %.2f°C", t);
 
     // Check for sensor fault (-127°C indicates sensor error)
     bool sensorError = (t <= -127.0f || t >= 85.0f); // DS18B20 valid range is -55°C to +125°C, but -127°C is error code
@@ -548,22 +556,22 @@ static void cb_readTempSensor() {
         if (!sensorFaultState) {
             sensorFaultState = true;
             CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, true, false);
-            sl->Printf("[TEMP] SENSOR FAULT detected! Reading: %.2f°C", t).Error();
+            lmg.log(LL::Error, "[TEMP] SENSOR FAULT detected! Reading: %.2f°C", t);
         }
-        sl->Printf("[TEMP] Invalid temperature reading: %.2f°C (sensor fault)", t).Warn();
+        lmg.log(LL::Warn, "[TEMP] Invalid temperature reading: %.2f°C (sensor fault)", t);
         // Try to check if sensor is still present
         uint8_t deviceCount = ds18->getDeviceCount();
-        sl->Printf("[TEMP] Devices still found: %d", deviceCount).Debug();
+        lmg.log(LL::Debug, "[TEMP] Devices still found: %d", deviceCount);
     } else {
         // Clear sensor fault if it was set
         if (sensorFaultState) {
             sensorFaultState = false;
             CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, false, false);
-            sl->Printf("[TEMP] Sensor fault cleared! Reading: %.2f°C", t).Info();
+            lmg.log(LL::Info, "[TEMP] Sensor fault cleared! Reading: %.2f°C", t);
         }
 
         temperature = t + tempSensorSettings.corrOffset.get();
-        sl->Printf("[TEMP] Temperature updated: %.2f°C (offset: %.2f°C)", temperature, tempSensorSettings.corrOffset.get()).Info();
+        lmg.log(LL::Info, "[TEMP] Temperature updated: %.2f°C (offset: %.2f°C)", temperature, tempSensorSettings.corrOffset.get());
         // Optionally: push alarms now
         // CRM().updateAlarms(); // cheap
     }
@@ -572,7 +580,7 @@ static void cb_readTempSensor() {
 static void setupTempSensor() {
     int pin = tempSensorSettings.gpioPin.get();
     if (pin <= 0) {
-        sl->Warn("[TEMP] DS18B20 GPIO pin not set or invalid -> skipping init");
+        lmg.log(LL::Warn, "[TEMP] DS18B20 GPIO pin not set or invalid -> skipping init");
         return;
     }
     oneWireBus = new OneWire((uint8_t)pin);
@@ -585,20 +593,20 @@ static void setupTempSensor() {
 
     // Extended diagnostics
     uint8_t deviceCount = ds18->getDeviceCount();
-    sl->Printf("[TEMP] OneWire devices found: %d", deviceCount).Info();
+    lmg.log(LL::Info, "[TEMP] OneWire devices found: %d", deviceCount);
 
     if (deviceCount == 0) {
-        sl->Info("[TEMP] No DS18B20 sensors found! Check:");
-        sl->Info("[TEMP] 1. Pull-up resistor (4.7kΩ) between VCC and GPIO");
-        sl->Info("[TEMP] 2. Wiring: VCC→3.3V, GND→GND, DATA→GPIO");
-        sl->Info("[TEMP] 3. Sensor connection and power");
+        lmg.log(LL::Info, "[TEMP] No DS18B20 sensors found! Check:");
+        lmg.log(LL::Info, "[TEMP] 1. Pull-up resistor (4.7kΩ) between VCC and GPIO");
+        lmg.log(LL::Info, "[TEMP] 2. Wiring: VCC->3.3V, GND->GND, DATA->GPIO");
+        lmg.log(LL::Info, "[TEMP] 3. Sensor connection and power");
 
         // Set sensor fault alarm if no devices found
         sensorFaultState = true;
         CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, true, false);
-        sl->Printf("[TEMP] Sensor fault alarm activated - no devices found").Warn();
+        lmg.log(LL::Warn, "[TEMP] Sensor fault alarm activated - no devices found");
     } else {
-        sl->Printf("[TEMP] Found %d DS18B20 sensor(s) on GPIO %d", deviceCount, pin).Info();
+        lmg.log(LL::Info, "[TEMP] Found %d DS18B20 sensor(s) on GPIO %d", deviceCount, pin);
 
         // Clear sensor fault alarm if devices are found
         sensorFaultState = false;
@@ -606,155 +614,265 @@ static void setupTempSensor() {
 
         // Check if sensor is using parasitic power
         bool parasitic = ds18->readPowerSupply(0);
-        sl->Printf("[TEMP] Power mode: %s", parasitic ? "Normal (VCC connected)" : "Parasitic (VCC=GND)").Info();
+        lmg.log(LL::Info, "[TEMP] Power mode: %s", parasitic ? "Normal (VCC connected)" : "Parasitic (VCC=GND)");
 
         // Set resolution to 12-bit for better accuracy
         ds18->setResolution(12);
-        sl->Printf("[TEMP] Resolution set to 12-bit").Info();
+        lmg.log(LL::Info, "[TEMP] Resolution set to 12-bit");
     }
 
     float intervalSec = (float)tempSensorSettings.readInterval.get();
     if (intervalSec < 1.0f) intervalSec = 30.0f;
     TempReadTicker.attach(intervalSec, cb_readTempSensor);
-    sl->Printf("[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C", pin, intervalSec, tempSensorSettings.corrOffset.get()).Info();
+    lmg.log(LL::Info, "[TEMP] DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C",
+            pin, intervalSec, tempSensorSettings.corrOffset.get());
 }
 
 //----------------------------------------
-// MQTT PUBLISHING HELPER FOR SETTINGS CHANGES VIA WEB GUI
+// LOGGING / IO / MQTT HELPERS
 //----------------------------------------
-void BoilerSettings::publishSettingToMQTT(const String& settingName, const String& value) {
-    extern MQTTManager mqttManager;
-    extern MQTT_Settings mqttSettings;
-    extern SigmaLoger *sl;
-
-    if (mqttManager.isConnected()) {
-        String topic = mqttSettings.Publish_Topic.get() + "/Settings/" + settingName;
-        sl->Printf("[MAIN] GUI Change: Publishing to topic [%s] (length: %d)", topic.c_str(), topic.length()).Debug();
-        mqttManager.publish(topic.c_str(), value, true);
-        sl->Printf("[MAIN] GUI Change: Published %s = %s to MQTT", settingName.c_str(), value.c_str()).Debug();
-    }
-}
-
-//----------------------------------------
-// MQTT FUNCTIONS
-//----------------------------------------
-void setupMQTT()
+static void setupLogging()
 {
-    // -- Setup MQTT connection --
-    sl->Printf("[MAIN] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
-    sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Info();
+    Serial.begin(115200);
 
-    // Test network connectivity to MQTT broker before attempting connection
-    String mqttHost = mqttSettings.mqtt_server.get();
-    uint16_t mqttPort = static_cast<uint16_t>(mqttSettings.mqtt_port.get());
+    auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
+    serialOut->setLevel(LL::Trace);
+    serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis);
+    serialOut->setRateLimitMs(2);
+    lmg.addOutput(std::move(serialOut));
 
-    sl->Printf("[MAIN] Testing connectivity to MQTT broker %s:%d", mqttHost.c_str(), mqttPort).Debug();
+    lmg.setGlobalLevel(LL::Trace);
+    lmg.attachToConfigManager(LL::Info, LL::Trace, "CM");
+}
 
-    WiFiClient testClient;
-    bool canConnect = testClient.connect(mqttHost.c_str(), mqttPort);
-    if (canConnect) {
-        testClient.stop();
-        sl->Printf("[MAIN] Network connectivity to MQTT broker: OK").Info();
-    } else {
-        sl->Printf("[MAIN] Network connectivity to MQTT broker: FAILED").Warn();
-        sl->Printf("[MAIN] Check if MQTT broker is running and accessible").Warn();
-    }
+static void registerIOBindings()
+{
+    analogReadResolution(12);
 
-    mqttSettings.updateTopics();
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
+        .id = IO_BOILER_ID,
+        .name = "Boiler Relay",
+        .defaultPin = 23,
+        .defaultActiveLow = true,
+        .defaultEnabled = true,
+    });
+    ioManager.addIOtoGUI(IO_BOILER_ID, "Boiler IO", 1);
 
-    // Configure MQTT Manager with improved stability settings
-    mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
-    mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-
-    // Create unique client ID with MAC address, timestamp and random number to avoid conflicts
-    String macAddr = WiFi.macAddress();
-    macAddr.replace(":", "");
-    uint32_t chipId = ESP.getEfuseMac() & 0xFFFFFF;
-    String clientId = "ESP32_" + macAddr + "_" + String(chipId, HEX) + "_" + String(millis());
-    mqttManager.setClientId(clientId.c_str());
-
-    // Improved connection parameters for stability
-    mqttManager.setKeepAlive(90);        // Longer keep-alive to avoid timeouts
-    mqttManager.setMaxRetries(15);       // More retries for flaky networks
-    mqttManager.setRetryInterval(10000); // Longer interval between retries
-    mqttManager.setBufferSize(512);      // Larger buffer for message handling
-
-    sl->Printf("[MAIN] MQTT Client ID: %s", clientId.c_str()).Debug();
-    sl->Printf("[MAIN] MQTT Credentials: User=%s, Pass=%s",
-               mqttSettings.mqtt_username.get().c_str(),
-               mqttSettings.mqtt_password.get().length() > 0 ? "***" : "none").Debug();
-
-    // Set MQTT callbacks
-    mqttManager.onConnected([]()
-                            {
-                                sl->Debug("[MAIN] MQTT Connected! Subscribing to command topics...");
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicSetShowerTime.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topicSetShowerTime.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicWillShower.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topicWillShower.c_str());
-                                // Subscribe to bidirectional boiler settings topics
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_BoilerEnabled.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topic_BoilerEnabled.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OnThreshold.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topic_OnThreshold.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OffThreshold.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topic_OffThreshold.c_str());
-
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_StopTimerOnTarget.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topic_StopTimerOnTarget.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_OncePerPeriod.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topic_OncePerPeriod.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topic_YouCanShowerPeriodMin.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topic_YouCanShowerPeriodMin.c_str());
-                                sl->Printf("[MAIN] Subscribe to: %s", mqttSettings.topicSave.c_str()).Debug();
-                                mqttManager.subscribe(mqttSettings.topicSave.c_str());
-
-                                // // Clean up any potentially corrupted retained messages from previous versions
-                                // String baseSettings = mqttSettings.Publish_Topic.get() + "/Settings/";
-                                // mqttManager.publish((baseSettings + "StopTimerOnTarg11").c_str(), "", true); // Clear corrupted topic
-                                // sl->Info("[MAIN] Cleared potential corrupted retained messages");
-
-                                // One-time retained propagation of all relevant topics (on cold start)
-                                if (!didStartupMQTTPropagate) {
-                                    // Compute derived status - only notify if boiler is/was actively heating
-                                    youCanShowerNow = (temperature >= boilerSettings.offThreshold.get()) && Relays::getBoiler();
-
-                                    // Publish current statuses retained
-                                    mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature), /*retained*/ true);
-                                    {
-                                        int total = max(0, boilerTimeRemaining);
-                                        int h = total / 3600;
-                                        int m = (total % 3600) / 60;
-                                        int s = total % 60;
-                                        char buf[12];
-                                        snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
-                                        mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(buf), /*retained*/ true);
-                                    }
-                                    mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(Relays::getBoiler()), /*retained*/ true);
-                                    mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.c_str(), youCanShowerNow ? "1" : "0", /*retained*/ true);
-                                    // Publish current Boiler settings retained (state reflection)
-                                    mqttManager.publish(mqttSettings.topic_BoilerEnabled.c_str(), boilerSettings.enabled.get() ? "1" : "0", true);
-                                    mqttManager.publish(mqttSettings.topic_OnThreshold.c_str(), String(boilerSettings.onThreshold.get()), true);
-                                    mqttManager.publish(mqttSettings.topic_OffThreshold.c_str(), String(boilerSettings.offThreshold.get()), true);
-
-                                    mqttManager.publish(mqttSettings.topic_StopTimerOnTarget.c_str(), boilerSettings.stopTimerOnTarget.get() ? "1" : "0", true);
-                                    mqttManager.publish(mqttSettings.topic_OncePerPeriod.c_str(), boilerSettings.onlyOncePerPeriod.get() ? "1" : "0", true);
-
-                                    didStartupMQTTPropagate = true;
-                                    sl->Info("[MAIN] Published retained MQTT startup state");
-                                }
-                                cb_publishToMQTT(); // Publish initial values
-                            });
-
-    mqttManager.onDisconnected([]() {
-        sl->Printf("[MAIN] MQTT disconnected - Retry count: %d, Uptime was: %lu ms",
-                   mqttManager.getCurrentRetry(), mqttManager.getUptime()).Warn();
-        sll->Printf("MQTT disconnected - Will retry connection").Warn();
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = IO_RESET_ID,
+        .name = "Reset Button",
+        .defaultPin = 15,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
+        .defaultEnabled = true,
     });
 
-    mqttManager.onMessage([](char *topic, byte *payload, unsigned int length) { cb_MQTT_GotMessage(topic, payload, length); });
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = IO_AP_ID,
+        .name = "AP Mode Button",
+        .defaultPin = 13,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
+        .defaultEnabled = true,
+    });
 
-    mqttManager.begin();
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = IO_SHOWER_ID,
+        .name = "Shower Request Button",
+        .defaultPin = 19,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
+        .defaultEnabled = true,
+    });
+
+    ioManager.addInputToGUI(IO_AP_ID, nullptr, 8, "AP Mode", "inputs", false);
+    ioManager.addInputToGUI(IO_RESET_ID, nullptr, 9, "Reset", "inputs", false);
+    ioManager.addInputToGUI(IO_SHOWER_ID, nullptr, 10, "Shower Button", "inputs", false);
+
+    cm::IOManager::DigitalInputEventOptions resetOptions;
+    resetOptions.longClickMs = resetHoldDurationMs;
+    ioManager.configureDigitalInputEvents(
+        IO_RESET_ID,
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onPress = []() {
+                lmg.log(LL::Debug, "[MAIN] Reset button pressed -> show display");
+                ShowDisplay();
+            },
+            .onLongPressOnStartup = []() {
+                lmg.log(LL::Trace, "[MAIN] Reset button pressed at startup -> restoring defaults");
+                ConfigManager.clearAllFromPrefs();
+                ConfigManager.saveAll();
+                delay(3000);
+                ESP.restart();
+            },
+            .onLongClick = []() {
+                lmg.log(LL::Trace, "[MAIN] Reset button long-press detected -> restoring defaults");
+                ConfigManager.clearAllFromPrefs();
+                ConfigManager.saveAll();
+                delay(3000);
+                ESP.restart();
+            },
+        },
+        resetOptions);
+
+    cm::IOManager::DigitalInputEventOptions apOptions;
+    apOptions.longClickMs = 1200;
+    ioManager.configureDigitalInputEvents(
+        IO_AP_ID,
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onPress = []() {
+                lmg.log(LL::Debug, "[MAIN] AP button pressed -> show display");
+                ShowDisplay();
+            },
+            .onLongPressOnStartup = []() {
+                lmg.log(LL::Trace, "[MAIN] AP button pressed at startup -> starting AP mode");
+                ConfigManager.startAccessPoint("ESP32_Config", "");
+            },
+            .onLongClick = []() {
+                lmg.log(LL::Trace, "[MAIN] AP button long-press -> starting AP mode");
+                ConfigManager.startAccessPoint("ESP32_Config", "");
+            },
+        },
+        apOptions);
+
+    ioManager.configureDigitalInputEvents(
+        IO_SHOWER_ID,
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onClick = []() {
+                const bool newState = !willShowerRequested;
+                lmg.log(LL::Debug, "[MAIN] Shower button pressed -> toggling shower request to %s",
+                        newState ? "ON" : "OFF");
+                ShowDisplay();
+                handleShowerRequest(newState);
+            },
+        });
+}
+
+static void setBoilerState(bool on)
+{
+    ioManager.setState(IO_BOILER_ID, on);
+}
+
+static bool getBoilerState()
+{
+    return ioManager.getState(IO_BOILER_ID);
+}
+
+static void setupMQTT()
+{
+    mqtt.attach(ConfigManager);
+    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
+
+    static bool mqttLogAdded = false;
+    if (!mqttLogAdded) {
+        auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+        mqttLog->setLevel(LL::Debug);
+        mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+        lmg.addOutput(std::move(mqttLog));
+        mqttLogAdded = true;
+    }
+}
+
+static void ensureMqttDefaults(bool enableMissing, bool baseMissing, bool publishMissing)
+{
+    bool changed = false;
+    if (enableMissing) {
+        mqtt.settings().enableMQTT.set(true);
+        changed = true;
+    }
+    if (baseMissing || mqtt.settings().publishTopicBase.get().isEmpty()) {
+        mqtt.settings().publishTopicBase.set(String(APP_NAME));
+        changed = true;
+    }
+    if (publishMissing) {
+        mqtt.settings().publishIntervalSec.set(2.0f);
+        changed = true;
+    }
+
+    if (changed) {
+        ConfigManager.saveAll();
+        mqtt.attach(ConfigManager);
+    }
+}
+
+static void updateMqttTopics()
+{
+    String base = mqtt.settings().publishTopicBase.get();
+    if (base.isEmpty()) {
+        base = mqtt.getMqttBaseTopic();
+    }
+    if (base.isEmpty()) {
+        base = String(APP_NAME);
+    }
+
+    if (base != mqttBaseTopic) {
+        mqttBaseTopic = base;
+        didStartupMQTTPropagate = false;
+    }
+
+    topicActualState = mqttBaseTopic + "/AktualState";
+    topicActualBoilerTemp = mqttBaseTopic + "/TemperatureBoiler";
+    topicActualTimeRemaining = mqttBaseTopic + "/TimeRemaining";
+    topicYouCanShowerNow = mqttBaseTopic + "/YouCanShowerNow";
+
+    const String sp = mqttBaseTopic + "/Settings";
+    topicSetShowerTime = sp + "/SetShowerTime";
+    topicWillShower = sp + "/WillShower";
+    topicSave = sp + "/Save";
+    topicBoilerEnabled = sp + "/BoilerEnabled";
+    topicOnThreshold = sp + "/OnThreshold";
+    topicOffThreshold = sp + "/OffThreshold";
+    topicBoilerTimeMin = sp + "/BoilerTimeMin";
+    topicStopTimerOnTarget = sp + "/StopTimerOnTarget";
+    topicOncePerPeriod = sp + "/OncePerPeriod";
+    topicYouCanShowerPeriodMin = sp + "/YouCanShowerPeriodMin";
+}
+
+static void setupMqttCallbacks()
+{
+    boilerSettings.enabled.setCallback([](bool v) {
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicBoilerEnabled.c_str(), v ? "1" : "0", true);
+        }
+    });
+
+    boilerSettings.onThreshold.setCallback([](float v) {
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicOnThreshold.c_str(), String(v), true);
+        }
+    });
+
+    boilerSettings.offThreshold.setCallback([](float v) {
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicOffThreshold.c_str(), String(v), true);
+        }
+    });
+
+    boilerSettings.boilerTimeMin.setCallback([](int v) {
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicBoilerTimeMin.c_str(), String(v), true);
+            mqtt.publish(topicYouCanShowerPeriodMin.c_str(), String(v), true);
+        }
+        lastYouCanShower1PeriodId = -1;
+        lastPublishedYouCanShower = false;
+    });
+
+    boilerSettings.stopTimerOnTarget.setCallback([](bool v) {
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicStopTimerOnTarget.c_str(), v ? "1" : "0", true);
+        }
+    });
+
+    boilerSettings.onlyOncePerPeriod.setCallback([](bool v) {
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicOncePerPeriod.c_str(), v ? "1" : "0", true);
+        }
+        lastYouCanShower1PeriodId = -1;
+        lastPublishedYouCanShower = false;
+    });
 }
 
 // Compute current period ID for once-per-period gating
@@ -762,117 +880,116 @@ static long getCurrentPeriodId()
 {
     const long periodMin = max(1, boilerSettings.boilerTimeMin.get());
     const long periodSec = periodMin * 60L;
-    // Prefer NTP time if available (epoch > 1 Jan 1971 makes it likely)
     time_t now = time(nullptr);
     if (now > 24 * 60 * 60) {
         return now / periodSec;
     }
-    // Fallback: millis-based coarse period
     return (long)((millis() / 1000UL) / periodSec);
 }
 
-void cb_publishToMQTT()
+static void publishMqttState(bool retained)
 {
-    if (mqttManager.isConnected())
-    {
-        // sl->Debug("[MAIN] cb_publishToMQTT: Publishing to MQTT...");
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualBoilerTemperature.c_str(), String(temperature));
+    if (!mqtt.isConnected() || mqttBaseTopic.isEmpty()) {
+        return;
+    }
+
+    mqtt.publish(topicActualBoilerTemp.c_str(), String(temperature), retained);
+
     int total = max(0, boilerTimeRemaining);
     int h = total / 3600;
     int m = (total % 3600) / 60;
     int s = total % 60;
     char buf[12];
     snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
-    mqttManager.publish(mqttSettings.mqtt_publish_AktualTimeRemaining_topic.c_str(), String(buf));
-        mqttManager.publish(mqttSettings.mqtt_publish_AktualState.c_str(), String(Relays::getBoiler()));
-        // Publish 'You can shower now' status based on off-threshold AND relay state
-        // Only notify when temp is reached AND boiler was actually heating (relay on)
-        const bool canShower = (temperature >= boilerSettings.offThreshold.get()) && Relays::getBoiler();
-        youCanShowerNow = canShower; // keep in-sync for UI/runtime
-        if (!boilerSettings.onlyOncePerPeriod.get()) {
-            // legacy behavior: always publish current state
-            mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.c_str(), canShower ? "1" : "0");
-            lastPublishedYouCanShower = canShower;
+    mqtt.publish(topicActualTimeRemaining.c_str(), String(buf), retained);
+
+    mqtt.publish(topicActualState.c_str(), getBoilerState() ? "1" : "0", retained);
+
+    const bool canShower = (temperature >= boilerSettings.offThreshold.get()) && getBoilerState();
+    youCanShowerNow = canShower;
+    if (!boilerSettings.onlyOncePerPeriod.get()) {
+        mqtt.publish(topicYouCanShowerNow.c_str(), canShower ? "1" : "0", retained);
+        lastPublishedYouCanShower = canShower;
+    } else {
+        const long pid = getCurrentPeriodId();
+        if (canShower) {
+            if (pid != lastYouCanShower1PeriodId) {
+                mqtt.publish(topicYouCanShowerNow.c_str(), "1", true);
+                lastYouCanShower1PeriodId = pid;
+                lastPublishedYouCanShower = true;
+            }
         } else {
-            const long pid = getCurrentPeriodId();
-            if (canShower) {
-                if (pid != lastYouCanShower1PeriodId) {
-                    // First time this period -> publish '1' and remember period
-                    mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.c_str(), "1", true);
-                    lastYouCanShower1PeriodId = pid;
-                    lastPublishedYouCanShower = true;
-                }
-                // else: already sent '1' this period -> suppress repeat
-            } else {
-                // Optionally publish '0' so dashboards can reset
-                if (lastPublishedYouCanShower != false) {
-                    mqttManager.publish(mqttSettings.mqtt_publish_YouCanShowerNow_topic.c_str(), "0", true);
-                    lastPublishedYouCanShower = false;
-                }
+            if (lastPublishedYouCanShower) {
+                mqtt.publish(topicYouCanShowerNow.c_str(), "0", true);
+                lastPublishedYouCanShower = false;
             }
         }
-        // Note: Settings are only published on startup or when explicitly changed via MQTT/GUI
-        // No periodic republishing to avoid confusion between ESP32 GUI and HA
-        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 100, /*gapMs*/ 1500);
+    }
+
+    buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 100, /*gapMs*/ 1500);
+}
+
+static void publishMqttStateIfNeeded()
+{
+    const float intervalSec = mqtt.settings().publishIntervalSec.get();
+    if (intervalSec <= 0.0f) {
+        return;
+    }
+
+    const unsigned long intervalMs = static_cast<unsigned long>(intervalSec * 1000.0f);
+    if (intervalMs == 0) {
+        return;
+    }
+
+    const unsigned long now = millis();
+    if (lastMqttPublishMs == 0 || (now - lastMqttPublishMs >= intervalMs)) {
+        lastMqttPublishMs = now;
+        publishMqttState(false);
     }
 }
 
-void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
+static void handleMqttMessage(const char* topic, const char* payload, unsigned int length)
 {
-    if (topic == nullptr || message == nullptr) {
-        sl->Warn("[MAIN] MQTT callback with null pointer - ignored");
+    if (!topic || !payload || length == 0) {
+        lmg.log(LL::Warn, "[MAIN] MQTT callback with invalid payload - ignored");
         return;
     }
 
-    // Additional safety check for empty or invalid length
-    if (length == 0) {
-        sl->Warn("[MAIN] MQTT callback with zero length message - ignored");
-        return;
-    }
+    String messageTemp(payload, length);
+    messageTemp.trim();
 
-    String messageTemp((char *)message, length); // Convert byte array to String using constructor
-    messageTemp.trim();                          // Remove leading and trailing whitespace
+    lmg.log(LL::Debug, "[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str());
 
-    sl->Printf("[MAIN] <-- MQTT: Topic[%s] <-- [%s]", topic, messageTemp.c_str()).Debug();
-
-    // Debug: Print all registered topics
-    sl->Printf("[MAIN] DEBUG: Comparing with SetShowerTime: %s", mqttSettings.topicSetShowerTime.c_str()).Debug();
-    sl->Printf("[MAIN] DEBUG: Comparing with WillShower: %s", mqttSettings.topicWillShower.c_str()).Debug();
-    sl->Printf("[MAIN] DEBUG: Comparing with BoilerEnabled: %s", mqttSettings.topic_BoilerEnabled.c_str()).Debug();
-
-    if (strcmp(topic, mqttSettings.topicSetShowerTime.c_str()) == 0)
-    {
-        // check if it is a number, if not set it to 0
+    if (strcmp(topic, topicSetShowerTime.c_str()) == 0) {
         if (messageTemp.equalsIgnoreCase("null") ||
             messageTemp.equalsIgnoreCase("undefined") ||
             messageTemp.equalsIgnoreCase("NaN") ||
             messageTemp.equalsIgnoreCase("Infinity") ||
-            messageTemp.equalsIgnoreCase("-Infinity"))
-        {
-            sl->Printf("[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str()).Warn();
+            messageTemp.equalsIgnoreCase("-Infinity")) {
+            lmg.log(LL::Warn, "[MAIN] Received invalid value from MQTT: %s", messageTemp.c_str());
             messageTemp = "0";
         }
-        // Interpret payload as minutes to keep boiler ON
-        int mins = messageTemp.toInt();
+        const int mins = messageTemp.toInt();
         if (mins > 0) {
             boilerTimeRemaining = mins * 60;
             willShowerRequested = true;
-            if (!Relays::getBoiler()) {
-                Relays::setBoiler(true);
+            if (!getBoilerState()) {
+                setBoilerState(true);
             }
             ShowDisplay();
-            sl->Printf("[MAIN] MQTT set shower time: %d min (relay ON)", mins).Debug();
-            if (mqttManager.isConnected()) {
-                mqttManager.publish(mqttSettings.topicWillShower.c_str(), "1", true);
+            lmg.log(LL::Debug, "[MAIN] MQTT set shower time: %d min (relay ON)", mins);
+            if (mqtt.isConnected()) {
+                mqtt.publish(topicWillShower.c_str(), "1", true);
             }
         }
+        return;
     }
-    else if (strcmp(topic, mqttSettings.topicWillShower.c_str()) == 0)
-    {
-        // Boolean-like arming: 'I will shower' -> start timer with configured minutes
-        bool willShower = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
+
+    if (strcmp(topic, topicWillShower.c_str()) == 0) {
+        const bool willShower = messageTemp.equalsIgnoreCase("1") ||
+                                messageTemp.equalsIgnoreCase("true") ||
+                                messageTemp.equalsIgnoreCase("on");
         if (willShower == willShowerRequested) {
-            // No state change -> ignore to avoid echo loops
             return;
         }
         if (willShower) {
@@ -882,200 +999,134 @@ void cb_MQTT_GotMessage(char *topic, byte *message, unsigned int length)
                 boilerTimeRemaining = mins * 60;
             }
             willShowerRequested = true;
-            if (!Relays::getBoiler()) {
-                Relays::setBoiler(true);
+            if (!getBoilerState()) {
+                setBoilerState(true);
             }
             ShowDisplay();
-            sl->Printf("[MAIN] HA request: will shower -> set %d min (relay ON)", mins).Debug();
+            lmg.log(LL::Debug, "[MAIN] HA request: will shower -> set %d min (relay ON)", mins);
         } else {
             willShowerRequested = false;
             boilerTimeRemaining = 0;
-            if (Relays::getBoiler()) {
-                Relays::setBoiler(false);
+            if (getBoilerState()) {
+                setBoilerState(false);
             }
-            sl->Debug("[MAIN] HA request: will shower = false -> timer cleared, relay OFF");
+            lmg.log(LL::Debug, "[MAIN] HA request: will shower = false -> timer cleared, relay OFF");
         }
-    }
-    // Boiler settings updates via MQTT
-    else if (strcmp(topic, mqttSettings.topic_BoilerEnabled.c_str()) == 0) {
-        bool v = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
-        boilerSettings.enabled.set(v);
-        sl->Printf("[MAIN] MQTT: BoilerEnabled set to %s", v ? "true" : "false").Debug();
-    }
-    else if (strcmp(topic, mqttSettings.topic_OnThreshold.c_str()) == 0) {
-        float v = messageTemp.toFloat();
-        if (v > 0) {
-            boilerSettings.onThreshold.set(v);
-            sl->Printf("[MAIN] MQTT: OnThreshold set to %.1f", v).Debug();
-        }
-    }
-    else if (strcmp(topic, mqttSettings.topic_OffThreshold.c_str()) == 0) {
-        float v = messageTemp.toFloat();
-        if (v > 0) {
-            boilerSettings.offThreshold.set(v);
-            sl->Printf("[MAIN] MQTT: OffThreshold set to %.1f", v).Debug();
-        }
-    }
-    else if (strcmp(topic, mqttSettings.topic_BoilerTimeMin.c_str()) == 0) {
-        int v = messageTemp.toInt();
-        if (v >= 0) {
-            boilerSettings.boilerTimeMin.set(v);
-            sl->Printf("[MAIN] MQTT: BoilerTimeMin set to %d", v).Debug();
-            lastYouCanShower1PeriodId = -1; lastPublishedYouCanShower = false;
-        }
-    }
-    else if (strcmp(topic, mqttSettings.topic_StopTimerOnTarget.c_str()) == 0) {
-        bool v = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
-        boilerSettings.stopTimerOnTarget.set(v);
-        sl->Printf("[MAIN] MQTT: StopTimerOnTarget set to %s", v ? "true" : "false").Debug();
-
-    }
-    else if (strcmp(topic, mqttSettings.topic_OncePerPeriod.c_str()) == 0) {
-        bool v = messageTemp.equalsIgnoreCase("1") || messageTemp.equalsIgnoreCase("true") || messageTemp.equalsIgnoreCase("on");
-        boilerSettings.onlyOncePerPeriod.set(v);
-        sl->Printf("[MAIN] MQTT: OncePerPeriod set to %s", v ? "true" : "false").Debug();
-        lastYouCanShower1PeriodId = -1; lastPublishedYouCanShower = false;
-    }
-    else if (strcmp(topic, mqttSettings.topic_YouCanShowerPeriodMin.c_str()) == 0) {
-        // Map incoming period to Boiler Max Heating Time for compatibility
-        int v = messageTemp.toInt();
-        if (v <= 0) v = 45; // default
-        boilerSettings.boilerTimeMin.set(v);
-        sl->Printf("[MAIN] MQTT: YouCanShowerPeriodMin mapped to BoilerTimeMin = %d", v).Debug();
-        lastYouCanShower1PeriodId = -1; lastPublishedYouCanShower = false;
-
-    }
-    else if (strcmp(topic, mqttSettings.topicSave.c_str()) == 0) {
-        // Persist all current settings
-        ConfigManager.saveAll();
-        if (mqttManager.isConnected()) mqttManager.publish(mqttSettings.topicSave.c_str(), "OK", false);
-        sl->Info("[MAIN] Settings saved via MQTT");
-    }
-    else {
-        sl->Printf("[MAIN] MQTT: Topic [%s] not recognized - ignored", topic).Warn();
-    }
-}
-
-void cb_MQTTListener()
-{
-    mqttManager.loop(); // process MQTT connection and incoming messages
-}
-
-//----------------------------------------
-// HELPER FUNCTIONS
-//----------------------------------------
-
-void SetupCheckForResetButton()
-{
-    // check for pressed reset button
-    if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
-    {
-    sl->Internal("[MAIN] Reset button pressed -> Reset all settings...");
-    sll->Internal("Reset!");
-        ConfigManager.clearAllFromPrefs(); // Clear all settings from EEPROM
-        ConfigManager.saveAll();           // Save the default settings to EEPROM
-
-        // Show user feedback that reset is happening
-    sll->Internal("restarting...");
-        //ToDo: add non blocking delay to show message on display before restart
-        ESP.restart(); // Restart the ESP32
-    }
-}
-
-void SetupCheckForAPModeButton()
-{
-    String APName = "ESP32_Config";
-    String pwd = "config1234"; // Default AP password
-
-    if (wifiSettings.wifiSsid.get().length() == 0)
-    {
-    sl->Printf("[MAIN] WiFi SSID is empty [%s] (fresh/unconfigured)", wifiSettings.wifiSsid.get().c_str()).Error();
-        ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
-    }
-
-    // check for pressed AP mode button
-
-    if (digitalRead(buttonSettings.apModePin.get()) == LOW)
-    {
-    sl->Internal("[MAIN] AP mode button pressed -> starting AP mode...");
-    sll->Internal("AP mode button!");
-        ConfigManager.startAccessPoint(APName, ""); // Only SSID and password
-    }
-}
-
-void CheckButtons()
-{
-    static bool lastResetButtonState = HIGH;
-    static bool lastAPButtonState = HIGH;
-    static bool lastShowerButtonState = HIGH;
-    static unsigned long lastButtonCheck = 0;
-    static unsigned long resetPressStart = 0;
-    static bool resetHandled = false;
-
-    // Debounce: only check buttons every 50ms
-    if (millis() - lastButtonCheck < 50)
-    {
         return;
     }
-    lastButtonCheck = millis();
 
-    bool currentResetState = digitalRead(buttonSettings.resetDefaultsPin.get());
-    bool currentAPState = digitalRead(buttonSettings.apModePin.get());
-    bool currentShowerState = HIGH;
-    if (buttonSettings.showerRequestPin.get() > 0) {
-        currentShowerState = digitalRead(buttonSettings.showerRequestPin.get());
+    if (strcmp(topic, topicBoilerEnabled.c_str()) == 0) {
+        const bool v = messageTemp.equalsIgnoreCase("1") ||
+                       messageTemp.equalsIgnoreCase("true") ||
+                       messageTemp.equalsIgnoreCase("on");
+        boilerSettings.enabled.set(v);
+        lmg.log(LL::Debug, "[MAIN] MQTT: BoilerEnabled set to %s", v ? "true" : "false");
+        return;
     }
 
-    // Check for button press (transition from HIGH to LOW)
-    if (lastResetButtonState == HIGH && currentResetState == LOW)
-    {
-        sl->Debug("[MAIN] Reset-Button pressed -> Start Display Ticker...");
-        ShowDisplay();
-    }
-
-    if (lastAPButtonState == HIGH && currentAPState == LOW)
-    {
-        sl->Debug("[MAIN] AP-Mode-Button pressed -> Start Display Ticker...");
-        ShowDisplay();
-    }
-
-    // Shower request press (toggle on/off)
-    if (buttonSettings.showerRequestPin.get() > 0) {
-        if (lastShowerButtonState == HIGH && currentShowerState == LOW) {
-            // Toggle the shower request state
-            bool newState = !willShowerRequested;
-            sl->Printf("[MAIN] Shower button pressed -> toggling shower request to %s", newState ? "ON" : "OFF").Debug();
-            ShowDisplay();
-            handleShowerRequest(newState);
+    if (strcmp(topic, topicOnThreshold.c_str()) == 0) {
+        const float v = messageTemp.toFloat();
+        if (v > 0) {
+            boilerSettings.onThreshold.set(v);
+            lmg.log(LL::Debug, "[MAIN] MQTT: OnThreshold set to %.1f", v);
         }
-        lastShowerButtonState = currentShowerState;
+        return;
     }
 
-    lastResetButtonState = currentResetState;
-    lastAPButtonState = currentAPState;
-
-    // Detect long press on reset button to restore defaults at runtime
-    if (currentResetState == LOW)
-    {
-        if (resetPressStart == 0)
-        {
-            resetPressStart = millis();
+    if (strcmp(topic, topicOffThreshold.c_str()) == 0) {
+        const float v = messageTemp.toFloat();
+        if (v > 0) {
+            boilerSettings.offThreshold.set(v);
+            lmg.log(LL::Debug, "[MAIN] MQTT: OffThreshold set to %.1f", v);
         }
-        else if (!resetHandled && millis() - resetPressStart >= resetHoldDurationMs)
-        {
-            resetHandled = true;
-            sl->Internal("[MAIN] Reset button long-press detected -> restoring defaults");
-            sll->Internal("restoring defaults");
-            ConfigManager.clearAllFromPrefs();
-            ConfigManager.saveAll();
-            delay(3000); // Small delay to allow message to be seen
-            ESP.restart();
-        }
+        return;
     }
-    else
+
+    if (strcmp(topic, topicBoilerTimeMin.c_str()) == 0) {
+        const int v = messageTemp.toInt();
+        if (v >= 0) {
+            boilerSettings.boilerTimeMin.set(v);
+            lmg.log(LL::Debug, "[MAIN] MQTT: BoilerTimeMin set to %d", v);
+            lastYouCanShower1PeriodId = -1;
+            lastPublishedYouCanShower = false;
+        }
+        return;
+    }
+
+    if (strcmp(topic, topicStopTimerOnTarget.c_str()) == 0) {
+        const bool v = messageTemp.equalsIgnoreCase("1") ||
+                       messageTemp.equalsIgnoreCase("true") ||
+                       messageTemp.equalsIgnoreCase("on");
+        boilerSettings.stopTimerOnTarget.set(v);
+        lmg.log(LL::Debug, "[MAIN] MQTT: StopTimerOnTarget set to %s", v ? "true" : "false");
+        return;
+    }
+
+    if (strcmp(topic, topicOncePerPeriod.c_str()) == 0) {
+        const bool v = messageTemp.equalsIgnoreCase("1") ||
+                       messageTemp.equalsIgnoreCase("true") ||
+                       messageTemp.equalsIgnoreCase("on");
+        boilerSettings.onlyOncePerPeriod.set(v);
+        lmg.log(LL::Debug, "[MAIN] MQTT: OncePerPeriod set to %s", v ? "true" : "false");
+        lastYouCanShower1PeriodId = -1;
+        lastPublishedYouCanShower = false;
+        return;
+    }
+
+    if (strcmp(topic, topicYouCanShowerPeriodMin.c_str()) == 0) {
+        int v = messageTemp.toInt();
+        if (v <= 0) v = 45;
+        boilerSettings.boilerTimeMin.set(v);
+        lmg.log(LL::Debug, "[MAIN] MQTT: YouCanShowerPeriodMin mapped to BoilerTimeMin = %d", v);
+        lastYouCanShower1PeriodId = -1;
+        lastPublishedYouCanShower = false;
+        return;
+    }
+
+    if (strcmp(topic, topicSave.c_str()) == 0) {
+        ConfigManager.saveAll();
+        if (mqtt.isConnected()) {
+            mqtt.publish(topicSave.c_str(), "OK", false);
+        }
+        lmg.log(LL::Info, "[MAIN] Settings saved via MQTT");
+        return;
+    }
+
+    lmg.log(LL::Warn, "[MAIN] MQTT: Topic [%s] not recognized - ignored", topic);
+}
+
+namespace cm
+{
+    void onMQTTConnected()
     {
-        resetPressStart = 0;
-        resetHandled = false;
+        updateMqttTopics();
+        lmg.log(LL::Info, "[MQTT] Connected");
+
+        if (!topicSetShowerTime.isEmpty()) mqtt.subscribe(topicSetShowerTime.c_str());
+        if (!topicWillShower.isEmpty()) mqtt.subscribe(topicWillShower.c_str());
+        if (!topicBoilerEnabled.isEmpty()) mqtt.subscribe(topicBoilerEnabled.c_str());
+        if (!topicOnThreshold.isEmpty()) mqtt.subscribe(topicOnThreshold.c_str());
+        if (!topicOffThreshold.isEmpty()) mqtt.subscribe(topicOffThreshold.c_str());
+        if (!topicStopTimerOnTarget.isEmpty()) mqtt.subscribe(topicStopTimerOnTarget.c_str());
+        if (!topicOncePerPeriod.isEmpty()) mqtt.subscribe(topicOncePerPeriod.c_str());
+        if (!topicYouCanShowerPeriodMin.isEmpty()) mqtt.subscribe(topicYouCanShowerPeriodMin.c_str());
+        if (!topicSave.isEmpty()) mqtt.subscribe(topicSave.c_str());
+
+        if (!didStartupMQTTPropagate) {
+            publishMqttState(true);
+            didStartupMQTTPropagate = true;
+        }
+        publishMqttState(false);
+    }
+
+    void onMQTTDisconnected()
+    {
+        lmg.log(LL::Warn, "[MQTT] Disconnected");
+    }
+
+    void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)
+    {
+        handleMqttMessage(topic, payload, length);
     }
 }
 
@@ -1221,123 +1272,36 @@ void updateStatusLED(){
 
 bool SetupStartWebServer()
 {
-    sl->Info("[MAIN] Starting Webserver...!");
-    sll->Info("Starting Webserver...!");
+    lmg.log(LL::Info, "[MAIN] Starting Webserver...");
 
-    if (WiFi.getMode() == WIFI_AP)
-    {
-        return false; // Skip webserver setup in AP mode
-    }
+    ConfigManager.startWebServer();
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
 
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        if (wifiSettings.useDhcp.get())
-        {
-            sl->Debug("[MAIN] startWebServer: DHCP enabled");
-            ConfigManager.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-        }
-        else
-        {
-            sl->Debug("[MAIN] startWebServer: DHCP disabled - using static IP");
-            IPAddress staticIP, gateway, subnet, dns1, dns2;
-            staticIP.fromString(wifiSettings.staticIp.get());
-            gateway.fromString(wifiSettings.gateway.get());
-            subnet.fromString(wifiSettings.subnet.get());
-
-            const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
-            const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
-            if (!dnsPrimaryStr.isEmpty())
-            {
-                dns1.fromString(dnsPrimaryStr);
-            }
-            if (!dnsSecondaryStr.isEmpty())
-            {
-                dns2.fromString(dnsSecondaryStr);
-            }
-
-            ConfigManager.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
-        }
-    }
-
-    return true; // Webserver setup completed
+    return !ConfigManager.getWiFiManager().isInAPMode();
 }
 
 void onWiFiConnected()
 {
-    sl->Info("[MAIN] WiFi connected! Activating services...");
-    sll->Info("WiFi connected!");
+    wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
+    ShowDisplay();
 
-    if (!tickerActive)
-    {
-        ShowDisplay(); // Show the display
-
-        // Start MQTT tickers
-        PublischMQTTTicker.attach(mqttSettings.MQTTPublischPeriod.get(), cb_publishToMQTT);
-        ListenMQTTTicker.attach(mqttSettings.MQTTListenPeriod.get(), cb_MQTTListener);
-
-        // Start OTA if enabled
-        if (systemSettings.allowOTA.get())
-        {
-            sll->Debug("Start OTA-Module");
-            ConfigManager.setupOTA(APP_NAME, systemSettings.otaPassword.get().c_str());
-        }
-
-        tickerActive = true;
-    }
-    sl->Printf("\n\n[MAIN] Webserver running at: %s\n", WiFi.localIP().toString().c_str()).Info();
-    sll->Printf("IP: %s\n\n", WiFi.localIP().toString().c_str()).Info();
-    sl->Printf("[MAIN] WLAN-Strength: %d dBm\n", WiFi.RSSI()).Info();
-    sl->Printf("[MAIN] WLAN-Strength is: %s\n\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
-    sll->Printf("WLAN: %s\n", WiFi.RSSI() > -70 ? "good" : (WiFi.RSSI() > -80 ? "ok" : "weak")).Info();
-
-    // Start NTP sync now and schedule periodic resyncs
-    auto doNtpSync = [](){
-        // Use TZ-aware sync for correct local time (Berlin: CET/CEST)
-        configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str());
-    };
-    doNtpSync();
-    NtpSyncTicker.detach();
-    int ntpInt = ntpSettings.frequencySec.get();
-    if (ntpInt < 60) ntpInt = 3600; // default to 1 hour
-    NtpSyncTicker.attach(ntpInt, +[](){
-        configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str());
-    });
+    lmg.log(LL::Info, "[MAIN] WiFi connected");
+    lmg.log(LL::Info, "[MAIN] Station Mode: http://%s", WiFi.localIP().toString().c_str());
+    lmg.log(LL::Info, "[MAIN] WLAN strength: %d dBm", WiFi.RSSI());
 }
 
 void onWiFiDisconnected()
 {
-    sl->Debug("[MAIN] WiFi disconnected! Deactivating services...");
-    sll->Warn("WiFi lost connection!");
-
-    if (tickerActive)
-    {
-        ShowDisplay(); // Show the display to indicate WiFi is lost
-
-        // Stop MQTT tickers
-        PublischMQTTTicker.detach();
-        ListenMQTTTicker.detach();
-
-        // Stop OTA if it should be disabled
-        if (systemSettings.allowOTA.get() == false && ConfigManager.isOTAInitialized())
-        {
-            sll->Debug("Stop OTA-Module");
-            ConfigManager.stopOTA();
-        }
-
-        tickerActive = false;
-    }
+    wifiServices.onDisconnected();
+    ShowDisplay();
+    lmg.log(LL::Warn, "[MAIN] WiFi disconnected");
 }
 
 void onWiFiAPMode()
 {
-    sl->Warn("[MAIN] WiFi in AP mode");
-    sll->Warn("AP mode!");
-
-    // Ensure services are stopped in AP mode
-    if (tickerActive)
-    {
-        onWiFiDisconnected(); // Reuse disconnected logic
-    }
+    wifiServices.onAPMode();
+    ShowDisplay();
+    lmg.log(LL::Warn, "[MAIN] AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
 //----------------------------------------
@@ -1352,17 +1316,17 @@ static void handleShowerRequest(bool v)
             if (mins <= 0) mins = 60;
             boilerTimeRemaining = mins * 60;
         }
-        Relays::setBoiler(true);
+        setBoilerState(true);
         ShowDisplay();
-        if (mqttManager.isConnected()) {
-            mqttManager.publish(mqttSettings.topicWillShower.c_str(), "1", true);
+        if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+            mqtt.publish(topicWillShower.c_str(), "1", true);
         }
     } else {
         // user canceled
         boilerTimeRemaining = 0;
-        Relays::setBoiler(false);
-        if (mqttManager.isConnected()) {
-            mqttManager.publish(mqttSettings.topicWillShower.c_str(), "0", true);
+        setBoilerState(false);
+        if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+            mqtt.publish(topicWillShower.c_str(), "0", true);
         }
     }
 }
