@@ -56,6 +56,23 @@
 #ifndef CM_ENABLE_VERBOSE_LOGGING
 #define CM_ENABLE_VERBOSE_LOGGING 0
 #endif
+
+// --- Logging level defaults (override with -DCM_LOGGING_LEVEL=CM_LOG_LEVEL_*) ---
+#define CM_LOG_LEVEL_OFF   0
+#define CM_LOG_LEVEL_FATAL 1
+#define CM_LOG_LEVEL_ERROR 2
+#define CM_LOG_LEVEL_WARN  3
+#define CM_LOG_LEVEL_INFO  4
+#define CM_LOG_LEVEL_DEBUG 5
+#define CM_LOG_LEVEL_TRACE 6
+
+#ifndef CM_LOGGING_LEVEL
+#if CM_ENABLE_VERBOSE_LOGGING
+#define CM_LOGGING_LEVEL CM_LOG_LEVEL_TRACE
+#else
+#define CM_LOGGING_LEVEL CM_LOG_LEVEL_INFO
+#endif
+#endif
 // ---------------------------------------------------------------------------------------------------------------------
 // Dynamic visibility is always enabled - legacy code removal completed
 // All related dynamic visibility flags are now obsolete and have been removed

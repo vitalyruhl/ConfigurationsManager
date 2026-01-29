@@ -78,7 +78,7 @@ class ConfigManagerClass;
 #if CM_ENABLE_LOGGING
 #define CM_LOG(...) ConfigManagerClass::log_message(__VA_ARGS__)
 #if CM_ENABLE_VERBOSE_LOGGING
-#define CM_LOG_VERBOSE(...) ConfigManagerClass::log_message(__VA_ARGS__)
+#define CM_LOG_VERBOSE(...) ConfigManagerClass::log_verbose_message(__VA_ARGS__)
 #else
 #define CM_LOG_VERBOSE(...) \
     do                      \
@@ -1650,10 +1650,14 @@ public:
     // Logging
 #if CM_ENABLE_LOGGING
     static void setLogger(LogCallback cb);
+    static void setLoggerVerbose(LogCallback cb);
     static void log_message(const char *format, ...);
+    static void log_verbose_message(const char *format, ...);
 #else
     static void setLogger(LogCallback) {}
+    static void setLoggerVerbose(LogCallback) {}
     static void log_message(const char *, ...) {}
+    static void log_verbose_message(const char *, ...) {}
 #endif
 
     void triggerLoggerTest() { CM_LOG("[I] Logger test message"); }
@@ -1683,6 +1687,7 @@ public:
 
 public:
     static LogCallback logger;
+    static LogCallback loggerVerbose;
     WebHTML webhtml;
 };
 

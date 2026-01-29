@@ -4,9 +4,10 @@
 
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
+#include "logging/LoggingManager.h"
 
 #define VERSION CONFIGMANAGER_VERSION
-#define APP_NAME "CM-Minimal-Demo"
+#define APP_NAME "CM-Full-Logging-Demo"
 
 void onWiFiConnected();
 void onWiFiDisconnected();
@@ -23,16 +24,18 @@ static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
+static cm::LoggingManager& lmg = cm::LoggingManager::instance();
+using LL = cm::LoggingManager::Level; //shorthand alias for logging levels
+
+void logging_Example();
+void Initial_logging();
+
+
 
 void setup()
 {
-    Serial.begin(115200);
 
-    ConfigManagerClass::setLogger([](const char *msg)
-        {
-            Serial.print("[Main-Min] ");
-            Serial.println(msg);
-        });
+    Initial_logging();
 
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
@@ -47,6 +50,8 @@ void setup()
 
     ConfigManager.startWebServer();
     ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
+
+    logging_Example();
 }
 
 void loop()
@@ -54,12 +59,13 @@ void loop()
     ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
+    lmg.loop();
 }
 
 void onWiFiConnected()
 {
     wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
-    Serial.printf("[INFO] Station Mode: http://%s\n", WiFi.localIP().toString().c_str());
+    CM_LOG("[Full-Logging-Demo][INFO] Station Mode: http://%s", WiFi.localIP().toString().c_str());
 }
 
 // These hooks are invoked internally by ConfigManager's WiFi manager on state transitions.
@@ -68,11 +74,48 @@ void onWiFiConnected()
 void onWiFiDisconnected()
 {
     wifiServices.onDisconnected();
-    Serial.println("[ERROR] WiFi disconnected");
+    CM_LOG("[Full-Logging-Demo][ERROR] WiFi disconnected");
 }
 
 void onWiFiAPMode()
 {
     wifiServices.onAPMode();
-    Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
+    CM_LOG("[Full-Logging-Demo][INFO] AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
+}
+
+void Initial_logging()
+{
+    Serial.begin(115200);
+    lmg.addOutput(std::make_unique<cm::LoggingManager::SerialOutput>(Serial));
+    lmg.setGlobalLevel(LL::Trace);
+    lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+
+    // Add a compact output that only logs warnings and above from the "LOG" tag
+    {
+        auto compactOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
+        compactOut->setLevel(LL::Warn);
+        compactOut->setFormat(cm::LoggingManager::Output::Format::Compact);
+        compactOut->setPrefix("[SHORT] ");
+        compactOut->setFilter([](LL level, const char* tag, const char*) {
+            return (level <= LL::Warn) && (tag && strcmp(tag, "LOG") == 0);
+        });
+        lmg.addOutput(std::move(compactOut));
+    }
+
+}
+
+
+
+void logging_Example()
+{
+    static int randomValue = 0;
+    randomValue = static_cast<int>(random(0, 1000));
+
+    lmg.log(LL::Fatal, "LOG", "Fatal example (value=%d)", randomValue);
+    lmg.log(LL::Error, "LOG", "Error example (value=%d)", randomValue);
+    lmg.log(LL::Error, "Other-Tag", "Error example (value=%d)", randomValue); // This will not appear in the compact output, wrong tag
+    lmg.log(LL::Warn, "LOG", "Warn example (value=%d)", randomValue);
+    lmg.log(LL::Info, "LOG", "Info example (value=%d)", randomValue);
+    lmg.log(LL::Debug, "LOG", "Debug example (value=%d)", randomValue);
+    lmg.log(LL::Trace, "LOG", "Trace example (value=%d)", randomValue);
 }

@@ -27,16 +27,27 @@ void LoggingManager::SerialOutput::log(Level level, const char* tag, const char*
     if (level == Level::Off || level > getLevel()) {
         return;
     }
+    if (!shouldLog(level, tag, message)) {
+        return;
+    }
+
+    const String& prefix = getPrefix();
+    const bool compact = (getFormat() == Output::Format::Compact);
     serial_.print('[');
     serial_.print(timestampMs);
     serial_.print("] ");
-    serial_.print('[');
-    serial_.print(levelToString(level));
-    serial_.print("] ");
-    if (tag && tag[0]) {
+    if (!compact) {
         serial_.print('[');
-        serial_.print(tag);
+        serial_.print(levelToString(level));
         serial_.print("] ");
+        if (tag && tag[0]) {
+            serial_.print('[');
+            serial_.print(tag);
+            serial_.print("] ");
+        }
+    }
+    if (prefix.length()) {
+        serial_.print(prefix);
     }
     serial_.println(message ? message : "");
 }
@@ -88,13 +99,24 @@ void LoggingManager::loop()
     }
 }
 
-void LoggingManager::attachToConfigManager(Level level, const char* tag)
+void LoggingManager::attachToConfigManager(Level level, Level verboseLevel, const char* tag)
 {
     defaultLevel_ = level;
-    defaultTag_ = (tag && tag[0]) ? tag : "ConfigManager";
+    if (tag == nullptr) {
+        defaultTag_ = "ConfigManager";
+    } else if (tag[0] == '\0') {
+        defaultTag_ = "";
+    } else {
+        defaultTag_ = tag;
+    }
+    verboseLevel_ = verboseLevel;
+    verboseTag_ = defaultTag_;
 
     ConfigManagerClass::setLogger([this](const char* msg) {
         this->log(defaultLevel_, defaultTag_, "%s", msg ? msg : "");
+    });
+    ConfigManagerClass::setLoggerVerbose([this](const char* msg) {
+        this->log(verboseLevel_, verboseTag_, "%s", msg ? msg : "");
     });
 }
 
