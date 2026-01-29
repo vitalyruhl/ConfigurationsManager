@@ -39,3 +39,11 @@ After WiFi is configured:
 - Optional: `MQTT: Subscribe Topic` (example: `cm/demo/#`)
 
 Then watch the `MQTT` runtime card for status updates.
+
+## Screenshots
+
+![alt text](full-MQTT-Demo-GUI.jpg) 
+![alt text](full-MQTT-Demo-Settings_01.jpg) 
+![alt text](full-MQTT-Demo-Settings_02.jpg) 
+![alt text](mqtt-explorer.jpg)
+

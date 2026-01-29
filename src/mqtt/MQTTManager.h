@@ -222,6 +222,7 @@ public:
 
     bool publish(const char* topic, const char* payload, bool retained = false);
     bool publish(const char* topic, const String& payload, bool retained = false);
+    bool publishRaw(const char* topic, const char* payload, bool retained = false);
     bool clearRetain(const char* topic);
     bool subscribe(const char* topic, uint8_t qos = 0);
     bool subscribeWildcard(const char* topicFilter, uint8_t qos = 0);
@@ -1231,6 +1232,14 @@ inline bool MQTTManager::publish(const char* topic, const char* payload, bool re
 inline bool MQTTManager::publish(const char* topic, const String& payload, bool retained)
 {
     return publish(topic, payload.c_str(), retained);
+}
+
+inline bool MQTTManager::publishRaw(const char* topic, const char* payload, bool retained)
+{
+    if (!isConnected()) {
+        return false;
+    }
+    return mqttClient_.publish(topic, payload, retained);
 }
 
 inline String MQTTManager::getSystemInfoTopic() const

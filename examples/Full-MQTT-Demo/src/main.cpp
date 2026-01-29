@@ -14,6 +14,7 @@
 // Optional MQTT module (requires PubSubClient in the consuming project)
 #define CM_MQTT_NO_DEFAULT_HOOKS
 #include "mqtt/MQTTManager.h"
+#include "mqtt/MQTTLogOutput.h"
 
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Full-MQTT-Demo"
@@ -28,8 +29,8 @@ static cm::CoreSystemSettings &systemSettings = coreSettings.system;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
-static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
-static cm::LoggingManager& lmg = cm::LoggingManager::instance();
+static cm::MQTTManager &mqtt = cm::MQTTManager::instance();
+static cm::LoggingManager &lmg = cm::LoggingManager::instance();
 using LL = cm::LoggingManager::Level;
 
 static constexpr int BUTTON_PIN = 33;
@@ -51,27 +52,30 @@ static float washingMachineEnergyTotalMWh = 0.0f;
 static int solarLimiterSetValueW = 0;
 static String tasmotaLastError;
 
-
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
 void setupMqtt();
 void Initial_logging_Serial();
 
-namespace cm {
+namespace cm
+{
     void onMQTTConnected()
     {
         lmg.logTag(LL::Info, "MQTT", "Connected");
-        if (mqtt.settings().publishTopicBase.get().isEmpty()) {
+        if (mqtt.settings().publishTopicBase.get().isEmpty())
+        {
             mqtt.settings().publishTopicBase.set(mqtt.settings().clientId.get());
         }
         const String base = mqtt.getMqttBaseTopic();
-        if (!base.isEmpty()) {
+        if (!base.isEmpty())
+        {
             const String statusTopic = base + "/System-Info/status";
             mqtt.publishExtraTopicImmediately("mqtt_status_aus_Main_Callback", statusTopic.c_str(), "online", true);
         }
         const bool ok = mqtt.publishSystemInfoNow(true);
-        if (!ok) {
+        if (!ok)
+        {
             lmg.logTag(LL::Warn, "MQTT", "Failed to publish System-Info (missing base topic or not connected)");
         }
     }
@@ -87,16 +91,18 @@ namespace cm {
         lmg.logTag(LL::Info, "MQTT", "State changed: %s", MQTTManager::mqttStateToString(mqttState));
     }
 
-    void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)
+    void onNewMQTTMessage(const char *topic, const char *payload, unsigned int length)
     {
-        if (!topic || !payload || length == 0) {
+        if (!topic || !payload || length == 0)
+        {
             return;
         }
         String payloadString(payload, length);
         payloadString.trim();
         lmg.logTag(LL::Info, "MQTT", "RX: %s => %s", topic, payloadString.c_str());
 
-        if (String(topic).endsWith(TASMOTA_ERRORS_FILTER)) {
+        if (String(topic).endsWith(TASMOTA_ERRORS_FILTER))
+        {
             tasmotaLastError = String(topic) + " => " + payloadString;
             lmg.logTag(LL::Error, "TASMOTA", "%s", tasmotaLastError.c_str());
         }
@@ -119,13 +125,34 @@ void setup()
 
     setupMqtt();
 
+    auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+    mqttLog->setLevel(LL::Debug);
+    mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+    lmg.addOutput(std::move(mqttLog));
+
+    // Example: custom retained log topic for tags that start with "Custom"
+    // This shows how to add a dedicated log output without changing the core logger.
+    {
+        auto customLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+        customLog->setLevel(LL::Trace);
+        customLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+        customLog->setRateLimitMs(50);
+        customLog->setUnretainedEnabled(false);
+        customLog->setRetainedLevels(false, false, false);
+        customLog->setCustomTagPrefix("Custom");
+        customLog->setCustomRetainedEnabled(true);
+        customLog->setFilter([](LL, const char *tag, const char *)
+                             { return tag && strncmp(tag, "Custom", 6) == 0; });
+        lmg.addOutput(std::move(customLog));
+    }
+
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
 
-    systemSettings.allowOTA.setCallback([](bool enabled) {
+    systemSettings.allowOTA.setCallback([](bool enabled)
+                                        {
         lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
-        ConfigManager.getOTAManager().enable(enabled);
-    });
+        ConfigManager.getOTAManager().enable(enabled); });
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
     pinMode(BUTTON_PIN, INPUT_PULLDOWN);
@@ -156,7 +183,8 @@ void loop()
     ConfigManager.handleRuntimeAlarms();
 
     static unsigned long lastAlarmEval = 0;
-    if (millis() - lastAlarmEval > 1500) {
+    if (millis() - lastAlarmEval > 1500)
+    {
         lastAlarmEval = millis();
         CRM().updateAlarms();
     }
@@ -166,24 +194,38 @@ void loop()
 
     static unsigned long lastLoopLogMs = 0;
     const unsigned long now = millis();
-    if (now - lastLoopLogMs >= 10000) {
+    if (now - lastLoopLogMs >= 10000)
+    {
+
+        static int randomValue = 0;
+        randomValue = static_cast<int>(random(0, 10));
+
         lastLoopLogMs = now;
         lmg.logTag(LL::Info, "Loop", "wifi=%s mqtt=%s base=%s lastTopic=%s",
                    WiFi.isConnected() ? "connected" : "disconnected",
                    mqtt.isConnected() ? "connected" : "disconnected",
                    mqtt.getMqttBaseTopic().c_str(),
                    mqtt.getLastTopic().c_str());
+
+        lmg.logTag(LL::Fatal, "Loop", "Fatal example (value=%d)", randomValue);
+        lmg.logTag(LL::Error, "Loop", "Error example (value=%d)", randomValue);
+        lmg.logTag(LL::Warn, "Loop", "Warn example (value=%d)", randomValue);
+        lmg.logTag(LL::Info, "Loop", "Info example (value=%d)", randomValue);
+        lmg.logTag(LL::Debug, "Loop", "Debug example (value=%d)", randomValue);
+        lmg.logTag(LL::Trace, "Loop", "Trace example (value=%d)", randomValue);
     }
 
     static bool buttonStateInitialized = false;
     static bool lastButtonState = false;
     const bool buttonState = (digitalRead(BUTTON_PIN) == HIGH);
-    if (!buttonStateInitialized || buttonState != lastButtonState) {
+    if (!buttonStateInitialized || buttonState != lastButtonState)
+    {
         lastButtonState = buttonState;
         buttonStateInitialized = true;
-        const char* payload = buttonState ? "1" : "0";
+        const char *payload = buttonState ? "1" : "0";
         const String base = mqtt.getMqttBaseTopic();
-        if (!base.isEmpty()) {
+        if (!base.isEmpty())
+        {
             const String topic = base + "/" + BUTTON_TOPIC;
             mqtt.publishExtraTopicImmediately(BUTTON_ID, topic.c_str(), payload, false);
         }
@@ -192,7 +234,8 @@ void loop()
     washingMachineEnergyTotalMWh = washingMachineEnergyTotal / 1000.0f;
     {
         const String base = mqtt.getMqttBaseTopic();
-        if (!base.isEmpty()) {
+        if (!base.isEmpty())
+        {
             char payload[16];
             snprintf(payload, sizeof(payload), "%.2f", static_cast<double>(washingMachineEnergyTotalMWh));
             const String topic = base + "/washing_machine_energy_total_mwh";
@@ -214,7 +257,7 @@ void setupMqtt()
 
     // Receive test topics
     mqtt.addMQTTTopicReceiveFloat("boiler_temp_c", "Boiler Temperature", "BoilerSaver/TemperatureBoiler", &boilerTemperatureC, "C", 1, "none", false); // not added to settings GUI
-    mqtt.addMQTTTopicReceiveString("boiler_time_remaining", "Boiler Time Remaining", "BoilerSaver/TimeRemaining", &boilerTimeRemaining, "none"); // not added to settings GUI per default
+    mqtt.addMQTTTopicReceiveString("boiler_time_remaining", "Boiler Time Remaining", "BoilerSaver/TimeRemaining", &boilerTimeRemaining, "none");       // not added to settings GUI per default
     mqtt.addMQTTTopicReceiveBool("boiler_shower_now", "You Can Shower Now", "BoilerSaver/YouCanShowerNow", &boilerYouCanShowerNow, "none", true);
     mqtt.addMQTTTopicReceiveFloat("powermeter_power_in_w", "Power Meter Power In", "tele/powerMeter/powerMeter/SENSOR", &powerMeterPowerInW, "W", 0, "E320.Power_in", true);
 
@@ -235,13 +278,13 @@ void setupMqtt()
     mqtt.addMQTTTopicTooGUI(ConfigManager, "solar_limiter_set_value_w", "MQTT-Received", 5);
 
     // GUI examples: other infos via runtime provider
-    ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject& data) {
+    ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject &data)
+                                                  {
         data["lastTopic"] = mqtt.getLastTopic();
         data["lastPayload"] = mqtt.getLastPayload();
         data["lastMsgAgeMs"] = mqtt.getLastMessageAgeMs();
         data["washing_machine_energy_total_mwh"] = washingMachineEnergyTotalMWh;
-        data["tasmotaLastError"] = tasmotaLastError;
-    }, 3);
+        data["tasmotaLastError"] = tasmotaLastError; }, 3);
 
     RuntimeFieldMeta lastTopicMeta;
     lastTopicMeta.group = "mqtt";

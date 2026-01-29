@@ -154,6 +154,30 @@ void onMQTTConnected()
 - `publishAllNow(retained)` publishes System-Info and all receive items immediately.
 - `clearRetain(topic)` clears the retained message by publishing an empty retained payload.
 
+## MQTT logging (LoggingManager)
+
+If you use the advanced logging module, you can publish logs via MQTT:
+
+- Output class: `cm::MQTTLogOutput` (`src/mqtt/MQTTLogOutput.h`)
+- Plain-text payloads, not retained (stream)
+- Optional retained "last" entries per level
+
+Topic scheme (base = `<MQTTBaseTopic>`):
+- `<base>/log/<LEVEL>/LogMessages` (unretained stream)
+- `<base>/log/last/INFO`, `/WARN`, `/ERROR` (retained)
+- `<base>/log/last/Custom` (retained, tag prefix "Custom")
+
+Minimal example:
+
+```cpp
+#include "mqtt/MQTTLogOutput.h"
+
+auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+mqttLog->setLevel(cm::LoggingManager::Level::Trace);
+mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+lmg.addOutput(std::move(mqttLog));
+```
+
 ## Wildcard subscribe example (Tasmota errors)
 
 MQTT wildcard rules:

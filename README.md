@@ -31,6 +31,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - Callbacks on value change
 - OTA update integration
 - Static or DHCP WiFi startup helpers (multiple overloads)
+- Optional logging module (Serial/GUI/MQTT outputs)
 
 ## Note: C++17 Required
 
@@ -53,6 +54,9 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - WiFi helpers (DHCP / static / AP fallback)
 - OTA firmware upload via WebUI
 - Optional MQTT module (PubSubClient-based)
+
+### Logging
+- Optional logging module (Serial, GUI log tab, MQTT output)
 
 ### Extensibility
 - Conditional visibility (`showIf`)
@@ -192,6 +196,10 @@ More:
 ## Screenshots
 
 ### The embedded Web UI automatically adapts to desktop and mobile devices.
+
+>New in v3.3.0
+>![alt text](examples//screenshots/V3.3.0-GUI-STD.jpg) 
+>![alt text](examples//screenshots/V3.3.0-GUI-Dark.jpg)
 
 > Example on Monitor HD
 > ![Example on Monitor HD](examples/screenshots/test-hd.jpg)

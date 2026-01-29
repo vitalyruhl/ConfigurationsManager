@@ -24,9 +24,8 @@
 
 ### Wi-Fi / WebServer Defaults
 
-- Auto reboot timeout
-  - Initialize by default
-  - Move [Reboot if WiFi lost (min):] setting from System → WiFi
+- Move [Reboot if WiFi lost (min):] setting from System → WiFi
+- check rebooting on weak WiFi connection (reboot sometimes, but connection is only weak)
 
 - WebSocket defaults
   - Initialize inside `ConfigManager.startWebServer()` by default
@@ -38,52 +37,39 @@
 
 ## Feature Follow-ups (v3.x)
 
-### Modularization
-
-- Extract optional modules:
-  - MQTTManager (already mostly done)
-  - Logging module (advanced, optional)
-
----
-
 ### Module Migration Plan
 
-1) MQTTManager
-   - Publish helpers (typed, retained)
-   - Publish scheduling:
-     - Interval
-     - Publish-on-change
-   - Stable publish item ordering
-   - Decide singleton vs multi-instance
 
-2) Logging module
-   - Core: minimal logger
-   - Optional: advanced logger
-
-3) Refactor examples
-   - Start with Full-IO-Demo
+1) Refactor examples to newest v3 module structure
+   - Start with BoilerSaver
+     - remove logging module from there and apply new logging module usage from V3.3.0
+     - migrate to newest IO + WiFi + MQTT module usage
    - Later: SolarInverterLimiter
+     - the same like above
 
-4) Documentation
+2) Documentation
    - Include, dependencies, memory impact
+   - check all module docs for consistency
+   - Add minimal usage examples for each module
+   - check/add all public methods to docs like in LoggingManager docs  `void log(Level level, const char* tag, const char* message, unsigned long timestampMs)` (how many overloads) - short description.`
 
 ---
 
 ## Medium Priority (Prio 5)
 
-- Input logging with trends (analog/digital)
+- Remove unused WebUI runtime templates (`webui/src/components/runtime/templates/*.enabled.vue`)
+- Deactivate Settings UI via build flag or runtime config
+- Deactivate OTA UI when OTA is disabled (auto-hide or build flag)
+- Add explicit switch to disable OTA UI
+- Verify external WebUI hosting switch (CM_EMBED_WEBUI) and document; if missing, add a switch
 - SD card logging (CSV)
+  - Input logging with trends (analog/digital)
 - Alarm helpers for IOManager
 - IOManager improvements
   - PWM/LEDC backend
   - Output ramping
   - Fail-safe states
   - ID-based persistence + migration
-- Remove unused WebUI runtime templates (`webui/src/components/runtime/templates/*.enabled.vue`)
-- Deactivate Settings UI via build flag or runtime config
-- Deactivate OTA UI when OTA is disabled (auto-hide or build flag)
-- Add explicit switch to disable OTA UI
-- Verify external WebUI hosting switch (CM_EMBED_WEBUI) and document; if missing, add a switch
 
 ---
 
@@ -109,6 +95,7 @@
 - [COMPLETED] Logging redesign (core logger + advanced LoggingManager baseline)
   - Multiple outputs with independent levels
   - GUI log output buffer flush on WebSocket connect
+- [COMPLETED] Logging module (optional, including MQTT log output)
 - [COMPLETED] WebUI log tab (live logging view)
 - [COMPLETED] Human-readable uptime
 - [COMPLETED] Restart-loop bug fixed

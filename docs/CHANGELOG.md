@@ -7,6 +7,9 @@ This changelog is a curated overview.
 - IOManager module (digital IO + analog IO incl. alarms + DAC outputs)
 - Core settings templates / injection
 - Runtime + WebUI robustness improvements
+- Logging/MQTT-Logging module
+  - Advanced LoggingManager with multiple outputs (Serial / GUI / MQTT)
+  - MQTT log output topics (stream + retained last entries)
 
 ## 3.2.0
 

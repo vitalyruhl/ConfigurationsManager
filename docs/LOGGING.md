@@ -85,6 +85,7 @@ Available outputs:
 
 - `SerialOutput` (Print-based, e.g. Serial)
 - `GuiOutput` (WebUI live log tab via WebSocket)
+- `MQTTLogOutput` (MQTT module; publishes logs to MQTT topics)
 
 Each output supports:
 
@@ -137,6 +138,28 @@ Tags are combined with `/` if a base tag and scoped tags are active. Base tag mu
 ## Examples
 
 - `examples/Full-Logging-Demo`
+- `examples/Full-MQTT-Demo` (MQTT log output)
+
+## MQTT logging output
+
+`MQTTLogOutput` publishes plain-text log lines to MQTT.
+
+Topic scheme (base = `<MQTTBaseTopic>`):
+
+- Unretained stream: `<base>/log/<LEVEL>/LogMessages`
+- Retained "last" entries: `<base>/log/last/INFO`, `.../WARN`, `.../ERROR`
+- Optional retained custom: `<base>/log/last/Custom` (tag prefix filter, e.g. "Custom")
+
+Minimal example:
+
+```cpp
+#include "mqtt/MQTTLogOutput.h"
+
+auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+mqttLog->setLevel(LL::Trace);
+mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+lmg.addOutput(std::move(mqttLog));
+```
 
 ## Public API overview
 
@@ -188,3 +211,14 @@ Tags are combined with `/` if a base tag and scoped tags are active. Base tag mu
 - `void tick(unsigned long nowMs)` (1x) - Flush pending WS entries.
 - `void setMaxQueue(size_t limit)` (1x) - Pending queue cap.
 - `void setMaxPerTick(size_t count)` (1x) - Throttle per tick.
+
+### MQTTLogOutput
+
+- `MQTTLogOutput(MQTTManager& mqtt, const char* logRoot = "log")` (1x) - MQTT output.
+- `void addTimestamp(TimestampMode mode)` (1x) - Timestamp mode.
+- `void setRateLimitMs(uint32_t ms)` (1x) - Rate limit.
+- `void setLogRoot(const char* logRoot)` (1x) - Root topic (`log` by default).
+- `void setUnretainedEnabled(bool enabled)` (1x) - Enable/disable stream topics.
+- `void setRetainedLevels(bool info, bool warn, bool error)` (1x) - Retained "last" topics.
+- `void setCustomTagPrefix(const char* prefix)` (1x) - Prefix for custom retained.
+- `void setCustomRetainedEnabled(bool enabled)` (1x) - Toggle custom retained topic.
