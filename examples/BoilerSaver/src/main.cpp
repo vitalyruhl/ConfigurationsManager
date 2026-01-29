@@ -350,10 +350,46 @@ void setupGUI()
 
     // Add metadata for Boiler provider fields
     // Show whether boiler control is enabled (setting) and actual relay state
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN_Set", .label = "Enabled", .precision = 0, .order = 1, .isBool = true});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_EN", .label = "Relay On", .precision = 0, .order = 2, .isBool = true});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_CanShower", .label = "You can shower now", .precision = 0, .order = 5, .isBool = true});
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_Temp", .label = "Temperature", .unit = "°C", .precision = 1, .order = 10});
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Boiler";
+        meta.key = "Bo_EN_Set";
+        meta.label = "Enabled";
+        meta.precision = 0;
+        meta.order = 1;
+        meta.isBool = true;
+        CRM().addRuntimeMeta(meta);
+    }
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Boiler";
+        meta.key = "Bo_EN";
+        meta.label = "Relay On";
+        meta.precision = 0;
+        meta.order = 2;
+        meta.isBool = true;
+        CRM().addRuntimeMeta(meta);
+    }
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Boiler";
+        meta.key = "Bo_CanShower";
+        meta.label = "You can shower now";
+        meta.precision = 0;
+        meta.order = 5;
+        meta.isBool = true;
+        CRM().addRuntimeMeta(meta);
+    }
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Boiler";
+        meta.key = "Bo_Temp";
+        meta.label = "Temperature";
+        meta.unit = "°C";
+        meta.precision = 1;
+        meta.order = 10;
+        CRM().addRuntimeMeta(meta);
+    }
     // Show formatted time remaining as HH:MM:SS
     {
         RuntimeFieldMeta timeFmtMeta{};
@@ -364,7 +400,16 @@ void setupGUI()
         timeFmtMeta.isString = true;
         CRM().addRuntimeMeta(timeFmtMeta);
     }
-    CRM().addRuntimeMeta({.group = "Boiler", .key = "Bo_SettedTime", .label = "Time Set", .unit = "min", .precision = 0, .order = 22});
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Boiler";
+        meta.key = "Bo_SettedTime";
+        meta.label = "Time Set";
+        meta.unit = "min";
+        meta.precision = 0;
+        meta.order = 22;
+        CRM().addRuntimeMeta(meta);
+    }
 
     // Add alarms provider for min Temperature monitoring with hysteresis
     CRM().registerRuntimeAlarm(TEMP_ALARM_ID);
@@ -405,8 +450,26 @@ void setupGUI()
     CRM().addRuntimeMeta(sensorFaultMeta);
 
     // show some Info
-    CRM().addRuntimeMeta({.group = "Alarms", .key = "On_Threshold", .label = "Alarm Under Temperature", .unit = "°C", .precision = 1, .order = 101});
-    CRM().addRuntimeMeta({.group = "Alarms", .key = "Off_Threshold", .label = "You can shower now temperature", .unit = "°C", .precision = 1, .order = 102});
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Alarms";
+        meta.key = "On_Threshold";
+        meta.label = "Alarm Under Temperature";
+        meta.unit = "°C";
+        meta.precision = 1;
+        meta.order = 101;
+        CRM().addRuntimeMeta(meta);
+    }
+    {
+        RuntimeFieldMeta meta{};
+        meta.group = "Alarms";
+        meta.key = "Off_Threshold";
+        meta.label = "You can shower now temperature";
+        meta.unit = "°C";
+        meta.precision = 1;
+        meta.order = 102;
+        CRM().addRuntimeMeta(meta);
+    }
 
 #ifdef ENABLE_TEMP_TEST_SLIDER
     // Temperature slider for testing (initialize with current temperature value)
@@ -701,15 +764,15 @@ static void registerIOBindings()
                 lmg.log(LL::Debug, "[MAIN] Reset button pressed -> show display");
                 ShowDisplay();
             },
-            .onLongPressOnStartup = []() {
-                lmg.log(LL::Trace, "[MAIN] Reset button pressed at startup -> restoring defaults");
+            .onLongClick = []() {
+                lmg.log(LL::Trace, "[MAIN] Reset button long-press detected -> restoring defaults");
                 ConfigManager.clearAllFromPrefs();
                 ConfigManager.saveAll();
                 delay(3000);
                 ESP.restart();
             },
-            .onLongClick = []() {
-                lmg.log(LL::Trace, "[MAIN] Reset button long-press detected -> restoring defaults");
+            .onLongPressOnStartup = []() {
+                lmg.log(LL::Trace, "[MAIN] Reset button pressed at startup -> restoring defaults");
                 ConfigManager.clearAllFromPrefs();
                 ConfigManager.saveAll();
                 delay(3000);
@@ -727,12 +790,12 @@ static void registerIOBindings()
                 lmg.log(LL::Debug, "[MAIN] AP button pressed -> show display");
                 ShowDisplay();
             },
-            .onLongPressOnStartup = []() {
-                lmg.log(LL::Trace, "[MAIN] AP button pressed at startup -> starting AP mode");
-                ConfigManager.startAccessPoint("ESP32_Config", "");
-            },
             .onLongClick = []() {
                 lmg.log(LL::Trace, "[MAIN] AP button long-press -> starting AP mode");
+                ConfigManager.startAccessPoint("ESP32_Config", "");
+            },
+            .onLongPressOnStartup = []() {
+                lmg.log(LL::Trace, "[MAIN] AP button pressed at startup -> starting AP mode");
                 ConfigManager.startAccessPoint("ESP32_Config", "");
             },
         },
@@ -1210,6 +1273,21 @@ void WriteToDisplay()
         display.printf("");
     }
 
+    display.display();
+}
+
+static void SetupStartDisplay()
+{
+    Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
+    Wire.setClock(static_cast<uint32_t>(i2cSettings.busFreq.get()));
+
+    display.begin(SSD1306_SWITCHCAPVCC, i2cSettings.displayAddr.get());
+    display.clearDisplay();
+    display.drawRect(0, 0, 128, 24, WHITE);
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.setCursor(10, 4);
+    display.println("Start");
     display.display();
 }
 
