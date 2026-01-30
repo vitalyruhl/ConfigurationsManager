@@ -4,7 +4,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "settings.h"
+#include "settings_v3.h"
 
 // RS485 configuration (default Settings)
 // struct RS485_Settings

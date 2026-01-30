@@ -37,11 +37,11 @@
 ### Module Migration Plan
 
 
-1) Refactor examples to newest v3 module structure
-   - Later: SolarInverterLimiter
+1) [COMPLETED] Refactor examples to newest v3 module structure
+   - [COMPLETED] SolarInverterLimiter
      - remove logging module from there and apply new logging module usage from V3.3.0
      - migrate to newest IO + WiFi + MQTT module usage
-     - the same like above
+     - keep IO pins, preserve logic
 
 2) Documentation
    - Include, dependencies, memory impact

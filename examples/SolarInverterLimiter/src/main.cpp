@@ -1,21 +1,32 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <stdarg.h>       // for variadic functions (printf-style)
 #include <Ticker.h>
-#include "Wire.h"
+#include <Wire.h>
+#include <WiFi.h>
+#include <time.h>
 #include <BME280_I2C.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 // AsyncWebServer instance is provided by ConfigManager library (extern AsyncWebServer server)
 
-#include "settings.h"
-#include "logging/logging.h"
+#include "ConfigManager.h"
+
+#include "core/CoreSettings.h"
+#include "core/CoreWiFiServices.h"
+#include "io/IOManager.h"
+#include "logging/LoggingManager.h"
+
+#define CM_MQTT_NO_DEFAULT_HOOKS
+#include "mqtt/MQTTManager.h"
+#include "mqtt/MQTTLogOutput.h"
+
+#include "settings_v3.h"
 #include "RS485Module/RS485Module.h"
 #include "helpers/helpers.h"
-#include "helpers/mqtt_manager.h"
 #include "Smoother/Smoother.h"
-#include "helpers/relays.h"
 
 #if __has_include("secret/wifiSecret.h")
 #include "secret/wifiSecret.h"
@@ -34,44 +45,48 @@
 
 // predeclare the functions (prototypes)
 void SetupStartDisplay();
-void cb_PublishToMQTT();
 void cb_RS485Listener();
 void testRS232();
 void readBme280();
 void WriteToDisplay();
-void SetupCheckForResetButton();
-void SetupCheckForAPModeButton();
 void SetupStartTemperatureMeasuring();
-bool SetupStartWebServer();
 void ProjectConfig();
-void PinSetup();
-void CheckButtons();
 void CheckVentilator(float currentTemperature);
 void EvaluateHeater(float currentTemperature);
 void ShowDisplay();
 void ShowDisplayOff();
 static float computeDewPoint(float temperatureC, float relHumidityPct);
-void HeaterControl(bool heaterOn);
 static void logNetworkIpInfo(const char *context);
 void setupGUI();
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
+static void setupLogging();
+static void setupMqtt();
+static void registerIOBindings();
+static void updateMqttTopics();
+static void publishMqttNow();
+static void publishMqttNowIfNeeded();
+static void setFanRelay(bool on);
+static void setHeaterRelay(bool on);
+static bool getFanRelay();
+static bool getHeaterRelay();
 //--------------------------------------------------------------------------------------------------------------
 
 #pragma region configuratio variables
 
 BME280_I2C bme280;
 
+static constexpr int OLED_WIDTH = 128;
+static constexpr int OLED_HEIGHT = 32;
+static constexpr int OLED_RESET_PIN = 4; // keep legacy wiring default
+Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET_PIN);
+
 Helpers helpers;
 
-Ticker publishMqttTicker;
-Ticker publishMqttSettingsTicker;
 Ticker RS485Ticker;
 Ticker temperatureTicker;
 Ticker displayTicker;
-Ticker NtpSyncTicker;
-MQTTManager mqttManager;
 
 Smoother* powerSmoother = nullptr; //there is a memory allocation in setup, better use a pointer here
 
@@ -83,8 +98,8 @@ float Dewpoint = 0.0;         // current dewpoint in Celsius
 float Humidity = 0.0;         // current humidity in percent
 float Pressure = 0.0;         // current pressure in hPa
 
-bool tickerActive = false;    // flag to indicate if the ticker is active
 bool displayActive = true;   // flag to indicate if the display is active
+static bool displayInitialized = false;
 static bool dewpointRiskActive = false; // tracks dewpoint alarm state
 static bool heaterLatchedState = false; // hysteresis latch for heater
 
@@ -95,6 +110,31 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 .rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
 )CSS";
+
+static cm::LoggingManager &lmg = cm::LoggingManager::instance();
+using LL = cm::LoggingManager::Level;
+static cm::MQTTManager &mqtt = cm::MQTTManager::instance();
+static cm::MQTTManager::Settings &mqttSettings = mqtt.settings();
+static cm::IOManager ioManager;
+
+static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
+static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
+static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
+static cm::CoreWiFiServices wifiServices;
+
+static constexpr char IO_FAN_ID[] = "fan_relay";
+static constexpr char IO_HEATER_ID[] = "heater_relay";
+static constexpr char IO_RESET_ID[] = "reset_btn";
+static constexpr char IO_AP_ID[] = "ap_btn";
+
+static String mqttBaseTopic;
+static String topicPublishSetValueW;
+static String topicPublishGridImportW;
+static String topicPublishTempC;
+static String topicPublishHumidityPct;
+static String topicPublishDewpointC;
+static unsigned long lastMqttPublishMs = 0;
 
 #pragma endregion configuration variables
 
@@ -111,196 +151,200 @@ static void logNetworkIpInfo(const char *context)
   if (apActive)
   {
     const IPAddress apIp = WiFi.softAPIP();
-    sl->Printf("%s: AP IP: %s", context, apIp.toString().c_str()).Debug();
-    sl->Printf("%s: AP SSID: %s", context, WiFi.softAPSSID().c_str()).Debug();
-    sll->Printf("AP: %s", apIp.toString().c_str()).Debug();
+    lmg.logTag(LL::Debug, "WiFi", "%s: AP IP: %s", context, apIp.toString().c_str());
+    lmg.logTag(LL::Debug, "WiFi", "%s: AP SSID: %s", context, WiFi.softAPSSID().c_str());
   }
 
   if (staConnected)
   {
     const IPAddress staIp = WiFi.localIP();
-    sl->Printf("%s: STA IP: %s", context, staIp.toString().c_str()).Debug();
-    sll->Printf("IP: %s", staIp.toString().c_str()).Debug();
+    lmg.logTag(LL::Debug, "WiFi", "%s: STA IP: %s", context, staIp.toString().c_str());
   }
 }
 
 void setup()
 {
+    setupLogging();
+    lmg.scopedTag("SETUP");
+    lmg.log("System setup start...");
 
-  //-----------------------------------------------------------------
-    cfg.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    cfg.setVersion(VERSION); // Set the application version for web UI display
-    // Optional demo: global CSS override
-    cfg.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1); // Register global CSS override
-    // cfg.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
-    cfg.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
-  //----------------------------------------------------------------------------------------------------------------------------------
+    ConfigManager.setAppName(APP_NAME);
+    ConfigManager.setAppTitle(APP_NAME);
+    ConfigManager.setVersion(VERSION);
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
+    ConfigManager.enableBuiltinSystemProvider();
 
-systemSettings.init();    // System settings (OTA, version, etc.)
-buttonSettings.init();    // GPIO button configuration
-tempSettings.init();      // BME280 temperature sensor settings
-ntpSettings.init();       // NTP time synchronization settings
-wifiSettings.init();      // WiFi connection settings
+    coreSettings.attachWiFi(ConfigManager);
+    coreSettings.attachSystem(ConfigManager);
+    coreSettings.attachNtp(ConfigManager);
 
-LoggerSetupSerial(); // Initialize the serial logger
+    initializeAllSettings();
+    registerIOBindings();
+    setupMqtt();
 
-  sl->Printf("System setup start...").Debug();
+    ConfigManager.checkSettingsForErrors();
+    ConfigManager.loadAll();
+    delay(100);
 
-  PinSetup();
-  sl->Printf("Check for reset button...").Debug();
-  SetupCheckForResetButton();
-
-  sl->Printf("Load configuration...").Debug();
-  cfg.loadAll();
-  delay(100); // Small delay
-  
-  Relays::initPins();// Re-apply relay pin modes with loaded settings (pins/polarity may differ from defaults)
-
-  if (wifiSettings.wifiSsid.get().isEmpty())
-  {
-      sl->Printf("[MAIN] -------------------------------------------------------------").Debug();
-      sl->Printf("[MAIN] SETUP: *** SSID is empty, setting My values *** ").Debug();
-      sl->Printf("[MAIN] -------------------------------------------------------------").Debug();
+    // Apply secret defaults only if nothing is configured yet (after loading persisted settings).
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
 #if CM_HAS_WIFI_SECRETS
-      wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-      wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-      wifiSettings.staticIp.set(MY_WIFI_IP);
-      wifiSettings.useDhcp.set(false);
-      ConfigManager.saveAll();
-      delay(100); // Small delay
-#else
-      sl->Printf("[WARNING] WiFi SSID is empty. Create 'src/secret/wifiSecret.h' (see wifiSecret.example.h) or configure WiFi via the Web UI.").Error();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** SSID is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+
+        // Optional secret fields (not present in every example).
+#ifdef MY_WIFI_IP
+        wifiSettings.staticIp.set(MY_WIFI_IP);
 #endif
-  }
+#ifdef MY_USE_DHCP
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+#endif
+#ifdef MY_GATEWAY_IP
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+#endif
+#ifdef MY_SUBNET_MASK
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+#endif
+#ifdef MY_DNS_IP
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+#endif
+        ConfigManager.saveAll();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "Restarting ESP, after auto setting WiFi credentials");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        delay(500);
+        ESP.restart();
+#else
+        lmg.log(LL::Warn, "SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+#endif
+    }
 
-  sl->Printf("[SETUP] Check for AP mode button...").Debug();
-  SetupCheckForAPModeButton();
+    // Re-attach to apply loaded values (attach() is idempotent)
+    mqtt.attach(ConfigManager);
 
-  mqttSettings.updateTopics(); // Consider restarting after changing MQTT base topic to avoid heap fragmentation
+    if (mqttSettings.server.get().isEmpty())
+    {
+#if CM_HAS_WIFI_SECRETS
+#if defined(MY_MQTT_BROKER_IP) && defined(MY_MQTT_BROKER_PORT) && defined(MY_MQTT_ROOT)
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        mqttSettings.server.set(MY_MQTT_BROKER_IP);
+        mqttSettings.port.set(MY_MQTT_BROKER_PORT);
+#ifdef MY_MQTT_USERNAME
+        mqttSettings.username.set(MY_MQTT_USERNAME);
+#endif
+#ifdef MY_MQTT_PASSWORD
+        mqttSettings.password.set(MY_MQTT_PASSWORD);
+#endif
+        mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
+        ConfigManager.saveAll();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+#else
+        lmg.log(LL::Info, "SETUP: MQTT server is empty; secret/wifiSecret.h does not provide MQTT defaults for this example");
+#endif
+#else
+        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
+#endif
+    }
 
-  // init modules...
-  sl->Printf("[SETUP] init modules...").Debug();
-  sll->Printf("init modules...").Debug();
-  SetupStartDisplay();
-  ShowDisplay();
+    systemSettings.allowOTA.setCallback([](bool enabled)
+                                        {
+        lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
+        ConfigManager.getOTAManager().enable(enabled); });
+    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
-  helpers.blinkBuidInLEDsetpinMode(); // Initialize the built-in LED pin mode
-  helpers.blinkBuidInLED(3, 100);     // Blink the built-in LED 3 times with a 100ms delay
+    ioManager.begin();
 
-  sl->Printf("[SETUP] Init buffer...!").Debug();
-  powerSmoother = new Smoother(
+    // Apply WiFi reboot timeout from settings (minutes)
+    ConfigManager.getWiFiManager().setAutoRebootTimeout(static_cast<unsigned long>(wifiSettings.rebootTimeoutMin.get()));
+
+    ConfigManager.startWebServer();
+
+    ConfigManager.enableWebSocketPush();
+    ConfigManager.setWebSocketInterval(1000);
+    ConfigManager.setPushOnConnect(true);
+
+    ConfigManager.enableSmartRoaming(true);
+    ConfigManager.setRoamingThreshold(-75);
+    ConfigManager.setRoamingCooldown(30);
+    ConfigManager.setRoamingImprovement(10);
+
+    // Prefer this AP, fallback to others
+    ConfigManager.setWifiAPMacPriority("3C:A6:2F:B8:54:B1");
+
+    updateMqttTopics();
+
+    SetupStartDisplay();
+    ShowDisplay();
+
+    helpers.blinkBuidInLEDsetpinMode();
+    helpers.blinkBuidInLED(3, 100);
+
+    powerSmoother = new Smoother(
         limiterSettings.smoothingSize.get(),
         limiterSettings.inputCorrectionOffset.get(),
         limiterSettings.minOutput.get(),
-        limiterSettings.maxOutput.get()
-      );
-  powerSmoother->fillBufferOnStart(limiterSettings.minOutput.get());
+        limiterSettings.maxOutput.get());
+    powerSmoother->fillBufferOnStart(limiterSettings.minOutput.get());
 
-  //------------------
-  sl->Printf("[SETUP] Starting RS485...").Debug();
-  sll->Printf("Starting RS485...").Debug();
-  RS485begin();
+    RS485begin();
+    SetupStartTemperatureMeasuring();
 
-  sl->Printf("[SETUP] Check and start BME280!").Debug();
-  sll->Printf("Starting BME280!").Debug();
-  SetupStartTemperatureMeasuring(); //also starts the temperature ticker, its allways active
+    RS485Ticker.attach(limiterSettings.RS232PublishPeriod.get(), cb_RS485Listener);
 
-  // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
-  cfg.enableSmartRoaming(true);            // Re-enabled now that WiFi stack is fixed
-  cfg.setRoamingThreshold(-75);            // Trigger roaming at -75 dBm
-  cfg.setRoamingCooldown(30);              // Wait 30 seconds between attempts (reduced from 120)
-  cfg.setRoamingImprovement(10);           // Require 10 dBm improvement
+    setupGUI();
 
-  //----------------------------------------------------------------------------------------------------------------------------------
-  // Configure WiFi AP MAC filtering/priority (example - customize as needed)
-  // cfg.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
-  cfg.setWifiAPMacPriority("3C:A6:2F:B8:54:B1");   // Prefer this AP, fallback to others
+    setFanRelay(false);
+    setHeaterRelay(false);
 
-  bool isStartedAsAP = SetupStartWebServer();
-
-  //----------------------------------------
-  // -- Setup MQTT connection --
-  sl->Printf("[SETUP] Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-  sll->Printf("Starting MQTT! [%s]", mqttSettings.mqtt_server.get().c_str()).Debug();
-  mqttManager.setServer(mqttSettings.mqtt_server.get().c_str(), static_cast<uint16_t>(mqttSettings.mqtt_port.get()));
-  mqttManager.setCredentials(mqttSettings.mqtt_username.get().c_str(), mqttSettings.mqtt_password.get().c_str());
-  mqttManager.setClientId(mqttSettings.publishTopicBase.get().c_str());
-  mqttManager.configurePowerUsage(mqttSettings.mqtt_sensor_powerusage_topic.get(),
-                                 mqttSettings.mqtt_sensor_powerusage_json_keypath.get(),
-                                 &currentGridImportW);
-  mqttManager.onConnected([]() {
-    if (!mqttSettings.enableMQTT.get())
-      return;
-    mqttManager.subscribe(mqttSettings.mqtt_sensor_powerusage_topic.get().c_str());
-    cb_PublishToMQTT();
-  });
-  mqttManager.onDisconnected([]() {
-    sll->Debug("MQTT disconnected");
-  });
-  mqttManager.begin();
-
-  //set rs232 ticker, its always active
-  sl->Printf("[SETUP] Setup RS485 ticker...").Debug();
-  sll->Printf("att. RS485 ticker...").Debug();
-  RS485Ticker.attach(limiterSettings.RS232PublishPeriod.get(), cb_RS485Listener);
-
-  setupGUI();
-
-  sl->Printf("[SETUP] System setup completed.").Debug();
-  sll->Printf("Setup completed.").Debug();
-
-  HeaterControl(false); // make sure heater is off at startup
+    lmg.logTag(LL::Info, "SETUP", "Completed successfully. Starting main loop...");
 }
 
 void loop()
 {
-  static unsigned long lastMqttLoopMs = 0;
-  static unsigned long lastMqttPublishMs = 0;
+    ConfigManager.updateLoopTiming();
+    ConfigManager.getWiFiManager().update();
 
-  CheckButtons();
+    ioManager.update();
 
-  // Let ConfigManager handle WiFi state machine and callbacks.
-  cfg.updateLoopTiming();
-  cfg.getWiFiManager().update();
+    // Services managed by ConfigManager.
+    ConfigManager.handleClient();
+    ConfigManager.handleWebsocketPush();
+    ConfigManager.handleOTA();
+    ConfigManager.handleRuntimeAlarms();
 
-  // Keep MQTT work out of Ticker callbacks (esp_timer task) to avoid watchdog resets.
-  if (mqttSettings.enableMQTT.get() && cfg.getWiFiManager().isConnected() && !cfg.getWiFiManager().isInAPMode())
-  {
-    const unsigned long now = millis();
-    if (now - lastMqttLoopMs >= 25)
+    if (mqttSettings.enableMQTT.get() && ConfigManager.getWiFiManager().isConnected() && !ConfigManager.getWiFiManager().isInAPMode())
     {
-      mqttManager.loop();
-      lastMqttLoopMs = now;
+        mqtt.loop();
+        publishMqttNowIfNeeded();
     }
 
-    const unsigned long publishIntervalMs = static_cast<unsigned long>(mqttSettings.mqttPublishPeriodSec.get()) * 1000UL;
-    if (publishIntervalMs > 0 && (now - lastMqttPublishMs) >= publishIntervalMs)
+    lmg.loop();
+
+    // Status LED: simple feedback
+    if (ConfigManager.getWiFiManager().isInAPMode())
     {
-      cb_PublishToMQTT();
-      lastMqttPublishMs = now;
+        digitalWrite(LED_BUILTIN, HIGH);
     }
-  }
+    else if (ConfigManager.getWiFiManager().isConnected() && mqtt.isConnected())
+    {
+        digitalWrite(LED_BUILTIN, LOW);
+    }
+    else
+    {
+        digitalWrite(LED_BUILTIN, HIGH);
+    }
 
-  // Services managed by ConfigManager.
-  cfg.handleClient();
-  cfg.handleWebsocketPush();
-  cfg.handleOTA();
-  cfg.handleRuntimeAlarms();
+    WriteToDisplay();
 
-  // Status LED: simple feedback
-  if (cfg.getWiFiManager().isInAPMode()) {
-    digitalWrite(LED_BUILTIN, HIGH);
-  } else if (cfg.getWiFiManager().isConnected() && mqttManager.isConnected()) {
-    digitalWrite(LED_BUILTIN, LOW);
-  } else {
-    digitalWrite(LED_BUILTIN, HIGH);
-  }
-
-  WriteToDisplay();
-
-  CheckVentilator(temperature);
-  EvaluateHeater(temperature);
-  delay(10);
+    CheckVentilator(temperature);
+    EvaluateHeater(temperature);
+    delay(10);
 }
 
 void setupGUI()
@@ -406,8 +450,8 @@ void setupGUI()
   //region relay outputs
       CRM().addRuntimeProvider("Outputs", [](JsonObject &data)
       {
-          data["ventilator"] = Relays::getVentilator();
-          data["heater"] = Relays::getHeater();
+          data["ventilator"] = getFanRelay();
+          data["heater"] = getHeaterRelay();
           data["dewpoint_risk"] = dewpointRiskActive;
       }, 3);
 
@@ -438,42 +482,22 @@ void setupGUI()
       dewpointRiskMeta.order = 3;
       CRM().addRuntimeMeta(dewpointRiskMeta);
 
-      static bool heaterState = false;
-      cfg.defineRuntimeCheckbox("Outputs", "heater", "Heater", []()
-        {
-            return heaterState;
-        }, [](bool state)
-        {
-            heaterState = Relays::getHeater();
-            Relays::setHeater(state);
-        }, "", 21);
-
-      static bool ventilatorState = false;
-      cfg.defineRuntimeCheckbox("Outputs", "ventilator", "Ventilator", []()
-        {
-            return ventilatorState;
-        }, [](bool state)
-        {
-            ventilatorState = Relays::getVentilator();
-            Relays::setVentilator(state);
-        }, "", 22);
-
         // Alarm: temperature is close to dewpoint (risk of condensation)
-        cfg.defineRuntimeAlarm(
+        ConfigManager.defineRuntimeAlarm(
           "Outputs",
           "dewpoint_risk",
           "Dewpoint Risk",
           [](){
-            return (temperature - Dewpoint) <= 1.2f;
+            return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow.get();
           },
           [](){
             dewpointRiskActive = true;
-            sl->Printf("[ALARM] Dewpoint risk ENTER").Debug();
+            lmg.logTag(LL::Warn, "ALARM", "Dewpoint risk ENTER");
             EvaluateHeater(temperature);
           },
           [](){
             dewpointRiskActive = false;
-            sl->Printf("[ALARM] Dewpoint risk EXIT").Debug();
+            lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
             EvaluateHeater(temperature);
           }
         );
@@ -481,23 +505,226 @@ void setupGUI()
 
 }
 
+//----------------------------------------
+// LOGGING / IO / MQTT SETUP
+//----------------------------------------
+
+static void setupLogging()
+{
+    Serial.begin(115200);
+
+    auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
+    serialOut->setLevel(LL::Trace);
+    serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis);
+    serialOut->setRateLimitMs(2);
+    lmg.addOutput(std::move(serialOut));
+
+    lmg.setGlobalLevel(LL::Trace);
+    lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+}
+
+static void registerIOBindings()
+{
+    lmg.scopedTag("IO");
+    analogReadResolution(12);
+
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
+        .id = IO_FAN_ID,
+        .name = "Ventilator Relay",
+        .defaultPin = 23,
+        .defaultActiveLow = true,
+        .defaultEnabled = true,
+    });
+    ioManager.addIOtoGUI(IO_FAN_ID, "Relays", 1);
+
+    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
+        .id = IO_HEATER_ID,
+        .name = "Heater Relay",
+        .defaultPin = 33,
+        .defaultActiveLow = true,
+        .defaultEnabled = true,
+    });
+    ioManager.addIOtoGUI(IO_HEATER_ID, "Relays", 2);
+
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = IO_RESET_ID,
+        .name = "Reset Button",
+        .defaultPin = 15,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
+        .defaultEnabled = true,
+    });
+
+    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
+        .id = IO_AP_ID,
+        .name = "AP Mode Button",
+        .defaultPin = 13,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
+        .defaultEnabled = true,
+    });
+
+    cm::IOManager::DigitalInputEventOptions resetOptions;
+    resetOptions.longClickMs = 3000;
+    ioManager.configureDigitalInputEvents(
+        IO_RESET_ID,
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onPress = []() {
+                lmg.logTag(LL::Debug, "IO", "Reset button pressed -> show display");
+                ShowDisplay();
+            },
+            .onLongPressOnStartup = []() {
+                lmg.logTag(LL::Warn, "IO", "Reset button pressed at startup -> restoring defaults");
+                ConfigManager.clearAllFromPrefs();
+                ConfigManager.saveAll();
+                delay(500);
+                ESP.restart();
+            },
+        },
+        resetOptions);
+
+    cm::IOManager::DigitalInputEventOptions apOptions;
+    apOptions.longClickMs = 1200;
+    ioManager.configureDigitalInputEvents(
+        IO_AP_ID,
+        cm::IOManager::DigitalInputEventCallbacks{
+            .onPress = []() {
+                lmg.logTag(LL::Debug, "IO", "AP button pressed -> show display");
+                ShowDisplay();
+            },
+            .onLongPressOnStartup = []() {
+                lmg.logTag(LL::Warn, "IO", "AP button pressed at startup -> starting AP mode");
+                ConfigManager.startAccessPoint(APMODE_SSID, APMODE_PASSWORD);
+            },
+        },
+        apOptions);
+}
+
+static void setupMqtt()
+{
+    mqtt.attach(ConfigManager);
+
+    // Receive: grid import W (from power meter JSON)
+    mqtt.addMQTTTopicReceiveInt(
+        "grid_import_w",
+        "Grid Import",
+        "tele/powerMeter/powerMeter/SENSOR",
+        &currentGridImportW,
+        "W",
+        "E320.Power_in",
+        true);
+
+    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
+    mqtt.addMQTTReceiveSettingsToGUI(ConfigManager);
+    mqtt.addMQTTTopicTooGUI(ConfigManager, "grid_import_w", "MQTT-Received", 1);
+
+    // Optional: show meta fields in runtime UI
+    mqtt.addLastTopicToGUI(ConfigManager, "mqtt", 20, "Last Topic", "MQTT");
+    mqtt.addLastPayloadToGUI(ConfigManager, "mqtt", 21, "Last Payload", "MQTT");
+    mqtt.addLastMessageAgeToGUI(ConfigManager, "mqtt", 22, "Last Message Age", "ms", "MQTT");
+
+    static bool mqttLogAdded = false;
+    if (!mqttLogAdded)
+    {
+        auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+        mqttLog->setLevel(LL::Trace);
+        mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+        lmg.addOutput(std::move(mqttLog));
+        mqttLogAdded = true;
+    }
+}
+
+static void updateMqttTopics()
+{
+    String base = mqtt.settings().publishTopicBase.get();
+    if (base.isEmpty())
+    {
+        base = mqtt.getMqttBaseTopic();
+    }
+    if (base.isEmpty())
+    {
+        base = "SolarLimiter2";
+    }
+
+    mqttBaseTopic = base;
+    topicPublishSetValueW = mqttBaseTopic + "/SetValue";
+    topicPublishGridImportW = mqttBaseTopic + "/GetValue";
+    topicPublishTempC = mqttBaseTopic + "/Temperature";
+    topicPublishHumidityPct = mqttBaseTopic + "/Humidity";
+    topicPublishDewpointC = mqttBaseTopic + "/Dewpoint";
+}
+
+static void setFanRelay(bool on)
+{
+    if (!fanSettings.enabled.get())
+    {
+        on = false;
+    }
+    ioManager.setState(IO_FAN_ID, on);
+}
+
+static void setHeaterRelay(bool on)
+{
+    if (!heaterSettings.enabled.get())
+    {
+        on = false;
+    }
+    ioManager.setState(IO_HEATER_ID, on);
+}
+
+static bool getFanRelay()
+{
+    return ioManager.getState(IO_FAN_ID);
+}
+
+static bool getHeaterRelay()
+{
+    return ioManager.getState(IO_HEATER_ID);
+}
+
 
 //----------------------------------------
 // MQTT FUNCTIONS
 //----------------------------------------
 
-void cb_PublishToMQTT()
+static void publishMqttNow()
 {
-  if (!mqttManager.isConnected())
-  {
-    return;
-  }
+    if (!mqtt.isConnected())
+    {
+        return;
+    }
 
-  mqttManager.publish(mqttSettings.mqtt_publish_setvalue_topic.c_str(), String(inverterSetValue));
-  mqttManager.publish(mqttSettings.mqtt_publish_getvalue_topic.c_str(), String(currentGridImportW));
-  mqttManager.publish(mqttSettings.mqtt_publish_Temperature_topic.c_str(), String(temperature));
-  mqttManager.publish(mqttSettings.mqtt_publish_Humidity_topic.c_str(), String(Humidity));
-  mqttManager.publish(mqttSettings.mqtt_publish_Dewpoint_topic.c_str(), String(Dewpoint));
+    updateMqttTopics();
+
+    mqtt.publishExtraTopic("setvalue_w", topicPublishSetValueW.c_str(), String(inverterSetValue), false);
+    mqtt.publishExtraTopic("grid_import_w", topicPublishGridImportW.c_str(), String(currentGridImportW), false);
+    mqtt.publishExtraTopic("temperature_c", topicPublishTempC.c_str(), String(temperature), false);
+    mqtt.publishExtraTopic("humidity_pct", topicPublishHumidityPct.c_str(), String(Humidity), false);
+    mqtt.publishExtraTopic("dewpoint_c", topicPublishDewpointC.c_str(), String(Dewpoint), false);
+}
+
+static void publishMqttNowIfNeeded()
+{
+    const float intervalSec = mqttSettings.publishIntervalSec.get();
+    if (intervalSec <= 0.0f)
+    {
+        return;
+    }
+
+    const unsigned long intervalMs = static_cast<unsigned long>(intervalSec * 1000.0f);
+    if (intervalMs == 0)
+    {
+        return;
+    }
+
+    const unsigned long now = millis();
+    if ((now - lastMqttPublishMs) >= intervalMs)
+    {
+        lastMqttPublishMs = now;
+        publishMqttNow();
+    }
 }
 
 //----------------------------------------
@@ -515,14 +742,11 @@ void cb_RS485Listener()
   // legacy comment: powerSmoother.setCorrectionOffset(generalSettings.inputCorrectionOffset.get());
   powerSmoother->setCorrectionOffset(limiterSettings.inputCorrectionOffset.get()); // apply the correction offset to the smoother, if needed
     sendToRS485(static_cast<uint16_t>(inverterSetValue));
-    sl->Printf("controller is enabled! Set inverter to %d W", inverterSetValue).Debug();
+    lmg.logTag(LL::Debug, "RS485", "Controller enabled -> set inverter to %d W", inverterSetValue);
   }
   else
   {
-    sl->Debug("Controller is disabled.");
-    sl->Debug("Using MAX output.");
-    sll->Debug("Limiter is disabled.");
-    sll->Debug("Using MAX output.");
+    lmg.logTag(LL::Info, "RS485", "Controller disabled -> using MAX output");
     sendToRS485(limiterSettings.maxOutput.get()); // send the maxOutput to the RS485 module
   }
 }
@@ -530,65 +754,45 @@ void cb_RS485Listener()
 void testRS232()
 {
   // test the RS232 connection
-  sl->Printf("Testing RS232 connection... shorting RX and TX pins!");
-  sl->Printf("Baudrate: %d", rs485settings.baudRate);
-  sl->Printf("RX Pin: %d", rs485settings.rxPin);
-  sl->Printf("TX Pin: %d", rs485settings.txPin);
-  sl->Printf("DE Pin: %d", rs485settings.dePin);
+  lmg.logTag(LL::Info, "RS485", "Testing RS232 connection... shorting RX and TX pins");
+  lmg.logTag(LL::Info, "RS485", "Baudrate: %d", rs485settings.baudRate.get());
+  lmg.logTag(LL::Info, "RS485", "RX Pin: %d", rs485settings.rxPin.get());
+  lmg.logTag(LL::Info, "RS485", "TX Pin: %d", rs485settings.txPin.get());
+  lmg.logTag(LL::Info, "RS485", "DE Pin: %d", rs485settings.dePin.get());
 
-  Serial2.begin(rs485settings.baudRate, SERIAL_8N1, rs485settings.rxPin, rs485settings.txPin);
+  Serial2.begin(rs485settings.baudRate.get(), SERIAL_8N1, rs485settings.rxPin.get(), rs485settings.txPin.get());
   Serial2.println("Hello RS485");
   delay(300);
   if (Serial2.available())
   {
-    sl->Printf("[MAIN] Received on Serial2!").Debug();
+    lmg.logTag(LL::Debug, "RS485", "[MAIN] Received on Serial2");
   }
 }
 
-void SetupCheckForResetButton()
+void SetupStartDisplay()
 {
+  Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
+  Wire.setClock(i2cSettings.busFreq.get());
 
-  // check for pressed reset button
-
-  if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
+  const uint8_t address = static_cast<uint8_t>(i2cSettings.displayAddr.get());
+  if (!display.begin(SSD1306_SWITCHCAPVCC, address))
   {
-  sl->Internal("Reset button pressed -> Reset all settings...");
-  sll->Internal("Reset button pressed!");
-  sll->Internal("Reset all settings!");
-    cfg.clearAllFromPrefs(); // Clear all settings from EEPROM
-    delay(10000);            // Wait for 10 seconds to avoid multiple resets
-    cfg.saveAll();           // Save the default settings to EEPROM
-    delay(10000);            // Wait for 10 seconds to avoid multiple resets
-    ESP.restart();           // Restart the ESP32
-  }
-}
-
-void SetupCheckForAPModeButton()
-{
-  String APName = APMODE_SSID;
-  String pwd = APMODE_PASSWORD; // Default AP password
-
-  // if (wifiSettings.wifiSsid.get().length() == 0 || systemSettings.unconfigured.get())
-  if (wifiSettings.wifiSsid.get().length() == 0 )
-  {
-  sl->Printf("[WARNING] SETUP: WiFi SSID is empty [%s] (fresh/unconfigured)", wifiSettings.wifiSsid.get().c_str()).Error();
-    cfg.startAccessPoint(APName, pwd);
-    delay(250);
-    logNetworkIpInfo("AP started (no SSID)");
-    cfg.saveAll(); // Save the settings to EEPROM
+    displayInitialized = false;
+    displayActive = false;
+    lmg.logTag(LL::Warn, "Display", "SSD1306 init failed (addr=0x%02X)", static_cast<unsigned int>(address));
+    return;
   }
 
-  // check for pressed AP mode button
+  displayInitialized = true;
+  displayActive = true;
 
-  if (digitalRead(buttonSettings.apModePin.get()) == LOW)
-  {
-  sl->Internal("AP mode button pressed -> starting AP mode...");
-  sll->Internal("AP mode button!");
-  sll->Internal("-> starting AP mode...");
-    cfg.startAccessPoint(APName, pwd);
-    delay(250);
-    logNetworkIpInfo("AP started (button)");
-  }
+  display.clearDisplay();
+  display.drawRect(0, 0, 128, 25, WHITE);
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(10, 5);
+  display.println("Starting!");
+  display.display();
 }
 
 void SetupStartTemperatureMeasuring()
@@ -604,115 +808,34 @@ void SetupStartTemperatureMeasuring()
       bme280.BME280_OVERSAMPLING_1,
       bme280.BME280_MODE_NORMAL);
   if (!isStatus) {
-    sl->Printf("can NOT initialize for using BME280.").Debug();
-    sll->Printf("No BME280 detected!").Debug();
+    lmg.logTag(LL::Error, "BME280", "BME280 init failed");
   }
   else {
-    sl->Printf("BME280 ready. Start measurement ticker...").Debug();
-    sll->Printf("BME280 detected!").Debug();
+    lmg.logTag(LL::Info, "BME280", "BME280 ready. Starting measurement ticker...");
 
     temperatureTicker.attach(tempSettings.readIntervalSec.get(), readBme280); // Attach the ticker to read BME280
     readBme280(); // initial read
   }
 }
 
-bool SetupStartWebServer()
-{
-  sl->Printf("[WARNING] SETUP: Starting web server...").Debug();
-  sll->Printf("Starting Webserver...!").Debug();
-
-  if (WiFi.getMode() == WIFI_AP)
-  {
-    return false; // Skip webserver setup in AP mode
-  }
-
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    if (wifiSettings.useDhcp.get())
-    {
-      sl->Printf("[WiFi] startWebServer: DHCP enabled").Debug();
-      cfg.startWebServer(wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get());
-      cfg.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
-    }
-    else
-    {
-      sl->Printf("[WiFi] startWebServer: DHCP disabled - using static IP").Debug();
-      IPAddress staticIP, gateway, subnet, dns1, dns2;
-      staticIP.fromString(wifiSettings.staticIp.get());
-      gateway.fromString(wifiSettings.gateway.get());
-      subnet.fromString(wifiSettings.subnet.get());
-
-      const String dnsPrimaryStr = wifiSettings.dnsPrimary.get();
-      const String dnsSecondaryStr = wifiSettings.dnsSecondary.get();
-      if (!dnsPrimaryStr.isEmpty())
-      {
-        dns1.fromString(dnsPrimaryStr);
-      }
-      if (!dnsSecondaryStr.isEmpty())
-      {
-        dns2.fromString(dnsSecondaryStr);
-      }
-
-      cfg.startWebServer(staticIP, gateway, subnet, wifiSettings.wifiSsid.get(), wifiSettings.wifiPassword.get(), dns1, dns2);
-      cfg.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
-    }
-  }
-
-  return true; // Webserver setup completed
-}
-
 void onWiFiConnected()
 {
-  sl->Printf("[WiFi] Connected! Activating services...").Debug();
-  sll->Printf("WiFi connected!").Debug();
-
-  logNetworkIpInfo("onWiFiConnected");
-
-  if (!tickerActive)
-  {
-    if (systemSettings.allowOTA.get() && !cfg.getOTAManager().isInitialized())
-    {
-      cfg.setupOTA("Ota-esp32-device", systemSettings.otaPassword.get().c_str());
-    }
-
-    tickerActive = true;
-  }
-
-  // Start NTP sync now and schedule periodic resyncs
-  auto doNtpSync = []()
-  {
-    configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str());
-  };
-  doNtpSync();
-
-  NtpSyncTicker.detach();
-  int ntpInt = ntpSettings.frequencySec.get();
-  if (ntpInt < 60)
-  {
-    ntpInt = 3600;
-  }
-  NtpSyncTicker.attach(ntpInt, +[]()
-                       { configTzTime(ntpSettings.tz.get().c_str(), ntpSettings.server1.get().c_str(), ntpSettings.server2.get().c_str()); });
+    wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
+    logNetworkIpInfo("onWiFiConnected");
+    lmg.logTag(LL::Info, "WiFi", "Station Mode: http://%s", WiFi.localIP().toString().c_str());
 }
 
 void onWiFiDisconnected()
 {
-  sl->Printf("[WiFi] Disconnected! Deactivating services...").Debug();
-  sll->Printf("WiFi disconnected!").Debug();
-
-  if (tickerActive)
-  {
-    NtpSyncTicker.detach();
-    tickerActive = false;
-  }
+    wifiServices.onDisconnected();
+    lmg.logTag(LL::Warn, "WiFi", "Disconnected");
 }
 
 void onWiFiAPMode()
 {
-  sl->Printf("[WiFi] AP mode active").Debug();
-  sll->Printf("AP mode").Debug();
-  logNetworkIpInfo("onWiFiAPMode");
-  onWiFiDisconnected();
+    wifiServices.onAPMode();
+    logNetworkIpInfo("onWiFiAPMode");
+    lmg.logTag(LL::Info, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
 static float computeDewPoint(float temperatureC, float relHumidityPct) {
@@ -731,7 +854,7 @@ void readBme280()
 {
   // todo: add settings for correcting the values!!!
   //   set sea-level pressure
-  bme280.setSeaLevelPressure(1010);
+  bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
 
   bme280.read();
 
@@ -741,39 +864,26 @@ void readBme280()
   Dewpoint = computeDewPoint(temperature, Humidity);
 
   // output formatted values to serial console
-  sl->Printf("-----------------------").Debug();
-  sl->Printf("Temperature: %2.1lf °C", temperature).Debug();
-  sl->Printf("Humidity   : %2.1lf %rH", Humidity).Debug();
-  sl->Printf("Dewpoint   : %2.1lf °C", Dewpoint).Debug();
-  sl->Printf("Pressure   : %4.0lf hPa", Pressure).Debug();
-  sl->Printf("Altitude   : %4.2lf m", bme280.data.altitude).Debug();
-  sl->Printf("-----------------------").Debug();
-}
-
-void HeaterControl(bool heaterOn){
-  // Feature & battery-save guards
-  if(!heaterSettings.enabled.get()){
-    if(Relays::getHeater()){
-      sl->Debug("HeaterControl: disabled or battery-save active -> force OFF");
-    }
-    Relays::setHeater(false);
-    return;
-  }
-  Relays::setHeater(heaterOn);
+  lmg.logTag(LL::Trace, "BME280", "-----------------------");
+  lmg.logTag(LL::Trace, "BME280", "Temperature: %.1f C", temperature);
+  lmg.logTag(LL::Trace, "BME280", "Humidity   : %.1f %%", Humidity);
+  lmg.logTag(LL::Trace, "BME280", "Dewpoint   : %.1f C", Dewpoint);
+  lmg.logTag(LL::Trace, "BME280", "Pressure   : %.0f hPa", Pressure);
+  lmg.logTag(LL::Trace, "BME280", "Altitude   : %.2f m", bme280.data.altitude);
+  lmg.logTag(LL::Trace, "BME280", "-----------------------");
 }
 
 // Limiter provider moved into setup() for clarity
 
 void WriteToDisplay()
 {
-  // display.clearDisplay();
-  display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
-
-  if (displayActive == false)
+  if (!displayInitialized || !displayActive)
   {
     return; // exit the function if the display is not active
   }
 
+  // display.clearDisplay();
+  display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
   display.drawRect(0, 0, 128, 24, WHITE);
 
   display.setTextSize(1);
@@ -816,33 +926,16 @@ void WriteToDisplay()
   display.display();
 }
 
-void PinSetup()
-{
-  analogReadResolution(12);  // Use full 12-bit resolution
-  pinMode(buttonSettings.resetDefaultsPin.get(), INPUT_PULLUP);
-  pinMode(buttonSettings.apModePin.get(), INPUT_PULLUP);
-  Relays::initPins();
-  // Force known OFF state
-  Relays::setVentilator(false);
-  Relays::setHeater(false);
-  // Simple validation: warn if same pin used for both or invalid
-  int fanPin = fanSettings.relayPin.get();
-  int heaterPin = heaterSettings.relayPin.get();
-  if(fanPin == heaterPin && heaterSettings.enabled.get()){
-    sl->Error("Relay config: Fan and Heater share same GPIO! This may cause conflicts.");
-  }
-}
-
 void CheckVentilator(float currentTemperature)
 {
   if (!fanSettings.enabled.get()) {
-    Relays::setVentilator(false);
+    setFanRelay(false);
     return;
   }
   if (currentTemperature >= fanSettings.onThreshold.get()) {
-    Relays::setVentilator(true);
+    setFanRelay(true);
   } else if (currentTemperature <= fanSettings.offThreshold.get()) {
-    Relays::setVentilator(false);
+    setFanRelay(false);
   }
 }
 
@@ -866,27 +959,12 @@ void EvaluateHeater(float currentTemperature){
     }
 
   }
-  Relays::setHeater(heaterLatchedState);
-}
-
-void CheckButtons()
-{
-  // sl->Debug("Check Buttons...");
-  if (digitalRead(buttonSettings.resetDefaultsPin.get()) == LOW)
-  {
-    sl->Internal("Reset-Button pressed after reboot... -> Start Display Ticker...");
-    ShowDisplay();
-  }
-
-  if (digitalRead(buttonSettings.apModePin.get()) == LOW)
-  {
-    sl->Internal("AP-Mode-Button pressed after reboot... -> Start Display Ticker...");
-    ShowDisplay();
-  }
+  setHeaterRelay(heaterLatchedState);
 }
 
 void ShowDisplay()
 {
+  if (!displayInitialized) return;
   displayTicker.detach(); // Stop the ticker to prevent multiple calls
   display.ssd1306_command(SSD1306_DISPLAYON); // Turn on the display
   displayTicker.attach(displaySettings.onTimeSec.get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
@@ -895,6 +973,7 @@ void ShowDisplay()
 
 void ShowDisplayOff()
 {
+  if (!displayInitialized) return;
   displayTicker.detach(); // Stop the ticker to prevent multiple calls
   display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
   // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area

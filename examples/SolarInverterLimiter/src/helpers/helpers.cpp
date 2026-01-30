@@ -1,6 +1,9 @@
 #include "helpers.h"
 #include <Preferences.h>
-#include "logging/logging.h"
+#include "logging/LoggingManager.h"
+
+static cm::LoggingManager &lmg = cm::LoggingManager::instance();
+using LL = cm::LoggingManager::Level;
 
 /** info
  * @param x float -> the value to be converted
@@ -51,34 +54,34 @@ void Helpers::checkVersion(String currentVersion, String currentVersionDate)
     int currentMajor = 0, currentMinor = 0, currentPatch = 0;
     int major = 0, minor = 0, patch = 0;
 
-    String version = Preferences().getString("version", "0.0.0");
-
-    if (version == "0.0.0") // there is no version saved, set the default version
+    Preferences prefs;
+    if (!prefs.begin("SolarInverterLimiter", true))
     {
-       //todo:save Version to EEPROM from new ConfigurationMananger Library
+        lmg.logTag(LL::Warn, "Helpers", "Failed to open Preferences namespace for version check");
         return;
     }
 
-    sl->Printf("Current version: %s", currentVersion).Debug();
-    sll->Printf("Cur. Version: %s", currentVersion).Debug();
-    sl->Printf("Current Version_Date: %s", currentVersionDate).Debug();
-    sll->Printf("from: %s", currentVersionDate).Debug();
-    sl->Printf("Saved version: %s", version.c_str()).Debug();
+    String version = prefs.getString("version", "0.0.0");
+    prefs.end();
+
+    if (version == "0.0.0") // there is no version saved, set the default version
+    {
+       // todo: save version using ConfigManager settings storage
+        return;
+    }
+
+    lmg.logTag(LL::Debug, "Helpers", "Current version: %s", currentVersion.c_str());
+    lmg.logTag(LL::Debug, "Helpers", "Current version date: %s", currentVersionDate.c_str());
+    lmg.logTag(LL::Debug, "Helpers", "Saved version: %s", version.c_str());
 
     sscanf(version.c_str(), "%d.%d.%d", &major, &minor, &patch);
     sscanf(currentVersion.c_str(), "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
 
     if (currentMajor != major || currentMinor != minor)
     {
-        sl->Printf("Version changed, removing all settings...").Debug();
-        sll->Printf("Version changed, removing all settings...").Debug();
-        //todo: implement a function to remove all settings from new ConfigurationMananger Library
-        
-        sll->Printf("restarting...").Debug();
-        //deactivate until the new version is implemented
-        // delay(10000);  // Wait for 10 seconds to avoid multiple resets
-
-        // ESP.restart(); // Restart the ESP32
+        lmg.logTag(LL::Warn, "Helpers", "Version changed (%d.%d -> %d.%d); settings migration is not implemented yet",
+                   major, minor, currentMajor, currentMinor);
+        // todo: implement a migration strategy and/or "remove all settings" helper
     }
 
 }
