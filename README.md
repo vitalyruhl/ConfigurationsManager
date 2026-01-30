@@ -186,6 +186,12 @@ If you want to consume the library as a local dependency in your own project, yo
 
 Note (Windows): these example projects set `[platformio] build_dir` and `libdeps_dir` outside the repo to prevent recursive local installs when using `lib_deps = file://../..`.
 
+Tips:
+
+- Avoid `lib_extra_dirs = ../..` for the workspace library; it can cause cross-example compilation issues.
+- Some examples include a pre-build helper script `tools/pio_force_local_lib_refresh.py` to force PlatformIO to refresh the local `file://../..` library copy automatically (disable via `CM_PIO_NO_LIB_REFRESH=1`).
+- If you see `UnicodeEncodeError: 'charmap' codec can't encode character ...` on Windows, see `docs/TROUBLESHOOTING.md`.
+
 More:
 
 - Getting started (full minimal pattern): `docs/GETTING_STARTED.md`

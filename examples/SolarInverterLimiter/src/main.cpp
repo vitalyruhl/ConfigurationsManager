@@ -19,6 +19,9 @@
 
 #if __has_include("secret/wifiSecret.h")
 #include "secret/wifiSecret.h"
+#define CM_HAS_WIFI_SECRETS 1
+#else
+#define CM_HAS_WIFI_SECRETS 0
 #endif
 
 #ifndef APMODE_SSID
@@ -158,12 +161,16 @@ LoggerSetupSerial(); // Initialize the serial logger
       sl->Printf("[MAIN] -------------------------------------------------------------").Debug();
       sl->Printf("[MAIN] SETUP: *** SSID is empty, setting My values *** ").Debug();
       sl->Printf("[MAIN] -------------------------------------------------------------").Debug();
+#if CM_HAS_WIFI_SECRETS
       wifiSettings.wifiSsid.set(MY_WIFI_SSID);
       wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
       wifiSettings.staticIp.set(MY_WIFI_IP);
       wifiSettings.useDhcp.set(false);
       ConfigManager.saveAll();
       delay(100); // Small delay
+#else
+      sl->Printf("[WARNING] WiFi SSID is empty. Create 'src/secret/wifiSecret.h' (see wifiSecret.example.h) or configure WiFi via the Web UI.").Error();
+#endif
   }
 
   sl->Printf("[SETUP] Check for AP mode button...").Debug();

@@ -481,7 +481,7 @@ struct SystemSettings
                        wifiRebootTimeoutMin(ConfigOptions<int>{
                            .key = "WiFiRb",
                            .name = "Reboot if WiFi lost (min)",
-                           .category = "System",
+                           .category = "WiFi",
                            .defaultValue = 5,
                            .showInWeb = true}),
                        version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = "System", .defaultValue = String(VERSION)})

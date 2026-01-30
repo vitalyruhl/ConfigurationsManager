@@ -64,15 +64,17 @@ monitor_speed = 115200
 ; upload_port = COM5
 ```
 
-## Symlink Helper (Windows)
+## PlatformIO: Local library (recommended)
 
-If you want to use this repo as a local library via `lib_deps = file://../..`, a symlink can be useful.
+Use this repository as a local library via `lib_deps = file://../..` in your example `platformio.ini`.
 
-```bat
-mklink /D "C:\Users\admin\Documents\privat\SolarInverterLimiter\.pio\libdeps\mgr\ESP32 Configuration Manager" "C:\Users\admin\Documents\privat\ConfigurationsManager"
-```
+Recommendations:
 
-```powershell
-New-Item -ItemType SymbolicLink -Path "C:\Users\admin\Documents\privat\SolarInverterLimiter\.pio\libdeps\mgr\ESP32 Configuration Manager" -Target "C:\Users\admin\Documents\privat\ConfigurationsManager"
-Remove-Item -Path "C:\Users\admin\Documents\privat\SolarInverterLimiter\.pio\libdeps\mgr\ESP32 Configuration Manager" -Force
+- Keep build artifacts out of the repo using per-example `build_dir` and `libdeps_dir` under `${sysenv.HOME}/.pio-build/...`.
+- Do not use `lib_extra_dirs = ../..` for the workspace library; it can cause cross-example compilation issues and confusing include resolution.
+- If PlatformIO appears to use an old local library copy, clean and rebuild (or use the helper script `tools/pio_force_local_lib_refresh.py`):
+
+```sh
+pio run -t clean
+pio run
 ```

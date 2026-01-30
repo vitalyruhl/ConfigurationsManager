@@ -4,6 +4,19 @@ This guide is a practical starting point that mirrors the `examples/minimal` pat
 
 If you prefer a full working project, open one of the example projects in `examples/` (each example is a standalone PlatformIO project).
 
+## Examples: PlatformIO setup notes
+
+The examples are set up to use this repo as a local library via `lib_deps = file://../..` and keep build outputs outside the repository using per-example `build_dir` / `libdeps_dir` under `${sysenv.HOME}/.pio-build/...`.
+
+Avoid using `lib_extra_dirs = ../..` for the workspace library. If a build ever seems to use stale local library code, run:
+
+```sh
+pio run -t clean
+pio run
+```
+
+Some examples include a pre-build helper script `tools/pio_force_local_lib_refresh.py` to force PlatformIO to refresh the local `file://../..` library copy automatically. You can disable that behavior by setting `CM_PIO_NO_LIB_REFRESH=1`.
+
 ## Quick start (recommended)
 
 1. Clone this repository (or your fork).
