@@ -1,0 +1,200 @@
+Processing usb (platform: espressif32; board: nodemcu-32s; framework: arduino)
+--------------------------------------------------------------------------------
+Library Manager: Installing bblanchon/ArduinoJson@~7.4.1
+Library Manager: Installing esphome/ESPAsyncWebServer-esphome@~3.2.2
+Library Manager: Installing esphome/AsyncTCP-esphome@2.1.4
+Verbose mode can be enabled via `-v, --verbose` option
+
+up to date, audited 195 packages in 933ms
+
+84 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> esp32-config-webui@3.3.0 build
+> vite build
+
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 28 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.50 kB │ gzip:  0.33 kB
+dist/assets/style-CeP0Pddr.css   22.16 kB │ gzip:  4.71 kB
+dist/assets/index-Cx81ijkw.js   123.14 kB │ gzip: 42.86 kB
+✓ built in 709ms
+Header generated: C:\Daten\_Codding\ESP32\ConfigurationsManager\src\html_content.h
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/nodemcu-32s.html
+PLATFORM: Espressif 32 (6.12.0) > NodeMCU-32S
+HARDWARE: ESP32 240MHz, 320KB RAM, 4MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 2.40900.250804 (4.9.0) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 43 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- ArduinoJson @ 7.4.2
+|-- ESPAsyncWebServer-esphome @ 3.4.0
+|-- AsyncTCP-esphome @ 2.1.4
+|-- PubSubClient @ 2.8.0
+|-- OneWire @ 2.3.8
+|-- DallasTemperature @ 3.11.0
+|-- Adafruit GFX Library @ 1.12.4
+|-- Adafruit SSD1306 @ 2.5.16
+|-- ESP32 Configuration Manager @ 3.3.0
+|-- Preferences @ 2.0.0
+|-- Ticker @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- Wire @ 2.0.0
+Building in release mode
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\src\binking\Blinker.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\src\main.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\src\settings.cpp.o
+Building C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\bootloader.bin
+Generating partitions C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\partitions.bin
+esptool.py v4.9.0
+Creating esp32 image...
+Merged 1 ELF section
+Successfully created esp32 image.
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libc0c\AsyncTCP-esphome\AsyncTCP.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libb57\FS\FS.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libb57\FS\vfs_api.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFi.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiAP.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiClient.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiGeneric.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiMulti.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiSTA.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiScan.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiServer.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\WiFi\WiFiUdp.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\AsyncEventSource.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\AsyncWebSocket.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\WebAuthentication.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\WebHandlers.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\WebRequest.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\WebResponses.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libc0c\libAsyncTCP-esphome.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\ESPAsyncWebServer-esphome\WebServer.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib578\PubSubClient\PubSubClient.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libb57\libFS.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib5b9\OneWire\OneWire.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib996\DallasTemperature\DallasTemperature.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\liba7c\Wire\Wire.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib0ab\SPI\SPI.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib994\Adafruit BusIO\Adafruit_BusIO_Register.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libfe9\libWiFi.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib994\Adafruit BusIO\Adafruit_GenericDevice.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib994\Adafruit BusIO\Adafruit_I2CDevice.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib994\Adafruit BusIO\Adafruit_SPIDevice.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe87\Adafruit GFX Library\Adafruit_GFX.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe87\Adafruit GFX Library\Adafruit_GrayOLED.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe87\Adafruit GFX Library\Adafruit_SPITFT.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe87\Adafruit GFX Library\glcdfont.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib597\Adafruit SSD1306\Adafruit_SSD1306.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib94a\Preferences\Preferences.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib54d\Ticker\Ticker.cpp.o
+C:/.pio-build/ConfigurationsManager/examples/BoilerSaver/libdeps/usb/OneWire/OneWire.cpp:599:22: warning: extra tokens at end of #undef directive
+ #  undef noInterrupts() {portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;portENTER_CRITICAL(&mux)
+                      ^
+C:/.pio-build/ConfigurationsManager/examples/BoilerSaver/libdeps/usb/OneWire/OneWire.cpp:600:20: warning: extra tokens at end of #undef directive
+ #  undef interrupts() portEXIT_CRITICAL(&mux);}
+                    ^
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe3c\Update\HttpsOTAUpdate.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe3c\Update\Updater.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib309\ESPmDNS\ESPmDNS.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib578\libPubSubClient.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib95f\ArduinoOTA\ArduinoOTA.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libccb\libESPAsyncWebServer-esphome.a
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib5b9\libOneWire.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\ConfigManager.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib54d\libTicker.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\default_hooks.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\html_content.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\io\IOManager.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib996\libDallasTemperature.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\logging\LoggingManager.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\main.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\liba7c\libWire.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\ota\OTAManager.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\runtime\RuntimeManager.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib0ab\libSPI.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\web\WebServer.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\ESP32 Configuration Manager\wifi\WiFiManager.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\Esp.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib994\libAdafruit BusIO.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\FirmwareMSC.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\FunctionalInterrupt.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\HWCDC.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\HardwareSerial.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\IPAddress.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\IPv6Address.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe87\libAdafruit GFX Library.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\MD5Builder.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib94a\libPreferences.a
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib597\libAdafruit SSD1306.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\Print.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\Stream.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libe3c\libUpdate.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\StreamString.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib309\libESPmDNS.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\Tone.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\USB.cpp.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib95f\libArduinoOTA.a
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\USBCDC.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\USBMSC.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\WMath.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\WString.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\base64.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\cbuf.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-adc.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-bt.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-cpu.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-dac.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-gpio.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-i2c-slave.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-i2c.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-ledc.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-matrix.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-misc.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-psram.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-rgb-led.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-rmt.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-sigmadelta.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-spi.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-time.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-timer.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-tinyusb.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-touch.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\esp32-hal-uart.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\firmware_msc_fat.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\libb64\cdecode.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\libb64\cencode.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\main.cpp.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\stdlib_noniso.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\wiring_pulse.c.o
+Compiling C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\FrameworkArduino\wiring_shift.c.o
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\lib8eb\libESP32 Configuration Manager.a
+Archiving C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\libFrameworkArduino.a
+Linking C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\firmware.elf
+Retrieving maximum program size C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\firmware.elf
+Checking size C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [==        ]  18.3% (used 59840 bytes from 327680 bytes)
+Flash: [========= ]  91.8% (used 1202797 bytes from 1310720 bytes)
+Building C:\.pio-build\ConfigurationsManager\examples\BoilerSaver\usb\firmware.bin
+esptool.py v4.9.0
+Creating esp32 image...
+Merged 27 ELF sections
+Successfully created esp32 image.
+========================= [SUCCESS] Took 37.20 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+usb            SUCCESS   00:00:37.205
+========================= 1 succeeded in 00:00:37.205 =========================

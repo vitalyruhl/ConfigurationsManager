@@ -1,0 +1,30 @@
+Processing usb (platform: espressif32; board: nodemcu-32s; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/nodemcu-32s.html
+PLATFORM: Espressif 32 (6.12.0) > NodeMCU-32S
+HARDWARE: ESP32 240MHz, 320KB RAM, 4MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 2.40900.250804 (4.9.0) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 36 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- ArduinoJson @ 7.4.2
+|-- ESPAsyncWebServer-esphome @ 3.4.0
+|-- AsyncTCP-esphome @ 2.1.4
+|-- Preferences @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- ArduinoOTA @ 2.0.0
+|-- Update @ 2.0.0
+Building in release mode
+Retrieving maximum program size .pio\build\usb\firmware.elf
+Checking size .pio\build\usb\firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [=         ]   8.3% (used 27128 bytes from 327680 bytes)
+Flash: [===       ]  34.2% (used 447933 bytes from 1310720 bytes)
+========================= [SUCCESS] Took 4.18 seconds =========================
