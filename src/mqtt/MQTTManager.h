@@ -33,6 +33,34 @@ inline void onMQTTStateChanged(int) {}
 inline void onNewMQTTMessage(const char*, const char*, unsigned int) {}
 #endif
 
+inline void callOnMQTTConnectedSafe_()
+{
+    if (&onMQTTConnected != nullptr) {
+        onMQTTConnected();
+    }
+}
+
+inline void callOnMQTTDisconnectedSafe_()
+{
+    if (&onMQTTDisconnected != nullptr) {
+        onMQTTDisconnected();
+    }
+}
+
+inline void callOnMQTTStateChangedSafe_(int state)
+{
+    if (&onMQTTStateChanged != nullptr) {
+        onMQTTStateChanged(state);
+    }
+}
+
+inline void callOnNewMQTTMessageSafe_(const char* topic, const char* payload, unsigned int length)
+{
+    if (&onNewMQTTMessage != nullptr) {
+        onNewMQTTMessage(topic, payload, length);
+    }
+}
+
 class MQTTManager {
 public:
     enum class ConnectionState {
@@ -1613,10 +1641,15 @@ inline void MQTTManager::configureFromSettings_()
 inline void MQTTManager::applySettingsCallbacks_()
 {
     // Keep this idempotent: callbacks may be assigned multiple times.
-    settings_.enableMQTT.setCallback([this](bool) {
-        if (!settings_.enableMQTT.get()) {
+    settings_.enableMQTT.setCallback([this](bool enabled) {
+        if (!enabled) {
             disconnect();
+            return;
         }
+
+        // Ensure internal connect state is initialized when MQTT gets enabled via UI.
+        // Without this, clientId/base topic may stay empty until another setting changes.
+        configureFromSettings_();
     });
 
     auto reconfigure = [this](auto) { this->configureFromSettings_(); };
@@ -1789,7 +1822,7 @@ inline void MQTTManager::handleConnection_()
     if (onConnected_) {
         onConnected_();
     }
-    onMQTTConnected();
+    callOnMQTTConnectedSafe_();
 
     CM_LOG_VERBOSE("[MQTT] Connected, subscribed to %u receive topics",
                    static_cast<unsigned int>(receiveItems_.size()));
@@ -1804,7 +1837,7 @@ inline void MQTTManager::handleDisconnection_()
         if (onDisconnected_) {
             onDisconnected_();
         }
-        onMQTTDisconnected();
+        callOnMQTTDisconnectedSafe_();
     }
 
     setState_(ConnectionState::Disconnected);
@@ -1820,7 +1853,7 @@ inline void MQTTManager::setState_(ConnectionState newState)
     if (onStateChanged_) {
         onStateChanged_(state_);
     }
-    ::cm::onMQTTStateChanged(static_cast<int>(state_));
+    callOnMQTTStateChangedSafe_(static_cast<int>(state_));
 }
 
 inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length)
@@ -1843,7 +1876,7 @@ inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* p
         onNewMqttMessage_(view);
     }
     if (topic && payload && length > 0) {
-        ::cm::onNewMQTTMessage(topic, reinterpret_cast<const char*>(payload), length);
+        callOnNewMQTTMessageSafe_(topic, reinterpret_cast<const char*>(payload), length);
     }
 
     if (onMessage_) {

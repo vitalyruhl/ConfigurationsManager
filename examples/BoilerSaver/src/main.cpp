@@ -1130,6 +1130,12 @@ namespace cm
         lmg.log(LL::Warn, "Disconnected");
     }
 
+    void onMQTTStateChanged(int state)
+    {
+        auto mqttState = static_cast<MQTTManager::ConnectionState>(state);
+        lmg.log(LL::Info, "State changed: %s", MQTTManager::mqttStateToString(mqttState));
+    }
+
     void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)
     {
         handleMqttMessage(topic, payload, length);
