@@ -507,6 +507,18 @@ void handeleBoilerState(bool forceON)
         const bool stopOnTarget = boilerSettings.stopTimerOnTarget.get();
         const int prevTime = boilerTimeRemaining;
 
+        // When we force-enable the boiler (e.g. due to under-temperature alarm),
+        // ensure we actually have a non-zero timer so the existing control logic can turn the relay on.
+        if (forceON && boilerTimeRemaining <= 0)
+        {
+            int mins = boilerSettings.boilerTimeMin.get();
+            if (mins <= 0) {
+                mins = 1;
+            }
+            boilerTimeRemaining = mins * 60;
+            lmg.log(LL::Warn, "Under-temperature alarm active -> starting heating timer: %d min", mins);
+        }
+
         // Temperature-based auto control: turn off when upper threshold reached, allow turn-on when below lower threshold
         if (getBoilerState()) {
             if (temperature >= boilerSettings.offThreshold.get()) {
@@ -689,7 +701,7 @@ static void registerIOBindings()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
-    ioManager.addIOtoGUI(IO_BOILER_ID, "Boiler IO", 1);
+    ioManager.addIOtoGUI(IO_BOILER_ID, "Boiler Relay", 1);
 
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = IO_RESET_ID,

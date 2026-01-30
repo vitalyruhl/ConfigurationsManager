@@ -17,13 +17,11 @@ struct I2CSettings {
     Config<int> sdaPin;
     Config<int> sclPin;
     Config<int> busFreq;
-    Config<int> bmeFreq;
     Config<int> displayAddr;
     I2CSettings():
         sdaPin(ConfigOptions<int>{.key = "I2CSDA", .name = "I2C SDA Pin", .category = "I2C", .defaultValue = 21}),
         sclPin(ConfigOptions<int>{.key = "I2CSCL", .name = "I2C SCL Pin", .category = "I2C", .defaultValue = 22}),
         busFreq(ConfigOptions<int>{.key = "I2CFreq", .name = "I2C Bus Freq", .category = "I2C", .defaultValue = 400000}),
-        bmeFreq(ConfigOptions<int>{.key = "BMEFreq", .name = "BME280 Bus Freq", .category = "I2C", .defaultValue = 400000}),
         displayAddr(ConfigOptions<int>{.key = "DispAddr", .name = "Display I2C Address", .category = "I2C", .defaultValue = 0x3C})
     {
         // Settings registration moved to initializeAllSettings()
