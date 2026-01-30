@@ -224,7 +224,7 @@ void setup()
 
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     setupRuntimeUI();
 

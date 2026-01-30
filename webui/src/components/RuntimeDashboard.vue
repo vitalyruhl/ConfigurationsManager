@@ -1659,11 +1659,10 @@ let otaProbeTimer = null;
 async function probeOtaEndpoint() {
   try {
     const r = await fetch("/ota_update", {
-      method: "POST",
+      method: "GET",
       headers: {
         "X-OTA-PROBE": "1",
       },
-      body: new Blob(),
     });
     //console.log('[OTA Probe] Status:', r.status, 'Current state:', otaEndpointAvailable.value);
     // Only enable if we get a successful response (200-299)

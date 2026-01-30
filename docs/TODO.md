@@ -24,8 +24,9 @@
 
 ### Wi-Fi / WebServer Defaults
 
-- Move [Reboot if WiFi lost (min):] setting from System → WiFi
-- check rebooting on weak WiFi connection (reboot sometimes, but connection is only weak)
+- [COMPLETED] Move [Reboot if WiFi lost (min)] setting from System -> WiFi
+- [COMPLETED] Log missing SSID (WL_NO_SSID_AVAIL) and list nearby SSIDs
+- [CURRENT] WiFi reconnect loop: avoid immediate reboot after repeated connect attempts; reboot only when auto-reboot timeout is reached (needs device validation)
 
 - WebSocket defaults
   - Initialize inside `ConfigManager.startWebServer()` by default

@@ -196,7 +196,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
             }
 
                 String* body = static_cast<String*>(request->_tempObject);
-            body->concat(String((const char*)data).substring(0, len));
+            // data is not null-terminated; append exactly len bytes to avoid out-of-bounds reads.
+            body->concat(reinterpret_cast<const char*>(data), len);
 
             if (index + len == total) {
                 WEB_LOG("POST /config with body");
@@ -315,79 +316,74 @@ void ConfigManagerWeb::setupAPIRoutes() {
     });
 
     // Settings update endpoint - /config/apply (matches frontend expectations)
-    server->on("/config/apply", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            // Response is sent in body handler
+    // Use AsyncCallbackJsonWebHandler to avoid edge cases with raw body accumulation.
+    {
+        auto* handler = new AsyncCallbackJsonWebHandler("/config/apply", [this](AsyncWebServerRequest* request, JsonVariant& json) {
             WEB_LOG("/config/apply request received");
-        },
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            // Accumulate body data
-            if (index == 0) {
-                request->_tempObject = new String();
-                static_cast<String*>(request->_tempObject)->reserve(total);
+
+            const String category = request->hasParam("category") ? request->getParam("category")->value() : "";
+            const String key = request->hasParam("key") ? request->getParam("key")->value() : "";
+            if (category.isEmpty() || key.isEmpty()) {
+                WEB_LOG("Missing URL params for /config/apply");
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"missing_params\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
             }
 
-            String* body = static_cast<String*>(request->_tempObject);
-            body->concat(String((const char*)data).substring(0, len));
+            if (!json.is<JsonObject>()) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"invalid_json\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
 
-            // Process when all data received
-            if (index + len == total) {
-                WEB_LOG("/config/apply body complete (%u bytes)", (unsigned)total);
-                // Get URL parameters
-                AsyncWebParameter* pCategory = request->getParam("category");
-                AsyncWebParameter* pKey = request->getParam("key");
+            JsonObject obj = json.as<JsonObject>();
+            if (!obj.containsKey("value")) {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"missing_value\"}");
+                enableCORS(response);
+                request->send(response);
+                return;
+            }
 
-                if (!pCategory || !pKey) {
-                    WEB_LOG("Missing URL params for /config/apply");
-                    request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_params\"}");
-                    delete body;
-                    request->_tempObject = nullptr;
-                    return;
-                }
+            String value;
+            JsonVariant v = obj["value"];
+            if (v.is<const char*>()) {
+                value = v.as<String>();
+            } else if (v.is<bool>()) {
+                value = v.as<bool>() ? "true" : "false";
+            } else if (v.is<int>()) {
+                value = String(v.as<int>());
+            } else if (v.is<float>()) {
+                value = String(v.as<float>(), 6);
+            } else {
+                serializeJson(v, value);
+            }
 
-                String category = pCategory->value();
-                String key = pKey->value();
+            WEB_LOG("Processing /config/apply: category='%s', key='%s'", category.c_str(), key.c_str());
 
-                WEB_LOG("Processing /config/apply: category='%s', key='%s'",
-                        category.c_str(), key.c_str());
+            // Passwords are transmitted in plaintext over HTTP.
+            const String finalValue = value;
 
-                // Parse JSON body to get value
-                DynamicJsonDocument doc(256);
-                DeserializationError err = deserializeJson(doc, *body);
-
-                String value;
-                if (!err && doc.containsKey("value")) {
-                    if (doc["value"].is<String>()) {
-                        value = doc["value"].as<String>();
-                    } else {
-                        // Convert other types to string
-                        serializeJson(doc["value"], value);
-                    }
-                } else {
-                    // Fallback: use entire body as value
-                    value = *body;
-                }
-
-                WEB_LOG("Extracted value: '%s'", value.c_str());
-
-                // Passwords are transmitted in plaintext over HTTP.
-                String finalValue = value;
-                
-                // Call apply callback (memory only, no flash save)
-                if (settingApplyCallback && settingApplyCallback(category, key, finalValue)) {
-                    String response = "{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"" +
-                                    category + "\",\"key\":\"" + key + "\"}";
-                    request->send(200, "application/json", response);
-                } else {
-                    request->send(400, "application/json",
-                                "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"update_failed\"}");
-                }
-
-                delete body;
-                request->_tempObject = nullptr;
+            if (settingApplyCallback && settingApplyCallback(category, key, finalValue)) {
+                const String payload = String("{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"") +
+                    category + "\",\"key\":\"" + key + "\"}";
+                AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+                enableCORS(response);
+                request->send(response);
+            } else {
+                AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
+                    "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"update_failed\"}");
+                enableCORS(response);
+                request->send(response);
             }
         });
+        handler->setMethod(HTTP_POST);
+        server->addHandler(handler);
+    }
 
     // Settings save endpoint - /config/save (saves individual setting to flash)
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.

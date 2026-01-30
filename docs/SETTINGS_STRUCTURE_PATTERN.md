@@ -39,7 +39,6 @@ struct SystemSettings {
 struct SystemSettings {
     Config<bool> allowOTA;
     Config<String> otaPassword;
-    Config<int> wifiRebootTimeoutMin;
     Config<String> version;
     
     // Phase 1: Konstruktor (sicher - keine ConfigManager-Zugriffe)
@@ -58,13 +57,6 @@ struct SystemSettings {
             .showInWeb = true, 
             .isPassword = true
         }),
-        wifiRebootTimeoutMin(ConfigOptions<int>{
-            .key = "WiFiRb",
-            .name = "Reboot if WiFi lost (min)",
-            .category = "System",
-            .defaultValue = 5,
-            .showInWeb = true
-        }),
         version(ConfigOptions<String>{
             .key = "P_Version", 
             .name = "Program Version", 
@@ -80,8 +72,28 @@ struct SystemSettings {
         // Hier ist ConfigManager garantiert bereit
         ConfigManager.addSetting(&allowOTA);
         ConfigManager.addSetting(&otaPassword);
-        ConfigManager.addSetting(&wifiRebootTimeoutMin);
         ConfigManager.addSetting(&version);
+    }
+};
+```
+
+```cpp
+struct WiFiSettings {
+    Config<int> rebootTimeoutMin;
+    
+    WiFiSettings() :
+        rebootTimeoutMin(ConfigOptions<int>{
+            .key = "WiFiRb",
+            .name = "Reboot if WiFi lost (min)",
+            .category = "WiFi",
+            .defaultValue = 5,
+            .showInWeb = true
+        })
+    {
+    }
+    
+    void init() {
+        ConfigManager.addSetting(&rebootTimeoutMin);
     }
 };
 ```
@@ -90,6 +102,7 @@ struct SystemSettings {
 
 ```cpp
 SystemSettings systemSettings; // Konstruktor wird aufgerufen, aber init() noch nicht
+WiFiSettings wifiSettings;
 ```
 
 **3. Explizite Initialisierung in setup():**

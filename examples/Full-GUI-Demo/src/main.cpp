@@ -35,6 +35,7 @@ static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
 // Built-in core settings templates.
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
@@ -140,7 +141,7 @@ void setup()
 
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     setupGUI();
 

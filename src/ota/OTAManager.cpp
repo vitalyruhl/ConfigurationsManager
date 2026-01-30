@@ -137,7 +137,8 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
                 request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
                 return;
             }
-            request->send(405, "application/json", "{\"status\":\"error\",\"reason\":\"method_not_allowed\"}");
+            // Treat GET as a lightweight probe endpoint for clients/UI.
+            request->send(200, "application/json", "{\"status\":\"ok\",\"probe\":true}");
         });
 
     server->on("/ota_update", HTTP_POST,

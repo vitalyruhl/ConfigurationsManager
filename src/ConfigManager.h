@@ -1106,8 +1106,25 @@ public:
     {
         CM_CORE_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
 
+        auto getInt = [this](const char *category, const char *key, int fallback) -> int
+        {
+            BaseSetting *s = findSetting(category, key);
+            if (!s)
+            {
+                return fallback;
+            }
+            if (s->getType() != SettingType::INT)
+            {
+                return fallback;
+            }
+            return static_cast<Config<int> *>(s)->get();
+        };
+
+        const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
+        const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
+
         // Start WiFi connection non-blocking
-        wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout
+        wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
         wifiManager.setCallbacks(
             [this]()
             {
@@ -1153,7 +1170,24 @@ public:
     {
         CM_CORE_LOG("Starting web server with static IP %s", staticIP.toString().c_str());
 
-        wifiManager.begin(10000, 30); // 10s reconnect interval, 30min auto-reboot timeout
+        auto getInt = [this](const char *category, const char *key, int fallback) -> int
+        {
+            BaseSetting *s = findSetting(category, key);
+            if (!s)
+            {
+                return fallback;
+            }
+            if (s->getType() != SettingType::INT)
+            {
+                return fallback;
+            }
+            return static_cast<Config<int> *>(s)->get();
+        };
+
+        const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
+        const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
+
+        wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
         wifiManager.setCallbacks(
             [this]()
             {

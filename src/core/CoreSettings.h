@@ -40,6 +40,8 @@ struct CoreWiFiSettings
     Config<String> dnsPrimary{ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = CoreCategories::WiFi, .defaultValue = String("192.168.0.1"), .showInWeb = true, .sortOrder = 7}};
     Config<String> dnsSecondary{ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = CoreCategories::WiFi, .defaultValue = String("8.8.8.8"), .showInWeb = true, .sortOrder = 8}};
 
+    Config<int> rebootTimeoutMin{ConfigOptions<int>{.key = "WiFiRb", .name = "Reboot if WiFi lost (min)", .category = CoreCategories::WiFi, .defaultValue = 5, .showInWeb = true, .sortOrder = 20}};
+
     void attachTo(ConfigManagerClass &cfg)
     {
         cfg.addSetting(&wifiSsid);
@@ -50,6 +52,7 @@ struct CoreWiFiSettings
         cfg.addSetting(&subnet);
         cfg.addSetting(&dnsPrimary);
         cfg.addSetting(&dnsSecondary);
+        cfg.addSetting(&rebootTimeoutMin);
 
         // Keep DHCP-dependent visibility consistent with the original demo pattern.
         staticIp.showIfFunc = [this]()
@@ -70,21 +73,18 @@ struct CoreSystemSettings
     explicit CoreSystemSettings(const String &defaultVersion)
                 : allowOTA(ConfigOptions<bool>{.key = "OTAEn", .name = "Allow OTA Updates", .category = CoreCategories::System, .defaultValue = true, .showInWeb = true, .sortOrder = 1}),
                     otaPassword(ConfigOptions<String>{.key = "OTAPass", .name = "OTA Password", .category = CoreCategories::System, .defaultValue = String(""), .showInWeb = true, .isPassword = true, .sortOrder = 2}),
-                    wifiRebootTimeoutMin(ConfigOptions<int>{.key = "WiFiRb", .name = "Reboot if WiFi lost (min)", .category = CoreCategories::System, .defaultValue = 5, .showInWeb = true, .sortOrder = 3}),
-                    version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = CoreCategories::System, .defaultValue = defaultVersion, .showInWeb = true, .sortOrder = 4})
+                    version(ConfigOptions<String>{.key = "P_Version", .name = "Program Version", .category = CoreCategories::System, .defaultValue = defaultVersion, .showInWeb = true, .sortOrder = 3})
     {
     }
 
     Config<bool> allowOTA;
     Config<String> otaPassword;
-    Config<int> wifiRebootTimeoutMin;
     Config<String> version;
 
     void attachTo(ConfigManagerClass &cfg)
     {
         cfg.addSetting(&allowOTA);
         cfg.addSetting(&otaPassword);
-        cfg.addSetting(&wifiRebootTimeoutMin);
         cfg.addSetting(&version);
     }
 };

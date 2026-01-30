@@ -97,10 +97,23 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
     JsonObject root = d.to<JsonObject>();
     root["uptime"] = millis();
 
-    // Sort providers by order
-    sortProviders();
+    // Do not sort runtimeProviders in-place here: runtimeValuesToJSON() can be called from
+    // multiple contexts (WS push + HTTP handlers). In-place std::sort would introduce data races.
+    std::vector<const RuntimeValueProvider*> providers;
+    providers.reserve(runtimeProviders.size());
+    for (const auto& prov : runtimeProviders) {
+        providers.push_back(&prov);
+    }
+    std::sort(providers.begin(), providers.end(),
+        [](const RuntimeValueProvider* a, const RuntimeValueProvider* b) {
+            return a->order < b->order;
+        });
 
-    for (auto& prov : runtimeProviders) {
+    for (const auto* provPtr : providers) {
+        if (!provPtr) {
+            continue;
+        }
+        const auto& prov = *provPtr;
         JsonObject slot;
         JsonVariant existing = root[prov.name];
         if (existing.isNull()) {

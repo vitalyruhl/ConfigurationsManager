@@ -27,12 +27,13 @@ Example (based on examples/Full-IO-Demo):
 ```cpp
 #include "ConfigManager.h"
 #include "core/CoreSettings.h"
-#include "core/CoreWiFiServices.h"
-
-static cm::CoreSettings& coreSettings = cm::CoreSettings::instance();
-static cm::CoreSystemSettings& systemSettings = coreSettings.system;
-static cm::CoreNtpSettings& ntpSettings = coreSettings.ntp;
-static cm::CoreWiFiServices wifiServices;
+ #include "core/CoreWiFiServices.h"
+ 
+ static cm::CoreSettings& coreSettings = cm::CoreSettings::instance();
+ static cm::CoreWiFiSettings& wifiSettings = coreSettings.wifi;
+ static cm::CoreSystemSettings& systemSettings = coreSettings.system;
+ static cm::CoreNtpSettings& ntpSettings = coreSettings.ntp;
+ static cm::CoreWiFiServices wifiServices;
 
 void setup() {
   ConfigManager.setAppName("MyDevice");
@@ -41,11 +42,12 @@ void setup() {
   coreSettings.attachNtp(ConfigManager);
 
   ConfigManager.loadAll();
-  ConfigManager.startWebServer();
-
-  // Optional: reboot if WiFi stays down too long.
-  ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
-}
+   ConfigManager.startWebServer();
+ 
+   // Optional: reboot if WiFi stays down too long.
+   // Note: ConfigManager.startWebServer() already passes WiFiRb into WiFiManager.begin().
+   ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
+ }
 
 void onWiFiConnected() {
   wifiServices.onConnected(ConfigManager, "MyDevice", systemSettings, ntpSettings);
@@ -66,7 +68,7 @@ If you use `cm::CoreSettings` (see src/core/CoreSettings.h), the following setti
 
 | Key | Name (UI) | Type | Meaning |
 |---|---|---|---|
-| `WiFiSSID` | WiFi SSID | string | STA SSID (empty → AP fallback) |
+| `WiFiSSID` | WiFi SSID | string | STA SSID (empty -> AP fallback) |
 | `WiFiPassword` | WiFi Password | password | STA password |
 | `WiFiUseDHCP` | Use DHCP | bool | `true` = DHCP, `false` = static IP |
 | `WiFiStaticIP` | Static IP | string | Static IP address |
@@ -74,6 +76,7 @@ If you use `cm::CoreSettings` (see src/core/CoreSettings.h), the following setti
 | `WiFiSubnet` | Subnet Mask | string | Subnet mask |
 | `WiFiDNS1` | Primary DNS | string | Optional DNS1 |
 | `WiFiDNS2` | Secondary DNS | string | Optional DNS2 |
+| `WiFiRb` | Reboot if WiFi lost (min) | int | Auto reboot timeout in minutes |
 
 Related system settings (category `System`):
 
@@ -81,13 +84,12 @@ Related system settings (category `System`):
 |---|---|---|---|
 | `OTAEn` | Allow OTA Updates | bool | Enables ArduinoOTA (and OTA web routes) |
 | `OTAPass` | OTA Password | password | Password used for ArduinoOTA |
-| `WiFiRb` | Reboot if WiFi lost (min) | int | Auto reboot timeout in minutes |
 
 Important ESP32 note:
-
-- ESP32 has a 15 character limitation for internal preference keys.
-- ConfigManager builds a storage key from `<category>_<key>`.
-- Keep categories short (or use the core bundles which are already compatible).
+ 
+ - ESP32 has a 15 character limitation for internal preference keys.
+ - `ConfigOptions.key` is the preference key. If it is `nullptr`, ConfigManager auto-generates a key from category + name.
+ - Keep categories short (or use the core bundles which are already compatible).
 
 ## Station mode (DHCP vs. static IP)
 
@@ -142,8 +144,8 @@ If no SSID is configured, starting an AP is a common fallback.
 
 Typical flow:
 
-- if SSID is empty → `startAccessPoint()`
-- if the device runs in AP mode → skip normal web server startup
+ - if SSID is empty -> `startAccessPoint()`
+ - if the device runs in AP mode -> skip normal web server startup
 
 Notes:
 

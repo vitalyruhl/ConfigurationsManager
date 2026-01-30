@@ -26,6 +26,8 @@
 #include "mqtt/MQTTManager.h"
 #include "mqtt/MQTTLogOutput.h"
 
+#include "secret/wifiSecret.h"
+
 // predeclare the functions (prototypes)
 static void setupLogging();
 static void setupGUI();
@@ -35,7 +37,6 @@ static void setupMqttCallbacks();
 static void handleMqttMessage(const char* topic, const char* payload, unsigned int length);
 static void publishMqttState(bool retained);
 static void publishMqttStateIfNeeded();
-static void ensureMqttDefaults(bool enableMissing, bool baseMissing, bool publishMissing);
 static void registerIOBindings();
 static void SetupStartDisplay();
 static void WriteToDisplay();
@@ -82,6 +83,8 @@ static cm::IOManager ioManager;
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
+static cm::MQTTManager::Settings &mqttSettings = mqtt.settings();
 static cm::CoreWiFiServices wifiServices;
 
 static Adafruit_SSD1306 display(4);
@@ -174,17 +177,56 @@ void setup()
     setupMQTT();
 
     ConfigManager.loadAll();
+    delay(100); // Small delay
 
-    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
+    //add my wifi credentials if not set
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** SSID is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+        ConfigManager.saveAll();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "Restarting ESP, after auto setting WiFi credentials");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        delay(500); // Small delay - get time to flush log
+        ESP.restart();
+    }
+
+    
     // Re-attach to apply loaded values (attach() is idempotent)
     mqtt.attach(ConfigManager);
 
-    ioManager.begin();
-    setBoilerState(false);
+    //add my mqtt credentials if not set
+    if (mqttSettings.server.get().isEmpty())
+    {
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        mqttSettings.server.set(MY_MQTT_BROKER_IP);
+        mqttSettings.port.set(MY_MQTT_BROKER_PORT);
+        mqttSettings.username.set(MY_MQTT_USERNAME);
+        mqttSettings.password.set(MY_MQTT_PASSWORD);
+        mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
+        ConfigManager.saveAll();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+    }
 
+    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
+
+    ioManager.begin();
+    
     updateMqttTopics();
     setupMqttCallbacks();
+    setBoilerState(false);
 
     setupGUI();
 
@@ -206,17 +248,18 @@ void setup()
 
     const bool startedInStationMode = SetupStartWebServer();
 
-    lmg.log("[SETUP] System setup completed.");
+    lmg.log("System setup completed.");
 }
 
 void loop()
 {
     lmg.scopedTag("loop");
-    boilerState = getBoilerState();
-
     ConfigManager.updateLoopTiming();
+    
     ConfigManager.getWiFiManager().update();
+    boilerState = getBoilerState();
     ioManager.update();
+
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
@@ -242,8 +285,6 @@ void loop()
     lmg.loop();
 
     publishMqttStateIfNeeded();
-
-    // Monitor MQTT connection status and log periodically
    
     handeleBoilerState(false);
 
@@ -1257,7 +1298,7 @@ bool SetupStartWebServer()
     lmg.log(LL::Info, "Starting Webserver...");
 
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
+    // Auto reboot timeout is configured via WiFiRb (handled inside ConfigManager.startWebServer()).
 
     return !ConfigManager.getWiFiManager().isInAPMode();
 }

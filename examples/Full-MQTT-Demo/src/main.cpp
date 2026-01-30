@@ -11,6 +11,9 @@
 // Optional logging module
 #include "logging/LoggingManager.h"
 
+#include "secret/wifiSecret.h"
+
+
 // Optional MQTT module (requires PubSubClient in the consuming project)
 #define CM_MQTT_NO_DEFAULT_HOOKS
 #include "mqtt/MQTTManager.h"
@@ -26,10 +29,12 @@ static const char SETTINGS_PASSWORD[] = "";
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
 static cm::MQTTManager &mqtt = cm::MQTTManager::instance();
+static cm::MQTTManager::Settings &mqttSettings = mqtt.settings();
 static cm::LoggingManager &lmg = cm::LoggingManager::instance();
 using LL = cm::LoggingManager::Level;
 
@@ -149,6 +154,36 @@ void setup()
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
 
+    // Apply secret defaults only if nothing is configured yet (after loading persisted settings).
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** SSID is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+        ConfigManager.saveAll();
+    }
+
+    if (mqttSettings.server.get().isEmpty())
+    {
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        mqttSettings.server.set(MY_MQTT_BROKER_IP);
+        mqttSettings.port.set(MY_MQTT_BROKER_PORT);
+        mqttSettings.username.set(MY_MQTT_USERNAME);
+        mqttSettings.password.set(MY_MQTT_PASSWORD);
+        mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
+        ConfigManager.saveAll();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+    }
+
     systemSettings.allowOTA.setCallback([](bool enabled)
                                         {
         lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
@@ -159,7 +194,6 @@ void setup()
 
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
 
     ConfigManager.enableWebSocketPush();
     ConfigManager.setWebSocketInterval(1000);

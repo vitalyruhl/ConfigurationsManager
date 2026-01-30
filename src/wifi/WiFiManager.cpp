@@ -1,11 +1,74 @@
 #include "WiFiManager.h"
 #include "../ConfigManager.h"
 #include <ESP.h>
+#include <esp_system.h>
 #include <esp_wifi.h>
 
 // Logging support with verbosity levels
 #define WIFI_LOG(...) CM_LOG("[WiFi] " __VA_ARGS__)
 #define WIFI_LOG_VERBOSE(...) CM_LOG_VERBOSE("[WiFi] " __VA_ARGS__)
+
+namespace
+{
+constexpr uint32_t kRestartMarkerMagic = 0x434D5752; // "CMWR"
+constexpr uint32_t kRestartCauseWiFiAutoReboot = 1;
+
+RTC_DATA_ATTR uint32_t g_restartMarkerMagic = 0;
+RTC_DATA_ATTR uint32_t g_restartMarkerCause = 0;
+
+const char *resetReasonToStr(const esp_reset_reason_t reason)
+{
+  switch (reason)
+  {
+  case ESP_RST_POWERON:
+    return "POWERON";
+  case ESP_RST_EXT:
+    return "EXTERNAL";
+  case ESP_RST_SW:
+    return "SW";
+  case ESP_RST_PANIC:
+    return "PANIC";
+  case ESP_RST_INT_WDT:
+    return "INT_WDT";
+  case ESP_RST_TASK_WDT:
+    return "TASK_WDT";
+  case ESP_RST_WDT:
+    return "WDT";
+  case ESP_RST_DEEPSLEEP:
+    return "DEEPSLEEP";
+  case ESP_RST_BROWNOUT:
+    return "BROWNOUT";
+  case ESP_RST_SDIO:
+    return "SDIO";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+void markRestartCause(const uint32_t cause)
+{
+  g_restartMarkerMagic = kRestartMarkerMagic;
+  g_restartMarkerCause = cause;
+}
+
+void logAndClearRestartMarker()
+{
+  if (g_restartMarkerMagic == kRestartMarkerMagic)
+  {
+    if (g_restartMarkerCause == kRestartCauseWiFiAutoReboot)
+    {
+      WIFI_LOG("[INFO] Previous restart marker: WiFi auto-reboot");
+    }
+    else
+    {
+      WIFI_LOG("[INFO] Previous restart marker: cause=%lu", static_cast<unsigned long>(g_restartMarkerCause));
+    }
+  }
+
+  g_restartMarkerMagic = 0;
+  g_restartMarkerCause = 0;
+}
+} // namespace
 
 ConfigManagerWiFi::ConfigManagerWiFi()
   : currentState(WIFI_STATE_DISCONNECTED)
@@ -29,13 +92,24 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , filterMac("")                     // No filter MAC by default
   , priorityMac("")                   // No priority MAC by default
   , connectAttempts(0)
+  , lastNoSsidScanMillis(0)
+  , noSsidScanStartMillis(0)
 {
 }
 
 void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long autoRebootTimeoutMin) {
+  const esp_reset_reason_t rr = esp_reset_reason();
+  WIFI_LOG_VERBOSE("Reset reason: %s (%d)", resetReasonToStr(rr), static_cast<int>(rr));
+  logAndClearRestartMarker();
+
   reconnectInterval = reconnectIntervalMs;
   autoRebootTimeoutMs = autoRebootTimeoutMin * 60000UL; // Convert minutes to milliseconds
   autoRebootEnabled = (autoRebootTimeoutMin > 0);
+
+  WIFI_LOG_VERBOSE("Config: reconnectInterval=%lu ms, autoReboot=%s (%lu min)",
+                   reconnectInterval,
+                   autoRebootEnabled ? "enabled" : "disabled",
+                   autoRebootTimeoutMin);
 
   // Initialize timing
   lastGoodConnectionMillis = millis();
@@ -178,6 +252,10 @@ void ConfigManagerWiFi::update() {
           WIFI_LOG_VERBOSE("Still connecting... WiFi.status() = %d (%s)",
                            wifiStatus, getWiFiStatusString(wifiStatus).c_str());
           lastStatusLog = millis();
+
+          if (wifiStatus == WL_NO_SSID_AVAIL) {
+            logNoSsidAvailScan_();
+          }
         }
       }
 
@@ -298,6 +376,8 @@ void ConfigManagerWiFi::checkAutoReboot() {
   if (timeSinceLastConnection >= autoRebootTimeoutMs) {
     // Time for auto-reboot
     WIFI_LOG("Auto-reboot triggered after %lu ms without connection", timeSinceLastConnection);
+    markRestartCause(kRestartCauseWiFiAutoReboot);
+    delay(50); // allow log to flush
     ESP.restart();
   }
 }
@@ -335,6 +415,9 @@ void ConfigManagerWiFi::enableAutoReboot(bool enable) {
 void ConfigManagerWiFi::setAutoRebootTimeout(unsigned long timeoutMinutes) {
   autoRebootTimeoutMs = timeoutMinutes * 60000UL;
   autoRebootEnabled = (timeoutMinutes > 0);
+  WIFI_LOG_VERBOSE("Auto-reboot timeout set to %lu min (%lu ms)",
+                   timeoutMinutes,
+                   autoRebootTimeoutMs);
 }
 
 void ConfigManagerWiFi::setReconnectInterval(unsigned long intervalMs) {
@@ -398,9 +481,13 @@ int ConfigManagerWiFi::getRSSI() const {
 // Attempt connection with phased strategy:
 //  - Attempt 1 (phase 0): normal connect (no stack reset)
 //  - Attempt 2 (phase 1): perform WiFi stack reset, then connect
-//  - Attempt 3+ (phase >=2): restart ESP
+//  - Attempt 3+ (phase >=2): keep retrying and periodically reset the WiFi stack
+//    (restart only via auto-reboot timeout to avoid reboot loops on weak networks)
 void ConfigManagerWiFi::attemptConnect() {
-  uint8_t phase = connectAttempts;
+  const uint8_t phase = connectAttempts;
+  const unsigned long now = millis();
+  const unsigned long timeSinceLastGood = now - lastGoodConnectionMillis;
+  const bool autoRebootDue = (autoRebootEnabled && autoRebootTimeoutMs > 0 && timeSinceLastGood >= autoRebootTimeoutMs);
 
   if (phase == 0) {
     WIFI_LOG_VERBOSE("Attempt 1: normal connect (no stack reset)");
@@ -418,9 +505,45 @@ void ConfigManagerWiFi::attemptConnect() {
       applyStaticConfig();
     }
   } else {
-    WIFI_LOG("Attempt %d: restarting ESP due to repeated connection failures", phase + 1);
-    ESP.restart();
-    return; // restart should not return
+    // Do not restart immediately; gate restarts by the configured auto-reboot timeout.
+    // This prevents short reboot loops when an SSID is temporarily unavailable or signal is weak.
+    const unsigned long timeoutMin = autoRebootTimeoutMs / 60000UL;
+    WIFI_LOG_VERBOSE("Attempt %u: retrying (sinceLastGood=%lu ms, autoReboot=%s, timeout=%lu min)",
+                     static_cast<unsigned int>(phase) + 1U,
+                     timeSinceLastGood,
+                     autoRebootEnabled ? "enabled" : "disabled",
+                     timeoutMin);
+
+    if (autoRebootDue) {
+      WIFI_LOG("Auto-reboot triggered after %lu ms without connection (attempt=%u)",
+               timeSinceLastGood,
+               static_cast<unsigned int>(phase) + 1U);
+      markRestartCause(kRestartCauseWiFiAutoReboot);
+      delay(50); // allow log to flush
+      ESP.restart();
+      return;
+    }
+
+    // Periodically reset the WiFi stack to recover from stuck states without rebooting the MCU.
+    // With a 10s reconnect interval, every 6th retry is roughly once per minute.
+    const bool periodicReset = ((phase % 6U) == 0U);
+    if (periodicReset) {
+      WIFI_LOG("Retry attempt %u: performing WiFi stack reset (no reboot)",
+               static_cast<unsigned int>(phase) + 1U);
+      performWiFiStackReset();
+      if (!useDHCP) {
+        applyStaticConfig();
+      }
+    } else {
+      // Ensure WiFi is in a sane STA config before calling begin() again.
+      WiFi.mode(WIFI_STA);
+      WiFi.setSleep(false);
+      WiFi.setAutoReconnect(true);
+      WiFi.persistent(true);
+      if (!useDHCP) {
+        applyStaticConfig();
+      }
+    }
   }
 
   // BSSID selection if configured
@@ -445,7 +568,9 @@ void ConfigManagerWiFi::attemptConnect() {
   // Advance state and counters
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = millis();
-  connectAttempts++;
+  if (connectAttempts < 250) {
+    connectAttempts++;
+  }
 }
 
 // Smart WiFi Roaming implementation
@@ -765,4 +890,79 @@ void ConfigManagerWiFi::performWiFiStackReset() {
   
   WIFI_LOG("WiFi stack reset complete - WiFi.mode() = %d, WiFi.status() = %d", 
          WiFi.getMode(), WiFi.status());
+}
+
+void ConfigManagerWiFi::logNoSsidAvailScan_() {
+  const unsigned long now = millis();
+  if (ssid.isEmpty()) {
+    WIFI_LOG("[WARNING] WL_NO_SSID_AVAIL but SSID is empty");
+    return;
+  }
+
+  constexpr unsigned long throttleMs = 60000UL; // avoid frequent scan starts/log spam
+  constexpr unsigned long maxScanAgeMs = 15000UL;
+
+  const int scanState = WiFi.scanComplete();
+  if (scanState == WIFI_SCAN_RUNNING) {
+    // Scan is already running (likely started by us).
+    if (noSsidScanStartMillis != 0 && (now - noSsidScanStartMillis) > maxScanAgeMs) {
+      WIFI_LOG_VERBOSE("SSID '%s' still not found; scan is still running (%lu ms)",
+                       ssid.c_str(),
+                       now - noSsidScanStartMillis);
+    }
+    return;
+  }
+
+  if (scanState >= 0) {
+    const int networkCount = scanState;
+    int matches = 0;
+    for (int i = 0; i < networkCount; i++) {
+      if (WiFi.SSID(i) == ssid) {
+        matches++;
+      }
+    }
+
+    constexpr int maxShown = 10;
+    String list;
+    list.reserve(256);
+    int shown = 0;
+    for (int i = 0; i < networkCount && shown < maxShown; i++) {
+      String s = WiFi.SSID(i);
+      if (s.isEmpty()) {
+        s = "<hidden>";
+      }
+      if (shown > 0) {
+        list += ", ";
+      }
+      list += s;
+      shown++;
+    }
+
+    WIFI_LOG("[WARNING] Nearby SSIDs: %d networks found, matches for '%s': %d, showing %d: %s",
+             networkCount, ssid.c_str(), matches, shown, list.c_str());
+    WiFi.scanDelete();
+    noSsidScanStartMillis = 0;
+    return;
+  }
+
+  // scanComplete() errors:
+  // - WIFI_SCAN_FAILED (-2): scan failed
+  // - WIFI_SCAN_RUNNING (-1): handled above
+  if (scanState == WIFI_SCAN_FAILED) {
+    WIFI_LOG("[WARNING] SSID '%s' not found; WiFi scan failed (WIFI_SCAN_FAILED)", ssid.c_str());
+    WiFi.scanDelete();
+    noSsidScanStartMillis = 0;
+    // Fall through to possibly start a new scan (throttled).
+  }
+
+  if (lastNoSsidScanMillis != 0 && (now - lastNoSsidScanMillis) < throttleMs) {
+    return;
+  }
+  lastNoSsidScanMillis = now;
+
+  WIFI_LOG("[WARNING] SSID '%s' not found (WL_NO_SSID_AVAIL). Starting async scan for nearby networks...",
+           ssid.c_str());
+  WiFi.scanDelete();
+  noSsidScanStartMillis = now;
+  (void)WiFi.scanNetworks(true /*async*/, false /*showHidden*/);
 }

@@ -696,7 +696,7 @@ bool SetupStartWebServer()
     // Standard behavior: ConfigManager reads the persisted WiFi settings (DHCP vs. static) and starts WiFi.
     Serial.println("[MAIN] startWebServer: auto (WiFi settings)");
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     return true; // Webserver setup completed
 }

@@ -22,6 +22,7 @@ static const char SETTINGS_PASSWORD[] = "";
 // Built-in core settings templates (WiFi/System/NTP).
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 static cm::LoggingManager &lmg = cm::LoggingManager::instance();
@@ -52,7 +53,7 @@ void setup()
 
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)systemSettings.wifiRebootTimeoutMin.get());
+    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     delay(1000);
     logging_Example1();
