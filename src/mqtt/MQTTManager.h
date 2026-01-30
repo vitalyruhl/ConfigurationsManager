@@ -1151,6 +1151,14 @@ inline void MQTTManager::loop()
         return;
     }
 
+    // Avoid connection attempts with an empty broker address (can crash depending on platform/lib).
+    if (settings_.server.get().isEmpty()) {
+        if (state_ != ConnectionState::Disconnected) {
+            disconnect();
+        }
+        return;
+    }
+
     if (!WiFi.isConnected()) {
         if (state_ == ConnectionState::Connected) {
             handleDisconnection_();

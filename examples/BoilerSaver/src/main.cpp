@@ -171,9 +171,9 @@ void setup()
     initializeAllSettings();
     registerIOBindings();
 
-    ConfigManager.loadAll();
-
     setupMQTT();
+
+    ConfigManager.loadAll();
 
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
