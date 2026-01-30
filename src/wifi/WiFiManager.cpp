@@ -826,6 +826,30 @@ String ConfigManagerWiFi::findBestBSSID() {
     }
   }
 
+  if (matchingNetworks == 0) {
+    constexpr int maxShown = 10;
+    String list;
+    list.reserve(256);
+    int shown = 0;
+    for (int i = 0; i < networkCount && shown < maxShown; i++) {
+      String s = WiFi.SSID(i);
+      if (s.isEmpty()) {
+        s = "<hidden>";
+      }
+      if (shown > 0) {
+        list += ", ";
+      }
+      list += s;
+      shown++;
+    }
+
+    WIFI_LOG("[WARNING] SSID '%s' not found during MAC scan. Nearby SSIDs: %d networks found, showing %d: %s",
+             ssid.c_str(),
+             networkCount,
+             shown,
+             list.c_str());
+  }
+
   // Clean up scan results
   WiFi.scanDelete();
 
@@ -899,8 +923,8 @@ void ConfigManagerWiFi::logNoSsidAvailScan_() {
     return;
   }
 
-  constexpr unsigned long throttleMs = 60000UL; // avoid frequent scan starts/log spam
-  constexpr unsigned long maxScanAgeMs = 15000UL;
+  constexpr unsigned long throttleMs = 15000UL; // avoid frequent scan starts/log spam
+  constexpr unsigned long maxScanAgeMs = 30000UL;
 
   const int scanState = WiFi.scanComplete();
   if (scanState == WIFI_SCAN_RUNNING) {
@@ -964,5 +988,5 @@ void ConfigManagerWiFi::logNoSsidAvailScan_() {
            ssid.c_str());
   WiFi.scanDelete();
   noSsidScanStartMillis = now;
-  (void)WiFi.scanNetworks(true /*async*/, false /*showHidden*/);
+  (void)WiFi.scanNetworks(true /*async*/, true /*showHidden*/);
 }
