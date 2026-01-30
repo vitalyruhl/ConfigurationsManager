@@ -24,10 +24,6 @@
 
 ### Wi-Fi / WebServer Defaults
 
-- [COMPLETED] Move [Reboot if WiFi lost (min)] setting from System -> WiFi
-- [COMPLETED] Log missing SSID (WL_NO_SSID_AVAIL) and list nearby SSIDs
-- [CURRENT] WiFi reconnect loop: avoid immediate reboot after repeated connect attempts; reboot only when auto-reboot timeout is reached (needs device validation)
-
 - WebSocket defaults
   - Initialize inside `ConfigManager.startWebServer()` by default
     - `enableWebSocketPush`
@@ -42,10 +38,9 @@
 
 
 1) Refactor examples to newest v3 module structure
-   - [COMPLETED] Start with BoilerSaver
-     - [COMPLETED] remove logging module from there and apply new logging module usage from V3.3.0
-     - [COMPLETED] migrate to newest IO + WiFi + MQTT module usage
    - Later: SolarInverterLimiter
+     - remove logging module from there and apply new logging module usage from V3.3.0
+     - migrate to newest IO + WiFi + MQTT module usage
      - the same like above
 
 2) Documentation
@@ -92,15 +87,3 @@
 ---
 
 ### Done / Resolved
-
-- [COMPLETED] Logging redesign (core logger + advanced LoggingManager baseline)
-  - Multiple outputs with independent levels
-  - GUI log output buffer flush on WebSocket connect
-- [COMPLETED] Logging module (optional, including MQTT log output)
-- [COMPLETED] WebUI log tab (live logging view)
-- [COMPLETED] Human-readable uptime
-- [COMPLETED] Restart-loop bug fixed
-- [COMPLETED] Remove obsolete config switches
-- [COMPLETED] WebUI redesign (Vue 3, theming, tabs)
-- [COMPLETED] Configurable browser title
-- [COMPLETED] WebUI debug logging flag
