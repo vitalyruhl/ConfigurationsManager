@@ -11,7 +11,12 @@
 // Optional logging module
 #include "logging/LoggingManager.h"
 
-#include "secret/wifiSecret.h"
+#if __has_include("secret/wifiSecret.h")
+  #include "secret/wifiSecret.h"
+  #define CM_HAS_WIFI_SECRETS 1
+#else
+  #define CM_HAS_WIFI_SECRETS 0
+#endif
 
 
 // Optional MQTT module (requires PubSubClient in the consuming project)
@@ -157,6 +162,7 @@ void setup()
     // Apply secret defaults only if nothing is configured yet (after loading persisted settings).
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
+#if CM_HAS_WIFI_SECRETS
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         lmg.log(LL::Debug, "SETUP: *** SSID is empty, setting My values *** ");
         lmg.log(LL::Debug, "-------------------------------------------------------------");
@@ -168,10 +174,14 @@ void setup()
         wifiSettings.subnet.set(MY_SUBNET_MASK);
         wifiSettings.dnsPrimary.set(MY_DNS_IP);
         ConfigManager.saveAll();
+#else
+        lmg.log(LL::Warn, "SETUP: SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+#endif
     }
 
     if (mqttSettings.server.get().isEmpty())
     {
+#if CM_HAS_WIFI_SECRETS
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
         lmg.log(LL::Debug, "-------------------------------------------------------------");
@@ -182,6 +192,9 @@ void setup()
         mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
         ConfigManager.saveAll();
         lmg.log(LL::Debug, "-------------------------------------------------------------");
+#else
+        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
+#endif
     }
 
     systemSettings.allowOTA.setCallback([](bool enabled)
