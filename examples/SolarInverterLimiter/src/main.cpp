@@ -53,7 +53,7 @@ void SetupStartTemperatureMeasuring();
 void ProjectConfig();
 void CheckVentilator(float currentTemperature);
 void EvaluateHeater(float currentTemperature);
-void ShowDisplay();
+void ShowDisplayOn();
 void ShowDisplayOff();
 static float computeDewPoint(float temperatureC, float relHumidityPct);
 static void logNetworkIpInfo(const char *context);
@@ -73,7 +73,7 @@ static bool getFanRelay();
 static bool getHeaterRelay();
 //--------------------------------------------------------------------------------------------------------------
 
-#pragma region configuratio variables
+#pragma region configuration variables
 
 BME280_I2C bme280;
 
@@ -136,7 +136,7 @@ static String topicPublishHumidityPct;
 static String topicPublishDewpointC;
 static unsigned long lastMqttPublishMs = 0;
 
-#pragma endregion configuration variables
+#pragma endregion configurationn variables
 
 //----------------------------------------
 // MAIN FUNCTIONS
@@ -223,9 +223,7 @@ void setup()
 #endif
     }
 
-    // Re-attach to apply loaded values (attach() is idempotent)
-    mqtt.attach(ConfigManager);
-
+    mqtt.attach(ConfigManager);// Re-attach to apply loaded values (attach() is idempotent)
     if (mqttSettings.server.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
@@ -252,10 +250,12 @@ void setup()
 #endif
     }
 
-    systemSettings.allowOTA.setCallback([](bool enabled)
-                                        {
-        lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
-        ConfigManager.getOTAManager().enable(enabled); });
+    systemSettings.allowOTA.setCallback(
+      [](bool enabled){
+            lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
+            ConfigManager.getOTAManager().enable(enabled);
+          });
+
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
     ioManager.begin();
@@ -275,12 +275,13 @@ void setup()
     ConfigManager.setRoamingImprovement(10);
 
     // Prefer this AP, fallback to others
-    ConfigManager.setWifiAPMacPriority("3C:A6:2F:B8:54:B1");
+    // ConfigManager.setWifiAPMacPriority("3C:A6:2F:B8:54:B1");//shest
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
 
     updateMqttTopics();
-
+    setupGUI();
     SetupStartDisplay();
-    ShowDisplay();
+    ShowDisplayOn();
 
     helpers.blinkBuidInLEDsetpinMode();
     helpers.blinkBuidInLED(3, 100);
@@ -297,7 +298,6 @@ void setup()
 
     RS485Ticker.attach(limiterSettings.RS232PublishPeriod.get(), cb_RS485Listener);
 
-    setupGUI();
 
     setFanRelay(false);
     setHeaterRelay(false);
@@ -309,7 +309,7 @@ void loop()
 {
     ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
-
+    lmg.loop();
     ioManager.update();
 
     // Services managed by ConfigManager.
@@ -323,8 +323,6 @@ void loop()
         mqtt.loop();
         publishMqttNowIfNeeded();
     }
-
-    lmg.loop();
 
     // Status LED: simple feedback
     if (ConfigManager.getWiFiManager().isInAPMode())
@@ -359,7 +357,7 @@ void setupGUI()
           data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
     }, 2);
 
-      
+
       // Define sensor display fields using addRuntimeMeta
       RuntimeFieldMeta tempMeta;
       tempMeta.group = "sensors";
@@ -482,25 +480,25 @@ void setupGUI()
       dewpointRiskMeta.order = 3;
       CRM().addRuntimeMeta(dewpointRiskMeta);
 
-        // Alarm: temperature is close to dewpoint (risk of condensation)
-        ConfigManager.defineRuntimeAlarm(
-          "Outputs",
-          "dewpoint_risk",
-          "Dewpoint Risk",
-          [](){
-            return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow.get();
-          },
-          [](){
-            dewpointRiskActive = true;
-            lmg.logTag(LL::Warn, "ALARM", "Dewpoint risk ENTER");
-            EvaluateHeater(temperature);
-          },
-          [](){
-            dewpointRiskActive = false;
-            lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
-            EvaluateHeater(temperature);
-          }
-        );
+      // Alarm: temperature is close to dewpoint (risk of condensation)
+      ConfigManager.defineRuntimeAlarm(
+        "Outputs",
+        "dewpoint_risk",
+        "Dewpoint Risk",
+        [](){
+          return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow.get();
+        },
+        [](){
+          dewpointRiskActive = true;
+          lmg.logTag(LL::Warn, "ALARM", "Dewpoint risk ENTER");
+          EvaluateHeater(temperature);
+        },
+        [](){
+          dewpointRiskActive = false;
+          lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
+          EvaluateHeater(temperature);
+        }
+      );
   //endregion relay outputs
 
 }
@@ -521,6 +519,8 @@ static void setupLogging()
 
     lmg.setGlobalLevel(LL::Trace);
     lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+
+
 }
 
 static void registerIOBindings()
@@ -530,7 +530,7 @@ static void registerIOBindings()
 
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = IO_FAN_ID,
-        .name = "Ventilator Relay",
+        .name = "Cooling Fan Relay",
         .defaultPin = 23,
         .defaultActiveLow = true,
         .defaultEnabled = true,
@@ -573,14 +573,14 @@ static void registerIOBindings()
         cm::IOManager::DigitalInputEventCallbacks{
             .onPress = []() {
                 lmg.logTag(LL::Debug, "IO", "Reset button pressed -> show display");
-                ShowDisplay();
+                ShowDisplayOn();
             },
             .onLongPressOnStartup = []() {
                 lmg.logTag(LL::Warn, "IO", "Reset button pressed at startup -> restoring defaults");
                 ConfigManager.clearAllFromPrefs();
                 ConfigManager.saveAll();
                 delay(500);
-                ESP.restart();
+                // ESP.restart();
             },
         },
         resetOptions);
@@ -592,11 +592,11 @@ static void registerIOBindings()
         cm::IOManager::DigitalInputEventCallbacks{
             .onPress = []() {
                 lmg.logTag(LL::Debug, "IO", "AP button pressed -> show display");
-                ShowDisplay();
+                ShowDisplayOn();
             },
             .onLongPressOnStartup = []() {
                 lmg.logTag(LL::Warn, "IO", "AP button pressed at startup -> starting AP mode");
-                ConfigManager.startAccessPoint(APMODE_SSID, APMODE_PASSWORD);
+                // ConfigManager.startAccessPoint(APMODE_SSID, APMODE_PASSWORD);
             },
         },
         apOptions);
@@ -605,6 +605,7 @@ static void registerIOBindings()
 static void setupMqtt()
 {
     mqtt.attach(ConfigManager);
+    mqtt.addMQTTReceiveSettingsToGUI(ConfigManager);
 
     // Receive: grid import W (from power meter JSON)
     mqtt.addMQTTTopicReceiveInt(
@@ -617,7 +618,6 @@ static void setupMqtt()
         true);
 
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
-    mqtt.addMQTTReceiveSettingsToGUI(ConfigManager);
     mqtt.addMQTTTopicTooGUI(ConfigManager, "grid_import_w", "MQTT-Received", 1);
 
     // Optional: show meta fields in runtime UI
@@ -953,7 +953,7 @@ void EvaluateHeater(float currentTemperature){
 
     if(currentTemperature < onTh){
       heaterLatchedState = true;
-    } 
+    }
     if(currentTemperature > offTh){
       heaterLatchedState = false;
     }
@@ -962,7 +962,7 @@ void EvaluateHeater(float currentTemperature){
   setHeaterRelay(heaterLatchedState);
 }
 
-void ShowDisplay()
+void ShowDisplayOn()
 {
   if (!displayInitialized) return;
   displayTicker.detach(); // Stop the ticker to prevent multiple calls

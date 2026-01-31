@@ -26,7 +26,6 @@ void initializeAllSettings()
     ConfigManager.addSetting(&i2cSettings.sdaPin);
     ConfigManager.addSetting(&i2cSettings.sclPin);
     ConfigManager.addSetting(&i2cSettings.busFreq);
-    ConfigManager.addSetting(&i2cSettings.bmeFreq);
     ConfigManager.addSetting(&i2cSettings.displayAddr);
 
     ConfigManager.addSetting(&fanSettings.enabled);

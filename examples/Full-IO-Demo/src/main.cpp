@@ -84,7 +84,7 @@ static void createDigitalOutputs()
     // Digital outputs are settings-driven and owned by IOManager.
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "heater",
-        .name = "Heater",
+        .name = "Heater Relay",
         .defaultPin = 4,
         .defaultActiveLow = true,
         .defaultEnabled = true,
@@ -92,7 +92,7 @@ static void createDigitalOutputs()
 
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "fan",
-        .name = "Cooling Fan",
+        .name = "Cooling Fan Relay",
         .defaultPin = 23,
         .defaultActiveLow = true,
         .defaultEnabled = true,
@@ -157,9 +157,9 @@ static void createDigitalInputs()
         .id = "ap_mode",
         .name = "AP Mode Button",
         .defaultPin = 13,
-        .defaultActiveLow = false,
-        .defaultPullup = false,
-        .defaultPulldown = true,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
         .defaultEnabled = true,
     });
 
@@ -167,9 +167,9 @@ static void createDigitalInputs()
         .id = "reset",
         .name = "Reset Button",
         .defaultPin = 14,
-        .defaultActiveLow = false,
-        .defaultPullup = false,
-        .defaultPulldown = true,
+        .defaultActiveLow = true,
+        .defaultPullup = true,
+        .defaultPulldown = false,
         .defaultEnabled = true,
     });
 

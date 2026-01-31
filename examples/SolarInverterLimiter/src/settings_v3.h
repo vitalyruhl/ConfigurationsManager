@@ -54,14 +54,12 @@ struct I2CSettings
     Config<int> sdaPin;
     Config<int> sclPin;
     Config<int> busFreq;
-    Config<int> bmeFreq;
     Config<int> displayAddr;
 
     I2CSettings()
         : sdaPin(ConfigOptions<int>{.key = "I2CSDA", .name = "SDA Pin", .category = "I2C", .defaultValue = 21})
         , sclPin(ConfigOptions<int>{.key = "I2CSCL", .name = "SCL Pin", .category = "I2C", .defaultValue = 22})
         , busFreq(ConfigOptions<int>{.key = "I2CFreq", .name = "Bus Frequency (Hz)", .category = "I2C", .defaultValue = 400000})
-        , bmeFreq(ConfigOptions<int>{.key = "I2CBmeHz", .name = "BME280 Frequency (Hz)", .category = "I2C", .defaultValue = 400000})
         , displayAddr(ConfigOptions<int>{.key = "I2CDisp", .name = "Display Address", .category = "I2C", .defaultValue = 0x3C})
     {
     }
