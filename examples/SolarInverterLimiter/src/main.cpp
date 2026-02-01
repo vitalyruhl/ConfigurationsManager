@@ -91,6 +91,7 @@ Smoother* powerSmoother = nullptr; //there is a memory allocation in setup, bett
 // global helper variables
 int currentGridImportW = 0; // amount of electricity being imported from grid
 int inverterSetValue = 0;     // current power inverter should deliver (default to zero)
+int solarPowerW = 0;          // current solar production
 float temperature = 0.0;      // current temperature in Celsius
 float Dewpoint = 0.0;         // current dewpoint in Celsius
 float Humidity = 0.0;         // current humidity in percent
@@ -413,6 +414,7 @@ void setupGUI()
           // Apply precision to sensor values to reduce JSON size
           data["gridIn"] = currentGridImportW;
           data["invSet"] = inverterSetValue;
+          data["solar"] = solarPowerW;
           data["enabled"] = limiterSettings.enableController.get();
       }, 1);
 
@@ -442,6 +444,15 @@ void setupGUI()
       limiterEnabledMeta.isBool = true;
       limiterEnabledMeta.order = 3;
       CRM().addRuntimeMeta(limiterEnabledMeta);
+
+      RuntimeFieldMeta solarMeta;
+      solarMeta.group = "Limiter";
+      solarMeta.key = "solar";
+      solarMeta.label = "Solar power";
+      solarMeta.unit = "W";
+      solarMeta.precision = 0;
+      solarMeta.order = 4;
+      CRM().addRuntimeMeta(solarMeta);
   //endregion Limiter
 
 
@@ -660,6 +671,15 @@ static void setupMqtt()
         &currentGridImportW,
         "W",
         "E320.Power_in",
+        true);
+
+    mqtt.addMQTTTopicReceiveInt(
+        "solar_power_w",
+        "Solar power",
+        "tele/tasmota_1DEE45/SENSOR",
+        &solarPowerW,
+        "W",
+        "ENERGY.Power",
         true);
 
     // mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
