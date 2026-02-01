@@ -689,7 +689,7 @@ static void setupMqtt()
         "ENERGY.Power",
         true);
 
-    mqtt.onMqttConnect([](){
+    mqtt.onConnected([](){
         const char* topic = "tele/tasmota_1DEE45/SENSOR";
         const bool ok = mqtt.subscribe(topic);
         lmg.logTag(LL::Debug, "MQTT", "Subscribed to solar topic %s -> %s", topic, ok ? "ok" : "failed");
