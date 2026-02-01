@@ -618,6 +618,7 @@ static void registerIOBindings()
         .defaultPulldown = false,
         .defaultEnabled = true,
     });
+    ioManager.addInputSettingsToGUI(IO_RESET_ID, nullptr, 10);
 
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = IO_AP_ID,
@@ -628,6 +629,7 @@ static void registerIOBindings()
         .defaultPulldown = false,
         .defaultEnabled = true,
     });
+    ioManager.addInputSettingsToGUI(IO_AP_ID, nullptr, 11);
 
     cm::IOManager::DigitalInputEventOptions resetOptions;
     resetOptions.longClickMs = 3000;

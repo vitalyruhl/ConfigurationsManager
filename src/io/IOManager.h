@@ -168,6 +168,17 @@ public:
                        const char* runtimeGroup = "inputs",
                        bool alarmWhenActive = true);
 
+    // Digital input settings only (no runtime/live view registration).
+    // Use this when you want the input configurable under Settings->IO, but do not want a live indicator in Runtime.
+    void addInputSettingsToGUI(const char* id, const char* cardName, int order);
+
+    // Digital input runtime indicator only (no settings/persistence registration).
+    // Use this when you want a live indicator in Runtime, but keep Settings->IO clean (or register settings separately).
+    void addInputRuntimeToGUI(const char* id, int order,
+                              const char* runtimeLabel = nullptr,
+                              const char* runtimeGroup = "inputs",
+                              bool alarmWhenActive = true);
+
     // Analog input settings + runtime values.
     // Shows either scaled OR raw value (depending on showRaw).
     // Call this function multiple times with different runtimeGroup values to show the same input in multiple cards.
@@ -355,6 +366,7 @@ private:
         uint8_t slot = 0;
 
         bool settingsRegistered = false;
+        bool runtimeRegistered = false;
         String cardKey;
         String cardPretty;
         int cardOrder = 100;

@@ -305,13 +305,16 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
     }
 
     DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
-    if (entry.settingsRegistered) {
+    if (entry.settingsRegistered || entry.runtimeRegistered) {
         IO_LOG("[WARNING] addInputToGUI: input '%s' already registered", entry.id.c_str());
         return;
     }
 
     if (!entry.registerSettings) {
+        // Runtime-only / programmatic input: no Settings tab entries and no persistence.
+        // Keep behavior consistent: addInputToGUI registers both parts when settings are enabled.
         entry.settingsRegistered = true;
+        entry.runtimeRegistered = true;
         return;
     }
 
@@ -407,6 +410,140 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
     ConfigManager.getRuntime().addRuntimeMeta(meta);
 
     entry.settingsRegistered = true;
+    entry.runtimeRegistered = true;
+}
+
+void IOManager::addInputSettingsToGUI(const char* id, const char* cardName, int order)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addInputSettingsToGUI: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    if (entry.settingsRegistered) {
+        IO_LOG("[WARNING] addInputSettingsToGUI: input '%s' already registered", entry.id.c_str());
+        return;
+    }
+
+    if (!entry.registerSettings) {
+        entry.settingsRegistered = true;
+        return;
+    }
+
+    entry.cardKey = entry.id;
+    entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    entry.cardOrder = order;
+
+    entry.cardKeyStable = makeStableString(entry.cardKey);
+    entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+    entry.keyPin = formatInputSlotKey(entry.slot, 'P');
+    entry.keyActiveLow = formatInputSlotKey(entry.slot, 'L');
+    entry.keyPullup = formatInputSlotKey(entry.slot, 'U');
+    entry.keyPulldown = formatInputSlotKey(entry.slot, 'D');
+
+    entry.keyPinStable = makeStableString(entry.keyPin);
+    entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+    entry.keyPullupStable = makeStableString(entry.keyPullup);
+    entry.keyPulldownStable = makeStableString(entry.keyPulldown);
+
+    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
+        .key = entry.keyPinStable->c_str(),
+        .name = "GPIO",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPin,
+        .showInWeb = entry.showPinInWeb,
+        .sortOrder = 21,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyActiveLowStable->c_str(),
+        .name = "Active LOW",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultActiveLow,
+        .showInWeb = entry.showActiveLowInWeb,
+        .sortOrder = 22,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.pullup = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyPullupStable->c_str(),
+        .name = "Pull-up",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPullup,
+        .showInWeb = entry.showPullupInWeb,
+        .sortOrder = 23,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    entry.pulldown = std::make_unique<Config<bool>>(ConfigOptions<bool>{
+        .key = entry.keyPulldownStable->c_str(),
+        .name = "Pull-down",
+        .category = cm::CoreCategories::IO,
+        .defaultValue = entry.defaultPulldown,
+        .showInWeb = entry.showPulldownInWeb,
+        .sortOrder = 24,
+        .categoryPretty = IO_CATEGORY_PRETTY,
+        .card = entry.cardKeyStable->c_str(),
+        .cardPretty = entry.cardPrettyStable->c_str(),
+        .cardOrder = entry.cardOrder,
+    });
+
+    ConfigManager.addSetting(entry.pin.get());
+    ConfigManager.addSetting(entry.activeLow.get());
+    ConfigManager.addSetting(entry.pullup.get());
+    ConfigManager.addSetting(entry.pulldown.get());
+
+    entry.settingsRegistered = true;
+}
+
+void IOManager::addInputRuntimeToGUI(const char* id, int order,
+                                     const char* runtimeLabel,
+                                     const char* runtimeGroup,
+                                     bool alarmWhenActive)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addInputRuntimeToGUI: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    if (entry.runtimeRegistered) {
+        IO_LOG("[WARNING] addInputRuntimeToGUI: input '%s' already registered", entry.id.c_str());
+        return;
+    }
+
+    entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("inputs");
+    entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
+    entry.runtimeOrder = order;
+    entry.alarmWhenActive = alarmWhenActive;
+    ensureInputRuntimeProvider(entry.runtimeGroup);
+
+    RuntimeFieldMeta meta;
+    meta.group = entry.runtimeGroup;
+    meta.key = entry.id;
+    meta.label = entry.runtimeLabel;
+    meta.isBool = true;
+    meta.order = entry.runtimeOrder;
+    if (entry.alarmWhenActive) {
+        meta.boolAlarmValue = true;
+    }
+    ConfigManager.getRuntime().addRuntimeMeta(meta);
+
+    entry.runtimeRegistered = true;
 }
 
 static void addAnalogRuntimeMeta(ConfigManagerRuntime& runtime,
