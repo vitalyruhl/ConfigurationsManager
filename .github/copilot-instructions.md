@@ -37,8 +37,8 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Exception (docs-only TODO updates): If the only changes are documentation TODO files (e.g. docs/TODO.md, docs/todo_*.md), direct commits to main are allowed.
   - Git read-only commands are allowed without asking: Examples: `git status`, `git diff`, `git log`, `git show`, `git branch`, `git remote -v`.
   - Git commands that can modify the working tree/index/history still require confirmation: Examples: `git add`, `git commit`, `git switch/checkout`, `git reset`, `git merge`, `git rebase`, `git clean`, `git stash`, `git cherry-pick`.
-  - Always stage changes with `git add -A` so commits include every tracked modification before you run `git commit`.
-  - After each commit on a work branch (feature/*), always push to origin.
+  - Stage/commit/push nur auf ausdrückliche Aufforderung; wenn gestaged wird, dann bevorzugt `git add -A`.
+  - Pushes erfolgen nur, wenn der Nutzer es verlangt (kein Auto-Push nach jedem Commit).
   - Command execution style:
     - For Git commands, do NOT prepend `Set-Location ...;` (just run e.g. `git status -sb`).
     - Only change directories when required for non-git commands (e.g. WebUI/PlatformIO in examples) and use `Push-Location`/`Pop-Location` to avoid leaving the terminal in a different folder.

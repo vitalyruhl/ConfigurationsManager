@@ -134,6 +134,7 @@ static String topicPublishTempC;
 static String topicPublishHumidityPct;
 static String topicPublishDewpointC;
 static unsigned long lastMqttPublishMs = 0;
+static unsigned long lastSolarTraceMs = 0;
 
 #pragma endregion configurationn variables
 
@@ -319,6 +320,15 @@ void loop()
     if (mqttSettings.enableMQTT.get() && ConfigManager.getWiFiManager().isConnected() && !ConfigManager.getWiFiManager().isInAPMode())
     {
         mqtt.loop();
+
+        const String &lastTopic = mqtt.getLastTopic();
+        if (lastTopic.equalsIgnoreCase("tele/tasmota_1DEE45/SENSOR"))
+        {
+            const String &payload = mqtt.getLastPayload();
+            lmg.logTag(LL::Trace, "MQTT", "Solar topic received: %s | payload: %s", lastTopic.c_str(), payload.c_str());
+            lastSolarTraceMs = millis();
+        }
+
         publishMqttNowIfNeeded();
     }
 
@@ -465,17 +475,14 @@ void setupGUI()
           data["manual_override"] = manualOverrideActive;
       }, 3);
 
-      CRM().defineRuntimeStateButton(
+      CRM().defineRuntimeCheckbox(
           "Outputs",
           "manual_override",
           "Manual Override",
           []() { return manualOverrideActive; },
           [](bool on) { setManualOverride(on); },
-          manualOverrideActive,
-          String(),
-          0,
-          "Manual",
-          "Auto");
+          String(),   // optional Hilfetext
+          0);
 
       CRM().defineRuntimeStateButton(
           "Outputs",
@@ -682,6 +689,34 @@ static void setupMqtt()
         "ENERGY.Power",
         true);
 
+    mqtt.onMqttConnect([](){
+        const char* topic = "tele/tasmota_1DEE45/SENSOR";
+        const bool ok = mqtt.subscribe(topic);
+        lmg.logTag(LL::Debug, "MQTT", "Subscribed to solar topic %s -> %s", topic, ok ? "ok" : "failed");
+    });
+
+    // Trace all MQTT RX and parse solar power manually as fallback.
+    mqtt.onMessage([](char *topic, byte *payload, unsigned int length) {
+        String t(topic ? topic : "");
+        String p(reinterpret_cast<char *>(payload), length);
+        lmg.logTag(LL::Trace, "MQTT", "RX topic=%s payload=%s", t.c_str(), p.c_str());
+        if (t.equalsIgnoreCase("tele/tasmota_1DEE45/SENSOR"))
+        {
+            StaticJsonDocument<512> doc;
+            DeserializationError err = deserializeJson(doc, p);
+            if (!err)
+            {
+                int power = doc["ENERGY"]["Power"] | solarPowerW;
+                solarPowerW = power;
+                lmg.logTag(LL::Debug, "MQTT", "Updated solarPowerW=%d from ENERGY.Power", power);
+            }
+            else
+            {
+                lmg.logTag(LL::Warn, "MQTT", "Failed to parse solar JSON: %s", err.c_str());
+            }
+        }
+    });
+
     // mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
     // mqtt.addMQTTTopicTooGUI(ConfigManager, "grid_import_w", "MQTT-Received", 1);
 
@@ -710,11 +745,17 @@ static void updateMqttTopics()
     }
     if (base.isEmpty())
     {
-        base = mqtt.settings().clientId.get();
+        const String cid = mqtt.settings().clientId.get();
+        if (!cid.isEmpty()) {
+            base = cid;
+        }
     }
     if (base.isEmpty())
     {
-        base = ConfigManager.getWiFiManager().getHostname();
+        const char* hn = WiFi.getHostname();
+        if (hn && hn[0]) {
+            base = hn;
+        }
     }
     if (base.isEmpty())
     {
