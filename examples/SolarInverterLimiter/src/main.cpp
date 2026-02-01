@@ -425,7 +425,7 @@ void setupGUI()
       gridInMeta.label = "Grid Import";
       gridInMeta.unit = "W";
       gridInMeta.precision = 0;
-      gridInMeta.order = 1;
+      gridInMeta.order = 2;
       CRM().addRuntimeMeta(gridInMeta);
 
       RuntimeFieldMeta invSetMeta;
@@ -434,7 +434,7 @@ void setupGUI()
       invSetMeta.label = "Inverter Setpoint";
       invSetMeta.unit = "W";
       invSetMeta.precision = 0;
-      invSetMeta.order = 2;
+      invSetMeta.order = 3;
       CRM().addRuntimeMeta(invSetMeta);
 
       RuntimeFieldMeta limiterEnabledMeta;
@@ -442,7 +442,7 @@ void setupGUI()
       limiterEnabledMeta.key = "enabled";
       limiterEnabledMeta.label = "Limiter Enabled";
       limiterEnabledMeta.isBool = true;
-      limiterEnabledMeta.order = 3;
+      limiterEnabledMeta.order = 1;
       CRM().addRuntimeMeta(limiterEnabledMeta);
 
       RuntimeFieldMeta solarMeta;
@@ -501,13 +501,13 @@ void setupGUI()
           "On",
           "Off");
 
-      RuntimeFieldMeta manualOverrideMeta;
-      manualOverrideMeta.group = "Outputs";
-      manualOverrideMeta.key = "manual_override";
-      manualOverrideMeta.label = "Manual Override";
-      manualOverrideMeta.isBool = true;
-      manualOverrideMeta.order = 0;
-      CRM().addRuntimeMeta(manualOverrideMeta);
+      // RuntimeFieldMeta manualOverrideMeta;
+      // manualOverrideMeta.group = "Outputs";
+      // manualOverrideMeta.key = "manual_override";
+      // manualOverrideMeta.label = "Manual Override";
+      // manualOverrideMeta.isBool = true;
+      // manualOverrideMeta.order = 0;
+      // CRM().addRuntimeMeta(manualOverrideMeta);
 
       RuntimeFieldMeta ventilatorMeta;
       ventilatorMeta.group = "Outputs";
@@ -710,7 +710,15 @@ static void updateMqttTopics()
     }
     if (base.isEmpty())
     {
-        base = "SolarLimiter2";
+        base = mqtt.settings().clientId.get();
+    }
+    if (base.isEmpty())
+    {
+        base = ConfigManager.getWiFiManager().getHostname();
+    }
+    if (base.isEmpty())
+    {
+        base = APP_NAME;
     }
 
     mqttBaseTopic = base;
