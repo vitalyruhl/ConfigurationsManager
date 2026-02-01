@@ -10,6 +10,7 @@ This changelog is a curated overview.
 - Logging/MQTT-Logging module
   - Advanced LoggingManager with multiple outputs (Serial / GUI / MQTT)
   - MQTT log output topics (stream + retained last entries)
+- SolarInverterLimiter example exposes a "Manual Override" runtime switch so the fan/heater UI buttons can pause automatic control.
 
 ## 3.2.0
 

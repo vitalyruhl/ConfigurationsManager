@@ -69,6 +69,7 @@ static void publishMqttNow();
 static void publishMqttNowIfNeeded();
 static void setFanRelay(bool on);
 static void setHeaterRelay(bool on);
+static void setManualOverride(bool on);
 static bool getFanRelay();
 static bool getHeaterRelay();
 //--------------------------------------------------------------------------------------------------------------
@@ -101,14 +102,14 @@ float Pressure = 0.0;         // current pressure in hPa
 bool displayActive = true;   // flag to indicate if the display is active
 static bool displayInitialized = false;
 static bool dewpointRiskActive = false; // tracks dewpoint alarm state
-static bool heaterLatchedState = false; // hysteresis latch for heater
+static bool heaterLatchedState = false;  // hysteresis latch for heater
+static bool manualOverrideActive = false; // when enabled, buttons control relays and automation pauses
 
 static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
 
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-.rw[data-group="sensors"][data-key="temp"] .rw{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .val{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="sensors"][data-key="temp"] .un{ color:rgba(16, 23, 198, 1);font-weight:900;font-size: 1.2rem;}
+.rw[data-group="sensors"][data-key="temp"]{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
+.rw[data-group="sensors"][data-key="temp"] *{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
 )CSS";
 
 static cm::LoggingManager &lmg = cm::LoggingManager::instance();
@@ -340,8 +341,11 @@ void loop()
 
     WriteToDisplay();
 
-    CheckVentilator(temperature);
-    EvaluateHeater(temperature);
+    if (!manualOverrideActive)
+    {
+        CheckVentilator(temperature);
+        EvaluateHeater(temperature);
+    }
     delay(10);
 }
 
@@ -451,7 +455,52 @@ void setupGUI()
           data["ventilator"] = getFanRelay();
           data["heater"] = getHeaterRelay();
           data["dewpoint_risk"] = dewpointRiskActive;
+          data["manual_override"] = manualOverrideActive;
       }, 3);
+
+      CRM().defineRuntimeStateButton(
+          "Outputs",
+          "manual_override",
+          "Manual Override",
+          []() { return manualOverrideActive; },
+          [](bool on) { setManualOverride(on); },
+          manualOverrideActive,
+          String(),
+          0,
+          "Manual",
+          "Auto");
+
+      CRM().defineRuntimeStateButton(
+          "Outputs",
+          "ventilator",
+          "Ventilator Relay",
+          []() { return getFanRelay(); },
+          [](bool on) { setFanRelay(on); },
+          getFanRelay(),
+          String(),
+          1,
+          "On",
+          "Off");
+
+      CRM().defineRuntimeStateButton(
+          "Outputs",
+          "heater",
+          "Heater Relay",
+          []() { return getHeaterRelay(); },
+          [](bool on) { setHeaterRelay(on); },
+          getHeaterRelay(),
+          String(),
+          2,
+          "On",
+          "Off");
+
+      RuntimeFieldMeta manualOverrideMeta;
+      manualOverrideMeta.group = "Outputs";
+      manualOverrideMeta.key = "manual_override";
+      manualOverrideMeta.label = "Manual Override";
+      manualOverrideMeta.isBool = true;
+      manualOverrideMeta.order = 0;
+      CRM().addRuntimeMeta(manualOverrideMeta);
 
       RuntimeFieldMeta ventilatorMeta;
       ventilatorMeta.group = "Outputs";
@@ -535,21 +584,21 @@ static void registerIOBindings()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
-    ioManager.addIOtoGUI(IO_FAN_ID, "Relays", 1);
+    ioManager.addIOtoGUI(IO_FAN_ID, "Cooling Fan Relay", 1);
 
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = IO_HEATER_ID,
         .name = "Heater Relay",
-        .defaultPin = 33,
+        .defaultPin = 27,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
-    ioManager.addIOtoGUI(IO_HEATER_ID, "Relays", 2);
+    ioManager.addIOtoGUI(IO_HEATER_ID, "Heater Relay", 2);
 
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = IO_RESET_ID,
         .name = "Reset Button",
-        .defaultPin = 15,
+        .defaultPin = 14,
         .defaultActiveLow = true,
         .defaultPullup = true,
         .defaultPulldown = false,
@@ -580,7 +629,7 @@ static void registerIOBindings()
                 ConfigManager.clearAllFromPrefs();
                 ConfigManager.saveAll();
                 delay(500);
-                // ESP.restart();
+                ESP.restart();
             },
         },
         resetOptions);
@@ -596,7 +645,7 @@ static void registerIOBindings()
             },
             .onLongPressOnStartup = []() {
                 lmg.logTag(LL::Warn, "IO", "AP button pressed at startup -> starting AP mode");
-                // ConfigManager.startAccessPoint(APMODE_SSID, APMODE_PASSWORD);
+                ConfigManager.startAccessPoint(APMODE_SSID, APMODE_PASSWORD);
             },
         },
         apOptions);
@@ -605,7 +654,7 @@ static void registerIOBindings()
 static void setupMqtt()
 {
     mqtt.attach(ConfigManager);
-    mqtt.addMQTTReceiveSettingsToGUI(ConfigManager);
+    // mqtt.addMQTTReceiveSettingsToGUI(ConfigManager);
 
     // Receive: grid import W (from power meter JSON)
     mqtt.addMQTTTopicReceiveInt(
@@ -617,13 +666,13 @@ static void setupMqtt()
         "E320.Power_in",
         true);
 
-    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "grid_import_w", "MQTT-Received", 1);
+    // mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
+    // mqtt.addMQTTTopicTooGUI(ConfigManager, "grid_import_w", "MQTT-Received", 1);
 
-    // Optional: show meta fields in runtime UI
-    mqtt.addLastTopicToGUI(ConfigManager, "mqtt", 20, "Last Topic", "MQTT");
-    mqtt.addLastPayloadToGUI(ConfigManager, "mqtt", 21, "Last Payload", "MQTT");
-    mqtt.addLastMessageAgeToGUI(ConfigManager, "mqtt", 22, "Last Message Age", "ms", "MQTT");
+    // // Optional: show meta fields in runtime UI
+    // mqtt.addLastTopicToGUI(ConfigManager, "mqtt", 20, "Last Topic", "MQTT");
+    // mqtt.addLastPayloadToGUI(ConfigManager, "mqtt", 21, "Last Payload", "MQTT");
+    // mqtt.addLastMessageAgeToGUI(ConfigManager, "mqtt", 22, "Last Message Age", "ms", "MQTT");
 
     static bool mqttLogAdded = false;
     if (!mqttLogAdded)
@@ -667,11 +716,21 @@ static void setFanRelay(bool on)
 
 static void setHeaterRelay(bool on)
 {
-    if (!heaterSettings.enabled.get())
+    if (!heaterSettings.enabled.get() && !manualOverrideActive)
     {
         on = false;
     }
     ioManager.setState(IO_HEATER_ID, on);
+}
+
+static void setManualOverride(bool on)
+{
+    manualOverrideActive = on;
+    if (!manualOverrideActive)
+    {
+        CheckVentilator(temperature);
+        EvaluateHeater(temperature);
+    }
 }
 
 static bool getFanRelay()
@@ -928,6 +987,10 @@ void WriteToDisplay()
 
 void CheckVentilator(float currentTemperature)
 {
+  if (manualOverrideActive)
+  {
+    return;
+  }
   if (!fanSettings.enabled.get()) {
     setFanRelay(false);
     return;
@@ -940,6 +1003,11 @@ void CheckVentilator(float currentTemperature)
 }
 
 void EvaluateHeater(float currentTemperature){
+
+  if (manualOverrideActive)
+  {
+    return;
+  }
 
   if(dewpointRiskActive){
     heaterLatchedState = true;

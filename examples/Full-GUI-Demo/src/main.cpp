@@ -21,8 +21,8 @@ static const char SETTINGS_PASSWORD[] = "cm";
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .card h3 { color: orange; text-decoration: underline; font-weight: 900 !important; font-size: 1.2rem !important; }
 /* Apply to the whole row (label + value + unit) */
-.rw[data-group="sensors"][data-key="temp"]{ color:rgba(16, 23, 198, 1) !important; font-weight:900; font-size: 1.2rem; }
-.rw[data-group="sensors"][data-key="temp"] *{ color:rgba(16, 23, 198, 1) !important; font-weight:900; font-size: 1.2rem; }
+.rw[data-group="sensors"][data-key="temp"]{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
+.rw[data-group="sensors"][data-key="temp"] *{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
 
 /* select the injected Value */
 .rw[data-group="system"][data-key="testValue"]{ color:red !important; }

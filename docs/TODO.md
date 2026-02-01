@@ -42,6 +42,7 @@
      - remove logging module from there and apply new logging module usage from V3.3.0
      - migrate to newest IO + WiFi + MQTT module usage
      - keep IO pins, preserve logic
+    - [COMPLETED] Runtime outputs now expose a Manual Override toggle so the fan/heater buttons work independently of temperature automation.
 
 2) Documentation
    - Include, dependencies, memory impact
