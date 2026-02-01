@@ -42,3 +42,5 @@
 - BACnet integration
 
 ### Done / Resolved
+
+- Helper module added to core (shared pulse helpers + dewpoint/mapFloat utilities) and both BoilerSaver/SolarInverterLimiter/BME280 examples refactored to use it.

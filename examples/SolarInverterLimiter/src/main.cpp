@@ -25,7 +25,7 @@
 
 #include "settings_v3.h"
 #include "RS485Module/RS485Module.h"
-#include "helpers/helpers.h"
+#include "helpers/HelperModule.h"
 #include "Smoother/Smoother.h"
 
 #if __has_include("secret/wifiSecret.h")
@@ -55,7 +55,6 @@ void CheckVentilator(float currentTemperature);
 void EvaluateHeater(float currentTemperature);
 void ShowDisplayOn();
 void ShowDisplayOff();
-static float computeDewPoint(float temperatureC, float relHumidityPct);
 static void logNetworkIpInfo(const char *context);
 void setupGUI();
 void onWiFiConnected();
@@ -82,8 +81,6 @@ static constexpr int OLED_WIDTH = 128;
 static constexpr int OLED_HEIGHT = 32;
 static constexpr int OLED_RESET_PIN = 4; // keep legacy wiring default
 Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET_PIN);
-
-Helpers helpers;
 
 Ticker RS485Ticker;
 Ticker temperatureTicker;
@@ -284,8 +281,7 @@ void setup()
     SetupStartDisplay();
     ShowDisplayOn();
 
-    helpers.blinkBuidInLEDsetpinMode();
-    helpers.blinkBuidInLED(3, 100);
+    cm::helpers::pulseWait(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh, 3, 100);
 
     powerSmoother = new Smoother(
         limiterSettings.smoothingSize.get(),
@@ -897,18 +893,6 @@ void onWiFiAPMode()
     lmg.logTag(LL::Info, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
-static float computeDewPoint(float temperatureC, float relHumidityPct) {
-    if (isnan(temperatureC) || isnan(relHumidityPct)) return NAN;
-  if (relHumidityPct <= 0.0f) relHumidityPct = 0.1f;       // Avoid divide-by-zero
-  if (relHumidityPct > 100.0f) relHumidityPct = 100.0f;    // Clamp
-    const float a = 17.62f;
-    const float b = 243.12f;
-    float rh = relHumidityPct / 100.0f;
-    float gamma = (a * temperatureC) / (b + temperatureC) + log(rh);
-    float dew = (b * gamma) / (a - gamma);
-    return dew;
-}
-
 void readBme280()
 {
   // todo: add settings for correcting the values!!!
@@ -920,7 +904,7 @@ void readBme280()
   temperature = bme280.data.temperature + tempSettings.tempCorrection.get(); // apply correction
   Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();   // apply correction
   Pressure = bme280.data.pressure;
-  Dewpoint = computeDewPoint(temperature, Humidity);
+  Dewpoint = cm::helpers::computeDewPoint(temperature, Humidity);
 
   // output formatted values to serial console
   lmg.logTag(LL::Trace, "BME280", "-----------------------");

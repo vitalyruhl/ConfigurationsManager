@@ -15,7 +15,7 @@
 
 #include "ConfigManager.h"
 #include "settings.h"
-#include "binking/Blinker.h"
+#include "helpers/HelperModule.h"
 
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
@@ -60,8 +60,8 @@ static void handleShowerRequest(bool requested);
 // Shorthand helper for RuntimeManager access
 static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntime(); }
 
-// Global blinkers: built-in LED and optional buzzer
-static Blinker buildinLED(LED_BUILTIN, Blinker::HIGH_ACTIVE);
+// Global pulse helper: built-in LED
+static cm::helpers::PulseOutput buildinLED(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh);
 
 // WiFi Manager callback functions
 void onWiFiConnected();
@@ -303,7 +303,7 @@ void loop()
 
     updateStatusLED();
 
-    Blinker::loopAll();
+    cm::helpers::PulseOutput::loopAll();
 
     delay(10);
 
@@ -953,7 +953,7 @@ static void publishMqttState(bool retained)
     }
 
     //TODO: add into IO-Manager Blinker support
-    buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 100, /*gapMs*/ 1500);
+    buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 100, /*gapMs*/ 1500);
 }
 
 static void publishMqttStateIfNeeded()
@@ -1307,14 +1307,14 @@ void updateStatusLED(){
     switch (mode)
     {
     case 1: // AP mode: 100/100 continuous
-        buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 200, /*gapMs*/ 0);
+        buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 200, /*gapMs*/ 0);
         break;
     case 2: // Connected: 60ms ON heartbeat every 2s -> 120ms pulse + 1880ms gap
         //mooved into send mqtt function to have heartbeat with mqtt messages
-        // buildinLED.repeat(/*count*/ 1, /*frequencyMs*/ 120, /*gapMs*/ 1880);
+        // buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 120, /*gapMs*/ 1880);
         break;
     case 3: // Connecting: double blink every ~1s -> two 200ms pulses + 600ms gap
-        buildinLED.repeat(/*count*/ 3, /*frequencyMs*/ 200, /*gapMs*/ 600);
+        buildinLED.setPulseRepeat(/*count*/ 3, /*periodMs*/ 200, /*gapMs*/ 600);
         break;
     }
 }

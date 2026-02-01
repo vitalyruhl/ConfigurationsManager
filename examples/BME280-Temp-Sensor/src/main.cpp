@@ -8,6 +8,7 @@
 
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
+#include "helpers/HelperModule.h"
 
 #ifndef BME280_ADDRESS
 #define BME280_ADDRESS 0x76
@@ -24,7 +25,6 @@ static const char SETTINGS_PASSWORD[] = "cm";
 #define I2C_SDA 21
 #define I2C_SCL 22
 
-static float computeDewPoint(float temperatureC, float relHumidityPct);
 static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
 
 extern ConfigManagerClass ConfigManager;
@@ -131,7 +131,7 @@ static void readBme280()
     temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
     humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
     pressure = bme280.data.pressure;
-    dewPoint = computeDewPoint(temperature, humidity);
+    dewPoint = cm::helpers::computeDewPoint(temperature, humidity);
 }
 
 static void setupTemperatureMeasuring()
@@ -164,29 +164,6 @@ static void setupTemperatureMeasuring()
     }
     temperatureTicker.attach(static_cast<float>(interval), readBme280);
     readBme280();
-}
-
-static float computeDewPoint(float temperatureC, float relHumidityPct)
-{
-    if (isnan(temperatureC) || isnan(relHumidityPct))
-    {
-        return NAN;
-    }
-    if (relHumidityPct <= 0.0f)
-    {
-        relHumidityPct = 0.1f;
-    }
-    if (relHumidityPct > 100.0f)
-    {
-        relHumidityPct = 100.0f;
-    }
-
-    const float a = 17.62f;
-    const float b = 243.12f;
-    const float rh = relHumidityPct / 100.0f;
-    const float gamma = (a * temperatureC) / (b + temperatureC) + log(rh);
-    const float dew = (b * gamma) / (a - gamma);
-    return dew;
 }
 
 void setup()
