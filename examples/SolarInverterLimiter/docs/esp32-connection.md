@@ -1,4 +1,4 @@
-# ESP32 Connection overwiew (ESP32-WROOM-32 - my development board)
+# ESP32 Connection overwiew (ESP32-WROOM-32 - development board)
 
 This document is a **project-specific** GPIO reference for an ESP32-WROOM-32 board.
 
@@ -37,19 +37,19 @@ Legend:
                                                                | .   ~~~~~~ Antenna ~~~~~~   .  |
                                                                | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
                                                                | .   ~~~~~~~~~~~~~~~~~~~~~   .  |
-                                                           EN  | [x]                        [x] | GPIO23 (DO/PWM)                                [Relay]
+                                                           EN  | [x]                        [x] | GPIO23 (DO/PWM)                                [Cooling-Fan-Relay]
                                                                |                                |
-[free]         {RO/no-Pull!}       (DI/ADC1)          PIO36/VP | [ ]                        [x] | GGPIO22 (DI/DO)                                [I2C SCL]
+[free]         {RO/no-Pull!}       (DI/ADC1)          PIO36/VP | [ ]                        [x] | GGPIO22 (DI/DO)                                [SCL for I2C]
                                                                |                                |
 [free]         {RO/no-Pull!}       (DI/ADC1)         GPIO39/VN | [ ]                        [ ] | GPIO1  (DO)               {UART1 TX only}      [free]
                                                                |                                |
-[free]         {RO/no-Pull!}       (DI/ADC1)            GPIO34 | [ ]                        [ ] | GPIO3  (DI)               {UART1 RX only}      [free]
+[Heater-Relay] {RO/no-Pull!}       (DI/ADC1)            GPIO34 | [x]                        [ ] | GPIO3  (DI)               {UART1 RX only}      [free]
                                                                |                                |
-[free]         {RO/no-Pull!}       (DI/ADC1)            GPIO35 | [ ]                        [x] | GPIO21 (DI/DO)                                 [I2C SDA]
+[free]         {RO/no-Pull!}       (DI/ADC1)            GPIO35 | [ ]                        [x] | GPIO21 (DI/DO)                                 [SDA for I2C]
                                                                |                                |
-[free]                             (DI/DO/ADC1)         GPIO32 | [ ]                        [x] | GPIO19 (DI/DO/PWM)                             [Will shower-Button]
+[free]                             (DI/DO/ADC1)         GPIO32 | [ ]                        [x] | GPIO19 (DI/DO/PWM)                             [TX to RS485-Module]
                                                                |                                |
-[free]                             (DI/DO/ADC1)         GPIO33 | [ ]                        [x] | GPIO18 (DI/DO/PWM)         {ADC2!}             [DS18B20 (3v3-->4,7k-->yellow)-->pin]
+[free]                             (DI/DO/ADC1)         GPIO33 | [ ]                        [x] | GPIO18 (DI/DO/PWM)         {ADC2!}             [RX from RS485-Module - not used in code!]
                                                                |                                |
 [free]         {ADC2!}             (DI/DO/DAC1/PWM)     GPIO25 | [ ]                        [ ] | GPIO5  (DI/DO/PWM)         {ADC2!}{BOOT}       [free]
                                                                |                                |
@@ -59,9 +59,9 @@ Legend:
                                                                |                                |
 [Reset-Button] {ADC2!}             (DO/PWM)             GPIO14 | [x]                        [ ] | GPIO4  (DO/PWM)            {BOOT}              [free]
                                                                |                                |
-[free]         {BOOT/ADC2!}        (DI/DO/ADC2!/PWM)    GPIO12 | [ ]                        [x] | GPIO2  (DO)                {Build-In LED only}
+[free]         {BOOT/ADC2!}        (DI/DO/ADC2!/PWM)    GPIO12 | [ ]                        [ ] | GPIO2  (DO)                {Build-In LED only} [free]
                                                                |                                |
-[AP Btn]                           (DI/DO)              GPIO13 | [x]                        [ ] | GPIO15 (DI/DO)             {LOW on BOOT!}      [free]
+[AP-Mode-Button]                   (DI/DO)              GPIO13 | [x]                        [ ] | GPIO15 (DI/DO)             {LOW on BOOT!}      [free]
                                                                |                                |
                                                           GND  | [x]  [pwr-LED] [GPIO2-LED] [x] | GND
                                                                |                                |

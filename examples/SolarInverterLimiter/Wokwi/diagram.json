@@ -48,8 +48,8 @@
     {
       "type": "wokwi-pushbutton",
       "id": "btn3",
-      "top": 236.6,
-      "left": 38.4,
+      "top": 92.6,
+      "left": -201.6,
       "attrs": { "color": "green", "xray": "1" }
     },
     {
@@ -124,7 +124,6 @@
     [ "relay1:IN", "esp1:D23", "yellow", [ "h-28.8", "v-134.6", "h-96", "v-153.7" ] ],
     [ "esp1:D34", "relay2:IN", "yellow", [ "h-57.6", "v287.8" ] ],
     [ "btn1:1.r", "esp1:D13", "green", [ "v0" ] ],
-    [ "esp1:D15", "btn3:1.l", "green", [ "h-38.7", "v76.6" ] ],
     [ "esp1:D19", "chip1:TxD", "purple", [ "h57.3", "v-105.7", "h-354.6", "v-163.2" ] ],
     [ "esp1:VIN", "chip1:VCC", "red", [ "h-211.2", "v-364.8" ] ],
     [ "esp1:GND.1", "chip1:GND", "black", [ "h210.9", "v-230.5", "h-489", "v-96" ] ],
@@ -144,8 +143,9 @@
     [ "lcd1:SDA", "dht2:SDA", "magenta", [ "h0" ] ],
     [ "lcd1:VCC", "dht2:VCC", "#8f4814", [ "h-48", "v-28.7", "h-76.8" ] ],
     [ "dht2:GND", "lcd1:GND", "black", [ "v0" ] ],
-    [ "btn3:2.l", "esp1:GND.1", "black", [ "h-19.2", "v-86.1" ] ],
-    [ "esp1:GND.2", "btn1:2.r", "black", [ "h-96", "v66.9" ] ]
+    [ "esp1:GND.2", "btn1:2.r", "black", [ "h-96", "v66.9" ] ],
+    [ "btn3:2.r", "esp1:GND.2", "black", [ "h0.2", "v57.9" ] ],
+    [ "btn3:1.r", "esp1:D14", "green", [ "h57.8", "v47.9" ] ]
   ],
   "dependencies": {}
 }

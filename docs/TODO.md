@@ -486,16 +486,16 @@ Open questions:
 
 ## Medium Priority (Prio 5)
 
-- SD card logging (CSV)
-- IOManager improvements (PWM/LEDC backend, ramping, fail-safe states)
+- Card layout/grid improvements
 - Alarm helpers (more UI, better formatting)
 - Allow overriding digital input definitions through a modular layer so incoming sensors can be remapped or replaced without touching the core registration (see Live Control override note above).
 
 
 ## Low Priority (Prio 10)
 
+- SD card logging (CSV)
+- IOManager improvements (PWM/LEDC backend, ramping, fail-safe states)
 - Headless mode (no HTTP server)
-- Card layout/grid improvements
 - WiFi failover
 - HTTPS support (wait for ESP32 core)
 
