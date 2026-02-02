@@ -44,6 +44,13 @@ void setup()
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setVersion(VERSION);   // Set the application version for web UI display
     ConfigManager.enableBuiltinSystemProvider();
+    // Reserve pages for the core settings bundles so the tabs stay in sync.
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
 
     coreSettings.attachWiFi(ConfigManager);

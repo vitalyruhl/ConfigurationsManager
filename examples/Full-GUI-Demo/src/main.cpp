@@ -116,6 +116,18 @@ void setup()
     ConfigManager.enableBuiltinSystemProvider();
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
 
+    // Keep the Settings tabs predictable by pre-registering the pages/groups used here.
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    ConfigManager.addSettingsPage("Example Settings", 40);
+    ConfigManager.addSettingsGroup("Example Settings", "Example Settings", "Example Settings", 40);
+    ConfigManager.addSettingsPage("Dynamic visibility example", 50);
+    ConfigManager.addSettingsGroup("Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 50);
+
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
@@ -148,6 +160,16 @@ void setup()
     ConfigManager.enableWebSocketPush();
     ConfigManager.setWebSocketInterval(1000);
     ConfigManager.setPushOnConnect(true);
+
+    // Keep the runtime tabs ordered for the custom providers we register.
+    ConfigManager.addLivePage("sensors", 10);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Sensors", 10);
+    ConfigManager.addLivePage("controls", 20);
+    ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 20);
+    ConfigManager.addLivePage("alerts", 30);
+    ConfigManager.addLiveGroup("alerts", "Live Values", "Alerts", 30);
+    ConfigManager.addLivePage("system", 40);
+    ConfigManager.addLiveGroup("system", "Live Values", "System", 40);
 
     Serial.println("[MOCKED DATA] Sensor values are randomized every 3 seconds");
     updateMockedSensors();

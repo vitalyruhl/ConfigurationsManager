@@ -13,6 +13,7 @@
 #include <exception>
 #include <algorithm>
 #include <cstdint>
+#include <set>
 
 #include "ConfigManagerConfig.h"
 
@@ -615,6 +616,10 @@ class ConfigManagerClass
 public:
     typedef std::function<void(const char *)> LogCallback;
 
+    static constexpr const char *DEFAULT_LAYOUT_NAME = "Default";
+    static constexpr int DEFAULT_LAYOUT_ORDER = 100;
+    static constexpr const char *DEFAULT_LIVE_CARD_NAME = "Live Values";
+
 private:
     Preferences prefs;
     std::vector<BaseSetting *> settings;
@@ -633,6 +638,39 @@ private:
     size_t customCssLen = 0; // 0 -> treat as null-terminated string
 
     bool guiLoggingEnabled = false;
+
+    struct LayoutGroup
+    {
+        String name;
+        int order = DEFAULT_LAYOUT_ORDER;
+    };
+
+    struct LayoutCard
+    {
+        String name;
+        int order = DEFAULT_LAYOUT_ORDER;
+        std::vector<LayoutGroup> groups;
+    };
+
+    struct LayoutPage
+    {
+        String name;
+        int order = DEFAULT_LAYOUT_ORDER;
+        std::vector<LayoutCard> cards;
+    };
+
+    std::vector<LayoutPage> settingsPages;
+    std::vector<LayoutPage> livePages;
+    std::set<String> layoutWarnings;
+
+    LayoutPage *findLayoutPage(std::vector<LayoutPage> &pages, const String &normalized);
+    LayoutCard *findLayoutCard(LayoutPage &page, const String &normalized);
+    LayoutGroup *findLayoutGroup(LayoutCard &card, const String &normalized);
+    LayoutPage &ensureLayoutPage(std::vector<LayoutPage> &pages, const char *name, int order, bool warnOnCreate);
+    LayoutCard &ensureLayoutCard(LayoutPage &page, const char *name, int order, const String &fallbackName, bool warnOnCreate);
+    LayoutGroup &ensureLayoutGroup(LayoutCard &card, const char *name, int order, const String &fallbackName, bool warnOnCreate);
+    String normalizeLayoutName(const String &value) const;
+    void logLayoutWarningOnce(const String &key, const String &message);
 
     // WebSocket support
 #if CM_ENABLE_WS_PUSH
@@ -739,6 +777,7 @@ public:
         settings.push_back(setting);
         setting->setLogger([](const char *msg)
                            { CM_CORE_LOG("%s", msg); });
+        registerSettingPlacement(setting);
     }
 
     // Debug method to check registered settings count
@@ -754,6 +793,34 @@ public:
                    s->isVisible() ? "true" : "false");
         }
     }
+
+    // Layout registries (Settings + Live)
+    void addSettingsPage(const char *pageName, int order);
+    void addSettingsCard(const char *pageName, const char *cardName, int order);
+    void addSettingsGroup(const char *pageName, const char *cardName, const char *groupName, int order);
+    void addLivePage(const char *pageName, int order);
+    void addLiveCard(const char *pageName, const char *cardName, int order);
+    void addLiveGroup(const char *pageName, const char *cardName, const char *groupName, int order);
+    void registerSettingPlacement(BaseSetting *setting);
+
+    struct UiPlacement
+    {
+        String id;
+        String page;
+        String card;
+        String group;
+        int order = DEFAULT_LAYOUT_ORDER;
+    };
+
+    std::vector<UiPlacement> settingsPlacements;
+    std::vector<UiPlacement> livePlacements;
+
+    void addToSettings(const char *itemId, const char *pageName, int order);
+    void addToSettingsGroup(const char *itemId, const char *pageName, const char *groupName, int order);
+    void addToSettingsGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order);
+    void addToLive(const char *itemId, const char *pageName, int order);
+    void addToLiveGroup(const char *itemId, const char *pageName, const char *groupName, int order);
+    void addToLiveGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order);
 
     void loadAll()
     {

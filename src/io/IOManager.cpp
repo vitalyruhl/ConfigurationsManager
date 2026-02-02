@@ -14,6 +14,28 @@ static std::shared_ptr<std::string> makeStableString(const String& value)
 
 static constexpr const char* IO_CATEGORY_PRETTY = "I/O";
 
+namespace {
+static constexpr const char* IO_SETTINGS_PAGE = IO_CATEGORY_PRETTY;
+static constexpr const char* IO_LIVE_CARD = "Live Values";
+
+static void registerSettingPlacement(BaseSetting* setting, const String& cardName, const String& groupName)
+{
+    if (!setting || !setting->shouldShowInWeb()) {
+        return;
+    }
+    ConfigManager.addToSettingsGroup(setting->getKey(), IO_SETTINGS_PAGE, cardName.c_str(), groupName.c_str(), setting->getSortOrder());
+}
+
+static void registerLivePlacement(const String& livePage, const String& key, const String& label, int order)
+{
+    if (livePage.isEmpty() || key.isEmpty()) {
+        return;
+    }
+    const String effectiveLabel = label.isEmpty() ? key : label;
+    ConfigManager.addToLiveGroup(key.c_str(), livePage.c_str(), IO_LIVE_CARD, effectiveLabel.c_str(), order);
+}
+} // namespace
+
 String IOManager::formatSlotKey(uint8_t slot, char suffix)
 {
     char buf[8];
@@ -288,7 +310,9 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     });
 
     ConfigManager.addSetting(entry.pin.get());
+    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.activeLow.get());
+    registerSettingPlacement(entry.activeLow.get(), entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -388,9 +412,13 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
     });
 
     ConfigManager.addSetting(entry.pin.get());
+    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.activeLow.get());
+    registerSettingPlacement(entry.activeLow.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.pullup.get());
+    registerSettingPlacement(entry.pullup.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.pulldown.get());
+    registerSettingPlacement(entry.pulldown.get(), entry.cardPretty, entry.name);
 
     entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("inputs");
     entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
@@ -408,6 +436,7 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
         meta.boolAlarmValue = true;
     }
     ConfigManager.getRuntime().addRuntimeMeta(meta);
+    registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
 
     entry.settingsRegistered = true;
     entry.runtimeRegistered = true;
@@ -502,9 +531,13 @@ void IOManager::addInputSettingsToGUI(const char* id, const char* cardName, int 
     });
 
     ConfigManager.addSetting(entry.pin.get());
+    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.activeLow.get());
+    registerSettingPlacement(entry.activeLow.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.pullup.get());
+    registerSettingPlacement(entry.pullup.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.pulldown.get());
+    registerSettingPlacement(entry.pulldown.get(), entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -542,6 +575,7 @@ void IOManager::addInputRuntimeToGUI(const char* id, int order,
         meta.boolAlarmValue = true;
     }
     ConfigManager.getRuntime().addRuntimeMeta(meta);
+    registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
 
     entry.runtimeRegistered = true;
 }
@@ -572,6 +606,7 @@ static void addAnalogRuntimeMeta(ConfigManagerRuntime& runtime,
     }
 
     runtime.addRuntimeMeta(meta);
+    registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
 }
 
 static void addAnalogOutputRuntimeMeta(ConfigManagerRuntime& runtime,
@@ -775,13 +810,21 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     });
 
     ConfigManager.addSetting(entry.pin.get());
+    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.rawMin.get());
+    registerSettingPlacement(entry.rawMin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.rawMax.get());
+    registerSettingPlacement(entry.rawMax.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.outMin.get());
+    registerSettingPlacement(entry.outMin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.outMax.get());
+    registerSettingPlacement(entry.outMax.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.unit.get());
+    registerSettingPlacement(entry.unit.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.deadband.get());
+    registerSettingPlacement(entry.deadband.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.minEventMs.get());
+    registerSettingPlacement(entry.minEventMs.get(), entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -814,6 +857,7 @@ void IOManager::ensureAnalogAlarmSettings(AnalogInputEntry& entry,
             .cardOrder = entry.cardOrder,
         });
         ConfigManager.addSetting(entry.alarmMinSetting.get());
+        registerSettingPlacement(entry.alarmMinSetting.get(), entry.cardPretty, entry.name);
     }
 
     if (!isnan(alarmMax) && !entry.alarmMaxSetting) {
@@ -830,6 +874,7 @@ void IOManager::ensureAnalogAlarmSettings(AnalogInputEntry& entry,
             .cardOrder = entry.cardOrder,
         });
         ConfigManager.addSetting(entry.alarmMaxSetting.get());
+        registerSettingPlacement(entry.alarmMaxSetting.get(), entry.cardPretty, entry.name);
     }
 }
 
@@ -849,6 +894,7 @@ static void addAnalogAlarmRuntimeIndicators(ConfigManagerRuntime& runtime,
         meta.boolAlarmValue = true;
         meta.order = baseOrder + 1;
         runtime.addRuntimeMeta(meta);
+        registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
     }
 
     if (hasMax) {
@@ -860,6 +906,7 @@ static void addAnalogAlarmRuntimeIndicators(ConfigManagerRuntime& runtime,
         meta.boolAlarmValue = true;
         meta.order = baseOrder + 2;
         runtime.addRuntimeMeta(meta);
+        registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
     }
 }
 
@@ -1050,13 +1097,21 @@ void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardNam
     });
 
     ConfigManager.addSetting(entry.pin.get());
+    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.rawMin.get());
+    registerSettingPlacement(entry.rawMin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.rawMax.get());
+    registerSettingPlacement(entry.rawMax.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.outMin.get());
+    registerSettingPlacement(entry.outMin.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.outMax.get());
+    registerSettingPlacement(entry.outMax.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.unit.get());
+    registerSettingPlacement(entry.unit.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.deadband.get());
+    registerSettingPlacement(entry.deadband.get(), entry.cardPretty, entry.name);
     ConfigManager.addSetting(entry.minEventMs.get());
+    registerSettingPlacement(entry.minEventMs.get(), entry.cardPretty, entry.name);
 
     IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
 
@@ -1170,6 +1225,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
     const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
     ConfigManager.defineRuntimeButton(group, entry.id, label, onPress, String(), order);
+    registerLivePlacement(group, entry.id, label, order);
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
@@ -1197,20 +1253,28 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
     const String onLabel = (runtimeOnLabel && runtimeOnLabel[0]) ? String(runtimeOnLabel) : String();
     const String offLabel = (runtimeOffLabel && runtimeOffLabel[0]) ? String(runtimeOffLabel) : String();
+    bool placementAdded = false;
 
     switch (type) {
         case RuntimeControlType::Checkbox:
             ConfigManager.defineRuntimeCheckbox(group, entry.id, label, getter, setter, String(), order);
+            placementAdded = true;
             break;
         case RuntimeControlType::MomentaryButton:
             ConfigManager.defineRuntimeMomentaryButton(group, entry.id, label, getter, setter, String(), order, onLabel, offLabel);
+            placementAdded = true;
             break;
         case RuntimeControlType::StateButton:
             ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order, onLabel, offLabel);
+            placementAdded = true;
             break;
         default:
             IO_LOG("[WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());
             break;
+    }
+
+    if (placementAdded) {
+        registerLivePlacement(group, entry.id, label, order);
     }
 }
 
@@ -1259,6 +1323,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
             });
 
             ConfigManager.addSetting(entry.pin.get());
+            registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
             entry.settingsRegistered = true;
         }
     }
@@ -1289,6 +1354,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
         unitStr,
         String(),
         order);
+    registerLivePlacement(group, entry.id, label, order);
 }
 
 void IOManager::addAnalogOutputSliderToGUI(const char* id, const char* cardName, int order,

@@ -542,6 +542,15 @@ void setup()
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
     ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
+
+    // Reserve Settings pages so the order matches the demo structure.
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    ConfigManager.addSettingsPage(cm::CoreCategories::IO, 40);
     //----------------------------------------------------------------------------------------------------------------------------------
 
     coreSettings.attachWiFi(ConfigManager);     // Register WiFi baseline settings
@@ -597,6 +606,20 @@ void setup()
     {
         Serial.println("[SETUP] we are in AP mode");
     }
+
+    // Layout hints for runtime tabs used by the IO demo.
+    ConfigManager.addLivePage("controls", 10);
+    ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 10);
+    ConfigManager.addLivePage("inputs", 20);
+    ConfigManager.addLiveGroup("inputs", "Live Values", "Inputs", 20);
+    ConfigManager.addLivePage("sensors", 30);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Sensors", 30);
+    ConfigManager.addLivePage("analog-outputs", 40);
+    ConfigManager.addLiveGroup("analog-outputs", "Live Values", "Analog Outputs", 40);
+    ConfigManager.addLivePage("Min Max Alarms Extra Card", 50);
+    ConfigManager.addLiveGroup("Min Max Alarms Extra Card", "Live Values", "Min Max Alarms Extra Card", 50);
+    ConfigManager.addLivePage("system", 60);
+    ConfigManager.addLiveGroup("system", "Live Values", "System", 60);
 
     setupGUI();
 

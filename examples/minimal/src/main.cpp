@@ -41,6 +41,14 @@ void setup()
     ConfigManager.enableBuiltinSystemProvider();
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
 
+    // Define per-category layout so the Web UI tabs/cards stay predictable.
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);

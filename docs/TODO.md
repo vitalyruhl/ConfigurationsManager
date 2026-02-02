@@ -64,6 +64,7 @@ Defaults / robustness:
 - Unknown names fall back to defaults and emit a warning once.
 - Default SettingsCard = pageName (if card not specified).
 - Default LiveCard = "Live Values" (or pageName).
+- Each `ConfigManager.addSetting()` call now mirrors the associated category/card into the layout registry automatically, so examples only need explicit `addSettings*`/`addToSettingsGroup()` calls when deviating from the default grouping or order.
 
 ### B) Settings builder API (ConfigOptions replacement)
 
@@ -510,6 +511,7 @@ Open questions:
 
 ## Medium Priority (Prio 5)
 
+- check where we kan safetly use  string_view  instead of  String  to reduce memory allocations/copies.
 - Card layout/grid improvements
 - Alarm helpers (more UI, better formatting)
 - Allow overriding digital input definitions through a modular layer so incoming sensors can be remapped or replaced without touching the core registration (see Live Control override note above).

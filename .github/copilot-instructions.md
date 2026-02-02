@@ -63,11 +63,57 @@ you are my coding assistant. Follow the instructions in this file carefully when
 
 - Code Style Preferences:
   - Use modern C++17 features
+  - C++ String Handling Preference (C++17):
+    - Prefer `std::string_view` for read-only string parameters (logging, parsing, lookups, comparisons) to avoid heap allocations and copies, especially on ESP32.
+    - Use `std::string` only when ownership or mutation is required (store the value, build/modify the string, return an owned result).
+    - Do NOT store `std::string_view` in members/containers/queues unless the referenced storage is guaranteed to outlive the view (e.g., string literals or static storage). When in doubt: store `std::string`/`String`.
+    - Do NOT assume `string_view::data()` is null-terminated. For Arduino/Print and binary-safe output, prefer `write(data, size)` over `print(data)`.
+    - For C APIs requiring null-termination, convert explicitly to an owning string/buffer before calling the API.
+    - Use `const std::string_view` or plain `std::string_view` for parameters; use `std::string_view` for tags/prefixes in logging; keep formatting functions (`printf`/`vsnprintf`) as `const char* fmt`.
+    - If returning an exact forwarded type is required (refs/const), prefer `decltype(auto)`; otherwise use `auto` for local variables to reduce noise.
   - RAII and smart pointers preferred
   - Comprehensive error handling
   - Thread-safe implementations for concurrent operations
   - Detailed logging for debugging (English messages only)
   - IMMEDIATE EMOJI REPLACEMENT: If ANY emoji is detected in code, comments, or log messages, replace it immediately with plain text equivalent like [SUCCESS], [ERROR], [WARNING], [INFO]
+  - Callbacks & Behavior Injection Policy (C++17 / ESP32):
+    - Prefer callbacks over preprocessor conditionals (`#ifdef`, `#ifndef`) when behavior needs to vary at runtime or between modules.
+    - Use `std::function` for callbacks, hooks, filters, and extension points when:
+      - behavior should be configurable or replaceable at runtime
+      - multiple implementations are possible (e.g. logging filter, event handler, WebUI hooks)
+      - testability and decoupling are more important than minimal call overhead
+    - Typical valid use-cases for `std::function`:
+      - logging filters and format hooks
+      - configuration change callbacks
+      - event dispatchers and observers
+      - optional features enabled/disabled via callbacks instead of `#ifdef`
+    - Avoid `std::function` in hot paths, tight loops, ISR contexts, or real-time critical code.
+    - Prefer function pointers (`void (*fn)(...)`) when:
+      - the callback has no captures
+      - the implementation is fixed and performance-critical
+    - Prefer templates or inline lambdas when:
+      - the behavior is known at compile time
+      - zero-overhead abstraction is required
+    - Do NOT use macros to implement behavior switching or callbacks.
+      - Macros are allowed only for compile-time feature flags, platform selection, or build configuration.
+    - Replace chains of `#ifdef` behavior switches with:
+      - callbacks (`std::function`)
+      - strategy objects
+      - or dependency injection via constructor/setter
+    - Time Handling Policy (`<chrono>` on ESP32, C++17):
+      - Use `<chrono>` exclusively for expressing durations, timeouts, intervals, and rate limits to ensure unit safety and readability.
+      - Treat Arduino/ESP32 time sources (`millis()`, `micros()`) as raw clocks only.
+        - Immediately convert their values to `std::chrono::duration` types.
+      - Prefer `std::chrono::milliseconds` as the default internal time unit.
+      - Use `std::chrono` literals (`100ms`, `1s`, `5min`) for configuration and comparisons.
+      - Do NOT use `<chrono>` as a real-time clock:
+        - Avoid `system_clock`, `high_resolution_clock`, or calendar/date logic without RTC/NTP.
+      - Do NOT mix raw integer time values and `std::chrono` durations in APIs.
+        - Public APIs must accept `std::chrono::duration` parameters instead of plain integers.
+      - Assume `millis()` wrap-around behavior (~49 days) and write comparisons using duration arithmetic (`now - last >= interval`).
+      - Avoid `<chrono>` in ISR contexts.
+      - `<chrono>` usage must remain allocation-free and constexpr-friendly.
+
 
 - Testing Approach:
   - Unit tests for core components

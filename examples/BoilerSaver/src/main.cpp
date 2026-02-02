@@ -167,6 +167,23 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
+    // Layout hints keep the Settings tab organized.
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    ConfigManager.addSettingsPage("I2C", 40);
+    ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Bus", 40);
+    ConfigManager.addSettingsPage("Boiler", 50);
+    ConfigManager.addSettingsGroup("Boiler", "Boiler", "Boiler Control", 50);
+    ConfigManager.addSettingsPage("Display", 60);
+    ConfigManager.addSettingsGroup("Display", "Display", "Display Options", 60);
+    ConfigManager.addSettingsPage("Temp Sensor", 70);
+    ConfigManager.addSettingsGroup("Temp Sensor", "Temp Sensor", "Temperature Sensor", 70);
+    ConfigManager.addSettingsPage(cm::CoreCategories::IO, 80);
+
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
@@ -240,6 +257,15 @@ void setup()
     updateMqttTopics();
     setupMqttCallbacks();
     setBoilerState(false);
+
+    ConfigManager.addLivePage("Boiler", 10);
+    ConfigManager.addLiveGroup("Boiler", "Live Values", "Boiler", 10);
+    ConfigManager.addLivePage("Alarms", 20);
+    ConfigManager.addLiveGroup("Alarms", "Live Values", "Alarms", 20);
+    ConfigManager.addLivePage("mqtt", 30);
+    ConfigManager.addLiveGroup("mqtt", "Live Values", "MQTT", 30);
+    ConfigManager.addLivePage("system", 40);
+    ConfigManager.addLiveGroup("system", "Live Values", "System", 40);
 
     setupGUI();
 

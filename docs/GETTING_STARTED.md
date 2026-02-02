@@ -181,6 +181,8 @@ void loop()
 
 ```
 
+        > **Note:** Every setting registered via `ConfigManager.addSetting()` now automatically gets a layout placement (page/card/group) derived from its category and Card name. If you need custom tabs or groups, call `ConfigManager.addSettingsPage()/addSettingsCard()/addSettingsGroup()` before `addSetting()` and then fine-tune placement with `ConfigManager.addToSettingsGroup(setting.getKey(), ...)`.
+
 ## Next
 
 - WiFi details and best practices: see `docs/WIFI.md`

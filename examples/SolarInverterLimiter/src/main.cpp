@@ -174,6 +174,42 @@ void setup()
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
     ConfigManager.enableBuiltinSystemProvider();
 
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    ConfigManager.addSettingsPage("MQTT", 40);
+    ConfigManager.addSettingsGroup("MQTT", "MQTT", "MQTT Settings", 40);
+    ConfigManager.addSettingsPage("MQTT-Topics", 50);
+    ConfigManager.addSettingsGroup("MQTT-Topics", "MQTT-Topics", "MQTT Topics", 50);
+    ConfigManager.addSettingsPage("Limiter", 60);
+    ConfigManager.addSettingsGroup("Limiter", "Limiter", "Limiter Settings", 60);
+    ConfigManager.addSettingsPage("Temp", 70);
+    ConfigManager.addSettingsGroup("Temp", "Temp", "Temp Settings", 70);
+    ConfigManager.addSettingsPage("I2C", 80);
+    ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Settings", 80);
+    ConfigManager.addSettingsPage("Fan", 90);
+    ConfigManager.addSettingsGroup("Fan", "Fan", "Fan Settings", 90);
+    ConfigManager.addSettingsPage("Heater", 100);
+    ConfigManager.addSettingsGroup("Heater", "Heater", "Heater Settings", 100);
+    ConfigManager.addSettingsPage("Display", 110);
+    ConfigManager.addSettingsGroup("Display", "Display", "Display Settings", 110);
+    ConfigManager.addSettingsPage("RS485", 120);
+    ConfigManager.addSettingsGroup("RS485", "RS485", "RS485 Settings", 120);
+    ConfigManager.addSettingsPage("I/O", 130);
+    ConfigManager.addSettingsGroup("I/O", "I/O", "I/O Settings", 130);
+
+    ConfigManager.addLivePage("sensors", 10);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Sensor Readings", 10);
+    ConfigManager.addLivePage("Limiter", 20);
+    ConfigManager.addLiveGroup("Limiter", "Live Values", "Limiter Status", 20);
+    ConfigManager.addLivePage("Outputs", 30);
+    ConfigManager.addLiveGroup("Outputs", "Live Values", "Relay Status", 30);
+    ConfigManager.addLivePage("controls", 40);
+    ConfigManager.addLiveGroup("controls", "Live Controls", "Manual Controls", 40);
+
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);

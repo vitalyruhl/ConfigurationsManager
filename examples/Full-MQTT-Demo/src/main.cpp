@@ -129,9 +129,23 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    ConfigManager.addSettingsPage("MQTT", 40);
+    ConfigManager.addSettingsGroup("MQTT", "MQTT", "MQTT Settings", 40);
+    ConfigManager.addSettingsPage("MQTT-Topics", 50);
+    ConfigManager.addSettingsGroup("MQTT-Topics", "MQTT-Topics", "MQTT Topics", 50);
+
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
+
+    ConfigManager.addLivePage("mqtt", 10);
+    ConfigManager.addLiveGroup("mqtt", "MQTT", "MQTT Status", 10);
 
     setupMqtt();
 

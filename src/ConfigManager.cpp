@@ -4,6 +4,21 @@
 AsyncWebServer server(80);
 ConfigManagerClass ConfigManager;
 
+namespace {
+String resolveLayoutLabel(const char *provided, const String &fallback)
+{
+    if (provided && provided[0] != '\0')
+    {
+        return String(provided);
+    }
+    if (!fallback.isEmpty())
+    {
+        return fallback;
+    }
+    return String(ConfigManagerClass::DEFAULT_LAYOUT_NAME);
+}
+}
+
 // Static logger instances
 std::function<void(const char*)> ConfigManagerClass::logger = nullptr;
 std::function<void(const char*)> ConfigManagerClass::loggerVerbose = nullptr;
@@ -80,3 +95,258 @@ void ConfigManagerClass::log_verbose_message(const char *format, ...)
     }
 }
 #endif
+
+String ConfigManagerClass::normalizeLayoutName(const String &value) const
+{
+    String normalized = value;
+    normalized.trim();
+    normalized.toLowerCase();
+    return normalized;
+}
+
+void ConfigManagerClass::logLayoutWarningOnce(const String &key, const String &message)
+{
+    if (layoutWarnings.insert(key).second)
+    {
+        CM_CORE_LOG("[WARNING] %s", message.c_str());
+    }
+}
+
+ConfigManagerClass::LayoutPage *ConfigManagerClass::findLayoutPage(std::vector<LayoutPage> &pages, const String &normalized)
+{
+    for (auto &page : pages)
+    {
+        if (normalizeLayoutName(page.name) == normalized)
+        {
+            return &page;
+        }
+    }
+    return nullptr;
+}
+
+ConfigManagerClass::LayoutCard *ConfigManagerClass::findLayoutCard(LayoutPage &page, const String &normalized)
+{
+    for (auto &card : page.cards)
+    {
+        if (normalizeLayoutName(card.name) == normalized)
+        {
+            return &card;
+        }
+    }
+    return nullptr;
+}
+
+ConfigManagerClass::LayoutGroup *ConfigManagerClass::findLayoutGroup(LayoutCard &card, const String &normalized)
+{
+    for (auto &group : card.groups)
+    {
+        if (normalizeLayoutName(group.name) == normalized)
+        {
+            return &group;
+        }
+    }
+    return nullptr;
+}
+
+ConfigManagerClass::LayoutPage &ConfigManagerClass::ensureLayoutPage(std::vector<LayoutPage> &pages, const char *name, int order, bool warnOnCreate)
+{
+    String resolvedName = resolveLayoutLabel(name, String(DEFAULT_LAYOUT_NAME));
+    String normalized = normalizeLayoutName(resolvedName);
+    if (auto *existing = findLayoutPage(pages, normalized))
+    {
+        if (order >= 0)
+        {
+            existing->order = order;
+        }
+        return *existing;
+    }
+
+    LayoutPage page;
+    page.name = resolvedName;
+    page.order = (order >= 0) ? order : DEFAULT_LAYOUT_ORDER;
+    pages.push_back(page);
+    if (warnOnCreate)
+    {
+        logLayoutWarningOnce("page:" + normalized, "Layout page '" + resolvedName + "' was auto-created");
+    }
+    return pages.back();
+}
+
+ConfigManagerClass::LayoutCard &ConfigManagerClass::ensureLayoutCard(LayoutPage &page, const char *name, int order, const String &fallbackName, bool warnOnCreate)
+{
+    String resolvedName = resolveLayoutLabel(name, fallbackName);
+    String normalized = normalizeLayoutName(resolvedName);
+    if (auto *existing = findLayoutCard(page, normalized))
+    {
+        if (order >= 0)
+        {
+            existing->order = order;
+        }
+        return *existing;
+    }
+
+    LayoutCard card;
+    card.name = resolvedName;
+    card.order = (order >= 0) ? order : DEFAULT_LAYOUT_ORDER;
+    page.cards.push_back(card);
+    if (warnOnCreate)
+    {
+        logLayoutWarningOnce("card:" + normalized, "Layout card '" + resolvedName + "' was auto-created in page '" + page.name + "'");
+    }
+    return page.cards.back();
+}
+
+ConfigManagerClass::LayoutGroup &ConfigManagerClass::ensureLayoutGroup(LayoutCard &card, const char *name, int order, const String &fallbackName, bool warnOnCreate)
+{
+    String resolvedName = resolveLayoutLabel(name, fallbackName);
+    String normalized = normalizeLayoutName(resolvedName);
+    if (auto *existing = findLayoutGroup(card, normalized))
+    {
+        if (order >= 0)
+        {
+            existing->order = order;
+        }
+        return *existing;
+    }
+
+    LayoutGroup group;
+    group.name = resolvedName;
+    group.order = (order >= 0) ? order : DEFAULT_LAYOUT_ORDER;
+    card.groups.push_back(group);
+    if (warnOnCreate)
+    {
+        logLayoutWarningOnce("group:" + normalized, "Layout group '" + resolvedName + "' was auto-created in card '" + card.name + "'");
+    }
+    return card.groups.back();
+}
+
+void ConfigManagerClass::addSettingsPage(const char *pageName, int order)
+{
+    ensureLayoutPage(settingsPages, pageName, order, false);
+}
+
+void ConfigManagerClass::addSettingsCard(const char *pageName, const char *cardName, int order)
+{
+    String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
+    String normalizedPage = normalizeLayoutName(resolvedPageName);
+    bool pageExists = findLayoutPage(settingsPages, normalizedPage) != nullptr;
+    LayoutPage &page = ensureLayoutPage(settingsPages, pageName, -1, !pageExists);
+    ensureLayoutCard(page, cardName, order, page.name, false);
+}
+
+void ConfigManagerClass::addSettingsGroup(const char *pageName, const char *cardName, const char *groupName, int order)
+{
+    String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
+    String normalizedPage = normalizeLayoutName(resolvedPageName);
+    bool pageExists = findLayoutPage(settingsPages, normalizedPage) != nullptr;
+    LayoutPage &page = ensureLayoutPage(settingsPages, pageName, -1, !pageExists);
+    LayoutCard &card = ensureLayoutCard(page, cardName, -1, page.name, false);
+    ensureLayoutGroup(card, groupName, order, card.name, false);
+}
+
+void ConfigManagerClass::addLivePage(const char *pageName, int order)
+{
+    ensureLayoutPage(livePages, pageName, order, false);
+}
+
+void ConfigManagerClass::addLiveCard(const char *pageName, const char *cardName, int order)
+{
+    String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
+    String normalizedPage = normalizeLayoutName(resolvedPageName);
+    bool pageExists = findLayoutPage(livePages, normalizedPage) != nullptr;
+    LayoutPage &page = ensureLayoutPage(livePages, pageName, -1, !pageExists);
+    ensureLayoutCard(page, cardName, order, String(DEFAULT_LIVE_CARD_NAME), false);
+}
+
+void ConfigManagerClass::addLiveGroup(const char *pageName, const char *cardName, const char *groupName, int order)
+{
+    String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
+    String normalizedPage = normalizeLayoutName(resolvedPageName);
+    bool pageExists = findLayoutPage(livePages, normalizedPage) != nullptr;
+    LayoutPage &page = ensureLayoutPage(livePages, pageName, -1, !pageExists);
+    LayoutCard &card = ensureLayoutCard(page, cardName, -1, String(DEFAULT_LIVE_CARD_NAME), false);
+    ensureLayoutGroup(card, groupName, order, card.name, false);
+}
+
+void ConfigManagerClass::registerSettingPlacement(BaseSetting *setting)
+{
+    if (!setting || !setting->shouldShowInWeb())
+    {
+        return;
+    }
+
+    const char *pageName = setting->getCategory();
+    String pageHolder;
+    if (!pageName || pageName[0] == '\0')
+    {
+        pageHolder = DEFAULT_LAYOUT_NAME;
+        pageName = pageHolder.c_str();
+    }
+
+    const char *cardName = setting->getCard();
+    String cardHolder;
+    if (!cardName || cardName[0] == '\0')
+    {
+        cardHolder = pageName;
+        cardName = cardHolder.c_str();
+    }
+
+    const char *groupName = setting->getCard();
+    String groupHolder;
+    if (!groupName || groupName[0] == '\0')
+    {
+        groupHolder = cardName;
+        groupName = groupHolder.c_str();
+    }
+
+    addSettingsCard(pageName, cardName, setting->getCardOrder());
+    addSettingsGroup(pageName, cardName, groupName, setting->getSortOrder());
+    addToSettingsGroup(setting->getKey(), pageName, cardName, groupName, setting->getSortOrder());
+}
+
+namespace {
+String resolvePlacementName(const char *provided, const char *fallback)
+{
+    if (provided && provided[0] != '\0')
+        return String(provided);
+    return fallback ? String(fallback) : String{};
+}
+}
+
+void ConfigManagerClass::addToSettings(const char *itemId, const char *pageName, int order)
+{
+    addToSettingsGroup(itemId, pageName, pageName, pageName, order);
+}
+
+void ConfigManagerClass::addToSettingsGroup(const char *itemId, const char *pageName, const char *groupName, int order)
+{
+    addToSettingsGroup(itemId, pageName, pageName, groupName, order);
+}
+
+void ConfigManagerClass::addToSettingsGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order)
+{
+    String resolvedPage = resolvePlacementName(pageName, DEFAULT_LAYOUT_NAME);
+    String resolvedCard = resolvePlacementName(cardName, resolvedPage.c_str());
+    String resolvedGroup = resolvePlacementName(groupName, resolvedCard.c_str());
+    addSettingsGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
+    settingsPlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
+}
+
+void ConfigManagerClass::addToLive(const char *itemId, const char *pageName, int order)
+{
+    addToLiveGroup(itemId, pageName, DEFAULT_LIVE_CARD_NAME, DEFAULT_LIVE_CARD_NAME, order);
+}
+
+void ConfigManagerClass::addToLiveGroup(const char *itemId, const char *pageName, const char *groupName, int order)
+{
+    addToLiveGroup(itemId, pageName, DEFAULT_LIVE_CARD_NAME, groupName, order);
+}
+
+void ConfigManagerClass::addToLiveGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order)
+{
+    String resolvedPage = resolvePlacementName(pageName, DEFAULT_LAYOUT_NAME);
+    String resolvedCard = resolvePlacementName(cardName, DEFAULT_LIVE_CARD_NAME);
+    String resolvedGroup = resolvePlacementName(groupName, resolvedCard.c_str());
+    addLiveGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
+    livePlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
+}

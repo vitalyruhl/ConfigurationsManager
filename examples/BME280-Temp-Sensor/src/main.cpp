@@ -182,6 +182,16 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
+    // Layout hints keep the Web UI tabs predictable.
+    ConfigManager.addSettingsPage("WiFi", 10);
+    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
+    ConfigManager.addSettingsPage("System", 20);
+    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
+    ConfigManager.addSettingsPage("NTP", 30);
+    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    ConfigManager.addSettingsPage("Temp", 40);
+    ConfigManager.addSettingsGroup("Temp", "Temp", "Temperature", 40);
+
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
@@ -203,6 +213,8 @@ void setup()
     ConfigManager.startWebServer();
     ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
+    ConfigManager.addLivePage("Sensors", 10);
+    ConfigManager.addLiveGroup("Sensors", "Sensors", "Sensor Readings", 10);
     setupRuntimeUI();
 
     ConfigManager.enableWebSocketPush();
