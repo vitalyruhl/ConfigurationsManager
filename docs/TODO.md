@@ -492,6 +492,12 @@ Open questions:
 8. MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
 9. Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
 
+## Example validation plan
+- Steps 1‑2 (terminology/layout registries) use the `minimal` example for fast iteration.
+- IOManager work (step 5) validates against `examples/Full-IO-Demo` to exercise digital/analog registration.
+- Live/GUI step additions (steps 6–7) target `examples/Full-GUI-Demo` so Live and Settings UI remain stable.
+- MQTTManager refactor (step 8) uses `examples/Full-MQTT-Demo` to cover topic definition/placement.
+- Final migration run can sample whichever example changed most, but keep one PlatformIO build per touched area to catch integration issues.
 
 ## Feasibility / Risks (ESP32)
 
