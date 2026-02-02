@@ -155,18 +155,26 @@ public:
         attachButtons(cfg);
     }
 
-    void attachWiFi(ConfigManagerClass &cfg)
+    void attachWiFi(ConfigManagerClass &cfg,
+                    const char* pageName = CoreCategories::WiFi,
+                    const char* groupPretty = "WiFi Settings",
+                    int order = 10)
     {
         if (wifiAttached)
             return;
+        registerCoreLayout(cfg, pageName, CoreCategories::WiFi, groupPretty, "WiFi Settings", order);
         wifi.attachTo(cfg);
         wifiAttached = true;
     }
 
-    void attachSystem(ConfigManagerClass &cfg)
+    void attachSystem(ConfigManagerClass &cfg,
+                      const char* pageName = CoreCategories::System,
+                      const char* groupPretty = "System Settings",
+                      int order = 20)
     {
         if (systemAttached)
             return;
+        registerCoreLayout(cfg, pageName, CoreCategories::System, groupPretty, "System Settings", order);
         system.attachTo(cfg);
         systemAttached = true;
     }
@@ -181,10 +189,14 @@ public:
 
     // Optional bundle: NTP settings.
     // Intentionally not part of attach() to keep the core bundles minimal.
-    void attachNtp(ConfigManagerClass &cfg)
+    void attachNtp(ConfigManagerClass &cfg,
+                   const char* pageName = CoreCategories::Ntp,
+                   const char* groupPretty = "NTP Settings",
+                   int order = 30)
     {
         if (ntpAttached)
             return;
+        registerCoreLayout(cfg, pageName, CoreCategories::Ntp, groupPretty, "NTP Settings", order);
         ntp.attachTo(cfg);
         ntpAttached = true;
     }
@@ -201,6 +213,20 @@ private:
     bool systemAttached = false;
     bool buttonsAttached = false;
     bool ntpAttached = false;
+
+    static void registerCoreLayout(ConfigManagerClass &cfg,
+                                   const char *pageName,
+                                   const char *defaultPage,
+                                   const char *groupPretty,
+                                   const char *defaultGroupPretty,
+                                   int order)
+    {
+        const char *resolvedPage = (pageName && pageName[0]) ? pageName : defaultPage;
+        const char *resolvedGroup = (groupPretty && groupPretty[0]) ? groupPretty : defaultGroupPretty;
+        cfg.setCategoryLayoutOverride(defaultPage, resolvedPage, resolvedPage, resolvedGroup, order);
+        cfg.addSettingsPage(resolvedPage, order);
+        cfg.addSettingsGroup(resolvedPage, resolvedPage, resolvedGroup, order);
+    }
 
     // Intentionally no dynamic allocation here.
 };

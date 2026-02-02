@@ -468,7 +468,9 @@ Open questions:
 
 1) [COMPLETED] Finalize UI terminology and defaults (SettingsPage/Card/Group; LivePage/Card/Group).
 2) [COMPLETED] Implement layout registries for Settings + Live (no IO changes yet).
+2a) [COMPLETED] Ensure the core settings bundles (WiFi/System/NTP) auto-register their standard page/group and allow overrides so sketches avoid repetitive layout boilerplate.
 3) Introduce Settings builder (`ConfigManager.settingX(...).name(...).defaultValue(...).persistSettings(true).build()`).
+3a) [COMPLETED] Switch ConfigManager settings to hash-derived storage keys (with legacy fallback), keep logs per display name, and emit warnings when duplicate hashes would collide.
 4) [COMPLETED] Add generic placement methods for settings: `ConfigManager.addToSettingsGroup(...)`, `ConfigManager.addToLiveGroup(...)`.
 5) Refactor IOManager:
    - Split IO definition from UI placement.
@@ -476,7 +478,7 @@ Open questions:
    - Implement `add*ToLive` returning a handle/builder.
 6) Implement Live callback builder API (digital/analog) + unify multi-click.
 7) Implement generic alarm registry (`addAlarm(...)`) + UI for alarms (Live first).
-8) Refactor MQTTManager to the same pattern (define -> settings placement -> live placement).
+8) Refactor MQTTManager to the same pattern (define -> settings placement -> live placement) and let its attach helpers create the default MQTT tabs/groups (with override hooks) so the layout matches other core bundles.
 9) Migrate all examples + docs:
    - Update each example to new APIs
    - Ensure at least one PlatformIO build passes (root or required env)
@@ -486,6 +488,7 @@ Open questions:
 1. [COMPLETED] Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
 2. [COMPLETED] Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
 3. Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
+4. Hash-based storage keys: derive the Preferences key from an FNV1a hash of the provided `ConfigOptions::key` (or previous auto-generated key), keep the human-readable name for logs/UI, migrate legacy keys when the hash changes, and warn once if a hash collision would otherwise prevent persistence.
 4. [COMPLETED] Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
 5. IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
 6. Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.

@@ -582,6 +582,3 @@ std::memset(buf, 0, sizeof(buf));
 
 ---
 
-# Notes
-- If you want, I can generate a **separate ESP32-focused version** (lean headers, low overhead, Arduino/IDF friendly).
-- If you tell me your target standard (**C++11 / C++17 / C++20**), I can tailor the sheet accordingly.

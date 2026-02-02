@@ -268,6 +268,33 @@ void ConfigManagerClass::addLiveGroup(const char *pageName, const char *cardName
     ensureLayoutGroup(card, groupName, order, card.name, false);
 }
 
+void ConfigManagerClass::setCategoryLayoutOverride(const char *category, const char *page, const char *card, const char *group, int order)
+{
+    if (!category || category[0] == '\0')
+        return;
+
+    CategoryLayoutOverride overrideEntry;
+    overrideEntry.page = (page && page[0]) ? String(page) : String();
+    overrideEntry.card = (card && card[0]) ? String(card) : String();
+    overrideEntry.group = (group && group[0]) ? String(group) : String();
+    overrideEntry.order = order;
+    categoryLayoutOverrides[String(category)] = overrideEntry;
+}
+
+const ConfigManagerClass::CategoryLayoutOverride *ConfigManagerClass::getCategoryLayoutOverride(const char *category) const
+{
+    if (!category || category[0] == '\0')
+    {
+        return nullptr;
+    }
+    auto it = categoryLayoutOverrides.find(String(category));
+    if (it == categoryLayoutOverrides.end())
+    {
+        return nullptr;
+    }
+    return &it->second;
+}
+
 void ConfigManagerClass::registerSettingPlacement(BaseSetting *setting)
 {
     if (!setting || !setting->shouldShowInWeb())
@@ -275,33 +302,34 @@ void ConfigManagerClass::registerSettingPlacement(BaseSetting *setting)
         return;
     }
 
-    const char *pageName = setting->getCategory();
-    String pageHolder;
-    if (!pageName || pageName[0] == '\0')
+    const char *category = setting->getCategory();
+    String pageName = (category && category[0]) ? String(category) : String(DEFAULT_LAYOUT_NAME);
+    String cardName = (setting->getCard() && setting->getCard()[0]) ? String(setting->getCard()) : pageName;
+    String groupName = (setting->getCard() && setting->getCard()[0]) ? String(setting->getCard()) : cardName;
+
+    if (const auto *overrideEntry = getCategoryLayoutOverride(category))
     {
-        pageHolder = DEFAULT_LAYOUT_NAME;
-        pageName = pageHolder.c_str();
+        if (!overrideEntry->page.isEmpty())
+        {
+            pageName = overrideEntry->page;
+            if (overrideEntry->card.isEmpty())
+            {
+                cardName = pageName;
+            }
+        }
+        if (!overrideEntry->card.isEmpty())
+        {
+            cardName = overrideEntry->card;
+        }
+        if (!overrideEntry->group.isEmpty())
+        {
+            groupName = overrideEntry->group;
+        }
     }
 
-    const char *cardName = setting->getCard();
-    String cardHolder;
-    if (!cardName || cardName[0] == '\0')
-    {
-        cardHolder = pageName;
-        cardName = cardHolder.c_str();
-    }
-
-    const char *groupName = setting->getCard();
-    String groupHolder;
-    if (!groupName || groupName[0] == '\0')
-    {
-        groupHolder = cardName;
-        groupName = groupHolder.c_str();
-    }
-
-    addSettingsCard(pageName, cardName, setting->getCardOrder());
-    addSettingsGroup(pageName, cardName, groupName, setting->getSortOrder());
-    addToSettingsGroup(setting->getKey(), pageName, cardName, groupName, setting->getSortOrder());
+    addSettingsCard(pageName.c_str(), cardName.c_str(), setting->getCardOrder());
+    addSettingsGroup(pageName.c_str(), cardName.c_str(), groupName.c_str(), setting->getSortOrder());
+    addToSettingsGroup(setting->getKey(), pageName.c_str(), cardName.c_str(), groupName.c_str(), setting->getSortOrder());
 }
 
 namespace {

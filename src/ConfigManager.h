@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <set>
+#include <map>
 
 #include "ConfigManagerConfig.h"
 
@@ -198,6 +199,27 @@ inline String generateKeyFromNameAndCategory(const char* name, const char* categ
     return result;
 }
 
+inline uint64_t fnv1aHash64(const char *data, size_t len)
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (size_t i = 0; i < len; ++i)
+    {
+        hash ^= static_cast<uint64_t>(static_cast<unsigned char>(data[i]));
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+inline String hashStringForStorage(const String &value)
+{
+    const size_t len = value.length();
+    const uint64_t hashValue = fnv1aHash64(value.c_str(), len);
+    char buffer[16];
+    // Keep result under 15 characters (HEX) to satisfy Preferences key limits
+    snprintf(buffer, sizeof(buffer), "%012llX", static_cast<unsigned long long>(hashValue & 0xFFFFFFFFFFFFull));
+    return String(buffer);
+}
+
 
 
 // BaseSetting class (updated for new ConfigOptions structure)
@@ -207,8 +229,9 @@ protected:
     bool showInWeb;
     bool isPassword;
     bool modified = false;
-    String generatedKey; // Store generated key if needed
-    const char *keyName;
+    String storageKey;
+    const char *storageKeyPtr = nullptr;
+    String legacyStorageKey;
     const char *category;
     const char *displayName;
     const char *categoryPrettyName = nullptr;
@@ -219,6 +242,7 @@ protected:
     int sortOrder = 100;
     bool hasKeyLengthError = false;
     String keyLengthErrorMsg;
+    inline static std::set<String> registeredStorageKeys;
 
     static constexpr size_t MAX_PREFS_KEY_LEN = 15;
 
@@ -282,6 +306,11 @@ protected:
         }
     }
 
+    static bool registerStorageKey(const String &key)
+    {
+        return registeredStorageKeys.insert(key).second;
+    }
+
 public:
     bool hasError() const { return hasKeyLengthError; }
     const char *getError() const { return keyLengthErrorMsg.c_str(); }
@@ -295,15 +324,23 @@ public:
     BaseSetting(const char* key, const char* name, const char* category, SettingType type,
                                 bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr,
                                 const char* card = nullptr, const char* cardPretty = nullptr, int cardOrder = 100)
-                : keyName(key), displayName(name), category(category), categoryPrettyName(categoryPretty),
+                : displayName(name), category(category), categoryPrettyName(categoryPretty),
                     cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder), type(type),
                     showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
     {
-        // If no key provided, generate one from name and category
-        if (!keyName || strlen(keyName) == 0) {
-            generatedKey = generateKeyFromNameAndCategory(name, category);
-            keyName = generatedKey.c_str();
-            log("[INFO] Auto-generated key '%s' for setting '%s' in category '%s'", keyName, name, category);
+        String legacyHint;
+        if (key && key[0] != '\0') {
+            legacyHint = key;
+        } else {
+            legacyHint = generateKeyFromNameAndCategory(name, category);
+        }
+        legacyStorageKey = legacyHint;
+        storageKey = hashStringForStorage(legacyHint);
+        storageKeyPtr = storageKey.c_str();
+        if (!registerStorageKey(storageKey)) {
+            hasKeyLengthError = true;
+            keyLengthErrorMsg = String("Storage key collision for '") + displayName + "' (" + storageKey + ") - not persisted";
+            log("[WARNING] %s", keyLengthErrorMsg.c_str());
         }
         checkKeyLength();
     }
@@ -318,13 +355,14 @@ public:
     virtual bool isVisible() const { return showInWeb; }
 
     const char *getDisplayName() const { return displayName; }
-    const char *getKey() const { return keyName; }
+    const char *getKey() const { return storageKeyPtr; }
     const char *getCategory() const { return category; }
     const char *getCategoryPretty() const { return categoryPrettyName ? categoryPrettyName : category; }
     const char *getCard() const { return cardName; }
     const char *getCardPretty() const { return cardPrettyName ? cardPrettyName : cardName; }
     int getCardOrder() const { return cardOrder; }
-    const char *getName() const { return keyName; }
+    const char *getName() const { return storageKeyPtr; }
+    const char *getLegacyKey() const { return legacyStorageKey.c_str(); }
     int getSortOrder() const { return sortOrder; }
     bool isSecret() const { return isPassword; }
     bool shouldShowInWeb() const { return showInWeb; }
@@ -385,87 +423,103 @@ public:
             return;
         }
 
-        // Automatically persist default values the first time a key is missing
-        bool keyExists = prefs.isKey(getKey());
-        logVerbose("[PREFS] Key %s.%s exists? %s", getCategory(), getKey(), keyExists ? "true" : "false");
+        const char* storageKey = getKey();
+        const char* legacyKey = getLegacyKey();
+        bool keyExists = prefs.isKey(storageKey);
+        logVerbose("[PREFS] Setting %s.%s exists? %s", getCategory(), getDisplayName(), keyExists ? "true" : "false");
 
-        if (!keyExists)
-        {
-            value = defaultValue;
-
+        auto readFrom = [&](const char* sourceKey) -> T {
             if constexpr (std::is_same_v<T, String>)
             {
-                prefs.putString(getKey(), value);
+                return prefs.getString(sourceKey, defaultValue);
+            }
+            else if constexpr (std::is_same_v<T, bool>)
+            {
+                return prefs.getBool(sourceKey, defaultValue);
+            }
+            else if constexpr (std::is_same_v<T, int>)
+            {
+                return prefs.getInt(sourceKey, defaultValue);
+            }
+            else if constexpr (std::is_same_v<T, float>)
+            {
+                return prefs.getFloat(sourceKey, defaultValue);
+            }
+        };
+
+        auto persistValue = [&](const char* targetKey, const char* actionLabel) {
+            if constexpr (std::is_same_v<T, String>)
+            {
+                prefs.putString(targetKey, value);
                 if (isPassword)
                 {
-                    log("[PREFS] Initialized %s.%s = '***' (hidden) (default)", getCategory(), getKey());
+                    log("[PREFS] %s %s.%s = '***' (hidden)", actionLabel, getCategory(), getDisplayName());
                 }
                 else
                 {
-                    log("[PREFS] Initialized %s.%s = '%s' (default)", getCategory(), getKey(), value.c_str());
+                    log("[PREFS] %s %s.%s = '%s'", actionLabel, getCategory(), getDisplayName(), value.c_str());
                 }
             }
             else if constexpr (std::is_same_v<T, bool>)
             {
-                prefs.putBool(getKey(), value);
-                log("[PREFS] Initialized %s.%s = %s (default)", getCategory(), getKey(), value ? "true" : "false");
+                prefs.putBool(targetKey, value);
+                log("[PREFS] %s %s.%s = %s", actionLabel, getCategory(), getDisplayName(), value ? "true" : "false");
             }
             else if constexpr (std::is_same_v<T, int>)
             {
-                prefs.putInt(getKey(), value);
-                log("[PREFS] Initialized %s.%s = %d (default)", getCategory(), getKey(), value);
+                prefs.putInt(targetKey, value);
+                log("[PREFS] %s %s.%s = %d", actionLabel, getCategory(), getDisplayName(), value);
             }
             else if constexpr (std::is_same_v<T, float>)
             {
-                prefs.putFloat(getKey(), value);
-                log("[PREFS] Initialized %s.%s = %.2f (default)", getCategory(), getKey(), value);
+                prefs.putFloat(targetKey, value);
+                log("[PREFS] %s %s.%s = %.2f", actionLabel, getCategory(), getDisplayName(), value);
+            }
+        };
+
+        if (!keyExists)
+        {
+            bool migrated = false;
+            if (legacyKey && legacyKey[0] != '\0' && strcmp(legacyKey, storageKey) != 0 && prefs.isKey(legacyKey))
+            {
+                value = readFrom(legacyKey);
+                persistValue(storageKey, "Migrated");
+                log("[PREFS] Migrated %s.%s from legacy key '%s'", getCategory(), getDisplayName(), legacyKey);
+                migrated = true;
+            }
+
+            if (!migrated)
+            {
+                value = defaultValue;
+                persistValue(storageKey, "Initialized (default)");
             }
 
             modified = false;
             return;
         }
 
-        T loadedValue;
-        if constexpr (std::is_same_v<T, String>)
-        {
-            loadedValue = prefs.getString(getKey(), defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, bool>)
-        {
-            loadedValue = prefs.getBool(getKey(), defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, int>)
-        {
-            loadedValue = prefs.getInt(getKey(), defaultValue);
-        }
-        else if constexpr (std::is_same_v<T, float>)
-        {
-            loadedValue = prefs.getFloat(getKey(), defaultValue);
-        }
-
-        value = loadedValue;
+        value = readFrom(storageKey);
         modified = false;
 
-        // Verbose logging for load operations
         if constexpr (std::is_same_v<T, String>)
         {
             if (isPassword) {
-                logVerbose("[PREFS] Loaded %s.%s = '***' (hidden)", getCategory(), getKey());
+                logVerbose("[PREFS] Loaded %s.%s = '***' (hidden)", getCategory(), getDisplayName());
             } else {
-                logVerbose("[PREFS] Loaded %s.%s = '%s'", getCategory(), getKey(), value.c_str());
+                logVerbose("[PREFS] Loaded %s.%s = '%s'", getCategory(), getDisplayName(), value.c_str());
             }
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
-            logVerbose("[PREFS] Loaded %s.%s = %s", getCategory(), getKey(), value ? "true" : "false");
+            logVerbose("[PREFS] Loaded %s.%s = %s", getCategory(), getDisplayName(), value ? "true" : "false");
         }
         else if constexpr (std::is_same_v<T, int>)
         {
-            logVerbose("[PREFS] Loaded %s.%s = %d", getCategory(), getKey(), value);
+            logVerbose("[PREFS] Loaded %s.%s = %d", getCategory(), getDisplayName(), value);
         }
         else if constexpr (std::is_same_v<T, float>)
         {
-            logVerbose("[PREFS] Loaded %s.%s = %.2f", getCategory(), getKey(), value);
+            logVerbose("[PREFS] Loaded %s.%s = %.2f", getCategory(), getDisplayName(), value);
         }
     }
 
@@ -482,25 +536,25 @@ public:
         {
             prefs.putString(getKey(), value);
             if (isPassword) {
-                logVerbose("[PREFS] Saved %s.%s = '***' (hidden)", getCategory(), getKey());
+                logVerbose("[PREFS] Saved %s.%s = '***' (hidden)", getCategory(), getDisplayName());
             } else {
-                logVerbose("[PREFS] Saved %s.%s = '%s'", getCategory(), getKey(), value.c_str());
+                logVerbose("[PREFS] Saved %s.%s = '%s'", getCategory(), getDisplayName(), value.c_str());
             }
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
             prefs.putBool(getKey(), value);
-            logVerbose("[PREFS] Saved %s.%s = %s", getCategory(), getKey(), value ? "true" : "false");
+            logVerbose("[PREFS] Saved %s.%s = %s", getCategory(), getDisplayName(), value ? "true" : "false");
         }
         else if constexpr (std::is_same_v<T, int>)
         {
             prefs.putInt(getKey(), value);
-            logVerbose("[PREFS] Saved %s.%s = %d", getCategory(), getKey(), value);
+            logVerbose("[PREFS] Saved %s.%s = %d", getCategory(), getDisplayName(), value);
         }
         else if constexpr (std::is_same_v<T, float>)
         {
             prefs.putFloat(getKey(), value);
-            logVerbose("[PREFS] Saved %s.%s = %.2f", getCategory(), getKey(), value);
+            logVerbose("[PREFS] Saved %s.%s = %.2f", getCategory(), getDisplayName(), value);
         }
 
         modified = false;
@@ -645,6 +699,14 @@ private:
         int order = DEFAULT_LAYOUT_ORDER;
     };
 
+    struct CategoryLayoutOverride
+    {
+        String page;
+        String card;
+        String group;
+        int order = DEFAULT_LAYOUT_ORDER;
+    };
+
     struct LayoutCard
     {
         String name;
@@ -662,6 +724,7 @@ private:
     std::vector<LayoutPage> settingsPages;
     std::vector<LayoutPage> livePages;
     std::set<String> layoutWarnings;
+    std::map<String, CategoryLayoutOverride> categoryLayoutOverrides;
 
     LayoutPage *findLayoutPage(std::vector<LayoutPage> &pages, const String &normalized);
     LayoutCard *findLayoutCard(LayoutPage &page, const String &normalized);
@@ -671,6 +734,9 @@ private:
     LayoutGroup &ensureLayoutGroup(LayoutCard &card, const char *name, int order, const String &fallbackName, bool warnOnCreate);
     String normalizeLayoutName(const String &value) const;
     void logLayoutWarningOnce(const String &key, const String &message);
+public:
+    void setCategoryLayoutOverride(const char *category, const char *page, const char *card, const char *group, int order);
+    const CategoryLayoutOverride *getCategoryLayoutOverride(const char *category) const;
 
     // WebSocket support
 #if CM_ENABLE_WS_PUSH
@@ -750,9 +816,16 @@ public:
     {
         for (auto *setting : settings)
         {
-            if (String(setting->getCategory()) == category && String(setting->getKey()) == key)
+            if (String(setting->getCategory()) == category)
             {
-                return setting;
+                if (String(setting->getKey()) == key)
+                {
+                    return setting;
+                }
+                if (const char *legacyKey = setting->getLegacyKey(); legacyKey && legacyKey[0] != '\0' && String(legacyKey) == key)
+                {
+                    return setting;
+                }
             }
         }
 
