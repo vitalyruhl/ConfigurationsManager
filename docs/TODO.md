@@ -362,6 +362,9 @@ Open questions:
 - Should onClick be derived from press/release automatically?
 - Is it useful to surface the timing settings (long press, click intervals) in the system settings? If not, we should offer `.setLongPressTiming(...)` and `.setClickTiming(...)` overrides so the defaults are only overwritten when required.
 
+- Decision: IOManager keeps a global timing set, but builders can call `.setLongPressTiming(...)`/`.setClickTiming(...)` if needed (only use overrides when RAM/flash impact is acceptable). Defaults stay in constructors and can be overridden system-wide during setup.
+- Decision: `onClick()` is derived internally from `onPress()`/`onRelease()` and handler priority follows `onClick` → `onMultiClick` → `onReleaseAfterLongPress` → `onRepeatWhilePressed` when multiple callbacks exist.
+
 
 ### G) Alarms: generic addAlarm() API (no hidden bools)
 
@@ -413,6 +416,9 @@ void addAlarmAnalog(const char* idOrKey,
 Open question:
 - Should alarms always appear in Live, or also as Settings toggles?
 - Plan: Alarms are presented through the Live UI only; Settings toggles for alarms are not part of the current scope.
+
+- Decision: UI toggles are off by default, but callers can add explicit Settings controls (`setMinAlarmActive`, etc.) when needed; analog alarms default to disabled unless explicitly activated, digital alarms default to enabled. Provide getters/setters for each alarm axis to control state programmatically.
+- Decision: Internally model alarm status as an enum/byte field (e.g. 0=ok, 1=alarm, 2=low, 3=high) so the UI exposes `State::Alarm` while keeping space-efficient bitflags internally.
 
 
 ### H) MQTTManager: refactor plan (new section/branch)
@@ -473,6 +479,18 @@ Open questions:
 9) Migrate all examples + docs:
    - Update each example to new APIs
    - Ensure at least one PlatformIO build passes (root or required env)
+
+## Implementation Details (from refactoring-plan)
+
+1. Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
+2. Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
+3. Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
+4. Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
+5. IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
+6. Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
+7. Generic Alarm Registry: Provide `addAlarm(AlarmConfig)`/`addAlarmAnalog`, separate trigger definition from UI placement, surface `onAlarmCome/Gone/Stay` hooks, and keep alarms on the Live side unless an explicit Settings toggle is added.
+8. MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
+9. Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
 
 
 ## Feasibility / Risks (ESP32)
