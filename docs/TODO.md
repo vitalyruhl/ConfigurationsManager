@@ -466,10 +466,10 @@ Open questions:
 
 ## Implementation Sequence (Suggested)
 
-1) Finalize UI terminology and defaults (SettingsPage/Card/Group; LivePage/Card/Group).
-2) Implement layout registries for Settings + Live (no IO changes yet).
+1) [COMPLETED] Finalize UI terminology and defaults (SettingsPage/Card/Group; LivePage/Card/Group).
+2) [COMPLETED] Implement layout registries for Settings + Live (no IO changes yet).
 3) Introduce Settings builder (`ConfigManager.settingX(...).name(...).defaultValue(...).persistSettings(true).build()`).
-4) Add generic placement methods for settings: `ConfigManager.addToSettingsGroup(...)`, `ConfigManager.addToLiveGroup(...)`.
+4) [COMPLETED] Add generic placement methods for settings: `ConfigManager.addToSettingsGroup(...)`, `ConfigManager.addToLiveGroup(...)`.
 5) Refactor IOManager:
    - Split IO definition from UI placement.
    - Implement `add*ToSettingsGroup` (guarded by persistSettings).
@@ -483,10 +483,10 @@ Open questions:
 
 ## Implementation Details (from refactoring-plan)
 
-1. Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
-2. Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
+1. [COMPLETED] Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
+2. [COMPLETED] Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
 3. Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
-4. Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
+4. [COMPLETED] Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
 5. IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
 6. Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
 7. Generic Alarm Registry: Provide `addAlarm(AlarmConfig)`/`addAlarmAnalog`, separate trigger definition from UI placement, surface `onAlarmCome/Gone/Stay` hooks, and keep alarms on the Live side unless an explicit Settings toggle is added.
