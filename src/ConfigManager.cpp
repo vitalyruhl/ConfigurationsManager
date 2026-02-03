@@ -394,6 +394,7 @@ void ConfigManagerClass::registerLivePlacement(const String &liveGroup,
     if (resolvedGroup.isEmpty() && !label.isEmpty())
     {
         resolvedGroup = label;
+        resolvedGroup.trim();
     }
     if (resolvedGroup.isEmpty())
     {
@@ -402,6 +403,100 @@ void ConfigManagerClass::registerLivePlacement(const String &liveGroup,
 
     String resolvedPage = String(DEFAULT_LAYOUT_NAME);
     String resolvedCard = resolvedGroup;
+    String resolvedLayoutGroup = resolvedGroup;
+
+    const auto *overrideEntry = getCategoryLayoutOverride(resolvedGroup.c_str());
+    if (overrideEntry)
+    {
+        if (!overrideEntry->page.isEmpty())
+        {
+            resolvedPage = overrideEntry->page;
+            if (overrideEntry->card.isEmpty())
+            {
+                resolvedCard = resolvedPage;
+            }
+        }
+        if (!overrideEntry->card.isEmpty())
+        {
+            resolvedCard = overrideEntry->card;
+        }
+        if (!overrideEntry->group.isEmpty())
+        {
+            resolvedLayoutGroup = overrideEntry->group;
+        }
+    }
+    else
+    {
+        const String wantedNorm = normalizeLayoutName(resolvedGroup);
+        bool found = false;
+
+        // 1) Prefer matching an explicitly defined Live group (by normalized token).
+        for (const auto &page : livePages)
+        {
+            for (const auto &card : page.cards)
+            {
+                for (const auto &group : card.groups)
+                {
+                    if (normalizeLayoutName(group.name) == wantedNorm)
+                    {
+                        resolvedPage = page.name;
+                        resolvedCard = card.name;
+                        resolvedLayoutGroup = group.name;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                {
+                    break;
+                }
+            }
+            if (found)
+            {
+                break;
+            }
+        }
+
+        // 2) If no group exists yet, try matching a defined card (and use it as group).
+        if (!found)
+        {
+            for (const auto &page : livePages)
+            {
+                for (const auto &card : page.cards)
+                {
+                    if (normalizeLayoutName(card.name) == wantedNorm)
+                    {
+                        resolvedPage = page.name;
+                        resolvedCard = card.name;
+                        resolvedLayoutGroup = card.name;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                {
+                    break;
+                }
+            }
+        }
+
+        // 3) If still not found, try matching a defined page (fallback to default card/group tokens).
+        if (!found)
+        {
+            for (const auto &page : livePages)
+            {
+                if (normalizeLayoutName(page.name) == wantedNorm)
+                {
+                    resolvedPage = page.name;
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Ensure the layout target exists without overriding existing group order with per-field order.
+    addLiveGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedLayoutGroup.c_str(), -1);
 
     for (auto &placement : livePlacements)
     {
@@ -409,13 +504,13 @@ void ConfigManagerClass::registerLivePlacement(const String &liveGroup,
         {
             placement.page = resolvedPage;
             placement.card = resolvedCard;
-            placement.group = resolvedGroup;
+            placement.group = resolvedLayoutGroup;
             placement.order = order;
             return;
         }
     }
 
-    addToLiveGroup(key.c_str(), resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
+    livePlacements.push_back({key, resolvedPage, resolvedCard, resolvedLayoutGroup, order});
 }
 
 String ConfigManagerClass::buildLiveLayoutJSON() const

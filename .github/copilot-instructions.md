@@ -208,3 +208,24 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - VALIDATION (Docker): If Docker CI is configured (e.g. Dockerfile.ci exists), validate using the documented Docker command before merging
   - ARCHITECTURE SUPPORT: Both Windows development and Linux production must work (where applicable)
   - DOCUMENTATION: README.md and /docs/TODO.md must be current when changes impact usage/behavior
+
+- Tooling & Search Policy:
+  - The agent may freely use standard CLI tools available in its sandbox
+    (e.g. rg/ripgrep, sed, awk) for analysis, refactoring safety, and audits.
+  - The user environment provides ripgrep (rg) on Windows / PowerShell.
+  - The agent MAY suggest rg commands to the user when helpful.
+  - When suggesting search commands:
+    - Prefer rg for code search (speed, accuracy, gitignore-aware).
+    - Include file scope where reasonable (e.g. src/, include/, docs/, examples/).
+  - Do NOT assume other Unix tools (sed/awk) are available locally unless explicitly required.
+  - If a command is sandbox-only or non-portable, summarize the result instead of asking the user to run it.
+
+- Rename Safety Rule:
+  - Before any rename, always perform a full reference search using rg.
+  - After renaming, re-run rg to ensure no old symbol names remain.
+  - A rename is considered incomplete if any reference remains in:
+    - src/
+    - include/
+    - examples/
+    - docs/
+    - tests/

@@ -1537,7 +1537,7 @@ function capitalize(s) {
 function fallbackBucketTitle(bucketKey) {
   const normalized = normalizeGroupToken(bucketKey);
   if (normalized === "sensors") {
-    return "System";
+    return "Sensors";
   }
   if (!bucketKey) {
     return "Other";
