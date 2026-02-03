@@ -44,6 +44,10 @@ Decision preference (based on screenshot):
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
+Prior to implementing this batch, create an intermediate commit and a dedicated branch so these changes stay isolated. The core requirement is a new `GUIMode` variable inside `ConfigManager` that supports at least three modes: `generic` (no pin validation), `esp32` (validate against the ESP32 pin matrix), and `arduinoUno` (validate against the Arduino Uno pin set). The design must stay extensible, so each mode gets its own rule definition pair in the `io` subdirectory (e.g., `esp32-io-definition.h/.cpp`). `ConfigManager` should include a top-level `ioDefinitions.h` that imports the relevant definitions, defaulting to the ESP32 rules. Validation must happen before saving configurations (not inside the Vue app) and also emit a warning during compilation when an invalid pin is bound (the `Full-IO-Demo` currently hardcodes a wrong pin for testing: `ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{ .id = "holdbutton", .defaultPin = 34, ... });`). For Arduino pin mappings, pull the reference data from up-to-date online sources.
+
+The GUI will only dispatch the JSON entry that was actually interacted with; however, the “save all” flow submits every entry and so must validate them all. In addition, add a reusable notification layer: `errorMessage` (pushes an error up via WebSocket, can be triggered programmatically through `ConfigManager::sendErrorMessage("short description", "long description", callbacks ok/retry/cancel)`) and `infoMessage` (same concept with a calmer presentation). Structure the notification system so that further popups (e.g., modal input for analog prompts) can be added later, but for now only implement error and info popups.
+
 ### A) Core: UI layout registry (Settings + Live)
 
 These are "layout only" utilities. They should not create IOs/settings; only define where UI elements live.
@@ -547,3 +551,8 @@ Workflow notes:
 ## Done / Resolved
 
 - Core HelperModule added (PulseOutput + computeDewPoint + mapFloat) and examples migrated.
+
+## Status Notes
+
+- [CURRENT] Tracking the new GUIMode validation task (generic/ESP32/Arduino Uno rules, pre-save checks, compile-time warnings, selective JSON saves, and the new error/info popup components) so the plan does not get lost.
+- [PAUSED] IOManager refactor / io-refactoring work (Implementation Sequence step 5) remains on hold until the tooling situation stabilizes.

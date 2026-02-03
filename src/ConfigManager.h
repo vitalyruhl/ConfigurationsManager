@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <string>
 #include <string_view>
+#include <optional>
 #include <Preferences.h>
 #include <vector>
 #include <functional>
@@ -15,12 +16,15 @@
 #include <exception>
 #include <stdexcept>
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <set>
 #include <map>
 #include <utility>
 
 #include "ConfigManagerConfig.h"
+
+#include "io/ioDefinitions.h"
 
 // Modular components
 #include "wifi/WiFiManager.h"
@@ -223,6 +227,47 @@ inline String hashStringForStorage(const String &value)
     snprintf(buffer, sizeof(buffer), "%012llX", static_cast<unsigned long long>(hashValue & 0xFFFFFFFFFFFFull));
     return String(buffer);
 }
+
+struct ConfigRequestContext
+{
+    enum class Origin
+    {
+        None,
+        ApplySingle,
+        SaveSingle,
+        ApplyAll,
+        SaveAll
+    };
+
+    Origin origin = Origin::None;
+    String endpoint;
+    String payload;
+    bool force = false;
+};
+
+inline const char *toString(ConfigRequestContext::Origin origin)
+{
+    switch (origin)
+    {
+    case ConfigRequestContext::Origin::ApplySingle:
+        return "apply";
+    case ConfigRequestContext::Origin::SaveSingle:
+        return "save";
+    case ConfigRequestContext::Origin::ApplyAll:
+        return "apply_all";
+    case ConfigRequestContext::Origin::SaveAll:
+        return "save_all";
+    default:
+        return "none";
+    }
+}
+
+struct GUIMessageAction
+{
+    String id;
+    String label;
+    bool primary = false;
+};
 
 
 
@@ -799,6 +844,26 @@ public:
     static constexpr int DEFAULT_LAYOUT_ORDER = 100;
     static constexpr const char *DEFAULT_LIVE_CARD_NAME = "Live Values";
 
+    void setGUIMode(cm::io::GUIMode mode);
+    cm::io::GUIMode getGUIMode() const;
+
+    void registerIOPinSetting(const char *key, cm::io::IOPinRole role);
+
+    void pushRequestContext(const ConfigRequestContext &ctx);
+    void popRequestContext();
+    const ConfigRequestContext &getCurrentRequestContext() const;
+
+    void sendErrorMessage(const String &title,
+                          const String &message,
+                          const String &details,
+                          const std::vector<GUIMessageAction> &actions,
+                          std::function<void(JsonObject &)> contextBuilder = nullptr);
+    void sendInfoMessage(const String &title,
+                         const String &message,
+                         const String &details,
+                         const std::vector<GUIMessageAction> &actions,
+                         std::function<void(JsonObject &)> contextBuilder = nullptr);
+
 private:
     Preferences prefs;
     std::vector<BaseSetting*> settings;
@@ -806,6 +871,154 @@ private:
     String appName;
     String appTitle;
     String appVersion;
+
+    cm::io::GUIMode guiMode = cm::io::GUIMode::Esp32;
+    std::unique_ptr<cm::io::IOPinRules> pinRules = cm::io::createPinRulesForMode(guiMode);
+    std::map<String, cm::io::IOPinRole> ioPinRoles;
+    std::vector<ConfigRequestContext> requestContextStack;
+    ConfigRequestContext fallbackRequestContext;
+
+    void sendGUIMessage(const char *type,
+                        const String &title,
+                        const String &message,
+                        const String &details,
+                        const std::vector<GUIMessageAction> &actions,
+                        std::function<void(JsonObject &)> contextBuilder)
+    {
+        DynamicJsonDocument doc(1024);
+        JsonObject root = doc.to<JsonObject>();
+        root["type"] = type;
+        root["title"] = title;
+        root["message"] = message;
+        root["details"] = details;
+        root["mode"] = cm::io::toString(guiMode);
+        root["origin"] = toString(getCurrentRequestContext().origin);
+        JsonArray actionArray = root.createNestedArray("actions");
+        for (const auto &act : actions)
+        {
+            JsonObject item = actionArray.createNestedObject();
+            item["id"] = act.id;
+            item["label"] = act.label;
+            item["primary"] = act.primary;
+        }
+        if (contextBuilder)
+        {
+            JsonObject contextObj = root.createNestedObject("context");
+            contextBuilder(contextObj);
+        }
+        String payload;
+        serializeJson(doc, payload);
+        if (!sendWebSocketPayload(payload))
+        {
+            CM_CORE_LOG("[CM] WebSocket payload not delivered: %s", payload.c_str());
+        }
+    }
+
+    bool sendWebSocketPayload(const String &payload)
+    {
+#if CM_ENABLE_WS_PUSH
+        return sendWebSocketText(payload);
+#else
+        (void)payload;
+        return false;
+#endif
+    }
+
+    IOPinValidationResult validateIOPinSetting(const String &key, const String &value) const
+    {
+        IOPinValidationResult result;
+        if (key.isEmpty())
+            return result;
+
+        auto it = ioPinRoles.find(key);
+        if (it == ioPinRoles.end())
+            return result;
+
+        result.role = it->second;
+        char *endPtr = nullptr;
+        long parsed = strtol(value.c_str(), &endPtr, 10);
+        if (endPtr == value.c_str() || *endPtr != '\0')
+        {
+            result.valid = false;
+            result.reason = "Pin value is not a number";
+            result.detail = String("Pin value for '") + key + "' must be numeric";
+            return result;
+        }
+
+        result.pin = static_cast<int>(parsed);
+        if (result.pin < 0)
+            return result;
+
+        if (!pinRules)
+            return result;
+
+        bool valid = false;
+        switch (result.role)
+        {
+        case cm::io::IOPinRole::DigitalOutput:
+            valid = pinRules->isValidDigitalOutputPin(result.pin);
+            break;
+        case cm::io::IOPinRole::DigitalInput:
+            valid = pinRules->isValidDigitalInputPin(result.pin);
+            break;
+        case cm::io::IOPinRole::AnalogInput:
+            valid = pinRules->isValidAnalogInputPin(result.pin);
+            break;
+        case cm::io::IOPinRole::AnalogOutput:
+            valid = pinRules->isValidAnalogOutputPin(result.pin);
+            break;
+        }
+
+        if (!valid)
+        {
+            result.valid = false;
+            result.reason = String("Pin not supported for ") + cm::io::toString(result.role);
+            result.detail = String("Pin ") + String(result.pin) + " is not valid for mode " + cm::io::toString(guiMode);
+        }
+
+        return result;
+    }
+
+    void handleIOPinValidationFailure(const String &category,
+                                     const String &key,
+                                     const String &value,
+                                     const IOPinValidationResult &result,
+                                     bool isApply)
+    {
+        const ConfigRequestContext &ctx = getCurrentRequestContext();
+        const String origin = toString(ctx.origin);
+        const std::vector<GUIMessageAction> actions = {
+            {"force", "Force anyway", true},
+            {"cancel", "Cancel", false}
+        };
+
+        sendGUIMessage(
+            "errorMessage",
+            "Invalid pin configuration",
+            result.reason,
+            result.detail,
+            actions,
+            [&](JsonObject &obj)
+            {
+                obj["category"] = category;
+                obj["key"] = key;
+                obj["value"] = value;
+                obj["pin"] = result.pin;
+                obj["role"] = cm::io::toString(result.role);
+                obj["mode"] = cm::io::toString(guiMode);
+                obj["origin"] = origin;
+                obj["isApply"] = isApply;
+                if (!ctx.endpoint.isEmpty())
+                {
+                    obj["endpoint"] = ctx.endpoint;
+                }
+                obj["forceParam"] = "force=1";
+                if (!ctx.payload.isEmpty())
+                {
+                    obj["payload"] = ctx.payload;
+                }
+            });
+    }
 
     // Modular components
     ConfigManagerWiFi wifiManager;
@@ -1291,6 +1504,66 @@ public:
                 CM_CORE_LOG("[E] Setting error: %s", s->getError());
             }
         }
+    }
+
+    void setGUIMode(cm::io::GUIMode mode)
+    {
+        if (guiMode == mode)
+            return;
+        guiMode = mode;
+        pinRules = cm::io::createPinRulesForMode(guiMode);
+    }
+
+    cm::io::GUIMode getGUIMode() const
+    {
+        return guiMode;
+    }
+
+    void registerIOPinSetting(const char *key, cm::io::IOPinRole role)
+    {
+        if (!key || key[0] == '\0')
+            return;
+        ioPinRoles[String(key)] = role;
+    }
+
+    void pushRequestContext(const ConfigRequestContext &ctx)
+    {
+        requestContextStack.push_back(ctx);
+    }
+
+    void popRequestContext()
+    {
+        if (!requestContextStack.empty())
+        {
+            requestContextStack.pop_back();
+        }
+    }
+
+    const ConfigRequestContext &getCurrentRequestContext() const
+    {
+        if (requestContextStack.empty())
+        {
+            return fallbackRequestContext;
+        }
+        return requestContextStack.back();
+    }
+
+    void sendErrorMessage(const String &title,
+                          const String &message,
+                          const String &details,
+                          const std::vector<GUIMessageAction> &actions,
+                          std::function<void(JsonObject &)> contextBuilder = nullptr)
+    {
+        sendGUIMessage("errorMessage", title, message, details, actions, contextBuilder);
+    }
+
+    void sendInfoMessage(const String &title,
+                         const String &message,
+                         const String &details,
+                         const std::vector<GUIMessageAction> &actions,
+                         std::function<void(JsonObject &)> contextBuilder = nullptr)
+    {
+        sendGUIMessage("infoMessage", title, message, details, actions, contextBuilder);
     }
 
     // App management
