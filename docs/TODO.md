@@ -556,3 +556,4 @@ Workflow notes:
 
 - [CURRENT] Tracking the new GUIMode validation task (generic/ESP32/Arduino Uno rules, pre-save checks, compile-time warnings, selective JSON saves, and the new error/info popup components) so the plan does not get lost.
 - [PAUSED] IOManager refactor / io-refactoring work (Implementation Sequence step 5) remains on hold until the tooling situation stabilizes.
+- [COMPLETED] IOManager now auto-populates `live_layout.json` (tabs/cards/groups for Inputs, Controls, Analog, Sensors, Alerts, System) so RuntimeDashboard.vue can rely on structured pages without a manual JSON stub.

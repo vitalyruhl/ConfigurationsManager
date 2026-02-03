@@ -16,7 +16,6 @@ static constexpr const char* IO_CATEGORY_PRETTY = "I/O";
 
 namespace {
 static constexpr const char* IO_SETTINGS_PAGE = IO_CATEGORY_PRETTY;
-static constexpr const char* IO_LIVE_CARD = "Live Values";
 
 static void registerSettingPlacement(BaseSetting* setting, const String& cardName, const String& groupName)
 {
@@ -24,15 +23,6 @@ static void registerSettingPlacement(BaseSetting* setting, const String& cardNam
         return;
     }
     ConfigManager.addToSettingsGroup(setting->getKey(), IO_SETTINGS_PAGE, cardName.c_str(), groupName.c_str(), setting->getSortOrder());
-}
-
-static void registerLivePlacement(const String& livePage, const String& key, const String& label, int order)
-{
-    if (livePage.isEmpty() || key.isEmpty()) {
-        return;
-    }
-    const String effectiveLabel = label.isEmpty() ? key : label;
-    ConfigManager.addToLiveGroup(key.c_str(), livePage.c_str(), IO_LIVE_CARD, effectiveLabel.c_str(), order);
 }
 } // namespace
 
@@ -426,7 +416,6 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
         meta.boolAlarmValue = true;
     }
     ConfigManager.getRuntime().addRuntimeMeta(meta);
-    registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
 
     entry.settingsRegistered = true;
     entry.runtimeRegistered = true;
@@ -557,7 +546,6 @@ void IOManager::addInputRuntimeToGUI(const char* id, int order,
         meta.boolAlarmValue = true;
     }
     ConfigManager.getRuntime().addRuntimeMeta(meta);
-    registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
 
     entry.runtimeRegistered = true;
 }
@@ -588,7 +576,6 @@ static void addAnalogRuntimeMeta(ConfigManagerRuntime& runtime,
     }
 
     runtime.addRuntimeMeta(meta);
-    registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
 }
 
 static void addAnalogOutputRuntimeMeta(ConfigManagerRuntime& runtime,
@@ -856,7 +843,6 @@ static void addAnalogAlarmRuntimeIndicators(ConfigManagerRuntime& runtime,
         meta.boolAlarmValue = true;
         meta.order = baseOrder + 1;
         runtime.addRuntimeMeta(meta);
-        registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
     }
 
     if (hasMax) {
@@ -868,7 +854,6 @@ static void addAnalogAlarmRuntimeIndicators(ConfigManagerRuntime& runtime,
         meta.boolAlarmValue = true;
         meta.order = baseOrder + 2;
         runtime.addRuntimeMeta(meta);
-        registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
     }
 }
 
@@ -1171,7 +1156,6 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
     const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
     ConfigManager.defineRuntimeButton(group, entry.id, label, onPress, String(), order);
-    registerLivePlacement(group, entry.id, label, order);
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
@@ -1199,28 +1183,19 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, Runt
     const String label = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
     const String onLabel = (runtimeOnLabel && runtimeOnLabel[0]) ? String(runtimeOnLabel) : String();
     const String offLabel = (runtimeOffLabel && runtimeOffLabel[0]) ? String(runtimeOffLabel) : String();
-    bool placementAdded = false;
-
     switch (type) {
         case RuntimeControlType::Checkbox:
             ConfigManager.defineRuntimeCheckbox(group, entry.id, label, getter, setter, String(), order);
-            placementAdded = true;
             break;
         case RuntimeControlType::MomentaryButton:
             ConfigManager.defineRuntimeMomentaryButton(group, entry.id, label, getter, setter, String(), order, onLabel, offLabel);
-            placementAdded = true;
             break;
         case RuntimeControlType::StateButton:
             ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order, onLabel, offLabel);
-            placementAdded = true;
             break;
         default:
             IO_LOG("[WARNING] addIOtoGUI(runtime): output '%s' uses 2 callbacks but type is Button", entry.id.c_str());
             break;
-    }
-
-    if (placementAdded) {
-        registerLivePlacement(group, entry.id, label, order);
     }
 }
 
@@ -1299,7 +1274,6 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
         unitStr,
         String(),
         order);
-    registerLivePlacement(group, entry.id, label, order);
 }
 
 void IOManager::addAnalogOutputSliderToGUI(const char* id, const char* cardName, int order,

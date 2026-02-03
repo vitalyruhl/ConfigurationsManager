@@ -44,6 +44,9 @@ void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<
 void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
     runtimeMeta.push_back(meta);
     RUNTIME_LOG("Added meta: %s.%s", meta.group.c_str(), meta.key.c_str());
+    if (configManager) {
+        configManager->registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
+    }
 }
 
 RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {

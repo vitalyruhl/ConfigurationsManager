@@ -113,7 +113,23 @@ you are my coding assistant. Follow the instructions in this file carefully when
       - Assume `millis()` wrap-around behavior (~49 days) and write comparisons using duration arithmetic (`now - last >= interval`).
       - Avoid `<chrono>` in ISR contexts.
       - `<chrono>` usage must remain allocation-free and constexpr-friendly.
-
+- Naming & API Consistency Policy:
+  - The authoritative naming rules are defined in docs/NAMING.md.
+  - Enforce the dominant token order for API names:
+    - <verb><SignalType><Direction><Target><Context>
+    - Example: addAnalogInput (NOT addInputAnalog)
+  - Specificity rule:
+    - If a method is specific to a signal type, it MUST include that token (Digital/Analog/Adc/Dac/Pwm).
+    - Example: Digital-only methods must be named addDigitalInputToGUI (NOT addInputToGUI).
+  - Unify concept vocabulary:
+    - Use exactly ONE term per concept (e.g. State vs Status -> choose State).
+    - Do not introduce synonyms or mixed acronyms (Wifi vs WiFi etc.). Follow the repo’s chosen form.
+  - Since the library is NOT published yet:
+    - Renames can be performed directly (no deprecation wrappers required).
+  - Safety gate for renames:
+    - Before renaming: search references.
+    - After renaming: update ALL call sites (src, examples, docs snippets, docs tables, tests).
+    - Ensure the project still builds (PlatformIO).
 
 - Testing Approach:
   - Unit tests for core components
