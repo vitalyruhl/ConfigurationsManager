@@ -66,12 +66,22 @@ struct TempSettings
     {
     }
 
-    void init()
+    void create()
     {
         ConfigManager.addSetting(&tempCorrection);
         ConfigManager.addSetting(&humidityCorrection);
         ConfigManager.addSetting(&seaLevelPressure);
         ConfigManager.addSetting(&readIntervalSec);
+    }
+
+    void placeInUi() const
+    {
+        ConfigManager.addSettingsPage("Temp", 40);
+        ConfigManager.addSettingsGroup("Temp", "Temp", "Temperature", 40);
+        ConfigManager.addToSettingsGroup(tempCorrection.getKey(), "Temp", "Temp", "Temperature", 10);
+        ConfigManager.addToSettingsGroup(humidityCorrection.getKey(), "Temp", "Temp", "Temperature", 20);
+        ConfigManager.addToSettingsGroup(seaLevelPressure.getKey(), "Temp", "Temp", "Temperature", 30);
+        ConfigManager.addToSettingsGroup(readIntervalSec.getKey(), "Temp", "Temp", "Temperature", 40);
     }
 };
 
@@ -182,16 +192,6 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
-    // Layout hints keep the Web UI tabs predictable.
-    ConfigManager.addSettingsPage("WiFi", 10);
-    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
-    ConfigManager.addSettingsPage("System", 20);
-    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
-    ConfigManager.addSettingsPage("NTP", 30);
-    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
-    ConfigManager.addSettingsPage("Temp", 40);
-    ConfigManager.addSettingsGroup("Temp", "Temp", "Temperature", 40);
-
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
@@ -202,14 +202,15 @@ void setup()
         ConfigManager.getOTAManager().enable(enabled);
     });
 
-    tempSettings.init();
+    tempSettings.create();
+    tempSettings.placeInUi();
 
     ConfigManager.loadAll();
 
     // Ensure OTAManager state matches the persisted setting.
     ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
-    // Settings-driven WiFi startup (DHCP/static/AP fallback).
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
     ConfigManager.startWebServer();
     ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 

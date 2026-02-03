@@ -174,16 +174,7 @@ void setup()
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
     ConfigManager.enableBuiltinSystemProvider();
 
-    ConfigManager.addSettingsPage("WiFi", 10);
-    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
-    ConfigManager.addSettingsPage("System", 20);
-    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
-    ConfigManager.addSettingsPage("NTP", 30);
-    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
-    ConfigManager.addSettingsPage("MQTT", 40);
-    ConfigManager.addSettingsGroup("MQTT", "MQTT", "MQTT Settings", 40);
-    ConfigManager.addSettingsPage("MQTT-Topics", 50);
-    ConfigManager.addSettingsGroup("MQTT-Topics", "MQTT-Topics", "MQTT Topics", 50);
+    // coreSettings owns the WiFi/System/NTP pages now; MQTT module registers its own layout.
     ConfigManager.addSettingsPage("Limiter", 60);
     ConfigManager.addSettingsGroup("Limiter", "Limiter", "Limiter Settings", 60);
     ConfigManager.addSettingsPage("Temp", 70);

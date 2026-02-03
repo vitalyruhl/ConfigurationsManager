@@ -35,7 +35,7 @@ ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
 Each input has a small set of settings.
 
 - `GPIO` (`P`): Which GPIO pin to use
-- `Active LOW` (`L`): Logic inversion
+- `LOW-Active` (`L`): Logic inversion
 - `Pull-up` (`U`): Use `INPUT_PULLUP`
 - `Pull-down` (`D`): Use `INPUT_PULLDOWN`
 

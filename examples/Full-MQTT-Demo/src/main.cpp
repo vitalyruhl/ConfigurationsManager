@@ -129,12 +129,7 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
-    ConfigManager.addSettingsPage("WiFi", 10);
-    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
-    ConfigManager.addSettingsPage("System", 20);
-    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
-    ConfigManager.addSettingsPage("NTP", 30);
-    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    // coreSettings owns WiFi/System/NTP layout registration, keep the MQTT tabs we need.
     ConfigManager.addSettingsPage("MQTT", 40);
     ConfigManager.addSettingsGroup("MQTT", "MQTT", "MQTT Settings", 40);
     ConfigManager.addSettingsPage("MQTT-Topics", 50);

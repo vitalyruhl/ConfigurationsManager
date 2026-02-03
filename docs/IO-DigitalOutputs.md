@@ -35,7 +35,7 @@ ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
 Each output has settings for:
 
 - `GPIO` (`P`): which GPIO pin to use
-- `Active LOW` (`L`): logic inversion
+- `LOW-Active` (`L`): logic inversion
 
 Outputs also have an enable concept (`defaultEnabled`), which is applied before the first preferences load.
 Note: currently the enable flag is not persisted as a setting (defaults only).

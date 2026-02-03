@@ -298,7 +298,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
 
     entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
         .key = entry.keyActiveLowStable->c_str(),
-        .name = "Active LOW",
+        .name = "LOW-Active",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultActiveLow,
         .showInWeb = entry.showActiveLowInWeb,
@@ -374,7 +374,7 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
 
     entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
         .key = entry.keyActiveLowStable->c_str(),
-        .name = "Active LOW",
+        .name = "LOW-Active",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultActiveLow,
         .showInWeb = entry.showActiveLowInWeb,
@@ -493,7 +493,7 @@ void IOManager::addInputSettingsToGUI(const char* id, const char* cardName, int 
 
     entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
         .key = entry.keyActiveLowStable->c_str(),
-        .name = "Active LOW",
+        .name = "LOW-Active",
         .category = cm::CoreCategories::IO,
         .defaultValue = entry.defaultActiveLow,
         .showInWeb = entry.showActiveLowInWeb,

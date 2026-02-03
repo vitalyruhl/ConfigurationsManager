@@ -120,10 +120,10 @@ struct CoreButtonSettings
     Config<int> resetDefaultsPin{ConfigOptions<int>{.key = "BtnRst", .name = "Reset Defaults Button GPIO", .category = CoreCategories::Buttons, .defaultValue = -1, .showInWeb = true, .sortOrder = 2}};
 
     // Default behavior matches the existing examples: INPUT_PULLUP + pressed == LOW.
-    Config<bool> apModeActiveLow{ConfigOptions<bool>{.key = "BtnAPLow", .name = "AP Mode Active LOW", .category = CoreCategories::Buttons, .defaultValue = true, .showInWeb = true, .sortOrder = 3}};
+    Config<bool> apModeActiveLow{ConfigOptions<bool>{.key = "BtnAPLow", .name = "AP Mode LOW-Active", .category = CoreCategories::Buttons, .defaultValue = true, .showInWeb = true, .sortOrder = 3}};
     Config<bool> apModeUsePullup{ConfigOptions<bool>{.key = "BtnAPPU", .name = "AP Mode Use Pull-Up", .category = CoreCategories::Buttons, .defaultValue = true, .showInWeb = true, .sortOrder = 4}};
 
-    Config<bool> resetActiveLow{ConfigOptions<bool>{.key = "BtnRstLow", .name = "Reset Active LOW", .category = CoreCategories::Buttons, .defaultValue = true, .showInWeb = true, .sortOrder = 5}};
+    Config<bool> resetActiveLow{ConfigOptions<bool>{.key = "BtnRstLow", .name = "Reset LOW-Active", .category = CoreCategories::Buttons, .defaultValue = true, .showInWeb = true, .sortOrder = 5}};
     Config<bool> resetUsePullup{ConfigOptions<bool>{.key = "BtnRstPU", .name = "Reset Use Pull-Up", .category = CoreCategories::Buttons, .defaultValue = true, .showInWeb = true, .sortOrder = 6}};
 
     void attachTo(ConfigManagerClass &cfg)

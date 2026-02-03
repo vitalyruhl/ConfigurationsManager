@@ -40,37 +40,46 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
 // Settings shown in the Settings tab (GUI demo).
-static Config<bool> demoBool(ConfigOptions<bool>{
-    .key = "tbool",
-    .category = "Example Settings",
-    .defaultValue = true});
+struct ExampleSettings
+{
+    Config<bool> demoBool{ConfigOptions<bool>{.key = "tbool", .category = "Example Settings", .defaultValue = true}};
+    Config<int> updateInterval{ConfigOptions<int>{.key = "interval", .name = "Update Interval (seconds)", .category = "Example Settings", .defaultValue = 30}};
 
-static Config<int> updateInterval(ConfigOptions<int>{
-    .key = "interval",
-    .name = "Update Interval (seconds)",
-    .category = "Example Settings",
-    .defaultValue = 30});
+    Config<bool> demoToggle{ConfigOptions<bool>{.key = "toggle", .name = "Demo Toggle", .category = "Dynamic visibility example", .defaultValue = true}};
+    Config<String> demoVisibleWhenTrue{ConfigOptions<String>{.key = "trueS", .name = "Visible When True", .category = "Dynamic visibility example", .defaultValue = String("Shown if toggle = true")}};
+    Config<String> demoVisibleWhenFalse{ConfigOptions<String>{.key = "falseS", .name = "Visible When False", .category = "Dynamic visibility example", .defaultValue = String("Shown if toggle = false")}};
 
-// Dynamic visibility demo.
-static Config<bool> demoToggle(ConfigOptions<bool>{
-    .key = "toggle",
-    .name = "Demo Toggle",
-    .category = "Dynamic visibility example",
-    .defaultValue = true});
+    ExampleSettings()
+    {
+        demoVisibleWhenTrue.showIf = [this]() { return demoToggle.get(); };
+        demoVisibleWhenFalse.showIf = [this]() { return !demoToggle.get(); };
+    }
 
-static Config<String> demoVisibleWhenTrue(ConfigOptions<String>{
-    .key = "trueS",
-    .name = "Visible When True",
-    .category = "Dynamic visibility example",
-    .defaultValue = String("Shown if toggle = true"),
-    .showIf = []() { return demoToggle.get(); }});
+    void create()
+    {
+        ConfigManager.addSetting(&demoBool);
+        ConfigManager.addSetting(&updateInterval);
+        ConfigManager.addSetting(&demoToggle);
+        ConfigManager.addSetting(&demoVisibleWhenTrue);
+        ConfigManager.addSetting(&demoVisibleWhenFalse);
+    }
 
-static Config<String> demoVisibleWhenFalse(ConfigOptions<String>{
-    .key = "falseS",
-    .name = "Visible When False",
-    .category = "Dynamic visibility example",
-    .defaultValue = String("Shown if toggle = false"),
-    .showIf = []() { return !demoToggle.get(); }});
+    void placeInUi() const
+    {
+        ConfigManager.addSettingsPage("Example Settings", 40);
+        ConfigManager.addSettingsGroup("Example Settings", "Example Settings", "Example Settings", 40);
+        ConfigManager.addToSettingsGroup(demoBool.getKey(), "Example Settings", "Example Settings", "Example Settings", 10);
+        ConfigManager.addToSettingsGroup(updateInterval.getKey(), "Example Settings", "Example Settings", "Example Settings", 20);
+
+        ConfigManager.addSettingsPage("Dynamic visibility example", 50);
+        ConfigManager.addSettingsGroup("Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 50);
+        ConfigManager.addToSettingsGroup(demoToggle.getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 10);
+        ConfigManager.addToSettingsGroup(demoVisibleWhenTrue.getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 20);
+        ConfigManager.addToSettingsGroup(demoVisibleWhenFalse.getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 30);
+    }
+};
+
+static ExampleSettings exampleSettings;
 
 // [MOCKED DATA] Sensor demo values.
 static Ticker sensorMockTicker;
@@ -116,27 +125,12 @@ void setup()
     ConfigManager.enableBuiltinSystemProvider();
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
 
-    // Keep the Settings tabs predictable by pre-registering the pages/groups used here.
-    ConfigManager.addSettingsPage("WiFi", 10);
-    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
-    ConfigManager.addSettingsPage("System", 20);
-    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
-    ConfigManager.addSettingsPage("NTP", 30);
-    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
-    ConfigManager.addSettingsPage("Example Settings", 40);
-    ConfigManager.addSettingsGroup("Example Settings", "Example Settings", "Example Settings", 40);
-    ConfigManager.addSettingsPage("Dynamic visibility example", 50);
-    ConfigManager.addSettingsGroup("Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 50);
-
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
 
-    ConfigManager.addSetting(&demoBool);
-    ConfigManager.addSetting(&updateInterval);
-    ConfigManager.addSetting(&demoToggle);
-    ConfigManager.addSetting(&demoVisibleWhenTrue);
-    ConfigManager.addSetting(&demoVisibleWhenFalse);
+    exampleSettings.create();
+    exampleSettings.placeInUi();
 
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();

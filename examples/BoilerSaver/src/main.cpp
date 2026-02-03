@@ -167,13 +167,7 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
-    // Layout hints keep the Settings tab organized.
-    ConfigManager.addSettingsPage("WiFi", 10);
-    ConfigManager.addSettingsGroup("WiFi", "WiFi", "WiFi Settings", 10);
-    ConfigManager.addSettingsPage("System", 20);
-    ConfigManager.addSettingsGroup("System", "System", "System Settings", 20);
-    ConfigManager.addSettingsPage("NTP", 30);
-    ConfigManager.addSettingsGroup("NTP", "NTP", "NTP Settings", 30);
+    // Layout hints keep the Settings tab organized; WiFi/System/NTP are handled by coreSettings.
     ConfigManager.addSettingsPage("I2C", 40);
     ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Bus", 40);
     ConfigManager.addSettingsPage("Boiler", 50);

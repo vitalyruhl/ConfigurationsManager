@@ -464,7 +464,7 @@ Open questions:
 - Settings should not auto-appear; they only show up after the caller places them with the right parameters, which allows pushing MQTT content into either the standard MQTT tab or an extra tab if needed.
 
 
-## Implementation Sequence (Suggested)
+### Implementation Sequence (Suggested)
 
 1) [COMPLETED] Finalize UI terminology and defaults (SettingsPage/Card/Group; LivePage/Card/Group).
 2) [COMPLETED] Implement layout registries for Settings + Live (no IO changes yet).
@@ -479,11 +479,25 @@ Open questions:
 6) Implement Live callback builder API (digital/analog) + unify multi-click.
 7) Implement generic alarm registry (`addAlarm(...)`) + UI for alarms (Live first).
 8) Refactor MQTTManager to the same pattern (define -> settings placement -> live placement) and let its attach helpers create the default MQTT tabs/groups (with override hooks) so the layout matches other core bundles.
-9) Migrate all examples + docs:
-   - Update each example to new APIs
-   - Ensure at least one PlatformIO build passes (root or required env)
+9) Check all examples + docs:
+   - Consistancy + completeness pass.
+   - Ensure at the PlatformIO build passes (deploy all, let user test it all)
 
-## Implementation Details (from refactoring-plan)
+### Implementation Details (from refactoring-plan)
+
+Workflow notes:
+- Rebuild order:
+  1. Minimal – must remain translatable
+  2. BME280 – must be translatable and deployable
+  3. Full-GUI
+  4. Full-IO
+  5. Full-Logging
+  6. Full-MQTT
+  7. Boilersaver
+  8. SolarInverterLimiter – must be flashable; larger test
+- After each step, rebuild and test the examples mentioned above while the remaining examples stay in refactor-only mode for the moment.
+- Commit and push an intermediate snapshot after the associated examples pass, and only then start the next step.
+- Mark each step as [COMPLETED] in both the Implementation Sequence and Implementation Details when done.
 
 1. [COMPLETED] Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
 2. [COMPLETED] Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
@@ -496,14 +510,14 @@ Open questions:
 8. MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
 9. Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
 
-## Example validation plan
+### Example validation plan
 - Steps 1‑2 (terminology/layout registries) use the `minimal` example for fast iteration.
 - IOManager work (step 5) validates against `examples/Full-IO-Demo` to exercise digital/analog registration.
 - Live/GUI step additions (steps 6–7) target `examples/Full-GUI-Demo` so Live and Settings UI remain stable.
 - MQTTManager refactor (step 8) uses `examples/Full-MQTT-Demo` to cover topic definition/placement.
 - Final migration run can sample whichever example changed most, but keep one PlatformIO build per touched area to catch integration issues.
 
-## Feasibility / Risks (ESP32)
+### Feasibility / Risks (ESP32)
 
 - Builder objects must not allocate heavily on heap; avoid accidental copies.
 - `std::function` capture size can be expensive; consider lightweight delegates if needed.
