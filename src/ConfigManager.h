@@ -1297,6 +1297,10 @@ private:
     void logLayoutWarningOnce(const String &key, const String &message);
 public:
     void setCategoryLayoutOverride(const char *category, const char *page, const char *card, const char *group, int order);
+    void registerLivePlacement(const String& liveGroup,
+                               const String& key,
+                               const String& label,
+                               int order = DEFAULT_LAYOUT_ORDER);
 
     const CategoryLayoutOverride *getCategoryLayoutOverride(const char *category) const;
 

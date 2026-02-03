@@ -379,6 +379,45 @@ void ConfigManagerClass::addToLiveGroup(const char *itemId, const char *pageName
     livePlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
 }
 
+void ConfigManagerClass::registerLivePlacement(const String &liveGroup,
+                                               const String &key,
+                                               const String &label,
+                                               int order)
+{
+    if (key.isEmpty())
+    {
+        return;
+    }
+
+    String resolvedGroup = liveGroup;
+    resolvedGroup.trim();
+    if (resolvedGroup.isEmpty() && !label.isEmpty())
+    {
+        resolvedGroup = label;
+    }
+    if (resolvedGroup.isEmpty())
+    {
+        resolvedGroup = String(DEFAULT_LIVE_CARD_NAME);
+    }
+
+    String resolvedPage = String(DEFAULT_LAYOUT_NAME);
+    String resolvedCard = resolvedGroup;
+
+    for (auto &placement : livePlacements)
+    {
+        if (placement.id == key)
+        {
+            placement.page = resolvedPage;
+            placement.card = resolvedCard;
+            placement.group = resolvedGroup;
+            placement.order = order;
+            return;
+        }
+    }
+
+    addToLiveGroup(key.c_str(), resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
+}
+
 String ConfigManagerClass::buildLiveLayoutJSON() const
 {
     DynamicJsonDocument doc(16384);
