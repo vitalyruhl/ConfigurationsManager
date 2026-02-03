@@ -69,8 +69,23 @@
       </div>
     </div>
 
-    <div v-else class="live-cards">
-      <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
+    <div v-else>
+      <div v-if="layoutTabs.length" class="runtime-tabs" role="tablist" aria-label="Live pages">
+        <button
+          v-for="tab in layoutTabs"
+          :key="tab.key"
+          class="rt-tab"
+          type="button"
+          :class="{ active: tab.key === activeLivePage }"
+          :aria-selected="tab.key === activeLivePage"
+          @click="activeLivePage = tab.key"
+        >
+          {{ tab.title }}
+        </button>
+      </div>
+
+      <div class="live-cards">
+        <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
         <h3>{{ group.title }}</h3>
 
         <div class="tbl">
@@ -79,50 +94,50 @@
 
             <RuntimeActionButton
               v-else-if="f.isButton"
-              :group="group.name"
+                :group="fieldSourceGroup(f)"
               :field="f"
               @action="handleRuntimeButton"
             />
 
             <RuntimeMomentaryButton
               v-else-if="f.isMomentaryButton"
-              :group="group.name"
+                :group="fieldSourceGroup(f)"
               :field="f"
-              :value="runtime[group.name] && runtime[group.name][f.key]"
+                :value="runtimeValue(f)"
               @set="handleMomentarySet"
             />
 
             <RuntimeStateButton
               v-else-if="f.isStateButton"
-              :group="group.name"
+                :group="fieldSourceGroup(f)"
               :field="f"
-              :value="runtime[group.name] && runtime[group.name][f.key]"
+                :value="runtimeValue(f)"
               @toggle="handleStateToggle"
             />
 
             <RuntimeSlider
               v-else-if="f.isIntSlider || f.isFloatSlider"
-              :group="group.name"
+                :group="fieldSourceGroup(f)"
               :field="f"
-              :value="runtime[group.name] && runtime[group.name][f.key]"
+                :value="runtimeValue(f)"
               :mode="f.isFloatSlider ? 'float' : 'int'"
               @commit="handleSliderCommit"
             />
 
             <RuntimeNumberInput
               v-else-if="f.isIntInput || f.isFloatInput"
-              :group="group.name"
+                :group="fieldSourceGroup(f)"
               :field="f"
-              :value="runtime[group.name] && runtime[group.name][f.key]"
+                :value="runtimeValue(f)"
               :mode="f.isFloatInput ? 'float' : 'int'"
               @commit="handleInputCommit"
             />
 
             <RuntimeCheckbox
               v-else-if="f.isCheckbox"
-              :group="group.name"
+                :group="fieldSourceGroup(f)"
               :field="f"
-              :value="runtime[group.name] && runtime[group.name][f.key]"
+                :value="runtimeValue(f)"
               @change="handleCheckboxChange"
             />
 
@@ -131,12 +146,9 @@
               <span class="val">
                 <template v-if="f.staticValue">{{ f.staticValue }}</template>
                 <template
-                  v-else-if="
-                    runtime[group.name] &&
-                    runtime[group.name][f.key] !== undefined
-                  "
+                  v-else-if="hasRuntimeValue(f)"
                 >
-                  {{ runtime[group.name][f.key] }}
+                  {{ runtimeValue(f) }}
                 </template>
                 <template v-else>—</template>
               </span>
@@ -145,14 +157,14 @@
 
             <div
               v-else-if="
-                runtime[group.name] && runtime[group.name][f.key] !== undefined
+                hasRuntimeValue(f)
               "
-              :class="['rw', valueClasses(runtime[group.name][f.key], f, group.name)]"
-              :data-group="group.name"
+                :class="['rw', valueClasses(runtimeValue(f), f, fieldSourceGroup(f))]"
+                :data-group="fieldSourceGroup(f)"
               :data-key="f.key"
               :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
               :data-state="
-                f.isBool ? boolState(runtime[group.name][f.key], f) : null
+                f.isBool ? boolState(runtimeValue(f), f) : null
               "
             >
               <template v-if="f.isBool">
@@ -162,10 +174,10 @@
                   :style="fieldCss(f, 'label')"
                 >
                   <span
-                    v-if="boolDotVisible(runtime[group.name][f.key], f)"
+                    v-if="boolDotVisible(runtimeValue(f), f)"
                     class="bd"
-                    :class="boolDotClasses(runtime[group.name][f.key], f)"
-                    :style="boolDotStyle(runtime[group.name][f.key], f)"
+                    :class="boolDotClasses(runtimeValue(f), f)"
+                    :style="boolDotStyle(runtimeValue(f), f)"
                   ></span>
                   {{ f.label }}
                 </span>
@@ -176,7 +188,7 @@
                   class="val"
                   :style="fieldCss(f, 'state')"
                 >
-                  {{ formatBool(runtime[group.name][f.key], f) }}
+                  {{ formatBool(runtimeValue(f), f) }}
                 </span>
                 <span v-else class="val"></span>
 
@@ -202,7 +214,7 @@
                   class="val"
                   :style="fieldCss(f, 'values')"
                 >
-                  {{ formatValue(runtime[group.name][f.key], f) }}
+                  {{ formatValue(runtimeValue(f), f) }}
                 </span>
                 <span v-else class="val"></span>
 
@@ -220,19 +232,19 @@
         </div>
 
         <hr
-          v-if="group.name === 'system' && runtime.uptime !== undefined"
+          v-if="groupHasRuntimeSource(group, 'system') && runtime.uptime !== undefined"
           class="dv"
         />
 
         <p
-          v-if="group.name === 'system' && runtime.uptime !== undefined"
+          v-if="groupHasRuntimeSource(group, 'system') && runtime.uptime !== undefined"
           class="uptime"
         >
           Uptime: {{ formatUptime(runtime.uptime) }}
         </p>
         <p
           v-if="
-            group.name === 'system' &&
+            groupHasRuntimeSource(group, 'system') &&
             runtime.system &&
             runtime.system.loopAvg !== undefined
           "
@@ -246,7 +258,7 @@
           }}
           ms
         </p>
-        <p v-if="group.name === 'system'" class="uptime ota-status">
+        <p v-if="groupHasRuntimeSource(group, 'system')" class="uptime ota-status">
           OTA:
           <span
             v-if="otaEndpointAvailable === null"
@@ -283,7 +295,7 @@
         </p>
 
         <div
-          v-if="group.name === 'system' && runtime.uptime !== undefined && hasVisibleAlarm"
+          v-if="groupHasRuntimeSource(group, 'system') && runtime.uptime !== undefined && hasVisibleAlarm"
           class="tbl"
         >
           <div class="rw cr">
@@ -297,6 +309,7 @@
               <span class="slider round"></span>
             </label>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -337,6 +350,8 @@ const dismissToast = inject("dismissToast", () => {});
 const runtime = ref({});
 const runtimeMeta = ref([]);
 const runtimeGroups = ref([]);
+const liveLayout = ref(null);
+const activeLivePage = ref("");
 const logEntries = ref([]);
 const logEnabled = ref(false);
 const showBoolStateText = ref(false);
@@ -390,6 +405,180 @@ function normalizeGroupToken(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function fieldSourceGroup(field) {
+  if (!field) return '';
+  if (typeof field.sourceGroup === 'string' && field.sourceGroup.length) {
+    return field.sourceGroup;
+  }
+  if (typeof field.group === 'string' && field.group.length) {
+    return field.group;
+  }
+  return '';
+}
+
+function runtimeValue(field) {
+  const groupName = fieldSourceGroup(field);
+  if (!groupName || !runtime.value) return undefined;
+  const groupData = runtime.value[groupName];
+  if (!groupData || typeof groupData !== 'object') return undefined;
+  return groupData[field.key];
+}
+
+function hasRuntimeValue(field) {
+  const groupName = fieldSourceGroup(field);
+  if (!groupName || !runtime.value) return false;
+  const groupData = runtime.value[groupName];
+  if (!groupData || typeof groupData !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(groupData, field.key);
+}
+
+function groupHasRuntimeSource(group, sourceName) {
+  if (!group || !sourceName) return false;
+  const token = normalizeGroupToken(sourceName);
+  const sources = Array.isArray(group.runtimeSources) ? group.runtimeSources : [];
+  return sources.some((entry) => normalizeGroupToken(entry) === token);
+}
+
+function buildLiveLayoutPages(groups, layout) {
+  if (!layout || !Array.isArray(layout.pages) || !layout.pages.length) {
+    return [];
+  }
+
+  const fieldMap = new Map();
+  const assigned = new Set();
+
+  for (const group of groups) {
+    if (!group || !Array.isArray(group.fields)) continue;
+    if (!Array.isArray(group.runtimeSources)) {
+      group.runtimeSources = [group.name];
+    }
+    for (const field of group.fields) {
+      if (!field || typeof field.key !== 'string') continue;
+      fieldMap.set(field.key, field);
+    }
+  }
+
+  const sortByOrder = (list) => {
+    const arr = Array.isArray(list) ? [...list] : [];
+    arr.sort((a, b) => {
+      const ao = typeof a?.order === 'number' ? a.order : 1000;
+      const bo = typeof b?.order === 'number' ? b.order : 1000;
+      if (ao === bo) {
+        const aTitle = String(a?.title || a?.name || '');
+        const bTitle = String(b?.title || b?.name || '');
+        return aTitle.localeCompare(bTitle);
+      }
+      return ao - bo;
+    });
+    return arr;
+  };
+
+  const pages = [];
+  const sortedPages = sortByOrder(layout.pages);
+
+  sortedPages.forEach((page, pageIndex) => {
+    const pageTitle = page?.title || page?.name || `Live ${pageIndex + 1}`;
+    const pageKey = normalizeGroupToken(page?.key || page?.slug || page?.name) || `page_${pageIndex}`;
+    const cards = sortByOrder(page?.cards || []);
+    const groupsForPage = [];
+
+    cards.forEach((card, cardIndex) => {
+      const groupsList = sortByOrder(card?.groups || []);
+      groupsList.forEach((groupEntry, groupIndex) => {
+        const itemIds = Array.isArray(groupEntry?.items) ? groupEntry.items : [];
+        const collectedFields = [];
+        const runtimeSources = new Set();
+        itemIds.forEach((id) => {
+          if (!fieldMap.has(id)) return;
+          const field = fieldMap.get(id);
+          collectedFields.push(field);
+          const source = fieldSourceGroup(field);
+          if (source) runtimeSources.add(source);
+          assigned.add(id);
+        });
+        if (collectedFields.length) {
+          const normalizedGroupName = normalizeGroupToken(groupEntry?.name || groupEntry?.title) || `group_${cardIndex}_${groupIndex}`;
+          groupsForPage.push({
+            name: `${pageKey}::${normalizedGroupName}`,
+            title: groupEntry?.title || groupEntry?.name || card?.title || card?.name || pageTitle,
+            fields: collectedFields,
+            runtimeSources: Array.from(runtimeSources),
+            pageKey,
+          });
+        }
+      });
+    });
+
+    if (groupsForPage.length) {
+      pages.push({
+        key: pageKey,
+        title: pageTitle,
+        order: typeof page?.order === 'number' ? page.order : 1000 + pageIndex,
+        groups: groupsForPage,
+      });
+    }
+  });
+
+  if (fieldMap.size && assigned.size < fieldMap.size) {
+    const fallbackGroups = new Map();
+    for (const [fieldKey, field] of fieldMap.entries()) {
+      if (assigned.has(fieldKey)) continue;
+      const bucketKey = fieldSourceGroup(field) || 'other';
+      if (!fallbackGroups.has(bucketKey)) {
+        fallbackGroups.set(bucketKey, {
+          name: `fallback::${bucketKey}`,
+          title: capitalize(bucketKey),
+          fields: [],
+          runtimeSources: [],
+          pageKey: '__unassigned__',
+        });
+      }
+      const bucket = fallbackGroups.get(bucketKey);
+      bucket.fields.push(field);
+      const sourceSet = new Set(bucket.runtimeSources);
+      const source = fieldSourceGroup(field);
+      if (source) sourceSet.add(source);
+      bucket.runtimeSources = Array.from(sourceSet);
+    }
+
+    if (fallbackGroups.size) {
+      pages.push({
+        key: '__unassigned__',
+        title: 'Other',
+        order: Number.MAX_SAFE_INTEGER,
+        groups: Array.from(fallbackGroups.values()),
+      });
+    }
+  }
+
+  pages.sort((a, b) => {
+    const ao = typeof a.order === 'number' ? a.order : 1000;
+    const bo = typeof b.order === 'number' ? b.order : 1000;
+    if (ao === bo) {
+      return a.title.localeCompare(b.title);
+    }
+    return ao - bo;
+  });
+
+  const groupOrderValue = (grp) => {
+    const orders = (grp.fields || []).map((field) => (typeof field.order === 'number' ? field.order : 1000));
+    return orders.length ? Math.min(...orders) : 1000;
+  };
+
+  pages.forEach((page) => {
+    page.groups.sort((a, b) => {
+      const ao = groupOrderValue(a);
+      const bo = groupOrderValue(b);
+      if (ao === bo) {
+        return a.title.localeCompare(b.title);
+      }
+      return ao - bo;
+    });
+  });
+
+  return pages;
+}
+
 let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
@@ -429,12 +618,10 @@ function clearLogs() {
   logEntries.value = [];
 }
 
-const displayRuntimeGroups = computed(() => {
-  const visible = runtimeGroups.value.filter((group) => groupHasVisibleContent(group));
-  // Stable group ordering:
-  // 1) Prefer runtime.json key insertion order (firmware provider order)
-  // 2) Fallback: metadata-derived order for cards not present in runtime.json (e.g. extra cards)
-  // 3) Final fallback: heuristics + title
+const sortedRuntimeGroups = computed(() => {
+  const groups = Array.isArray(runtimeGroups.value) ? runtimeGroups.value : [];
+  const visible = groups.filter((group) => groupHasVisibleContent(group));
+
   const runtimeOrder = (() => {
     const r = runtime.value && typeof runtime.value === 'object' ? runtime.value : {};
     const keys = Object.keys(r)
@@ -448,32 +635,29 @@ const displayRuntimeGroups = computed(() => {
     return map;
   })();
 
-  visible.sort((a, b) => {
+  const ordered = [...visible];
+  ordered.sort((a, b) => {
     const aFields = Array.isArray(a?.fields) ? a.fields : [];
     const bFields = Array.isArray(b?.fields) ? b.fields : [];
 
     const aToken = normalizeGroupToken(a?.name || a?.title);
     const bToken = normalizeGroupToken(b?.name || b?.title);
 
-    function hasSystemOrderOverride(fields) {
-      // Allow overriding the default "system last" behavior without firmware changes:
-      // any negative order value will move system back into ordered sorting.
+    const hasOverride = (token, fields) => {
+      if (token !== 'system') return false;
       for (const f of fields) {
         if (!f || typeof f.order !== 'number') continue;
         if (f.order < 0) return true;
       }
       return false;
-    }
+    };
 
-    const aSystemOverride = aToken === 'system' && hasSystemOrderOverride(aFields);
-    const bSystemOverride = bToken === 'system' && hasSystemOrderOverride(bFields);
+    const aSystemOverride = hasOverride(aToken, aFields);
+    const bSystemOverride = hasOverride(bToken, bFields);
 
-    // Default: system group always last.
     if (!aSystemOverride && aToken === 'system' && bToken !== 'system') return 1;
     if (!bSystemOverride && bToken === 'system' && aToken !== 'system') return -1;
 
-    // Primary ordering: runtime.json key insertion order (firmware provider order).
-    // This should align with ConfigManagerRuntime::runtimeValuesToJSON() sorting providers by provider.order.
     const aRuntimePos = runtimeOrder.has(aToken) ? runtimeOrder.get(aToken) : null;
     const bRuntimePos = runtimeOrder.has(bToken) ? runtimeOrder.get(bToken) : null;
     if (aRuntimePos !== null && bRuntimePos !== null && aRuntimePos !== bRuntimePos) {
@@ -482,36 +666,27 @@ const displayRuntimeGroups = computed(() => {
     if (aRuntimePos !== null && bRuntimePos === null) return -1;
     if (aRuntimePos === null && bRuntimePos !== null) return 1;
 
-    function computeGroupOrder(groupToken, fields) {
+    const computeGroupOrder = (groupToken, fields) => {
       let minOrder = 1000;
       let hasAnyOrderNumber = false;
       let hasNonZeroOrder = false;
-
       for (const f of fields) {
         if (!f || typeof f.order !== 'number') continue;
         hasAnyOrderNumber = true;
         minOrder = Math.min(minOrder, f.order);
         if (f.order !== 0) hasNonZeroOrder = true;
       }
-
-      // Special-case: most runtime fields default to order=0.
-      // For the "system" group this caused it to jump to the front.
-      // Default it to 1000 (last) unless a non-zero order is explicitly set.
       if (groupToken === 'system' && !hasNonZeroOrder) {
         return { hasOrder: false, order: 1000 };
       }
+      return { hasOrder: hasAnyOrderNumber && minOrder < 1000, order: minOrder };
+    };
 
-      const hasOrder = hasAnyOrderNumber && minOrder < 1000;
-      return { hasOrder, order: minOrder };
-    }
-    // Secondary ordering: metadata-derived order (mainly for extra cards not present in runtime.json).
     const aMeta = computeGroupOrder(aToken, aFields);
     const bMeta = computeGroupOrder(bToken, bFields);
-
     if (aMeta.hasOrder && bMeta.hasOrder && aMeta.order !== bMeta.order) return aMeta.order - bMeta.order;
     if (aMeta.hasOrder !== bMeta.hasOrder) return aMeta.hasOrder ? -1 : 1;
 
-    // Fallback ordering for groups without any explicit order.
     const priorityOrder = {
       alerts: 0,
       sensors: 1,
@@ -533,8 +708,31 @@ const displayRuntimeGroups = computed(() => {
     if (titleCmp !== 0) return titleCmp;
     return String(a?.name || '').localeCompare(String(b?.name || ''));
   });
-  return visible;
+  return ordered;
 });
+
+const layoutPages = computed(() => buildLiveLayoutPages(sortedRuntimeGroups.value, liveLayout.value));
+const layoutTabs = computed(() => layoutPages.value.map((page) => ({ key: page.key, title: page.title })));
+
+const displayRuntimeGroups = computed(() => {
+  if (!layoutPages.value.length) {
+    return sortedRuntimeGroups.value;
+  }
+  const fallback = layoutPages.value[0];
+  const currentKey = activeLivePage.value || (fallback ? fallback.key : '');
+  const currentPage = layoutPages.value.find((page) => page.key === currentKey) || fallback;
+  return currentPage ? currentPage.groups : sortedRuntimeGroups.value;
+});
+
+watch(layoutPages, (pages) => {
+  if (!pages.length) {
+    activeLivePage.value = "";
+    return;
+  }
+  if (!pages.some((page) => page.key === activeLivePage.value)) {
+    activeLivePage.value = pages[0].key;
+  }
+}, { immediate: true });
 
 // Show the boolean state-text toggle only if at least one alarm-capable field is present and enabled
 const hasVisibleAlarm = computed(() => {
@@ -812,6 +1010,9 @@ function startWebSocket(url) {
           logEnabled.value = true;
           return;
         }
+        if (typeof parsed.type === "string") {
+          return; // ignore GUI messages or other typed frames
+        }
         runtime.value = parsed;
         buildRuntimeGroups();
       } catch (e) {
@@ -890,6 +1091,19 @@ async function fetchRuntimeMeta() {
   }
 }
 
+async function fetchLiveLayout() {
+  try {
+    const r = await fetchWithTimeout("/live_layout.json?ts=" + Date.now(), {}, 5000);
+    if (!r.ok) {
+      liveLayout.value = null;
+      return;
+    }
+    liveLayout.value = await r.json();
+  } catch (e) {
+    liveLayout.value = null;
+  }
+}
+
 function buildRuntimeGroups() {
   if (runtimeMeta.value.length) {
     const grouped = {};
@@ -902,6 +1116,7 @@ function buildRuntimeGroups() {
           name: m.group,
           title: capitalize(m.group),
           fields: [],
+          runtimeSources: [m.group],
         };
       }
       grouped[m.group].fields.push({
@@ -939,6 +1154,8 @@ function buildRuntimeGroups() {
         order: m.order !== undefined ? m.order : 100,
         style: m.style || null,
         styleRules: normalizeStyle(m.style || null),
+        group: m.group,
+        sourceGroup: m.group,
       });
     }
 
@@ -966,6 +1183,8 @@ function buildRuntimeGroups() {
               staticValue: "",
               style: null,
               styleRules: null,
+              group: "system",
+              sourceGroup: "system",
             });
           }
         });
@@ -980,6 +1199,9 @@ function buildRuntimeGroups() {
         if (a.order === b.order) return a.label.localeCompare(b.label);
         return a.order - b.order;
       });
+      if (!Array.isArray(g.runtimeSources) || !g.runtimeSources.length) {
+        g.runtimeSources = [g.name];
+      }
       return g;
     });
 
@@ -992,9 +1214,14 @@ function buildRuntimeGroups() {
               name: f.card,
               title: capitalize(f.card),
               fields: [],
+              runtimeSources: [],
             };
           }
           extraCards[f.card].fields.push(f);
+          const source = fieldSourceGroup(f);
+          if (source && !extraCards[f.card].runtimeSources.includes(source)) {
+            extraCards[f.card].runtimeSources.push(source);
+          }
           return false;
         }
         return true;
@@ -1006,6 +1233,16 @@ function buildRuntimeGroups() {
         if (a.order === b.order) return a.label.localeCompare(b.label);
         return a.order - b.order;
       });
+      if (!extraCards[cardName].runtimeSources.length) {
+        const inferred = Array.from(
+          new Set(
+            extraCards[cardName].fields
+              .map((field) => fieldSourceGroup(field))
+              .filter((source) => !!source)
+          )
+        );
+        extraCards[cardName].runtimeSources = inferred.length ? inferred : [cardName];
+      }
       runtimeGroups.value.push(extraCards[cardName]);
     }
     return;
@@ -1016,6 +1253,7 @@ function buildRuntimeGroups() {
     fallback.push({
       name: "sensors",
       title: "Sensors",
+      runtimeSources: ["sensors"],
       fields: Object.keys(runtime.value.sensors).map((k) => ({
         key: k,
         label: capitalize(k),
@@ -1024,6 +1262,8 @@ function buildRuntimeGroups() {
           k.toLowerCase().includes("temp") || k.toLowerCase().includes("dew")
             ? 1
             : 0,
+        group: "sensors",
+        sourceGroup: "sensors",
       })),
     });
   }
@@ -1031,6 +1271,7 @@ function buildRuntimeGroups() {
     fallback.push({
       name: "system",
       title: "System",
+      runtimeSources: ["system"],
       fields: Object.keys(runtime.value.system)
         .filter((k) => !builtinSystemHiddenFields.has(k))
         .map((k) => ({
@@ -1038,6 +1279,8 @@ function buildRuntimeGroups() {
           label: capitalize(k),
           unit: "",
           precision: 0,
+          group: "system",
+          sourceGroup: "system",
         })),
     });
   }
@@ -1048,12 +1291,10 @@ function groupHasVisibleContent(group) {
   if (!group || !Array.isArray(group.fields) || group.fields.length === 0) {
     return false;
   }
-  return group.fields.some((field) =>
-    fieldHasVisibleContent(group.name, field)
-  );
+  return group.fields.some((field) => fieldHasVisibleContent(field));
 }
 
-function fieldHasVisibleContent(groupName, field) {
+function fieldHasVisibleContent(field) {
   if (!field || field.isDivider) {
     return false;
   }
@@ -1064,9 +1305,9 @@ function fieldHasVisibleContent(groupName, field) {
     if (field.staticValue && String(field.staticValue).trim().length) {
       return true;
     }
-    return runtimeHasValue(groupName, field.key);
+    return runtimeHasValue(fieldSourceGroup(field), field.key);
   }
-  return runtimeHasValue(groupName, field.key);
+  return runtimeHasValue(fieldSourceGroup(field), field.key);
 }
 
 function isInteractiveField(field) {
@@ -1083,8 +1324,14 @@ function isInteractiveField(field) {
 }
 
 function runtimeHasValue(groupName, key) {
+  if (!groupName) return false;
   const groupData = runtime.value[groupName];
-  if (groupData && groupData[key] !== undefined && groupData[key] !== null) {
+  if (
+    groupData &&
+    Object.prototype.hasOwnProperty.call(groupData, key) &&
+    groupData[key] !== null &&
+    groupData[key] !== undefined
+  ) {
     return true;
   }
   return false;
@@ -1697,6 +1944,7 @@ watch(showBoolStateText, (v) => {
 onMounted(() => {
   loadInitialPreferences();
   fetchRuntimeMeta();
+  fetchLiveLayout();
   fetchRuntime();
   initLive();
   probeOtaEndpoint();

@@ -269,6 +269,53 @@ struct GUIMessageAction
     bool primary = false;
 };
 
+enum class GUIMessageButtons
+{
+    Ok,
+    OkCancel,
+    OkCancelRetry,
+    Cancel
+};
+
+using GuiMessageCallback = std::function<void()>;
+
+enum class ValidationSeverity : uint8_t
+{
+    Ok,
+    Warning,
+    Error
+};
+
+struct IOPinValidationResult
+{
+    bool ok = false;
+    ValidationSeverity severity = ValidationSeverity::Error;
+
+    int pin = -1;
+    cm::io::IOPinRole role = cm::io::IOPinRole::DigitalInput;
+
+    String reason;
+    String detail;
+
+    uint32_t constraints = 0;
+    uint32_t capabilities = 0;
+
+    std::vector<int> alternatives;
+};
+
+inline const char *toString(ValidationSeverity severity)
+{
+    switch (severity)
+    {
+    case ValidationSeverity::Ok:
+        return "ok";
+    case ValidationSeverity::Warning:
+        return "warning";
+    default:
+        return "error";
+    }
+}
+
 
 
 // BaseSetting class (updated for new ConfigOptions structure)
@@ -820,6 +867,13 @@ public:
             return *this;
         }
 
+        SettingBuilder &ioPinRole(cm::io::IOPinRole role)
+        {
+            isIOPinSetting = true;
+            ioPinRoleValue = role;
+            return *this;
+        }
+
         Config<T> &build()
         {
             auto settingPtr = std::make_unique<Config<T>>(opts);
@@ -831,6 +885,10 @@ public:
                 message += opts.name ? opts.name : "(unnamed)";
                 throw std::runtime_error(message);
             }
+            if (isIOPinSetting && raw->getKey())
+            {
+                manager.registerIOPinSetting(raw->getKey(), ioPinRoleValue);
+            }
             return *static_cast<Config<T> *>(raw);
         }
 
@@ -838,31 +896,13 @@ public:
         ConfigOptions<T> opts;
         ConfigManagerClass &manager;
         bool persistFlag = true;
+        bool isIOPinSetting = false;
+        cm::io::IOPinRole ioPinRoleValue = cm::io::IOPinRole::DigitalInput;
     };
 
     static constexpr const char *DEFAULT_LAYOUT_NAME = "Default";
     static constexpr int DEFAULT_LAYOUT_ORDER = 100;
     static constexpr const char *DEFAULT_LIVE_CARD_NAME = "Live Values";
-
-    void setGUIMode(cm::io::GUIMode mode);
-    cm::io::GUIMode getGUIMode() const;
-
-    void registerIOPinSetting(const char *key, cm::io::IOPinRole role);
-
-    void pushRequestContext(const ConfigRequestContext &ctx);
-    void popRequestContext();
-    const ConfigRequestContext &getCurrentRequestContext() const;
-
-    void sendErrorMessage(const String &title,
-                          const String &message,
-                          const String &details,
-                          const std::vector<GUIMessageAction> &actions,
-                          std::function<void(JsonObject &)> contextBuilder = nullptr);
-    void sendInfoMessage(const String &title,
-                         const String &message,
-                         const String &details,
-                         const std::vector<GUIMessageAction> &actions,
-                         std::function<void(JsonObject &)> contextBuilder = nullptr);
 
 private:
     Preferences prefs;
@@ -877,6 +917,8 @@ private:
     std::map<String, cm::io::IOPinRole> ioPinRoles;
     std::vector<ConfigRequestContext> requestContextStack;
     ConfigRequestContext fallbackRequestContext;
+    uint32_t guiMessageCounter = 0;
+    std::map<String, std::map<String, GuiMessageCallback>> guiMessageCallbacks;
 
     void sendGUIMessage(const char *type,
                         const String &title,
@@ -914,14 +956,83 @@ private:
         }
     }
 
-    bool sendWebSocketPayload(const String &payload)
+    void sendSeverityMessage(const char *type,
+                             const String &title,
+                             const String &message,
+                             const String &details,
+                             GUIMessageButtons buttons,
+                             GuiMessageCallback cbOk,
+                             GuiMessageCallback cbCancel,
+                             GuiMessageCallback cbRetry,
+                             std::function<void(JsonObject &)> contextBuilder)
     {
-#if CM_ENABLE_WS_PUSH
-        return sendWebSocketText(payload);
-#else
-        (void)payload;
-        return false;
-#endif
+        const String messageId = allocateGuiMessageId();
+        const std::vector<GUIMessageAction> actions = buildGuiMessageActions(buttons);
+        registerGuiMessageCallbacks(messageId, actions, cbOk, cbCancel, cbRetry);
+        sendGUIMessage(type, title, message, details, actions,
+                       [this, messageId, contextBuilder](JsonObject &obj)
+                       {
+                           obj["guiActionEndpoint"] = "/gui/action";
+                           obj["guiMessageId"] = messageId;
+                           if (contextBuilder)
+                           {
+                               contextBuilder(obj);
+                           }
+                       });
+    }
+
+    std::vector<GUIMessageAction> buildGuiMessageActions(GUIMessageButtons buttons) const
+    {
+        std::vector<GUIMessageAction> actions;
+        switch (buttons)
+        {
+        case GUIMessageButtons::Ok:
+            actions.push_back({"ok", "Ok", true});
+            break;
+        case GUIMessageButtons::OkCancel:
+            actions.push_back({"ok", "Ok", true});
+            actions.push_back({"cancel", "Cancel", false});
+            break;
+        case GUIMessageButtons::OkCancelRetry:
+            actions.push_back({"ok", "Ok", true});
+            actions.push_back({"cancel", "Cancel", false});
+            actions.push_back({"retry", "Retry", false});
+            break;
+        case GUIMessageButtons::Cancel:
+            actions.push_back({"cancel", "Cancel", true});
+            break;
+        }
+        return actions;
+    }
+
+    void registerGuiMessageCallbacks(const String &messageId,
+                                     const std::vector<GUIMessageAction> &actions,
+                                     const GuiMessageCallback &cbOk,
+                                     const GuiMessageCallback &cbCancel,
+                                     const GuiMessageCallback &cbRetry)
+    {
+        auto &callbacks = guiMessageCallbacks[messageId];
+        for (const auto &action : actions)
+        {
+            if (action.id == "ok" && cbOk)
+            {
+                callbacks[action.id] = cbOk;
+            }
+            else if (action.id == "cancel" && cbCancel)
+            {
+                callbacks[action.id] = cbCancel;
+            }
+            else if (action.id == "retry" && cbRetry)
+            {
+                callbacks[action.id] = cbRetry;
+            }
+        }
+    }
+
+    String allocateGuiMessageId()
+    {
+        ++guiMessageCounter;
+        return String("gui_msg_") + String(guiMessageCounter, DEC);
     }
 
     IOPinValidationResult validateIOPinSetting(const String &key, const String &value) const
@@ -939,44 +1050,126 @@ private:
         long parsed = strtol(value.c_str(), &endPtr, 10);
         if (endPtr == value.c_str() || *endPtr != '\0')
         {
-            result.valid = false;
             result.reason = "Pin value is not a number";
             result.detail = String("Pin value for '") + key + "' must be numeric";
+            result.severity = ValidationSeverity::Error;
             return result;
         }
 
         result.pin = static_cast<int>(parsed);
         if (result.pin < 0)
+        {
+            result.reason = "Pin value must be positive";
+            result.detail = String("Pin value for '") + key + "' cannot be negative";
+            result.severity = ValidationSeverity::Error;
             return result;
+        }
 
         if (!pinRules)
+        {
+            result.reason = "Pin metadata unavailable";
+            result.detail = String("Pin validation cannot run before GUI mode rules are loaded for ") + cm::io::toString(guiMode);
+            result.severity = ValidationSeverity::Warning;
             return result;
+        }
 
-        bool valid = false;
-        switch (result.role)
+        const cm::io::PinInfo info = pinRules->getPinInfo(result.pin);
+        result.capabilities = info.capabilities;
+        result.constraints = info.constraints;
+
+        if (!info.exists)
+        {
+            result.reason = "Invalid pin";
+            result.detail = String("Pin ") + String(result.pin) + " does not exist on this board configuration";
+            result.severity = ValidationSeverity::Error;
+            return result;
+        }
+
+        if (!hasRoleCapability(result.role, info.capabilities))
+        {
+            result.reason = String("Pin not supported for ") + cm::io::toString(result.role);
+            result.detail = String("Pin ") + String(result.pin) + " lacks the required capability for mode " + cm::io::toString(guiMode);
+            result.severity = ValidationSeverity::Error;
+            return result;
+        }
+
+        const String constraintHint = pinRules ? pinRules->describeConstraints(info.constraints) : String();
+        if (!constraintHint.isEmpty())
+        {
+            result.reason = "Pin has hardware caveats";
+            result.detail = String("Pin ") + String(result.pin) + " is usable but " + constraintHint;
+            if (!result.detail.endsWith("."))
+            {
+                result.detail += ".";
+            }
+            result.severity = ValidationSeverity::Warning;
+            return result;
+        }
+
+        result.ok = true;
+        result.severity = ValidationSeverity::Ok;
+        return result;
+    }
+
+    static bool hasRoleCapability(cm::io::IOPinRole role, uint32_t capabilities)
+    {
+        switch (role)
         {
         case cm::io::IOPinRole::DigitalOutput:
-            valid = pinRules->isValidDigitalOutputPin(result.pin);
-            break;
+            return cm::io::has(capabilities, cm::io::PinCapability::DigitalOut) ||
+                   cm::io::has(capabilities, cm::io::PinCapability::PWMOut);
         case cm::io::IOPinRole::DigitalInput:
-            valid = pinRules->isValidDigitalInputPin(result.pin);
-            break;
+            return cm::io::has(capabilities, cm::io::PinCapability::DigitalIn);
         case cm::io::IOPinRole::AnalogInput:
-            valid = pinRules->isValidAnalogInputPin(result.pin);
-            break;
+            return cm::io::has(capabilities, cm::io::PinCapability::AnalogIn);
         case cm::io::IOPinRole::AnalogOutput:
-            valid = pinRules->isValidAnalogOutputPin(result.pin);
-            break;
+            return cm::io::has(capabilities, cm::io::PinCapability::DACOut) ||
+                   cm::io::has(capabilities, cm::io::PinCapability::PWMOut);
         }
+        return false;
+    }
 
-        if (!valid)
+    bool shouldBlockIOPinChange(BaseSetting *setting,
+                                const String &category,
+                                const String &key,
+                                const String &value,
+                                bool isApply)
+    {
+        if (!setting)
         {
-            result.valid = false;
-            result.reason = String("Pin not supported for ") + cm::io::toString(result.role);
-            result.detail = String("Pin ") + String(result.pin) + " is not valid for mode " + cm::io::toString(guiMode);
+            return false;
+        }
+        const char *storageKey = setting->getKey();
+        if (!storageKey || storageKey[0] == '\0')
+        {
+            return false;
+        }
+        auto it = ioPinRoles.find(storageKey);
+        if (it == ioPinRoles.end())
+        {
+            return false;
         }
 
-        return result;
+        const IOPinValidationResult result = validateIOPinSetting(storageKey, value);
+        if (result.ok || result.severity == ValidationSeverity::Ok)
+        {
+            return false;
+        }
+
+        const bool forced = getCurrentRequestContext().force;
+        const bool shouldBlock = (result.severity == ValidationSeverity::Error) && !forced;
+        handleIOPinValidationFailure(category, key, value, result, isApply);
+        if (shouldBlock)
+        {
+            CM_CORE_LOG("[W] IO pin validation blocked %s.%s value '%s' (reason: %s)",
+                        category.c_str(), key.c_str(), value.c_str(), result.reason.c_str());
+        }
+        else if (!result.reason.isEmpty())
+        {
+            CM_CORE_LOG("[W] IO pin validation warning for %s.%s: %s",
+                        category.c_str(), key.c_str(), result.reason.c_str());
+        }
+        return shouldBlock;
     }
 
     void handleIOPinValidationFailure(const String &category,
@@ -991,9 +1184,12 @@ private:
             {"force", "Force anyway", true},
             {"cancel", "Cancel", false}
         };
+        const char *messageType = (result.severity == ValidationSeverity::Warning)
+                                      ? "warningMessage"
+                                      : "errorMessage";
 
         sendGUIMessage(
-            "errorMessage",
+            messageType,
             "Invalid pin configuration",
             result.reason,
             result.detail,
@@ -1007,6 +1203,21 @@ private:
                 obj["role"] = cm::io::toString(result.role);
                 obj["mode"] = cm::io::toString(guiMode);
                 obj["origin"] = origin;
+                obj["severity"] = toString(result.severity);
+                String constraintsHex = String(result.constraints, HEX);
+                constraintsHex.toUpperCase();
+                obj["constraints"] = constraintsHex;
+                String capabilitiesHex = String(result.capabilities, HEX);
+                capabilitiesHex.toUpperCase();
+                obj["capabilities"] = capabilitiesHex;
+                if (!result.alternatives.empty())
+                {
+                    JsonArray alt = obj.createNestedArray("alternatives");
+                    for (int altPin : result.alternatives)
+                    {
+                        alt.add(altPin);
+                    }
+                }
                 obj["isApply"] = isApply;
                 if (!ctx.endpoint.isEmpty())
                 {
@@ -1020,7 +1231,17 @@ private:
             });
     }
 
-    // Modular components
+    bool sendWebSocketPayload(const String &payload)
+        {
+    #if CM_ENABLE_WS_PUSH
+        return sendWebSocketText(payload);
+    #else
+        (void)payload;
+        return false;
+    #endif
+        }
+
+        // Modular components
     ConfigManagerWiFi wifiManager;
     ConfigManagerWeb webManager;
     ConfigManagerOTA otaManager;
@@ -1036,6 +1257,7 @@ private:
     {
         String name;
         int order = DEFAULT_LAYOUT_ORDER;
+
     };
 
     struct CategoryLayoutOverride
@@ -1075,6 +1297,7 @@ private:
     void logLayoutWarningOnce(const String &key, const String &message);
 public:
     void setCategoryLayoutOverride(const char *category, const char *page, const char *card, const char *group, int order);
+
     const CategoryLayoutOverride *getCategoryLayoutOverride(const char *category) const;
 
     // WebSocket support
@@ -1084,6 +1307,7 @@ public:
     bool wsEnabled = false;
     bool pushOnConnect = true;
     uint32_t wsInterval = 2000;
+
     unsigned long wsLastPush = 0;
     std::function<String()> customPayloadBuilder;
     std::vector<std::function<void(AsyncWebSocketClient*)>> wsConnectCallbacks;
@@ -1355,6 +1579,11 @@ public:
             return false;
         }
 
+        if (shouldBlockIOPinChange(setting, category, key, value, true))
+        {
+            return false;
+        }
+
         CM_CORE_LOG("[DEBUG] Found setting: %s.%s (storage key: %s)",
                setting->getCategory(), setting->getDisplayName(), setting->getName());
 
@@ -1416,6 +1645,11 @@ public:
         if (!setting)
         {
             CM_CORE_LOG("[ERROR] Setting not found: %s.%s", category.c_str(), key.c_str());
+            return false;
+        }
+
+        if (shouldBlockIOPinChange(setting, category, key, value, false))
+        {
             return false;
         }
 
@@ -1557,6 +1791,30 @@ public:
         sendGUIMessage("errorMessage", title, message, details, actions, contextBuilder);
     }
 
+    void sendErrorMessage(const String &title,
+                          const String &message,
+                          const String &details,
+                          GUIMessageButtons buttons,
+                          GuiMessageCallback cbOk,
+                          GuiMessageCallback cbCancel,
+                          GuiMessageCallback cbRetry,
+                          std::function<void(JsonObject &)> contextBuilder)
+    {
+        sendSeverityMessage("errorMessage", title, message, details, buttons, cbOk, cbCancel, cbRetry, contextBuilder);
+    }
+
+    void sendWarnMessage(const String &title,
+                         const String &message,
+                         const String &details,
+                         GUIMessageButtons buttons,
+                         GuiMessageCallback cbOk,
+                         GuiMessageCallback cbCancel,
+                         GuiMessageCallback cbRetry,
+                         std::function<void(JsonObject &)> contextBuilder)
+    {
+        sendSeverityMessage("warningMessage", title, message, details, buttons, cbOk, cbCancel, cbRetry, contextBuilder);
+    }
+
     void sendInfoMessage(const String &title,
                          const String &message,
                          const String &details,
@@ -1564,6 +1822,39 @@ public:
                          std::function<void(JsonObject &)> contextBuilder = nullptr)
     {
         sendGUIMessage("infoMessage", title, message, details, actions, contextBuilder);
+    }
+
+    void sendInfoMessage(const String &title,
+                         const String &message,
+                         const String &details,
+                         GUIMessageButtons buttons,
+                         GuiMessageCallback cbOk,
+                         GuiMessageCallback cbCancel,
+                         GuiMessageCallback cbRetry,
+                         std::function<void(JsonObject &)> contextBuilder)
+    {
+        sendSeverityMessage("infoMessage", title, message, details, buttons, cbOk, cbCancel, cbRetry, contextBuilder);
+    }
+
+    bool handleGuiAction(const String &messageId, const String &actionId)
+    {
+        if (messageId.isEmpty() || actionId.isEmpty())
+        {
+            return false;
+        }
+        auto msgIt = guiMessageCallbacks.find(messageId);
+        if (msgIt == guiMessageCallbacks.end())
+        {
+            return false;
+        }
+        auto callbacks = msgIt->second;
+        guiMessageCallbacks.erase(msgIt);
+        auto cbIt = callbacks.find(actionId);
+        if (cbIt != callbacks.end() && cbIt->second)
+        {
+            cbIt->second();
+        }
+        return true;
     }
 
     // App management
@@ -2137,6 +2428,8 @@ public:
         serializeJsonPretty(doc, output);
         return output;
     }
+
+    String buildLiveLayoutJSON() const;
 
     // Runtime providers
     void addRuntimeProvider(const RuntimeValueProvider &provider)

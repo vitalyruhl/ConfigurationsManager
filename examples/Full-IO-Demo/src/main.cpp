@@ -106,9 +106,9 @@ static void createDigitalOutputs()
     });
 
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "holdbutton",
+        .id = "hbtn",
         .name = "Hold Button",
-        .defaultPin = 34,
+        .defaultPin = 32,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
@@ -142,11 +142,11 @@ static void registerDigitalOutputsGui()
     );
 
     ioManager.addIOtoGUI(
-        "holdbutton",
+        "hbtn",
         nullptr,
         4,
         cm::IOManager::RuntimeControlType::MomentaryButton,
-        []() { return ioManager.getState("holdbutton"); },
+        []() { return ioManager.getState("hbtn"); },
         [](bool state) {
             setHoldButtonState(state);
             Serial.printf("[HOLDBUTTON] State: %s\n", state ? "ON" : "OFF");
@@ -747,12 +747,12 @@ void setHoldButtonState(bool on)
     if (on)
     {
         Serial.println("Hold Button ON");
-        ioManager.set("holdbutton", true);
+        ioManager.set("hbtn", true);
     }
     else
     {
         Serial.println("Hold Button OFF");
-        ioManager.set("holdbutton", false);
+        ioManager.set("hbtn", false);
     }
 }
 

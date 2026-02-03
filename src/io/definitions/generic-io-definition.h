@@ -11,6 +11,7 @@ namespace cm::io
 		bool isValidDigitalInputPin(int /*pin*/) const override;
 		bool isValidAnalogInputPin(int /*pin*/) const override;
 		bool isValidAnalogOutputPin(int /*pin*/) const override;
+		PinInfo getPinInfo(int pin) const override;
 		const char *name() const override;
 	};
 

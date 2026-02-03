@@ -1,3 +1,4 @@
+#include "Arduino.h"
 #include "io/definitions/arduino-uno-io-definition.h"
 
 namespace cm::io
@@ -69,6 +70,76 @@ namespace cm::io
 	{
 		return isUnoPwmPin(pin);
 	}
+
+	PinInfo ArduinoUnoPinRules::getPinInfo(int pin) const
+	{
+		PinInfo info;
+		if (!isValidUnoAnyIoPin(pin))
+		{
+			return info;
+		}
+
+		info.exists = true;
+		if (isValidDigitalInputPin(pin))
+		{
+			info.capabilities |= static_cast<uint32_t>(PinCapability::DigitalIn);
+		}
+		if (isValidDigitalOutputPin(pin))
+		{
+			info.capabilities |= static_cast<uint32_t>(PinCapability::DigitalOut);
+		}
+		if (isValidAnalogInputPin(pin))
+		{
+			info.capabilities |= static_cast<uint32_t>(PinCapability::AnalogIn);
+		}
+		if (isValidAnalogOutputPin(pin))
+		{
+			info.capabilities |= static_cast<uint32_t>(PinCapability::PWMOut);
+		}
+		if (isUnoSerialPin(pin))
+		{
+			info.constraints |= static_cast<uint32_t>(PinConstraint::Serial);
+		}
+		return info;
+	}
+
+String ArduinoUnoPinRules::describeConstraints(uint32_t mask) const
+{
+	if (mask == 0)
+	{
+		return String();
+	}
+
+	static const struct ConstraintInfo
+	{
+		PinConstraint flag;
+		const char *label;
+		const char *hint;
+	} entries[] = {
+		{PinConstraint::Serial, "UART/serial pins", "D0/D1 share the hardware UART"},
+	};
+
+	String result;
+	for (const auto &entry : entries)
+	{
+		if (!has(mask, entry.flag))
+		{
+			continue;
+		}
+		if (!result.isEmpty())
+		{
+			result += ", ";
+		}
+		result += entry.label;
+		if (entry.hint && entry.hint[0] != '\0')
+		{
+			result += " (";
+			result += entry.hint;
+			result += ")";
+		}
+	}
+	return result;
+}
 
 	// ------------------------------------------------------------
 	// Optional helpers

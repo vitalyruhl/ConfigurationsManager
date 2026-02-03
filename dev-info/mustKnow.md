@@ -18,6 +18,6 @@ b = 88;  // changes x
 
 ## ESP - Chip Info 
 
-https://thelastoutpostworkshop.github.io/ESPConnect/
+[ESPConnect](https://thelastoutpostworkshop.github.io/ESPConnect/)
 
 > note : only on cromium based browsers!

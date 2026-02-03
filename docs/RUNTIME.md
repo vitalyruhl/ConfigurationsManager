@@ -103,6 +103,35 @@ cfg.enableWebSocketPush(2000);
 cfg.handleWebsocketPush();
 ```
 
+## GUI notifications from runtime code
+
+`ConfigManagerClass` ships with three helpers that push the same popup overlay you see during Settings validation:
+
+- `cfg.sendInfoMessage(...)`
+- `cfg.sendWarnMessage(...)`
+- `cfg.sendErrorMessage(...)`
+
+They all share the same signature: `title`, `message`, `details`, a `GUIMessageButtons` preset, optional `cbOk`/`cbCancel`/`cbRetry` callbacks and an optional `contextBuilder`. The warning helper defaults to `GUIMessageButtons::OkCancel`; the others default to `Ok` alone. The buttons determine which action IDs (`ok`, `cancel`, `retry`) are exposed to the UI, and the callbacks fire on the server after the UI `fetch`es `/gui/action?actionId=<id>&messageId=<id>`.
+
+Use the `contextBuilder` to add metadata (`category`, `key`, `pin`, `value`, etc.) so the runtime overlay can reuse the normal config actions or expose additional hints. Example:
+
+```cpp
+cfg.sendWarnMessage(
+  "Pump overheating",
+  "Outlet temperature is above 70 °C",
+  "Automatic cooling kick-in is disabled",
+  ConfigManagerClass::GUIMessageButtons::OkCancelRetry,
+  [](){ Serial.println("Cooling engaged"); },
+  [](){ Serial.println("User cancelled"); },
+  [](){ Serial.println("User requested retry"); },
+  [](JsonObject &ctx){ ctx["runtimeProvider"] = "cooling"; }
+);
+```
+
+Runtime providers, alarms and other application logic can capture the `ConfigManagerClass *cfg` reference and call the helpers whenever live data crosses a threshold. For example, a provider that samples battery voltage can report the value in `/runtime.json` and call `sendWarnMessage` when the reading drops below a safe limit, giving the user immediate feedback on the UI.
+
+Behind the scenes the UI will send the action request back to `POST /gui/action` so your callbacks run once the user acknowledges the popup; the helper methods add `context.guiActionEndpoint`/`context.guiMessageId` automatically, so no extra wiring is required.
+
 ## Custom Live Payload
 
 Provide a completely custom JSON payload instead of auto‑merging providers:

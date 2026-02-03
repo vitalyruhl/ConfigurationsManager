@@ -51,8 +51,8 @@ struct ExampleSettings
 
     ExampleSettings()
     {
-        demoVisibleWhenTrue.showIf = [this]() { return demoToggle.get(); };
-        demoVisibleWhenFalse.showIf = [this]() { return !demoToggle.get(); };
+        demoVisibleWhenTrue.showIfFunc = [this]() { return demoToggle.get(); };
+        demoVisibleWhenFalse.showIfFunc = [this]() { return !demoToggle.get(); };
     }
 
     void create()

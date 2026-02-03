@@ -18,6 +18,8 @@ namespace cm::io
 
 		// Optional: recommended variant when WiFi/BT is active
 		bool isValidAnalogInputPin(int pin, bool wifiOrBtActive) const;
+		PinInfo getPinInfo(int pin) const override;
+		String describeConstraints(uint32_t mask) const override;
 
 		const char *name() const override;
 	};

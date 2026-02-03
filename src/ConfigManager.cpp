@@ -378,3 +378,112 @@ void ConfigManagerClass::addToLiveGroup(const char *itemId, const char *pageName
     addLiveGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
     livePlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
 }
+
+String ConfigManagerClass::buildLiveLayoutJSON() const
+{
+    DynamicJsonDocument doc(16384);
+    JsonObject root = doc.to<JsonObject>();
+    JsonArray pagesArray = root.createNestedArray("pages");
+
+    const auto normalizeToken = [this](const String &value) -> String {
+        return normalizeLayoutName(value);
+    };
+
+    auto collectPlacements = [&](const String &pageName, const String &cardName, const String &groupName, JsonArray target) {
+        const String pageNorm = normalizeToken(pageName);
+        const String cardNorm = normalizeToken(cardName);
+        const String groupNorm = normalizeToken(groupName);
+
+        std::vector<const UiPlacement *> matches;
+        matches.reserve(livePlacements.size());
+        for (const auto &placement : livePlacements)
+        {
+            if (normalizeToken(placement.page) == pageNorm &&
+                normalizeToken(placement.card) == cardNorm &&
+                normalizeToken(placement.group) == groupNorm)
+            {
+                matches.push_back(&placement);
+            }
+        }
+
+        std::sort(matches.begin(), matches.end(), [](const UiPlacement *a, const UiPlacement *b) {
+            if (a->order == b->order)
+            {
+                return a->id < b->id;
+            }
+            return a->order < b->order;
+        });
+
+        for (const auto *placement : matches)
+        {
+            target.add(placement->id);
+        }
+    };
+
+    auto makeSortedPointers = [](const auto &container) {
+        using ElementType = typename std::remove_reference<decltype(container)>::type::value_type;
+        std::vector<const ElementType *> result;
+        result.reserve(container.size());
+        for (const auto &entry : container)
+        {
+            result.push_back(&entry);
+        }
+        std::sort(result.begin(), result.end(), [](const ElementType *a, const ElementType *b) {
+            if (a->order == b->order)
+            {
+                return a->name < b->name;
+            }
+            return a->order < b->order;
+        });
+        return result;
+    };
+
+    const auto sortedPages = makeSortedPointers(livePages);
+    for (const auto *page : sortedPages)
+    {
+        JsonObject pageObj = pagesArray.createNestedObject();
+        pageObj["name"] = page->name;
+        pageObj["title"] = page->name;
+        pageObj["order"] = page->order;
+        pageObj["key"] = normalizeToken(page->name);
+
+        JsonArray cardsArray = pageObj.createNestedArray("cards");
+        const auto sortedCards = makeSortedPointers(page->cards);
+        for (const auto *card : sortedCards)
+        {
+            JsonObject cardObj = cardsArray.createNestedObject();
+            cardObj["name"] = card->name;
+            cardObj["title"] = card->name;
+            cardObj["order"] = card->order;
+
+            JsonArray groupsArray = cardObj.createNestedArray("groups");
+            const auto sortedGroups = makeSortedPointers(card->groups);
+            for (const auto *group : sortedGroups)
+            {
+                JsonObject groupObj = groupsArray.createNestedObject();
+                groupObj["name"] = group->name;
+                groupObj["title"] = group->name;
+                groupObj["order"] = group->order;
+
+                JsonArray itemsArray = groupObj.createNestedArray("items");
+                collectPlacements(page->name, card->name, group->name, itemsArray);
+            }
+        }
+    }
+
+    JsonObject placementsObj = root.createNestedObject("placements");
+    for (const auto &placement : livePlacements)
+    {
+        JsonObject placementObj = placementsObj.createNestedObject(placement.id);
+        placementObj["page"] = placement.page;
+        placementObj["card"] = placement.card;
+        placementObj["group"] = placement.group;
+        placementObj["order"] = placement.order;
+    }
+
+    root["defaultPage"] = sortedPages.empty() ? String() : sortedPages.front()->name;
+
+    String output;
+    serializeJson(doc, output);
+    return output;
+}

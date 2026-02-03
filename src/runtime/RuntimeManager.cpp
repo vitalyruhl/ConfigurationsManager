@@ -243,9 +243,6 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 }
 
 String ConfigManagerRuntime::runtimeMetaToJSON() {
-    DynamicJsonDocument d(4096);
-    JsonArray arr = d.to<JsonArray>();
-
     // Sort meta by group, then order, then label
     std::vector<RuntimeFieldMeta> metaSorted;
 #ifdef development
@@ -267,8 +264,15 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             return a.group < b.group;
         });
 
-    for (auto& m : metaSorted) {
-        JsonObject o = arr.createNestedObject();
+    String out;
+    const size_t estimatedPerField = 128;
+    out.reserve((metaSorted.size() * estimatedPerField) + 2);
+    out += "[";
+
+    bool first = true;
+    for (const auto& m : metaSorted) {
+        StaticJsonDocument<768> entryDoc;
+        JsonObject o = entryDoc.to<JsonObject>();
         o["group"] = m.group;
         o["key"] = m.key;
         o["label"] = m.label;
@@ -309,7 +313,7 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         }
         if (m.hasAlarm) o["hasAlarm"] = true;
         if (m.alarmWhenTrue) o["alarmWhenTrue"] = true;
-        if (m.boolAlarmValue != false) {  // Only include if not default false
+        if (m.boolAlarmValue) {
             o["boolAlarmValue"] = m.boolAlarmValue;
         }
         if (m.alarmMin != 0.0f || m.alarmMax != 0.0f) {
@@ -330,10 +334,15 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         if (m.offLabel.length()) {
             o["offLabel"] = m.offLabel;
         }
+
+        if (!first) {
+            out += ",";
+        }
+        first = false;
+        serializeJson(entryDoc, out);
     }
 
-    String out;
-    serializeJson(d, out);
+    out += "]";
     return out;
 }
 

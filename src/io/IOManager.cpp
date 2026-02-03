@@ -293,6 +293,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
         .card(entry.cardKeyStable->c_str())
         .cardPretty(entry.cardPrettyStable->c_str())
         .cardOrder(entry.cardOrder)
+        .ioPinRole(cm::io::IOPinRole::DigitalOutput)
         .build();
 
     entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
@@ -305,6 +306,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
         .card(entry.cardKeyStable->c_str())
         .cardPretty(entry.cardPrettyStable->c_str())
         .cardOrder(entry.cardOrder)
+        .ioPinRole(cm::io::IOPinRole::DigitalInput)
         .build();
 
     registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
@@ -362,6 +364,7 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
         .card(entry.cardKeyStable->c_str())
         .cardPretty(entry.cardPrettyStable->c_str())
         .cardOrder(entry.cardOrder)
+        .ioPinRole(cm::io::IOPinRole::DigitalInput)
         .build();
 
     entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
@@ -374,6 +377,7 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
         .card(entry.cardKeyStable->c_str())
         .cardPretty(entry.cardPrettyStable->c_str())
         .cardOrder(entry.cardOrder)
+        .ioPinRole(cm::io::IOPinRole::AnalogInput)
         .build();
 
     entry.pullup = &ConfigManager.addSettingBool(entry.keyPullupStable->c_str())
@@ -386,6 +390,7 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
         .card(entry.cardKeyStable->c_str())
         .cardPretty(entry.cardPrettyStable->c_str())
         .cardOrder(entry.cardOrder)
+        .ioPinRole(cm::io::IOPinRole::AnalogInput)
         .build();
 
     entry.pulldown = &ConfigManager.addSettingBool(entry.keyPulldownStable->c_str())
@@ -1260,6 +1265,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
                 .card(entry.cardKeyStable->c_str())
                 .cardPretty(entry.cardPrettyStable->c_str())
                 .cardOrder(entry.cardOrder)
+                .ioPinRole(cm::io::IOPinRole::AnalogOutput)
                 .build();
 
             registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);

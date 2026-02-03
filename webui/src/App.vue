@@ -48,6 +48,45 @@
         </button>
       </div>
     </div>
+    <div
+      v-if="activeGuiPopup"
+      class="gui-popup-overlay"
+      role="alertdialog"
+      aria-modal="true"
+      :aria-label="activeGuiPopup?.title || 'Message'"
+      @click.self="dismissGuiPopup"
+    >
+      <div class="gui-popup-card" :class="activeGuiPopup.type">
+        <div class="gui-popup-header">
+          <span class="gui-popup-badge">{{ badgeLabel(activeGuiPopup.type) }}</span>
+          <h3>{{ activeGuiPopup.title }}</h3>
+        </div>
+        <p class="gui-popup-message">{{ activeGuiPopup.message }}</p>
+        <p v-if="activeGuiPopup.details" class="gui-popup-details">
+          {{ activeGuiPopup.details }}
+        </p>
+        <dl v-if="contextEntries.length" class="gui-popup-context">
+          <template v-for="entry in contextEntries" :key="entry.label">
+            <div>
+              <dt>{{ entry.label }}</dt>
+              <dd>{{ entry.value }}</dd>
+            </div>
+          </template>
+        </dl>
+        <div class="gui-popup-actions">
+          <button
+            v-for="action in activeGuiPopup.actions"
+            :key="action.id"
+            :class="['gui-action-btn', action.primary ? 'primary' : 'ghost']"
+            :disabled="guiActionBusy"
+            @click="handleGuiAction(action.id, action)"
+          >
+            <span v-if="guiActionBusy && action.primary" class="busy-dot"></span>
+            {{ action.label }}
+          </button>
+        </div>
+      </div>
+    </div>
     <!-- Settings Authentication Modal -->
     <div v-if="showSettingsAuth" class="modal-overlay" @click="cancelSettingsAuth">
       <div class="modal-content" @click.stop>
@@ -131,7 +170,7 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted, provide, nextTick, computed, watch } from "vue";
+import { ref, onBeforeUnmount, onMounted, provide, nextTick, computed, watch } from "vue";
 import Category from "./components/Category.vue";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
@@ -306,6 +345,44 @@ const HTTP_ONLY_HINT_STORAGE_KEY = 'cm.dismiss.httpOnlyHint.v1';
 
 // Detect if there is any live UI content available
 const hasLiveContent = ref(true);
+
+const guiPopup = ref(null);
+const guiPopupQueue = [];
+const guiActionBusy = ref(false);
+const activeGuiPopup = computed(() => guiPopup.value);
+const guiContextDisplay = [
+  { key: "category", label: "Category" },
+  { key: "key", label: "Key" },
+  { key: "value", label: "Value" },
+  { key: "pin", label: "Pin" },
+  { key: "role", label: "Role" },
+  { key: "mode", label: "Mode" },
+  { key: "origin", label: "Request" },
+  { key: "endpoint", label: "Endpoint" },
+  { key: "forceParam", label: "Force parameter" },
+];
+function formatContextValue(value) {
+  if (value === null || typeof value === "undefined") return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (e) {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+const contextEntries = computed(() => {
+  const ctx = activeGuiPopup.value && activeGuiPopup.value.context;
+  if (!ctx || typeof ctx !== "object") return [];
+  return guiContextDisplay
+    .map(({ key, label }) => {
+      const raw = ctx[key];
+      if (typeof raw === "undefined" || raw === null || raw === "") return null;
+      return { label, value: formatContextValue(raw) };
+    })
+    .filter(Boolean);
+});
 
 // Settings authentication
 const showSettingsAuth = ref(false);
@@ -518,6 +595,236 @@ provide("notify", notify);
 provide("updateToast", updateToast);
 provide("dismissToast", dismissToast);
 provide("fetchStoredPassword", fetchStoredPassword);
+
+const GUI_MESSAGE_TYPES = new Set(["errorMessage", "warningMessage", "infoMessage"]);
+const GUI_DEFAULT_ACTION = { id: "close", label: "Close", primary: true };
+let guiWebSocket = null;
+let guiWsRetry = 0;
+let guiWsReconnectTimer = null;
+
+function badgeLabel(type) {
+  if (type === "errorMessage") return "Error";
+  if (type === "warningMessage") return "Warning";
+  return "Info";
+}
+
+function normalizeGuiPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (!GUI_MESSAGE_TYPES.has(payload.type)) return null;
+  const rawActions = Array.isArray(payload.actions) ? payload.actions : [];
+  const actions = rawActions
+    .map((act, idx) => {
+      if (!act) return null;
+      const id = act.id ? String(act.id) : `action_${idx}`;
+      const label = act.label ? String(act.label) : id;
+      return { id, label, primary: !!act.primary };
+    })
+    .filter((act) => act && act.label);
+  if (!actions.length) {
+    actions.push({ ...GUI_DEFAULT_ACTION });
+  }
+  return {
+    type: payload.type,
+    title:
+      payload.title ||
+      (payload.type === "errorMessage" ? "Validation issue" : "Information"),
+    message: payload.message || "",
+    details: payload.details || "",
+    context: payload.context || {},
+    actions,
+  };
+}
+
+function queueGuiPopupMessage(payload) {
+  const normalized = normalizeGuiPayload(payload);
+  if (!normalized) return;
+  if (!guiPopup.value) {
+    guiPopup.value = normalized;
+    return;
+  }
+  guiPopupQueue.push(normalized);
+}
+
+function showNextGuiPopup() {
+  if (guiPopupQueue.length) {
+    guiPopup.value = guiPopupQueue.shift();
+    return;
+  }
+  guiPopup.value = null;
+}
+
+function dismissGuiPopup() {
+  guiActionBusy.value = false;
+  showNextGuiPopup();
+}
+
+async function handleGuiAction(actionId, action = {}) {
+  const current = activeGuiPopup.value;
+  if (!current) return;
+  if (actionId === "cancel" || actionId === "close") {
+    dismissGuiPopup();
+    return;
+  }
+  const url = buildGuiActionUrl(current.context || {}, actionId);
+  const body = buildGuiActionBody(current.context || {});
+  if (!url || body === null) {
+    notify("Unable to apply the selected action", "error", 6000);
+    dismissGuiPopup();
+    return;
+  }
+  guiActionBusy.value = true;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.status !== "ok") {
+      throw new Error(json.reason || `HTTP ${response.status}`);
+    }
+    notify(`${action.label || "Action"} succeeded`, "success");
+  } catch (e) {
+    notify(`${action.label || "Action"} failed: ${e.message}`, "error", 8000);
+  } finally {
+    guiActionBusy.value = false;
+    dismissGuiPopup();
+  }
+}
+
+function buildGuiActionUrl(context, actionId) {
+  if (context && context.guiActionEndpoint) {
+    const endpoint = String(context.guiActionEndpoint);
+    const sep = endpoint.includes("?") ? "&" : "?";
+    let url = `${endpoint}${sep}actionId=${rURIComp(actionId)}`;
+    if (context.guiMessageId) {
+      url += `&messageId=${rURIComp(context.guiMessageId)}`;
+    }
+    return url;
+  }
+  const base = context ? (context.endpoint || defaultGuiEndpoint(context)) : null;
+  if (!base) return null;
+  if (actionId === "force" && context && context.forceParam) {
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}${context.forceParam}`;
+  }
+  return base;
+}
+
+function defaultGuiEndpoint(context) {
+  const origin = context.origin;
+  const category = context.category;
+  const key = context.key;
+  if (origin === "apply_all") return "/config/apply_all";
+  if (origin === "save_all") return "/config/save_all";
+  if (!category || !key) return null;
+  const cat = rURIComp(category);
+  const k = rURIComp(key);
+  if (origin === "save") return `/config/save?category=${cat}&key=${k}`;
+  if (origin === "apply") return `/config/apply?category=${cat}&key=${k}`;
+  if (context.isApply) return `/config/apply?category=${cat}&key=${k}`;
+  return `/config/save?category=${cat}&key=${k}`;
+}
+
+function buildGuiActionBody(context) {
+  if (context && context.guiActionEndpoint) {
+    return "{}";
+  }
+  if (typeof context.payload !== "undefined" && context.payload !== null) {
+    return typeof context.payload === "string"
+      ? context.payload
+      : JSON.stringify(context.payload);
+  }
+  if (typeof context.value !== "undefined") {
+    return JSON.stringify({ value: context.value });
+  }
+  return null;
+}
+
+function initGuiWebSocket() {
+  if (typeof window === "undefined") return;
+  const proto = window.location.protocol === "https:" ? "wss://" : "ws://";
+  const url = proto + window.location.host + "/ws";
+  connectGuiWebSocket(url);
+}
+
+function connectGuiWebSocket(url) {
+  closeGuiWebSocket();
+  let connectionTimeout = null;
+  try {
+    guiWebSocket = new WebSocket(url);
+  } catch (e) {
+    scheduleGuiReconnect(url);
+    return;
+  }
+  connectionTimeout = setTimeout(() => {
+    if (guiWebSocket && guiWebSocket.readyState === WebSocket.CONNECTING) {
+      try {
+        guiWebSocket.close();
+      } catch (e) {
+        /* ignore */
+      }
+      guiWebSocket = null;
+    }
+    scheduleGuiReconnect(url);
+  }, 2000);
+  guiWebSocket.onopen = () => {
+    clearTimeout(connectionTimeout);
+    guiWsRetry = 0;
+  };
+  guiWebSocket.onclose = () => {
+    clearTimeout(connectionTimeout);
+    scheduleGuiReconnect(url);
+  };
+  guiWebSocket.onerror = () => {
+    clearTimeout(connectionTimeout);
+    scheduleGuiReconnect(url);
+  };
+  guiWebSocket.onmessage = handleGuiWsMessage;
+}
+
+function scheduleGuiReconnect(url) {
+  if (guiWsReconnectTimer) return;
+  const delay = Math.min(10000, 1000 + guiWsRetry * 700);
+  guiWsRetry = Math.min(10, guiWsRetry + 1);
+  guiWsReconnectTimer = setTimeout(() => {
+    guiWsReconnectTimer = null;
+    connectGuiWebSocket(url);
+  }, delay);
+}
+
+function closeGuiWebSocket() {
+  if (guiWsReconnectTimer) {
+    clearTimeout(guiWsReconnectTimer);
+    guiWsReconnectTimer = null;
+  }
+  if (guiWebSocket) {
+    try {
+      guiWebSocket.close();
+    } catch (e) {
+      /* ignore */
+    }
+    guiWebSocket = null;
+  }
+}
+
+function handleGuiWsMessage(event) {
+  if (typeof event.data === "string" && event.data === "__ping") {
+    try {
+      guiWebSocket?.send("__pong");
+    } catch (e) {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    const parsed = JSON.parse(event.data);
+    if (!parsed || typeof parsed !== "object") return;
+    queueGuiPopupMessage(parsed);
+  } catch (e) {
+    // Ignore malformed frames
+  }
+}
 
 function isPrivateIpv4(hostname) {
   const m = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/.exec(hostname);
@@ -1016,6 +1323,10 @@ onMounted(() => {
   loadSettings();
   injectVersion();
   checkLiveContent();
+  initGuiWebSocket();
+});
+onBeforeUnmount(() => {
+  closeGuiWebSocket();
 });
 </script>
 <style scoped>
@@ -1304,5 +1615,170 @@ onMounted(() => {
 
 .modal-buttons .confirm-btn:hover {
   background: #2ea043;
+}
+.gui-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top right, rgba(87, 182, 255, 0.25), transparent 55%),
+    rgba(1, 6, 16, 0.85);
+  backdrop-filter: blur(12px);
+  animation: guiPopupFade 0.4s ease;
+}
+.gui-popup-card {
+  width: min(520px, 90vw);
+  background: linear-gradient(135deg, #050c16, #162339 90%);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.8rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 25px rgba(87, 182, 255, 0.35);
+  color: #f8fafc;
+  font-family: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+}
+.gui-popup-card.errorMessage {
+  border-color: rgba(255, 99, 132, 0.35);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 25px rgba(255, 99, 132, 0.45);
+}
+.gui-popup-card.warningMessage {
+  border-color: rgba(255, 192, 0, 0.4);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 25px rgba(255, 196, 66, 0.45);
+}
+.gui-popup-card.infoMessage {
+  border-color: rgba(87, 182, 255, 0.3);
+}
+.gui-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.45rem;
+}
+.gui-popup-badge {
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.gui-popup-card.errorMessage .gui-popup-badge {
+  background: rgba(255, 99, 132, 0.25);
+  color: #ffe0e6;
+}
+.gui-popup-card.warningMessage .gui-popup-badge {
+  background: rgba(255, 192, 0, 0.25);
+  color: #1d1a0d;
+}
+.gui-popup-card.infoMessage .gui-popup-badge {
+  background: rgba(87, 182, 255, 0.25);
+  color: #0b1f30;
+}
+.gui-popup-message {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.gui-popup-details {
+  margin: 0.35rem 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.gui-popup-context {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+.gui-popup-context div {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.gui-popup-context dt {
+  margin: 0;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.gui-popup-context dd {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.gui-popup-actions {
+  margin-top: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+.gui-action-btn {
+  flex: 1 1 120px;
+  min-width: 100px;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8fafc;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.gui-action-btn.primary {
+  background: linear-gradient(120deg, #57b6ff, #84d0ff);
+  border-color: transparent;
+  color: #041022;
+  box-shadow: 0 12px 25px rgba(87, 182, 255, 0.35);
+}
+.gui-action-btn.ghost:hover:not(:disabled),
+.gui-action-btn.primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.4);
+}
+.gui-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.busy-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  background: #fff;
+  animation: guiPulse 0.9s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes guiPopupFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes guiPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 </style>

@@ -25,6 +25,60 @@ ConfigManagerWeb::~ConfigManagerWeb() {
     // Don't delete server here as it might be externally managed
 }
 
+namespace
+{
+bool parseForceFlag(AsyncWebServerRequest *request)
+{
+    if (!request)
+    {
+        return false;
+    }
+    AsyncWebParameter *param = nullptr;
+    if (request->hasParam("force"))
+    {
+        param = request->getParam("force");
+    }
+    else if (request->hasParam("force", true))
+    {
+        param = request->getParam("force", true);
+    }
+
+    if (!param)
+    {
+        return false;
+    }
+
+    String value = param->value();
+    value.trim();
+    value.toLowerCase();
+    return value == "1" || value == "true" || value == "yes";
+}
+
+class RequestContextScope
+{
+public:
+    RequestContextScope(ConfigManagerClass *manager, const ConfigRequestContext &ctx)
+        : manager(manager)
+    {
+        if (manager)
+        {
+            manager->pushRequestContext(ctx);
+        }
+    }
+
+    ~RequestContextScope()
+    {
+        if (manager)
+        {
+            manager->popRequestContext();
+        }
+    }
+
+private:
+    ConfigManagerClass *manager = nullptr;
+};
+}
+
 void ConfigManagerWeb::begin(ConfigManagerClass* cm) {
     configManager = cm;
     initialized = true;
@@ -315,6 +369,17 @@ void ConfigManagerWeb::setupAPIRoutes() {
         }
     });
 
+    server->on("/live_layout.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!configManager) {
+            request->send(500, "application/json", "{\"error\":\"no_config\"}");
+            return;
+        }
+        String json = configManager->buildLiveLayoutJSON();
+        AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+        enableCORS(response);
+        request->send(response);
+    });
+
     // Settings update endpoint - /config/apply (matches frontend expectations)
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with raw body accumulation.
     {
@@ -341,6 +406,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
             }
 
             JsonObject obj = json.as<JsonObject>();
+            String requestPayload;
+            serializeJson(obj, requestPayload);
             if (!obj.containsKey("value")) {
                 AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
                     "{\"status\":\"error\",\"action\":\"apply\",\"reason\":\"missing_value\"}");
@@ -368,7 +435,19 @@ void ConfigManagerWeb::setupAPIRoutes() {
             // Passwords are transmitted in plaintext over HTTP.
             const String finalValue = value;
 
-            if (settingApplyCallback && settingApplyCallback(category, key, finalValue)) {
+            bool success = false;
+            if (settingApplyCallback)
+            {
+                ConfigRequestContext ctx;
+                ctx.origin = ConfigRequestContext::Origin::ApplySingle;
+                ctx.endpoint = request->url();
+                ctx.payload = requestPayload;
+                ctx.force = parseForceFlag(request);
+                RequestContextScope scope(configManager, ctx);
+                success = settingApplyCallback(category, key, finalValue);
+            }
+
+            if (success) {
                 const String payload = String("{\"status\":\"ok\",\"action\":\"apply\",\"category\":\"") +
                     category + "\",\"key\":\"" + key + "\"}";
                 AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
@@ -384,6 +463,31 @@ void ConfigManagerWeb::setupAPIRoutes() {
         handler->setMethod(HTTP_POST);
         server->addHandler(handler);
     }
+
+        server->on("/gui/action", HTTP_POST, [this](AsyncWebServerRequest* request)
+        {
+            auto readParam = [request](const char *name) -> String
+            {
+                AsyncWebParameter *param = request->getParam(name, false);
+                if (!param)
+                {
+                    param = request->getParam(name, true);
+                }
+                return param ? param->value() : String();
+            };
+
+            const String actionId = readParam("actionId");
+            const String messageId = readParam("messageId");
+            bool handled = false;
+            if (configManager)
+            {
+                handled = configManager->handleGuiAction(messageId, actionId);
+            }
+            const String body = String("{\"status\":\"") + (handled ? "ok" : "error") + "\"}";
+            AsyncWebServerResponse *response = request->beginResponse(handled ? 200 : 400, "application/json", body);
+            enableCORS(response);
+            request->send(response);
+        });
 
     // Settings save endpoint - /config/save (saves individual setting to flash)
     // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
@@ -411,6 +515,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
             }
 
             JsonObject obj = json.as<JsonObject>();
+            String requestPayload;
+            serializeJson(obj, requestPayload);
             String value;
             if (obj.containsKey("value")) {
                 JsonVariant v = obj["value"];
@@ -436,7 +542,19 @@ void ConfigManagerWeb::setupAPIRoutes() {
             // Passwords are transmitted in plaintext over HTTP.
             const String finalValue = value;
 
-            if (settingUpdateCallback && settingUpdateCallback(category, key, finalValue)) {
+            bool success = false;
+            if (settingUpdateCallback)
+            {
+                ConfigRequestContext ctx;
+                ctx.origin = ConfigRequestContext::Origin::SaveSingle;
+                ctx.endpoint = request->url();
+                ctx.payload = requestPayload;
+                ctx.force = parseForceFlag(request);
+                RequestContextScope scope(configManager, ctx);
+                success = settingUpdateCallback(category, key, finalValue);
+            }
+
+            if (success) {
                 const String payload = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"") +
                     category + "\",\"key\":\"" + key + "\"}";
                 AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
@@ -570,6 +688,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
             bool allSuccess = true;
             int totalApplied = 0;
 
+            const bool forceFlag = parseForceFlag(request);
             JsonObject root = json.as<JsonObject>();
             for (JsonPair categoryPair : root) {
                 const String category = categoryPair.key().c_str();
@@ -596,7 +715,26 @@ void ConfigManagerWeb::setupAPIRoutes() {
                         serializeJson(v, value);
                     }
 
-                    if (settingApplyCallback && settingApplyCallback(category, key, value)) {
+                    String requestPayload;
+                    {
+                        StaticJsonDocument<128> payloadDoc;
+                        payloadDoc["value"] = v;
+                        serializeJson(payloadDoc, requestPayload);
+                    }
+
+                    bool callResult = false;
+                    if (settingApplyCallback)
+                    {
+                        ConfigRequestContext ctx;
+                        ctx.origin = ConfigRequestContext::Origin::ApplyAll;
+                        ctx.endpoint = request->url();
+                        ctx.payload = requestPayload;
+                        ctx.force = forceFlag;
+                        RequestContextScope scope(configManager, ctx);
+                        callResult = settingApplyCallback(category, key, value);
+                    }
+
+                    if (callResult) {
                         totalApplied++;
                         WEB_LOG("Applied %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
                     } else {
@@ -639,6 +777,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
             bool allSuccess = true;
             int totalSaved = 0;
 
+            const bool forceFlag = parseForceFlag(request);
             JsonObject root = json.as<JsonObject>();
             for (JsonPair categoryPair : root) {
                 const String category = categoryPair.key().c_str();
@@ -665,7 +804,26 @@ void ConfigManagerWeb::setupAPIRoutes() {
                         serializeJson(v, value);
                     }
 
-                    if (settingUpdateCallback && settingUpdateCallback(category, key, value)) {
+                    String requestPayload;
+                    {
+                        StaticJsonDocument<128> payloadDoc;
+                        payloadDoc["value"] = v;
+                        serializeJson(payloadDoc, requestPayload);
+                    }
+
+                    bool callResult = false;
+                    if (settingUpdateCallback)
+                    {
+                        ConfigRequestContext ctx;
+                        ctx.origin = ConfigRequestContext::Origin::SaveAll;
+                        ctx.endpoint = request->url();
+                        ctx.payload = requestPayload;
+                        ctx.force = forceFlag;
+                        RequestContextScope scope(configManager, ctx);
+                        callResult = settingUpdateCallback(category, key, value);
+                    }
+
+                    if (callResult) {
                         totalSaved++;
                         WEB_LOG("Saved %s.%s = %s", category.c_str(), key.c_str(), value.c_str());
                     } else {

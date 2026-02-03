@@ -18,6 +18,8 @@ namespace cm::io
 
 		// "Analog output" on UNO is PWM (not a real DAC).
 		bool isValidAnalogOutputPin(int pin) const override;
+		PinInfo getPinInfo(int pin) const override;
+		String describeConstraints(uint32_t mask) const override;
 
 		// Optional helpers (non-breaking)
 		bool isSerialPin(int pin) const;       // 0/1
