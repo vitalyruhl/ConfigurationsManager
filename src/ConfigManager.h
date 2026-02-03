@@ -1,20 +1,24 @@
 #pragma once
 
 #include <Arduino.h>
+#include <string>
 #include <string_view>
 #include <Preferences.h>
 #include <vector>
 #include <functional>
+#include <memory>
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <type_traits>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <exception>
+#include <stdexcept>
 #include <algorithm>
 #include <cstdint>
 #include <set>
 #include <map>
+#include <utility>
 
 #include "ConfigManagerConfig.h"
 
@@ -62,7 +66,7 @@ struct ConfigOptions
     bool showInWeb = true;               // Show in web interface
     bool isPassword = false;             // Hide value (password field)
     int sortOrder = 100;                 // Sort order in GUI (lower = higher priority)
-    void (*callback)(T) = nullptr;       // Value change callback
+    std::function<void(T)> callback = nullptr;       // Value change callback
     std::function<bool()> showIf = nullptr; // Conditional visibility
     const char *categoryPretty = nullptr;   // Optional pretty name for category/card
 
@@ -229,6 +233,7 @@ protected:
     bool showInWeb;
     bool isPassword;
     bool modified = false;
+    bool persistSetting = true;
     String storageKey;
     const char *storageKeyPtr = nullptr;
     String legacyStorageKey;
@@ -320,6 +325,9 @@ public:
         logger = logFunc;
     }
 
+    bool shouldPersist() const { return persistSetting; }
+    void setPersistSettings(bool persist) { persistSetting = persist; }
+
     // New constructor for ConfigOptions-based initialization
     BaseSetting(const char* key, const char* name, const char* category, SettingType type,
                                 bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr,
@@ -395,7 +403,7 @@ public:
         showIfFunc = opts.showIf;
         if (opts.callback)
         {
-            callback = [opts](T newValue) { opts.callback(newValue); };
+            callback = opts.callback;
         }
     }
 
@@ -670,13 +678,131 @@ class ConfigManagerClass
 public:
     typedef std::function<void(const char *)> LogCallback;
 
+    template<typename T>
+    class SettingBuilder
+    {
+    public:
+        SettingBuilder(ConfigManagerClass &owner, const char *key)
+            : manager(owner)
+        {
+            opts.key = key;
+            opts.name = key ? key : ConfigManagerClass::DEFAULT_LAYOUT_NAME;
+            opts.category = ConfigManagerClass::DEFAULT_LAYOUT_NAME;
+            opts.defaultValue = T{};
+        }
+
+        SettingBuilder &key(const char *customKey)
+        {
+            opts.key = customKey;
+            return *this;
+        }
+
+        SettingBuilder &name(const char *displayName)
+        {
+            opts.name = displayName;
+            return *this;
+        }
+
+        SettingBuilder &category(const char *categoryName)
+        {
+            opts.category = categoryName;
+            return *this;
+        }
+
+        SettingBuilder &categoryPretty(const char *prettyName)
+        {
+            opts.categoryPretty = prettyName;
+            return *this;
+        }
+
+        SettingBuilder &card(const char *cardName)
+        {
+            opts.card = cardName;
+            return *this;
+        }
+
+        SettingBuilder &cardPretty(const char *prettyName)
+        {
+            opts.cardPretty = prettyName;
+            return *this;
+        }
+
+        SettingBuilder &cardOrder(int order)
+        {
+            opts.cardOrder = order;
+            return *this;
+        }
+
+        SettingBuilder &sortOrder(int order)
+        {
+            opts.sortOrder = order;
+            return *this;
+        }
+
+        SettingBuilder &defaultValue(const T &value)
+        {
+            opts.defaultValue = value;
+            return *this;
+        }
+
+        SettingBuilder &showInWeb(bool value)
+        {
+            opts.showInWeb = value;
+            return *this;
+        }
+
+        SettingBuilder &password(bool value)
+        {
+            opts.isPassword = value;
+            return *this;
+        }
+
+        SettingBuilder &callback(std::function<void(T)> cb)
+        {
+            opts.callback = cb;
+            return *this;
+        }
+
+        SettingBuilder &showIf(std::function<bool()> predicate)
+        {
+            opts.showIf = predicate;
+            return *this;
+        }
+
+        SettingBuilder &persist(bool value)
+        {
+            persistFlag = value;
+            return *this;
+        }
+
+        Config<T> &build()
+        {
+            auto settingPtr = std::make_unique<Config<T>>(opts);
+            settingPtr->setPersistSettings(persistFlag);
+            BaseSetting *raw = manager.addSetting(std::move(settingPtr));
+            if (!raw)
+            {
+                std::string message = "Failed to register setting ";
+                message += opts.name ? opts.name : "(unnamed)";
+                throw std::runtime_error(message);
+            }
+            return *static_cast<Config<T> *>(raw);
+        }
+
+    private:
+        ConfigOptions<T> opts;
+        ConfigManagerClass &manager;
+        bool persistFlag = true;
+    };
+
     static constexpr const char *DEFAULT_LAYOUT_NAME = "Default";
     static constexpr int DEFAULT_LAYOUT_ORDER = 100;
     static constexpr const char *DEFAULT_LIVE_CARD_NAME = "Live Values";
 
 private:
     Preferences prefs;
-    std::vector<BaseSetting *> settings;
+    std::vector<BaseSetting*> settings;
+    std::vector<std::unique_ptr<BaseSetting>> ownedSettings;
     String appName;
     String appTitle;
     String appVersion;
@@ -795,7 +921,7 @@ public:
             [this]()
             { reboot(); }, // reboot callback
             [this]()
-            { for (auto *s : settings) s->setDefault(); saveAll(); }, // reset callback
+            { for (const auto &entry : settings) entry->setDefault(); saveAll(); }, // reset callback
             [this](const String &group, const String &key, const String &value) -> bool
             {
                 return updateSetting(group, key, value);  // Save to flash
@@ -814,7 +940,7 @@ public:
     // Settings management
     BaseSetting *findSetting(const String &category, const String &key)
     {
-        for (auto *setting : settings)
+        for (BaseSetting *setting : settings)
         {
             if (String(setting->getCategory()) == category)
             {
@@ -830,7 +956,7 @@ public:
         }
 
         // Backwards compatibility: older clients used displayName as the JSON key.
-        for (auto *setting : settings)
+        for (BaseSetting *setting : settings)
         {
             if (String(setting->getCategory()) == category && String(setting->getDisplayName()) == key)
             {
@@ -840,17 +966,40 @@ public:
         return nullptr;
     }
 
-    void addSetting(BaseSetting *setting)
+    BaseSetting *addSetting(std::unique_ptr<BaseSetting> setting)
     {
-        if (setting->hasError())
+        if (!setting || setting->hasError())
         {
-            CM_CORE_LOG("[E] Setting error: %s", setting->getError());
-            return;
+            if (setting)
+            {
+                CM_CORE_LOG("[E] Setting error: %s", setting->getError());
+            }
+            return nullptr;
         }
-        settings.push_back(setting);
+        BaseSetting *raw = setting.get();
+        raw->setLogger([](const char *msg)
+                       { CM_CORE_LOG("%s", msg); });
+        ownedSettings.push_back(std::move(setting));
+        settings.push_back(raw);
+        registerSettingPlacement(raw);
+        return raw;
+    }
+
+    BaseSetting *addSetting(BaseSetting *setting)
+    {
+        if (!setting || setting->hasError())
+        {
+            if (setting)
+            {
+                CM_CORE_LOG("[E] Setting error: %s", setting->getError());
+            }
+            return nullptr;
+        }
         setting->setLogger([](const char *msg)
-                           { CM_CORE_LOG("%s", msg); });
+                            { CM_CORE_LOG("%s", msg); });
+        settings.push_back(setting);
         registerSettingPlacement(setting);
+        return setting;
     }
 
     // Debug method to check registered settings count
@@ -895,6 +1044,26 @@ public:
     void addToLiveGroup(const char *itemId, const char *pageName, const char *groupName, int order);
     void addToLiveGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order);
 
+    inline SettingBuilder<bool> addSettingBool(const char *key = nullptr)
+    {
+        return SettingBuilder<bool>(*this, key);
+    }
+
+    inline SettingBuilder<int> addSettingInt(const char *key = nullptr)
+    {
+        return SettingBuilder<int>(*this, key);
+    }
+
+    inline SettingBuilder<float> addSettingFloat(const char *key = nullptr)
+    {
+        return SettingBuilder<float>(*this, key);
+    }
+
+    inline SettingBuilder<String> addSettingString(const char *key = nullptr)
+    {
+        return SettingBuilder<String>(*this, key);
+    }
+
     void loadAll()
     {
         if (!prefs.begin("ConfigManager", false))
@@ -902,9 +1071,12 @@ public:
             throw std::runtime_error("Failed to initialize preferences");
         }
 
-        for (auto *s : settings)
+        for (BaseSetting *s : settings)
         {
-            s->load(prefs);
+            if (s->shouldPersist())
+            {
+                s->load(prefs);
+            }
         }
         prefs.end();
 
@@ -916,7 +1088,7 @@ public:
             return h.indexOf(n) >= 0;
         };
 
-        for (auto *s : settings) {
+        for (BaseSetting *s : settings) {
             String cat = s->getCategory();
             String key = s->getDisplayName();
 
@@ -943,8 +1115,12 @@ public:
             return;
         }
 
-        for (auto *s : settings)
+        for (BaseSetting *s : settings)
         {
+            if (!s->shouldPersist())
+            {
+                continue;
+            }
             if (s->needsSave())
             {
                 s->save(prefs);
@@ -1069,19 +1245,25 @@ public:
         bool result = setting->fromJSON(doc.as<JsonVariant>());
 
         if (result) {
-            // Save the updated setting to flash storage immediately
-            CM_CORE_LOG("[DEBUG] Saving setting to flash storage");
-
-            // Save only this specific setting to flash
-            if (!prefs.begin("ConfigManager", false))
+            if (setting->shouldPersist())
             {
-                CM_CORE_LOG("[ERROR] Failed to open preferences for saving");
-                return false;
-            }
-            setting->save(prefs);
-            prefs.end();
+                // Save the updated setting to flash storage immediately
+                CM_CORE_LOG("[DEBUG] Saving setting to flash storage");
 
-            CM_CORE_LOG("[DEBUG] Setting saved to flash successfully");
+                if (!prefs.begin("ConfigManager", false))
+                {
+                    CM_CORE_LOG("[ERROR] Failed to open preferences for saving");
+                    return false;
+                }
+                setting->save(prefs);
+                prefs.end();
+
+                CM_CORE_LOG("[DEBUG] Setting saved to flash successfully");
+            }
+            else
+            {
+                CM_CORE_LOG("[DEBUG] Setting %s.%s is non-persistent; skipping flash save", category.c_str(), key.c_str());
+            }
 
             // Side-effects: keep runtime subsystems in sync with specific settings
             // Heuristic: treat keys containing both "ota" and "pass" (case-insensitive) as OTA password
@@ -1102,7 +1284,7 @@ public:
 
     void checkSettingsForErrors()
     {
-        for (auto *s : settings)
+        for (BaseSetting *s : settings)
         {
             if (s->hasError())
             {
@@ -1295,13 +1477,8 @@ public:
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
-
-    #if CM_ENABLE_WS_PUSH
-        // Register WebSocket handler early (before server->begin()) so the WebUI can connect to /ws.
-        // Periodic push still requires calling handleWebsocketPush() in loop(), unless you only want
-        // the initial push-on-connect payload.
-        enableWebSocketPush();
-    #endif
+        WebSocketPush(true, 250);
+        setPushOnConnect(true);
 
         CM_CORE_LOG("ConfigManager modules initialized - WiFi connecting in background");
     }
@@ -1357,11 +1534,8 @@ public:
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
-
-    #if CM_ENABLE_WS_PUSH
-        // Register WebSocket handler early (before server->begin()) so the WebUI can connect to /ws.
-        enableWebSocketPush();
-    #endif
+        WebSocketPush(true, 250);
+        setPushOnConnect(true);
     }
 
     void startAccessPoint(const String &apSSID = "", const String &apPassword = "")
@@ -1390,17 +1564,13 @@ public:
         wifiManager.startAccessPoint(ssid, apPassword);
 
         webManager.begin(this);
-
-    #if CM_ENABLE_WS_PUSH
-        // In AP mode, routes are defined immediately and server->begin() is called inside defineAllRoutes().
-        // Register the WebSocket handler before that so /ws is available.
-        enableWebSocketPush();
-    #endif
+        runtimeManager.begin(this);
+        WebSocketPush(true, 250);
+        setPushOnConnect(true);
 
         webManager.defineAllRoutes();
         otaManager.begin(this);
         otaManager.setupWebRoutes(webManager.getServer());
-        runtimeManager.begin(this);
     }
 
     // Non-blocking client handling
@@ -1431,9 +1601,9 @@ public:
 
     void clearAllFromPrefs()
     {
-        for (auto *setting : settings)
+        for (const auto &entry : settings)
         {
-            setting->setDefault(); // Reset to default values
+            entry->setDefault(); // Reset to default values
         }
         CM_CORE_LOG("[I] All settings cleared from preferences");
     }
@@ -1570,7 +1740,7 @@ public:
 
         String catNames[20];
         int catCount = 0;
-        for (auto *s : settings)
+        for (const auto *s : settings)
         {
             // Do not pre-filter dynamic visibility here; include all web-visible
             // settings and let the UI honor the resolved showIf boolean.
@@ -1853,6 +2023,19 @@ public:
     void setWebSocketInterval(uint32_t intervalMs) { wsInterval = intervalMs; }
     void setPushOnConnect(bool v) { pushOnConnect = v; }
     void setCustomLivePayloadBuilder(std::function<String()> fn) { customPayloadBuilder = fn; }
+    void WebSocketPush(bool enable = true, uint32_t intervalMs = 2000)
+    {
+#if CM_ENABLE_WS_PUSH
+        if (enable) {
+            enableWebSocketPush(intervalMs);
+        } else {
+            disableWebSocketPush();
+        }
+#else
+        (void)enable;
+        (void)intervalMs;
+#endif
+    }
 #else
     void handleWebsocketPush() {}
     void enableWebSocketPush(uint32_t = 2000) {}

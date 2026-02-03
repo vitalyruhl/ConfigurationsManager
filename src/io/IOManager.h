@@ -340,8 +340,8 @@ private:
         std::shared_ptr<std::string> keyPinStable;
         std::shared_ptr<std::string> keyActiveLowStable;
 
-        std::unique_ptr<Config<int>> pin;
-        std::unique_ptr<Config<bool>> activeLow;
+        Config<int> *pin = nullptr;
+        Config<bool> *activeLow = nullptr;
 
         int defaultPin = -1;
         bool defaultActiveLow = true;
@@ -384,10 +384,10 @@ private:
         std::shared_ptr<std::string> keyPullupStable;
         std::shared_ptr<std::string> keyPulldownStable;
 
-        std::unique_ptr<Config<int>> pin;
-        std::unique_ptr<Config<bool>> activeLow;
-        std::unique_ptr<Config<bool>> pullup;
-        std::unique_ptr<Config<bool>> pulldown;
+        Config<int> *pin = nullptr;
+        Config<bool> *activeLow = nullptr;
+        Config<bool> *pullup = nullptr;
+        Config<bool> *pulldown = nullptr;
 
         int defaultPin = -1;
         bool defaultActiveLow = true;
@@ -465,16 +465,16 @@ private:
         std::shared_ptr<std::string> keyAlarmMinStable;
         std::shared_ptr<std::string> keyAlarmMaxStable;
 
-        std::unique_ptr<Config<int>> pin;
-        std::unique_ptr<Config<int>> rawMin;
-        std::unique_ptr<Config<int>> rawMax;
-        std::unique_ptr<Config<float>> outMin;
-        std::unique_ptr<Config<float>> outMax;
-        std::unique_ptr<Config<String>> unit;
-        std::unique_ptr<Config<float>> deadband;
-        std::unique_ptr<Config<int>> minEventMs;
-        std::unique_ptr<Config<float>> alarmMinSetting;
-        std::unique_ptr<Config<float>> alarmMaxSetting;
+        Config<int> *pin = nullptr;
+        Config<int> *rawMin = nullptr;
+        Config<int> *rawMax = nullptr;
+        Config<float> *outMin = nullptr;
+        Config<float> *outMax = nullptr;
+        Config<String> *unit = nullptr;
+        Config<float> *deadband = nullptr;
+        Config<int> *minEventMs = nullptr;
+        Config<float> *alarmMinSetting = nullptr;
+        Config<float> *alarmMaxSetting = nullptr;
 
         int defaultPin = -1;
         bool defaultEnabled = true;
@@ -534,7 +534,7 @@ private:
         std::shared_ptr<std::string> cardPrettyStable;
         std::shared_ptr<std::string> keyPinStable;
 
-        std::unique_ptr<Config<int>> pin;
+        Config<int> *pin = nullptr;
 
         int defaultPin = -1;
         bool defaultEnabled = true;

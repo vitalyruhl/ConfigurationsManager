@@ -2,6 +2,7 @@
 
 This file collects the intended refactor direction for the next API version.
 Goal: clarify naming, reduce method explosion, keep parameter order consistent, and separate:
+Goal: keep user programs minimal while offering maximal flexibility; defaults should be applied automatically and only overridden when explicitly requested.
 
 1) Definition/registration of an IO/Setting (programmable object)
 2) Persistence (NVS) (optional)

@@ -16,3 +16,8 @@ a = 99;  // does NOT change x
 b = 88;  // changes x
 ```
 
+## ESP - Chip Info 
+
+https://thelastoutpostworkshop.github.io/ESPConnect/
+
+> note : only on cromium based browsers!

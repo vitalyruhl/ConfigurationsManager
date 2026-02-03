@@ -25,6 +25,13 @@ static const char SETTINGS_PASSWORD[] = "";
 // IO manager demo (settings-driven digital outputs)
 #include "io/IOManager.h"
 
+#if __has_include("secret/wifiSecret.h")
+#include "secret/wifiSecret.h"
+#define CM_HAS_WIFI_SECRETS 1
+#else
+#define CM_HAS_WIFI_SECRETS 0
+#endif
+
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Full-IO-Demo"
 
@@ -61,7 +68,6 @@ void setHeaterState(bool on);
 void setFanState(bool on);
 void setHoldButtonState(bool on);
 void setupGUI();
-bool SetupStartWebServer();
 
 // Global WiFi event hooks used by ConfigManager.
 // These are invoked internally by ConfigManager's WiFi manager on state transitions.
@@ -78,6 +84,7 @@ static void createAnalogOutputs();
 static void registerAnalogOutputsGui();
 static void demoAnalogOutputApi();
 
+void checkWifiCredentials();
 
 static void createDigitalOutputs()
 {
@@ -85,7 +92,7 @@ static void createDigitalOutputs()
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "heater",
         .name = "Heater Relay",
-        .defaultPin = 4,
+        .defaultPin = 23,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
@@ -93,7 +100,7 @@ static void createDigitalOutputs()
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "fan",
         .name = "Cooling Fan Relay",
-        .defaultPin = 23,
+        .defaultPin = 27,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
@@ -101,7 +108,7 @@ static void createDigitalOutputs()
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = "holdbutton",
         .name = "Hold Button",
-        .defaultPin = 27,
+        .defaultPin = 34,
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
@@ -173,8 +180,10 @@ static void createDigitalInputs()
         .defaultEnabled = true,
     });
 
-    ioManager.addInputToGUI("ap_mode", nullptr, 8, "AP Mode", "inputs", false);
-    ioManager.addInputToGUI("reset", nullptr, 9, "Reset", "inputs", false);
+    ioManager.addInputSettingsToGUI("ap_mode", "Digital Inputs", 8);
+    ioManager.addInputRuntimeToGUI("ap_mode", 8, "AP Mode", "inputs", false);
+    ioManager.addInputSettingsToGUI("reset", "Digital Inputs", 9);
+    ioManager.addInputRuntimeToGUI("reset", 9, "Reset", "inputs", false);
 
     cm::IOManager::DigitalInputEventOptions apOptions;
     apOptions.longClickMs = 1200;
@@ -216,15 +225,8 @@ static void createDigitalInputs()
         .defaultEnabled = true,
     });
 
-    // Show as bool dot in runtime.
-    ioManager.addInputToGUI(
-        "testbutton",
-        nullptr,
-        10,
-        "Test Button",
-        "inputs",
-        false
-    );
+    ioManager.addInputSettingsToGUI("testbutton", "Digital Inputs", 10);
+    ioManager.addInputRuntimeToGUI("testbutton", 10, "Test Button", "inputs", false);
 
     // Divider + per-event indicators for test button
     {
@@ -545,6 +547,10 @@ void setup()
 
     // coreSettings now owns the WiFi/System/NTP layout registration.
     ConfigManager.addSettingsPage("I/O", 40);
+    ConfigManager.addSettingsCard("I/O", "Digital Outputs", 10);
+    ConfigManager.addSettingsCard("I/O", "Digital Inputs", 20);
+    ConfigManager.addSettingsCard("I/O", "Analog Inputs", 30);
+    ConfigManager.addSettingsCard("I/O", "Analog Outputs", 40);
     //----------------------------------------------------------------------------------------------------------------------------------
 
     coreSettings.attachWiFi(ConfigManager);     // Register WiFi baseline settings
@@ -565,14 +571,7 @@ void setup()
     ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
     ioManager.begin();
 
-    // Boot behavior:
-    // - If WiFi SSID is empty (fresh reset/unconfigured), start AP mode automatically.
-    // - Avoid instant reset loops: do NOT reset on "pressed at boot"; reset/AP are handled via LongPressOnStartup event.
-    const bool ssidEmpty = (wifiSettings.wifiSsid.get().length() == 0);
-    if (ssidEmpty) {
-        Serial.println("[BOOT] WiFi SSID is empty -> starting AP mode");
-        ConfigManager.startAccessPoint("ESP32_Config", "");
-    }
+    checkWifiCredentials();
 
     //----------------------------------------------------------------------------------------------------------------------------------
     // Configure Smart WiFi Roaming with default values (can be customized in setup if needed)
@@ -587,20 +586,8 @@ void setup()
     // ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");     // Only connect to this specific AP
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP, fallback to others
 
-    // perform the wifi connection (skip if we are in AP mode)
-    bool startedInStationMode = false;
-    if (!ssidEmpty && WiFi.getMode() != WIFI_AP) {
-        startedInStationMode = SetupStartWebServer();
-    }
-    if (startedInStationMode)
-    {
-        // setupMQTT();
-    }
-    else
-    {
-        Serial.println("[SETUP] we are in AP mode");
-    }
-
+    
+   
     // Layout hints for runtime tabs used by the IO demo.
     ConfigManager.addLivePage("controls", 10);
     ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 10);
@@ -617,13 +604,10 @@ void setup()
 
     setupGUI();
 
+    ConfigManager.startWebServer();
     // Demo: exercise all analog output setter/getter APIs once.
     demoAnalogOutputApi();
 
-    // Enhanced WebSocket configuration
-    ConfigManager.enableWebSocketPush(); // Enable WebSocket push for real-time updates
-    ConfigManager.setWebSocketInterval(250); // Faster updates - every 250ms
-    ConfigManager.setPushOnConnect(true);     // Immediate data on client connect
     //----------------------------------------------------------------------------------------------------------------------------------
 
     Serial.println("Loaded configuration:");
@@ -696,27 +680,6 @@ void setupGUI()
 //----------------------------------------
 // WIFI MANAGER CALLBACK FUNCTIONS
 //----------------------------------------
-
-bool SetupStartWebServer()
-{
-    Serial.println("[MAIN] Starting Webserver...!");
-
-    if (WiFi.getMode() == WIFI_AP)
-    {
-        return false; // Skip webserver setup in AP mode
-    }
-
-    // Always initialize ConfigManager modules and WiFi callbacks.
-    // Even if WiFi.status() is already WL_CONNECTED (fast reconnect after reset), skipping startWebServer()
-    // would leave routes/OTA/runtime/callback wiring uninitialized.
-    //
-    // Standard behavior: ConfigManager reads the persisted WiFi settings (DHCP vs. static) and starts WiFi.
-    Serial.println("[MAIN] startWebServer: auto (WiFi settings)");
-    ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
-
-    return true; // Webserver setup completed
-}
 
 void onWiFiConnected()
 {
@@ -792,3 +755,43 @@ void setHoldButtonState(bool on)
         ioManager.set("holdbutton", false);
     }
 }
+
+void checkWifiCredentials()
+{
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+#if CM_HAS_WIFI_SECRETS
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
+        Serial.println("-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+
+        // Optional secret fields (not present in every example).
+#ifdef MY_WIFI_IP
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+#endif
+#ifdef MY_USE_DHCP
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+#endif
+#ifdef MY_GATEWAY_IP
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+#endif
+#ifdef MY_SUBNET_MASK
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+#endif
+#ifdef MY_DNS_IP
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+#endif
+        ConfigManager.saveAll();
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("Restarting ESP, after auto setting WiFi credentials");
+        Serial.println("-------------------------------------------------------------");
+        delay(500);
+        ESP.restart();
+#else
+        Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+#endif
+    }
+}
+

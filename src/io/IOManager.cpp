@@ -283,36 +283,32 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
     entry.keyPinStable = makeStableString(entry.keyPin);
     entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
 
-    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPinStable->c_str(),
-        .name = "GPIO",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPin,
-        .showInWeb = entry.showPinInWeb,
-        .sortOrder = 11,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+        .name("GPIO")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPin)
+        .showInWeb(entry.showPinInWeb)
+        .sortOrder(11)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyActiveLowStable->c_str(),
-        .name = "LOW-Active",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultActiveLow,
-        .showInWeb = entry.showActiveLowInWeb,
-        .sortOrder = 12,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
+        .name("LOW-Active")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultActiveLow)
+        .showInWeb(entry.showActiveLowInWeb)
+        .sortOrder(12)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    ConfigManager.addSetting(entry.pin.get());
-    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.activeLow.get());
-    registerSettingPlacement(entry.activeLow.get(), entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.activeLow, entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -329,16 +325,13 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
     }
 
     DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
-    if (entry.settingsRegistered || entry.runtimeRegistered) {
+    if (entry.settingsRegistered) {
         IO_LOG("[WARNING] addInputToGUI: input '%s' already registered", entry.id.c_str());
         return;
     }
 
     if (!entry.registerSettings) {
-        // Runtime-only / programmatic input: no Settings tab entries and no persistence.
-        // Keep behavior consistent: addInputToGUI registers both parts when settings are enabled.
         entry.settingsRegistered = true;
-        entry.runtimeRegistered = true;
         return;
     }
 
@@ -359,66 +352,58 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
     entry.keyPullupStable = makeStableString(entry.keyPullup);
     entry.keyPulldownStable = makeStableString(entry.keyPulldown);
 
-    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPinStable->c_str(),
-        .name = "GPIO",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPin,
-        .showInWeb = entry.showPinInWeb,
-        .sortOrder = 21,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+        .name("GPIO")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPin)
+        .showInWeb(entry.showPinInWeb)
+        .sortOrder(21)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyActiveLowStable->c_str(),
-        .name = "LOW-Active",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultActiveLow,
-        .showInWeb = entry.showActiveLowInWeb,
-        .sortOrder = 22,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
+        .name("LOW-Active")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultActiveLow)
+        .showInWeb(entry.showActiveLowInWeb)
+        .sortOrder(22)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.pullup = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyPullupStable->c_str(),
-        .name = "Pull-up",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPullup,
-        .showInWeb = entry.showPullupInWeb,
-        .sortOrder = 23,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pullup = &ConfigManager.addSettingBool(entry.keyPullupStable->c_str())
+        .name("Pull-up")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPullup)
+        .showInWeb(entry.showPullupInWeb)
+        .sortOrder(23)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.pulldown = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyPulldownStable->c_str(),
-        .name = "Pull-down",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPulldown,
-        .showInWeb = entry.showPulldownInWeb,
-        .sortOrder = 24,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pulldown = &ConfigManager.addSettingBool(entry.keyPulldownStable->c_str())
+        .name("Pull-down")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPulldown)
+        .showInWeb(entry.showPulldownInWeb)
+        .sortOrder(24)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    ConfigManager.addSetting(entry.pin.get());
-    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.activeLow.get());
-    registerSettingPlacement(entry.activeLow.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.pullup.get());
-    registerSettingPlacement(entry.pullup.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.pulldown.get());
-    registerSettingPlacement(entry.pulldown.get(), entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.activeLow, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pullup, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pulldown, entry.cardPretty, entry.name);
 
     entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("inputs");
     entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
@@ -478,66 +463,58 @@ void IOManager::addInputSettingsToGUI(const char* id, const char* cardName, int 
     entry.keyPullupStable = makeStableString(entry.keyPullup);
     entry.keyPulldownStable = makeStableString(entry.keyPulldown);
 
-    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPinStable->c_str(),
-        .name = "GPIO",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPin,
-        .showInWeb = entry.showPinInWeb,
-        .sortOrder = 21,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+        .name("GPIO")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPin)
+        .showInWeb(entry.showPinInWeb)
+        .sortOrder(21)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.activeLow = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyActiveLowStable->c_str(),
-        .name = "LOW-Active",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultActiveLow,
-        .showInWeb = entry.showActiveLowInWeb,
-        .sortOrder = 22,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
+        .name("LOW-Active")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultActiveLow)
+        .showInWeb(entry.showActiveLowInWeb)
+        .sortOrder(22)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.pullup = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyPullupStable->c_str(),
-        .name = "Pull-up",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPullup,
-        .showInWeb = entry.showPullupInWeb,
-        .sortOrder = 23,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pullup = &ConfigManager.addSettingBool(entry.keyPullupStable->c_str())
+        .name("Pull-up")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPullup)
+        .showInWeb(entry.showPullupInWeb)
+        .sortOrder(23)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.pulldown = std::make_unique<Config<bool>>(ConfigOptions<bool>{
-        .key = entry.keyPulldownStable->c_str(),
-        .name = "Pull-down",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPulldown,
-        .showInWeb = entry.showPulldownInWeb,
-        .sortOrder = 24,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pulldown = &ConfigManager.addSettingBool(entry.keyPulldownStable->c_str())
+        .name("Pull-down")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPulldown)
+        .showInWeb(entry.showPulldownInWeb)
+        .sortOrder(24)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    ConfigManager.addSetting(entry.pin.get());
-    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.activeLow.get());
-    registerSettingPlacement(entry.activeLow.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.pullup.get());
-    registerSettingPlacement(entry.pullup.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.pulldown.get());
-    registerSettingPlacement(entry.pulldown.get(), entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.activeLow, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pullup, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pulldown, entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -705,126 +682,110 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
     entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
     entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
 
-    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPinStable->c_str(),
-        .name = "GPIO",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPin,
-        .showInWeb = entry.showPinInWeb,
-        .sortOrder = 31,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+        .name("GPIO")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPin)
+        .showInWeb(entry.showPinInWeb)
+        .sortOrder(31)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.rawMin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyRawMinStable->c_str(),
-        .name = "Raw Min",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultRawMin,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 32,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.rawMin = &ConfigManager.addSettingInt(entry.keyRawMinStable->c_str())
+        .name("Raw Min")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultRawMin)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(32)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.rawMax = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyRawMaxStable->c_str(),
-        .name = "Raw Max",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultRawMax,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 33,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.rawMax = &ConfigManager.addSettingInt(entry.keyRawMaxStable->c_str())
+        .name("Raw Max")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultRawMax)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(33)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.outMin = std::make_unique<Config<float>>(ConfigOptions<float>{
-        .key = entry.keyOutMinStable->c_str(),
-        .name = "Out Min",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultOutMin,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 34,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.outMin = &ConfigManager.addSettingFloat(entry.keyOutMinStable->c_str())
+        .name("Out Min")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultOutMin)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(34)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.outMax = std::make_unique<Config<float>>(ConfigOptions<float>{
-        .key = entry.keyOutMaxStable->c_str(),
-        .name = "Out Max",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultOutMax,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 35,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.outMax = &ConfigManager.addSettingFloat(entry.keyOutMaxStable->c_str())
+        .name("Out Max")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultOutMax)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(35)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.unit = std::make_unique<Config<String>>(ConfigOptions<String>{
-        .key = entry.keyUnitStable->c_str(),
-        .name = "Unit",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultUnit,
-        .showInWeb = entry.showUnitInWeb,
-        .sortOrder = 36,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.unit = &ConfigManager.addSettingString(entry.keyUnitStable->c_str())
+        .name("Unit")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultUnit)
+        .showInWeb(entry.showUnitInWeb)
+        .sortOrder(36)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.deadband = std::make_unique<Config<float>>(ConfigOptions<float>{
-        .key = entry.keyDeadbandStable->c_str(),
-        .name = "Deadband",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultDeadband,
-        .showInWeb = entry.showDeadbandInWeb,
-        .sortOrder = 37,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.deadband = &ConfigManager.addSettingFloat(entry.keyDeadbandStable->c_str())
+        .name("Deadband")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultDeadband)
+        .showInWeb(entry.showDeadbandInWeb)
+        .sortOrder(37)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.minEventMs = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyMinEventMsStable->c_str(),
-        .name = "Min Event (ms)",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = static_cast<int>(entry.defaultMinEventMs),
-        .showInWeb = entry.showMinEventInWeb,
-        .sortOrder = 38,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.minEventMs = &ConfigManager.addSettingInt(entry.keyMinEventMsStable->c_str())
+        .name("Min Event (ms)")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(static_cast<int>(entry.defaultMinEventMs))
+        .showInWeb(entry.showMinEventInWeb)
+        .sortOrder(38)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    ConfigManager.addSetting(entry.pin.get());
-    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.rawMin.get());
-    registerSettingPlacement(entry.rawMin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.rawMax.get());
-    registerSettingPlacement(entry.rawMax.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.outMin.get());
-    registerSettingPlacement(entry.outMin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.outMax.get());
-    registerSettingPlacement(entry.outMax.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.unit.get());
-    registerSettingPlacement(entry.unit.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.deadband.get());
-    registerSettingPlacement(entry.deadband.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.minEventMs.get());
-    registerSettingPlacement(entry.minEventMs.get(), entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMax, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMax, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.unit, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.deadband, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.minEventMs, entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -844,37 +805,33 @@ void IOManager::ensureAnalogAlarmSettings(AnalogInputEntry& entry,
     }
 
     if (!isnan(alarmMin) && !entry.alarmMinSetting) {
-        entry.alarmMinSetting = std::make_unique<Config<float>>(ConfigOptions<float>{
-            .key = entry.keyAlarmMinStable->c_str(),
-            .name = "Alarm Min",
-            .category = cm::CoreCategories::IO,
-            .defaultValue = alarmMin,
-            .showInWeb = true,
-            .sortOrder = 39,
-            .categoryPretty = IO_CATEGORY_PRETTY,
-            .card = entry.cardKeyStable->c_str(),
-            .cardPretty = entry.cardPrettyStable->c_str(),
-            .cardOrder = entry.cardOrder,
-        });
-        ConfigManager.addSetting(entry.alarmMinSetting.get());
-        registerSettingPlacement(entry.alarmMinSetting.get(), entry.cardPretty, entry.name);
+        entry.alarmMinSetting = &ConfigManager.addSettingFloat(entry.keyAlarmMinStable->c_str())
+            .name("Alarm Min")
+            .category(cm::CoreCategories::IO)
+            .defaultValue(alarmMin)
+            .showInWeb(true)
+            .sortOrder(39)
+            .categoryPretty(IO_CATEGORY_PRETTY)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+        registerSettingPlacement(entry.alarmMinSetting, entry.cardPretty, entry.name);
     }
 
     if (!isnan(alarmMax) && !entry.alarmMaxSetting) {
-        entry.alarmMaxSetting = std::make_unique<Config<float>>(ConfigOptions<float>{
-            .key = entry.keyAlarmMaxStable->c_str(),
-            .name = "Alarm Max",
-            .category = cm::CoreCategories::IO,
-            .defaultValue = alarmMax,
-            .showInWeb = true,
-            .sortOrder = 40,
-            .categoryPretty = IO_CATEGORY_PRETTY,
-            .card = entry.cardKeyStable->c_str(),
-            .cardPretty = entry.cardPrettyStable->c_str(),
-            .cardOrder = entry.cardOrder,
-        });
-        ConfigManager.addSetting(entry.alarmMaxSetting.get());
-        registerSettingPlacement(entry.alarmMaxSetting.get(), entry.cardPretty, entry.name);
+        entry.alarmMaxSetting = &ConfigManager.addSettingFloat(entry.keyAlarmMaxStable->c_str())
+            .name("Alarm Max")
+            .category(cm::CoreCategories::IO)
+            .defaultValue(alarmMax)
+            .showInWeb(true)
+            .sortOrder(40)
+            .categoryPretty(IO_CATEGORY_PRETTY)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+        registerSettingPlacement(entry.alarmMaxSetting, entry.cardPretty, entry.name);
     }
 }
 
@@ -992,126 +949,110 @@ void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardNam
     entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
     entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
 
-    entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyPinStable->c_str(),
-        .name = "GPIO",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultPin,
-        .showInWeb = entry.showPinInWeb,
-        .sortOrder = 31,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+        .name("GPIO")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultPin)
+        .showInWeb(entry.showPinInWeb)
+        .sortOrder(31)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.rawMin = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyRawMinStable->c_str(),
-        .name = "Raw Min",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultRawMin,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 32,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.rawMin = &ConfigManager.addSettingInt(entry.keyRawMinStable->c_str())
+        .name("Raw Min")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultRawMin)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(32)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.rawMax = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyRawMaxStable->c_str(),
-        .name = "Raw Max",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultRawMax,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 33,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.rawMax = &ConfigManager.addSettingInt(entry.keyRawMaxStable->c_str())
+        .name("Raw Max")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultRawMax)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(33)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.outMin = std::make_unique<Config<float>>(ConfigOptions<float>{
-        .key = entry.keyOutMinStable->c_str(),
-        .name = "Out Min",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultOutMin,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 34,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.outMin = &ConfigManager.addSettingFloat(entry.keyOutMinStable->c_str())
+        .name("Out Min")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultOutMin)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(34)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.outMax = std::make_unique<Config<float>>(ConfigOptions<float>{
-        .key = entry.keyOutMaxStable->c_str(),
-        .name = "Out Max",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultOutMax,
-        .showInWeb = entry.showMappingInWeb,
-        .sortOrder = 35,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.outMax = &ConfigManager.addSettingFloat(entry.keyOutMaxStable->c_str())
+        .name("Out Max")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultOutMax)
+        .showInWeb(entry.showMappingInWeb)
+        .sortOrder(35)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.unit = std::make_unique<Config<String>>(ConfigOptions<String>{
-        .key = entry.keyUnitStable->c_str(),
-        .name = "Unit",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultUnit,
-        .showInWeb = entry.showUnitInWeb,
-        .sortOrder = 36,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.unit = &ConfigManager.addSettingString(entry.keyUnitStable->c_str())
+        .name("Unit")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultUnit)
+        .showInWeb(entry.showUnitInWeb)
+        .sortOrder(36)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.deadband = std::make_unique<Config<float>>(ConfigOptions<float>{
-        .key = entry.keyDeadbandStable->c_str(),
-        .name = "Deadband",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = entry.defaultDeadband,
-        .showInWeb = entry.showDeadbandInWeb,
-        .sortOrder = 37,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.deadband = &ConfigManager.addSettingFloat(entry.keyDeadbandStable->c_str())
+        .name("Deadband")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(entry.defaultDeadband)
+        .showInWeb(entry.showDeadbandInWeb)
+        .sortOrder(37)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    entry.minEventMs = std::make_unique<Config<int>>(ConfigOptions<int>{
-        .key = entry.keyMinEventMsStable->c_str(),
-        .name = "Min Event (ms)",
-        .category = cm::CoreCategories::IO,
-        .defaultValue = static_cast<int>(entry.defaultMinEventMs),
-        .showInWeb = entry.showMinEventInWeb,
-        .sortOrder = 38,
-        .categoryPretty = IO_CATEGORY_PRETTY,
-        .card = entry.cardKeyStable->c_str(),
-        .cardPretty = entry.cardPrettyStable->c_str(),
-        .cardOrder = entry.cardOrder,
-    });
+    entry.minEventMs = &ConfigManager.addSettingInt(entry.keyMinEventMsStable->c_str())
+        .name("Min Event (ms)")
+        .category(cm::CoreCategories::IO)
+        .defaultValue(static_cast<int>(entry.defaultMinEventMs))
+        .showInWeb(entry.showMinEventInWeb)
+        .sortOrder(38)
+        .categoryPretty(IO_CATEGORY_PRETTY)
+        .card(entry.cardKeyStable->c_str())
+        .cardPretty(entry.cardPrettyStable->c_str())
+        .cardOrder(entry.cardOrder)
+        .build();
 
-    ConfigManager.addSetting(entry.pin.get());
-    registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.rawMin.get());
-    registerSettingPlacement(entry.rawMin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.rawMax.get());
-    registerSettingPlacement(entry.rawMax.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.outMin.get());
-    registerSettingPlacement(entry.outMin.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.outMax.get());
-    registerSettingPlacement(entry.outMax.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.unit.get());
-    registerSettingPlacement(entry.unit.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.deadband.get());
-    registerSettingPlacement(entry.deadband.get(), entry.cardPretty, entry.name);
-    ConfigManager.addSetting(entry.minEventMs.get());
-    registerSettingPlacement(entry.minEventMs.get(), entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMax, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMin, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMax, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.unit, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.deadband, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.minEventMs, entry.cardPretty, entry.name);
 
     IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
 
@@ -1309,21 +1250,19 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
             entry.keyPin = formatAnalogOutputSlotKey(entry.slot, 'P');
             entry.keyPinStable = makeStableString(entry.keyPin);
 
-            entry.pin = std::make_unique<Config<int>>(ConfigOptions<int>{
-                .key = entry.keyPinStable->c_str(),
-                .name = "GPIO",
-                .category = cm::CoreCategories::IO,
-                .defaultValue = entry.defaultPin,
-                .showInWeb = entry.showPinInWeb,
-                .sortOrder = 41,
-                .categoryPretty = IO_CATEGORY_PRETTY,
-                .card = entry.cardKeyStable->c_str(),
-                .cardPretty = entry.cardPrettyStable->c_str(),
-                .cardOrder = entry.cardOrder,
-            });
+            entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+                .name("GPIO")
+                .category(cm::CoreCategories::IO)
+                .defaultValue(entry.defaultPin)
+                .showInWeb(entry.showPinInWeb)
+                .sortOrder(41)
+                .categoryPretty(IO_CATEGORY_PRETTY)
+                .card(entry.cardKeyStable->c_str())
+                .cardPretty(entry.cardPrettyStable->c_str())
+                .cardOrder(entry.cardOrder)
+                .build();
 
-            ConfigManager.addSetting(entry.pin.get());
-            registerSettingPlacement(entry.pin.get(), entry.cardPretty, entry.name);
+            registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
             entry.settingsRegistered = true;
         }
     }
@@ -1470,7 +1409,6 @@ void IOManager::reconfigureIfNeeded(AnalogOutputEntry& entry)
     entry.warningLoggedInvalidPin = false;
 
     if (!entry.hasLast || entry.lastPin != pin) {
-        pinMode(pin, OUTPUT);
         entry.lastPin = pin;
         entry.hasLast = true;
     }
