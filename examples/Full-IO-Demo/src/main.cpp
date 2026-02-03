@@ -82,7 +82,7 @@ void setup()
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
-   
+
     createPageGroups();
     registerIO();
     registerGUIforIO();
@@ -149,10 +149,10 @@ static void registerGUIForDI(){
 
     ioManager.addInputSettingsToGUI("ap_mode", "Digital Inputs", 8);
     ioManager.addInputRuntimeToGUI("ap_mode", 8, "AP Mode", "Digital Inputs", false);
-    
+
     ioManager.addInputSettingsToGUI("reset", "Digital Inputs", 9);
     ioManager.addInputRuntimeToGUI("reset", 9, "Reset", "Digital Inputs", false);
-    
+
     ioManager.addInputSettingsToGUI("testbutton", "Digital Inputs", 10);
     ioManager.addInputRuntimeToGUI("testbutton", 10, "Test Button", "Digital Inputs", false);
 
@@ -259,10 +259,10 @@ static void registerGUIForAI(){
     ConfigManager.addSettingsCard("Analog - I/O", "Analog Inputs", 40);
 
     ConfigManager.addLivePage("AI", 40);
-    ConfigManager.addLiveGroup("AI", "Analog Inputs", nullptr, 40); 
+    ConfigManager.addLiveGroup("AI", "Analog Inputs", nullptr, 40);
 
     ioManager.addAnalogInputToGUI("ldr_VN", nullptr, 11, "LDR VN RAW", "Analog Inputs", true);
-    
+
     RuntimeFieldMeta divider1;
     divider1.group = "Analog Inputs";
     divider1.key = "s_divider";
@@ -508,7 +508,7 @@ static void createAnalogInputs()
         "LDR VN",
         "sensors"
     );
-    
+
 
     ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
         .id = "ldr_w",

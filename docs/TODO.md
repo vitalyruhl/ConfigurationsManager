@@ -487,6 +487,7 @@ Open questions:
 9) Check all examples + docs:
    - Consistancy + completeness pass.
    - Ensure at the PlatformIO build passes (deploy all, let user test it all)
+10) [COMPLETED] Align runtime metadata + live layout placement so `runtime_meta.json` becomes a proper array and live tabs/cards use the defined layout registry.
 
 ### Implementation Details (from refactoring-plan)
 
@@ -551,6 +552,7 @@ Workflow notes:
 ## Done / Resolved
 
 - Core HelperModule added (PulseOutput + computeDewPoint + mapFloat) and examples migrated.
+- Runtime meta serialization and live layout registration now respect the layout registry so the WebUI tabs/cards populate correctly.
 
 ## Status Notes
 

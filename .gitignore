@@ -36,3 +36,4 @@ webui/dist/index.html.gz
 wifiSecret.h
 /webui/dist/index.html
 /tools/_buildlogs
+.pio-home

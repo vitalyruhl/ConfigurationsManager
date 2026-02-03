@@ -26,6 +26,11 @@ ConfigManagerRuntime::~ConfigManagerRuntime() {
 void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
     configManager = cm;
     RUNTIME_LOG("Runtime manager initialized");
+    if (configManager) {
+        for (const auto& meta : runtimeMeta) {
+            configManager->registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
+        }
+    }
 }
 
 void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
@@ -338,11 +343,13 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             o["offLabel"] = m.offLabel;
         }
 
+        String entryJson;
+        serializeJson(entryDoc, entryJson);
         if (!first) {
             out += ",";
         }
         first = false;
-        serializeJson(entryDoc, out);
+        out += entryJson;
     }
 
     out += "]";
