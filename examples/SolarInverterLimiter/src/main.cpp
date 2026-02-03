@@ -313,16 +313,16 @@ void setup()
     cm::helpers::pulseWait(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh, 3, 100);
 
     powerSmoother = new Smoother(
-        limiterSettings.smoothingSize.get(),
-        limiterSettings.inputCorrectionOffset.get(),
-        limiterSettings.minOutput.get(),
-        limiterSettings.maxOutput.get());
-    powerSmoother->fillBufferOnStart(limiterSettings.minOutput.get());
+        limiterSettings.smoothingSize->get(),
+        limiterSettings.inputCorrectionOffset->get(),
+        limiterSettings.minOutput->get(),
+        limiterSettings.maxOutput->get());
+    powerSmoother->fillBufferOnStart(limiterSettings.minOutput->get());
 
     RS485begin();
     SetupStartTemperatureMeasuring();
 
-    RS485Ticker.attach(limiterSettings.RS232PublishPeriod.get(), cb_RS485Listener);
+    RS485Ticker.attach(limiterSettings.RS232PublishPeriod->get(), cb_RS485Listener);
 
 
     setFanRelay(false);
@@ -452,7 +452,7 @@ void setupGUI()
           data["gridIn"] = currentGridImportW;
           data["invSet"] = inverterSetValue;
           data["solar"] = solarPowerW;
-          data["enabled"] = limiterSettings.enableController.get();
+          data["enabled"] = limiterSettings.enableController->get();
       }, 1);
 
       // Define sensor display fields using addRuntimeMeta
@@ -576,7 +576,7 @@ void setupGUI()
         "dewpoint_risk",
         "Dewpoint Risk",
         [](){
-          return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow.get();
+          return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow->get();
         },
         [](){
           dewpointRiskActive = true;
@@ -801,7 +801,7 @@ static void updateMqttTopics()
 
 static void setFanRelay(bool on)
 {
-    if (!fanSettings.enabled.get())
+    if (!fanSettings.enabled->get())
     {
         on = false;
     }
@@ -810,7 +810,7 @@ static void setFanRelay(bool on)
 
 static void setHeaterRelay(bool on)
 {
-    if (!heaterSettings.enabled.get() && !manualOverrideActive)
+    if (!heaterSettings.enabled->get() && !manualOverrideActive)
     {
         on = false;
     }
@@ -889,18 +889,18 @@ void cb_RS485Listener()
   // inverterSetValue = powerSmoother.smooth(currentGridImportW);
   inverterSetValue = powerSmoother->smooth(currentGridImportW);
   // (legacy) previously: if (generalSettings.enableController.get())
-  if (limiterSettings.enableController.get())
+  if (limiterSettings.enableController->get())
   {
     // rs485.sendToRS485(static_cast<uint16_t>(inverterSetValue));
   // legacy comment: powerSmoother.setCorrectionOffset(generalSettings.inputCorrectionOffset.get());
-  powerSmoother->setCorrectionOffset(limiterSettings.inputCorrectionOffset.get()); // apply the correction offset to the smoother, if needed
+  powerSmoother->setCorrectionOffset(limiterSettings.inputCorrectionOffset->get()); // apply the correction offset to the smoother, if needed
     sendToRS485(static_cast<uint16_t>(inverterSetValue));
     lmg.logTag(LL::Debug, "RS485", "Controller enabled -> set inverter to %d W", inverterSetValue);
   }
   else
   {
     lmg.logTag(LL::Info, "RS485", "Controller disabled -> using MAX output");
-    sendToRS485(limiterSettings.maxOutput.get()); // send the maxOutput to the RS485 module
+    sendToRS485(limiterSettings.maxOutput->get()); // send the maxOutput to the RS485 module
   }
 }
 
@@ -908,12 +908,12 @@ void testRS232()
 {
   // test the RS232 connection
   lmg.logTag(LL::Info, "RS485", "Testing RS232 connection... shorting RX and TX pins");
-  lmg.logTag(LL::Info, "RS485", "Baudrate: %d", rs485settings.baudRate.get());
-  lmg.logTag(LL::Info, "RS485", "RX Pin: %d", rs485settings.rxPin.get());
-  lmg.logTag(LL::Info, "RS485", "TX Pin: %d", rs485settings.txPin.get());
-  lmg.logTag(LL::Info, "RS485", "DE Pin: %d", rs485settings.dePin.get());
+  lmg.logTag(LL::Info, "RS485", "Baudrate: %d", rs485settings.baudRate->get());
+  lmg.logTag(LL::Info, "RS485", "RX Pin: %d", rs485settings.rxPin->get());
+  lmg.logTag(LL::Info, "RS485", "TX Pin: %d", rs485settings.txPin->get());
+  lmg.logTag(LL::Info, "RS485", "DE Pin: %d", rs485settings.dePin->get());
 
-  Serial2.begin(rs485settings.baudRate.get(), SERIAL_8N1, rs485settings.rxPin.get(), rs485settings.txPin.get());
+  Serial2.begin(rs485settings.baudRate->get(), SERIAL_8N1, rs485settings.rxPin->get(), rs485settings.txPin->get());
   Serial2.println("Hello RS485");
   delay(300);
   if (Serial2.available())
@@ -924,10 +924,10 @@ void testRS232()
 
 void SetupStartDisplay()
 {
-  Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
-  Wire.setClock(i2cSettings.busFreq.get());
+  Wire.begin(i2cSettings.sdaPin->get(), i2cSettings.sclPin->get());
+  Wire.setClock(i2cSettings.busFreq->get());
 
-  const uint8_t address = static_cast<uint8_t>(i2cSettings.displayAddr.get());
+  const uint8_t address = static_cast<uint8_t>(i2cSettings.displayAddr->get());
   if (!display.begin(SSD1306_SWITCHCAPVCC, address))
   {
     displayInitialized = false;
@@ -951,7 +951,7 @@ void SetupStartDisplay()
 void SetupStartTemperatureMeasuring()
 {
   // init BME280 for temperature and humidity sensor
-  bme280.setAddress(BME280_ADDRESS, i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
+  bme280.setAddress(BME280_ADDRESS, i2cSettings.sdaPin->get(), i2cSettings.sclPin->get());
   bool isStatus = bme280.begin(
       bme280.BME280_STANDBY_0_5,
       bme280.BME280_FILTER_16,
@@ -966,7 +966,7 @@ void SetupStartTemperatureMeasuring()
   else {
     lmg.logTag(LL::Info, "BME280", "BME280 ready. Starting measurement ticker...");
 
-    temperatureTicker.attach(tempSettings.readIntervalSec.get(), readBme280); // Attach the ticker to read BME280
+    temperatureTicker.attach(tempSettings.readIntervalSec->get(), readBme280); // Attach the ticker to read BME280
     readBme280(); // initial read
   }
 }
@@ -995,12 +995,12 @@ void readBme280()
 {
   // todo: add settings for correcting the values!!!
   //   set sea-level pressure
-  bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
+  bme280.setSeaLevelPressure(tempSettings.seaLevelPressure->get());
 
   bme280.read();
 
-  temperature = bme280.data.temperature + tempSettings.tempCorrection.get(); // apply correction
-  Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();   // apply correction
+  temperature = bme280.data.temperature + tempSettings.tempCorrection->get(); // apply correction
+  Humidity = bme280.data.humidity + tempSettings.humidityCorrection->get();   // apply correction
   Pressure = bme280.data.pressure;
   Dewpoint = cm::helpers::computeDewPoint(temperature, Humidity);
 
@@ -1073,13 +1073,13 @@ void CheckVentilator(float currentTemperature)
   {
     return;
   }
-  if (!fanSettings.enabled.get()) {
+  if (!fanSettings.enabled->get()) {
     setFanRelay(false);
     return;
   }
-  if (currentTemperature >= fanSettings.onThreshold.get()) {
+  if (currentTemperature >= fanSettings.onThreshold->get()) {
     setFanRelay(true);
-  } else if (currentTemperature <= fanSettings.offThreshold.get()) {
+  } else if (currentTemperature <= fanSettings.offThreshold->get()) {
     setFanRelay(false);
   }
 }
@@ -1095,10 +1095,10 @@ void EvaluateHeater(float currentTemperature){
     heaterLatchedState = true;
   }
 
-  if(heaterSettings.enabled.get()){
+  if(heaterSettings.enabled->get()){
     // Priority 4: Threshold hysteresis (normal mode)
-    float onTh = heaterSettings.onTemp.get();
-    float offTh = heaterSettings.offTemp.get();
+    float onTh = heaterSettings.onTemp->get();
+    float offTh = heaterSettings.offTemp->get();
     if(offTh <= onTh) offTh = onTh + 0.3f; // enforce separation
 
     if(currentTemperature < onTh){
@@ -1117,7 +1117,7 @@ void ShowDisplayOn()
   if (!displayInitialized) return;
   displayTicker.detach(); // Stop the ticker to prevent multiple calls
   display.ssd1306_command(SSD1306_DISPLAYON); // Turn on the display
-  displayTicker.attach(displaySettings.onTimeSec.get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
+  displayTicker.attach(displaySettings.onTimeSec->get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
   displayActive = true;
 }
 
@@ -1128,7 +1128,7 @@ void ShowDisplayOff()
   display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
   // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
 
-  if (displaySettings.turnDisplayOff.get()){
+  if (displaySettings.turnDisplayOff->get()){
     displayActive = false;
   }
 }

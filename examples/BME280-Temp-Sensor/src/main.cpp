@@ -53,35 +53,47 @@ void onWiFiAPMode();
 
 struct TempSettings
 {
-    Config<float> tempCorrection;
-    Config<float> humidityCorrection;
-    Config<int> seaLevelPressure;
-    Config<int> readIntervalSec;
-
-    TempSettings()
-        : tempCorrection(ConfigOptions<float>{.key = "TCO", .name = "Temperature Correction", .category = "Temp", .defaultValue = 0.0f}),
-          humidityCorrection(ConfigOptions<float>{.key = "HYO", .name = "Humidity Correction", .category = "Temp", .defaultValue = 0.0f}),
-          seaLevelPressure(ConfigOptions<int>{.key = "SLP", .name = "Sea Level Pressure", .category = "Temp", .defaultValue = 1013}),
-          readIntervalSec(ConfigOptions<int>{.key = "ReadTemp", .name = "Read Temp/Humidity every (s)", .category = "Temp", .defaultValue = 30})
-    {
-    }
+    Config<float> *tempCorrection = nullptr;
+    Config<float> *humidityCorrection = nullptr;
+    Config<int> *seaLevelPressure = nullptr;
+    Config<int> *readIntervalSec = nullptr;
 
     void create()
     {
-        ConfigManager.addSetting(&tempCorrection);
-        ConfigManager.addSetting(&humidityCorrection);
-        ConfigManager.addSetting(&seaLevelPressure);
-        ConfigManager.addSetting(&readIntervalSec);
+        tempCorrection = &ConfigManager.addSettingFloat("TCO")
+                              .name("Temperature Correction")
+                              .category("Temp")
+                              .defaultValue(0.0f)
+                              .build();
+        humidityCorrection = &ConfigManager.addSettingFloat("HYO")
+                                 .name("Humidity Correction")
+                                 .category("Temp")
+                                 .defaultValue(0.0f)
+                                 .build();
+        seaLevelPressure = &ConfigManager.addSettingInt("SLP")
+                                .name("Sea Level Pressure")
+                                .category("Temp")
+                                .defaultValue(1013)
+                                .build();
+        readIntervalSec = &ConfigManager.addSettingInt("ReadTemp")
+                               .name("Read Temp/Humidity every (s)")
+                               .category("Temp")
+                               .defaultValue(30)
+                               .build();
     }
 
     void placeInUi() const
     {
+        if (!tempCorrection || !humidityCorrection || !seaLevelPressure || !readIntervalSec)
+        {
+            return;
+        }
         ConfigManager.addSettingsPage("Temp", 40);
         ConfigManager.addSettingsGroup("Temp", "Temp", "Temperature", 40);
-        ConfigManager.addToSettingsGroup(tempCorrection.getKey(), "Temp", "Temp", "Temperature", 10);
-        ConfigManager.addToSettingsGroup(humidityCorrection.getKey(), "Temp", "Temp", "Temperature", 20);
-        ConfigManager.addToSettingsGroup(seaLevelPressure.getKey(), "Temp", "Temp", "Temperature", 30);
-        ConfigManager.addToSettingsGroup(readIntervalSec.getKey(), "Temp", "Temp", "Temperature", 40);
+        ConfigManager.addToSettingsGroup(tempCorrection->getKey(), "Temp", "Temp", "Temperature", 10);
+        ConfigManager.addToSettingsGroup(humidityCorrection->getKey(), "Temp", "Temp", "Temperature", 20);
+        ConfigManager.addToSettingsGroup(seaLevelPressure->getKey(), "Temp", "Temp", "Temperature", 30);
+        ConfigManager.addToSettingsGroup(readIntervalSec->getKey(), "Temp", "Temp", "Temperature", 40);
     }
 };
 
@@ -135,11 +147,11 @@ static void setupRuntimeUI()
 
 static void readBme280()
 {
-    bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
+    bme280.setSeaLevelPressure(tempSettings.seaLevelPressure->get());
     bme280.read();
 
-    temperature = bme280.data.temperature + tempSettings.tempCorrection.get();
-    humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
+    temperature = bme280.data.temperature + tempSettings.tempCorrection->get();
+    humidity = bme280.data.humidity + tempSettings.humidityCorrection->get();
     pressure = bme280.data.pressure;
     dewPoint = cm::helpers::computeDewPoint(temperature, humidity);
 }
@@ -167,7 +179,7 @@ static void setupTemperatureMeasuring()
     }
 
     Serial.println("[TEMP] BME280 ready! Starting temperature ticker...");
-    int interval = tempSettings.readIntervalSec.get();
+    int interval = tempSettings.readIntervalSec->get();
     if (interval < 2)
     {
         interval = 2;

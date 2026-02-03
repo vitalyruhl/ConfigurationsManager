@@ -42,40 +42,68 @@ static cm::CoreWiFiServices wifiServices;
 // Settings shown in the Settings tab (GUI demo).
 struct ExampleSettings
 {
-    Config<bool> demoBool{ConfigOptions<bool>{.key = "tbool", .category = "Example Settings", .defaultValue = true}};
-    Config<int> updateInterval{ConfigOptions<int>{.key = "interval", .name = "Update Interval (seconds)", .category = "Example Settings", .defaultValue = 30}};
-
-    Config<bool> demoToggle{ConfigOptions<bool>{.key = "toggle", .name = "Demo Toggle", .category = "Dynamic visibility example", .defaultValue = true}};
-    Config<String> demoVisibleWhenTrue{ConfigOptions<String>{.key = "trueS", .name = "Visible When True", .category = "Dynamic visibility example", .defaultValue = String("Shown if toggle = true")}};
-    Config<String> demoVisibleWhenFalse{ConfigOptions<String>{.key = "falseS", .name = "Visible When False", .category = "Dynamic visibility example", .defaultValue = String("Shown if toggle = false")}};
-
-    ExampleSettings()
-    {
-        demoVisibleWhenTrue.showIfFunc = [this]() { return demoToggle.get(); };
-        demoVisibleWhenFalse.showIfFunc = [this]() { return !demoToggle.get(); };
-    }
+    Config<bool>* demoBool = nullptr;
+    Config<int>* updateInterval = nullptr;
+    Config<bool>* demoToggle = nullptr;
+    Config<String>* demoVisibleWhenTrue = nullptr;
+    Config<String>* demoVisibleWhenFalse = nullptr;
 
     void create()
     {
-        ConfigManager.addSetting(&demoBool);
-        ConfigManager.addSetting(&updateInterval);
-        ConfigManager.addSetting(&demoToggle);
-        ConfigManager.addSetting(&demoVisibleWhenTrue);
-        ConfigManager.addSetting(&demoVisibleWhenFalse);
+        demoBool = &ConfigManager.addSettingBool("tbool")
+            .name("Demo Bool")
+            .category("Example Settings")
+            .defaultValue(true)
+            .build();
+
+        updateInterval = &ConfigManager.addSettingInt("interval")
+            .name("Update Interval (seconds)")
+            .category("Example Settings")
+            .defaultValue(30)
+            .build();
+
+        demoToggle = &ConfigManager.addSettingBool("toggle")
+            .name("Demo Toggle")
+            .category("Dynamic visibility example")
+            .defaultValue(true)
+            .build();
+
+        demoVisibleWhenTrue = &ConfigManager.addSettingString("trueS")
+            .name("Visible When True")
+            .category("Dynamic visibility example")
+            .defaultValue(String("Shown if toggle = true"))
+            .build();
+
+        demoVisibleWhenFalse = &ConfigManager.addSettingString("falseS")
+            .name("Visible When False")
+            .category("Dynamic visibility example")
+            .defaultValue(String("Shown if toggle = false"))
+            .build();
+
+        if (demoToggle && demoVisibleWhenTrue && demoVisibleWhenFalse)
+        {
+            demoVisibleWhenTrue->showIfFunc = [this]() { return demoToggle && demoToggle->get(); };
+            demoVisibleWhenFalse->showIfFunc = [this]() { return demoToggle && !demoToggle->get(); };
+        }
     }
 
     void placeInUi() const
     {
+        if (!demoBool || !updateInterval || !demoToggle || !demoVisibleWhenTrue || !demoVisibleWhenFalse)
+        {
+            return;
+        }
+
         ConfigManager.addSettingsPage("Example Settings", 40);
         ConfigManager.addSettingsGroup("Example Settings", "Example Settings", "Example Settings", 40);
-        ConfigManager.addToSettingsGroup(demoBool.getKey(), "Example Settings", "Example Settings", "Example Settings", 10);
-        ConfigManager.addToSettingsGroup(updateInterval.getKey(), "Example Settings", "Example Settings", "Example Settings", 20);
+        ConfigManager.addToSettingsGroup(demoBool->getKey(), "Example Settings", "Example Settings", "Example Settings", 10);
+        ConfigManager.addToSettingsGroup(updateInterval->getKey(), "Example Settings", "Example Settings", "Example Settings", 20);
 
         ConfigManager.addSettingsPage("Dynamic visibility example", 50);
         ConfigManager.addSettingsGroup("Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 50);
-        ConfigManager.addToSettingsGroup(demoToggle.getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 10);
-        ConfigManager.addToSettingsGroup(demoVisibleWhenTrue.getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 20);
-        ConfigManager.addToSettingsGroup(demoVisibleWhenFalse.getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 30);
+        ConfigManager.addToSettingsGroup(demoToggle->getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 10);
+        ConfigManager.addToSettingsGroup(demoVisibleWhenTrue->getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 20);
+        ConfigManager.addToSettingsGroup(demoVisibleWhenFalse->getKey(), "Dynamic visibility example", "Dynamic visibility example", "Visibility Demo", 30);
     }
 };
 

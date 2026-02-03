@@ -339,10 +339,10 @@ void setupGUI()
     CRM().addRuntimeProvider("Boiler",
         [](JsonObject &o)
         {
-            o["Bo_EN_Set"] = boilerSettings.enabled.get();
+            o["Bo_EN_Set"] = boilerSettings.enabled->get();
             o["Bo_EN"] = getBoilerState();
             o["Bo_Temp"] = temperature;
-            o["Bo_SettedTime"] = boilerSettings.boilerTimeMin.get();
+            o["Bo_SettedTime"] = boilerSettings.boilerTimeMin->get();
             // Expose time left both in seconds and formatted HH:MM:SS
             o["Bo_TimeLeft"] = boilerTimeRemaining; // raw seconds for API consumers
             {
@@ -355,7 +355,7 @@ void setupGUI()
                 o["Bo_TimeLeftFmt"] = String(buf);
             }
             // Derived readiness: can shower when current temp >= off threshold
-            bool canShower = (temperature >= boilerSettings.offThreshold.get()) && getBoilerState();
+            bool canShower = (temperature >= boilerSettings.offThreshold->get()) && getBoilerState();
             o["Bo_CanShower"] = canShower;
             youCanShowerNow = canShower; // keep MQTT status aligned
         });
@@ -431,8 +431,8 @@ void setupGUI()
         {
             o["AL_Status"] = globalAlarmState;
             o["SF_Status"] = sensorFaultState;
-            o["On_Threshold"] = boilerSettings.onThreshold.get();
-            o["Off_Threshold"] = boilerSettings.offThreshold.get();
+            o["On_Threshold"] = boilerSettings.onThreshold->get();
+            o["Off_Threshold"] = boilerSettings.offThreshold->get();
         });
 
     // Define alarm metadata fields
@@ -505,14 +505,14 @@ void UpdateBoilerAlarmState()
 
     if (globalAlarmState)
     {
-        if (temperature >= boilerSettings.onThreshold.get() + 2.0f)
+        if (temperature >= boilerSettings.onThreshold->get() + 2.0f)
         {
             globalAlarmState = false;
         }
     }
     else
     {
-        if (temperature <= boilerSettings.onThreshold.get())
+        if (temperature <= boilerSettings.onThreshold->get())
         {
             globalAlarmState = true;
         }
@@ -537,14 +537,14 @@ void handeleBoilerState(bool forceON)
     if (now - lastBoilerCheck >= 1000) // Check every second
     {
         lastBoilerCheck = now;
-        const bool stopOnTarget = boilerSettings.stopTimerOnTarget.get();
+        const bool stopOnTarget = boilerSettings.stopTimerOnTarget->get();
         const int prevTime = boilerTimeRemaining;
 
         // When we force-enable the boiler (e.g. due to under-temperature alarm),
         // ensure we actually have a non-zero timer so the existing control logic can turn the relay on.
         if (forceON && boilerTimeRemaining <= 0)
         {
-            int mins = boilerSettings.boilerTimeMin.get();
+            int mins = boilerSettings.boilerTimeMin->get();
             if (mins <= 0) {
                 mins = 1;
             }
@@ -554,7 +554,7 @@ void handeleBoilerState(bool forceON)
 
         // Temperature-based auto control: turn off when upper threshold reached, allow turn-on when below lower threshold
         if (getBoilerState()) {
-            if (temperature >= boilerSettings.offThreshold.get()) {
+            if (temperature >= boilerSettings.offThreshold->get()) {
                 setBoilerState(false);
                 if (stopOnTarget) {
                     boilerTimeRemaining = 0;
@@ -567,13 +567,13 @@ void handeleBoilerState(bool forceON)
                 }
             }
         } else {
-            if ((boilerSettings.enabled.get() || forceON) && (temperature <= boilerSettings.onThreshold.get()) && (boilerTimeRemaining > 0)) {
+            if ((boilerSettings.enabled->get() || forceON) && (temperature <= boilerSettings.onThreshold->get()) && (boilerTimeRemaining > 0)) {
                 setBoilerState(true);
             }
         }
 
 
-        if (boilerSettings.enabled.get() || forceON)
+        if (boilerSettings.enabled->get() || forceON)
         {
             if (boilerTimeRemaining > 0)
             {
@@ -646,8 +646,8 @@ static void cb_readTempSensor() {
             lmg.log(LL::Debug,"Sensor fault cleared! Reading: %.2f°C", t);
         }
 
-        temperature = t + tempSensorSettings.corrOffset.get();
-        lmg.log(LL::Trace, "Temperature updated: %.2f°C (offset: %.2f°C)", temperature, tempSensorSettings.corrOffset.get());
+        temperature = t + tempSensorSettings.corrOffset->get();
+        lmg.log(LL::Trace, "Temperature updated: %.2f°C (offset: %.2f°C)", temperature, tempSensorSettings.corrOffset->get());
         // Optionally: push alarms now
         // CRM().updateAlarms(); // cheap
     }
@@ -655,7 +655,7 @@ static void cb_readTempSensor() {
 
 static void setupTempSensor() {
     lmg.scopedTag("SETUP/TEMP");
-    int pin = tempSensorSettings.gpioPin.get();
+    int pin = tempSensorSettings.gpioPin->get();
     if (pin <= 0) {
         lmg.log(LL::Error, "DS18B20 GPIO pin not set or invalid -> skipping init");
         return;
@@ -698,11 +698,11 @@ static void setupTempSensor() {
         lmg.log(LL::Info, "Resolution set to 12-bit");
     }
 
-    float intervalSec = (float)tempSensorSettings.readInterval.get();
+    float intervalSec = (float)tempSensorSettings.readInterval->get();
     if (intervalSec < 1.0f) intervalSec = 30.0f;
     TempReadTicker.attach(intervalSec, cb_readTempSensor);
     lmg.log(LL::Debug, "DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C",
-            pin, intervalSec, tempSensorSettings.corrOffset.get());
+            pin, intervalSec, tempSensorSettings.corrOffset->get());
 }
 
 //----------------------------------------
@@ -878,25 +878,25 @@ static void updateMqttTopics()
 static void setupMqttCallbacks()
 {
     lmg.scopedTag("setupMqttCallbacks");
-    boilerSettings.enabled.setCallback([](bool v) {
+    boilerSettings.enabled->setCallback([](bool v) {
         if (mqtt.isConnected()) {
             mqtt.publish(topicBoilerEnabled.c_str(), v ? "1" : "0", true);
         }
     });
 
-    boilerSettings.onThreshold.setCallback([](float v) {
+    boilerSettings.onThreshold->setCallback([](float v) {
         if (mqtt.isConnected()) {
             mqtt.publish(topicOnThreshold.c_str(), String(v), true);
         }
     });
 
-    boilerSettings.offThreshold.setCallback([](float v) {
+    boilerSettings.offThreshold->setCallback([](float v) {
         if (mqtt.isConnected()) {
             mqtt.publish(topicOffThreshold.c_str(), String(v), true);
         }
     });
 
-    boilerSettings.boilerTimeMin.setCallback([](int v) {
+    boilerSettings.boilerTimeMin->setCallback([](int v) {
         if (mqtt.isConnected()) {
             mqtt.publish(topicBoilerTimeMin.c_str(), String(v), true);
             mqtt.publish(topicYouCanShowerPeriodMin.c_str(), String(v), true);
@@ -905,13 +905,13 @@ static void setupMqttCallbacks()
         lastPublishedYouCanShower = false;
     });
 
-    boilerSettings.stopTimerOnTarget.setCallback([](bool v) {
+    boilerSettings.stopTimerOnTarget->setCallback([](bool v) {
         if (mqtt.isConnected()) {
             mqtt.publish(topicStopTimerOnTarget.c_str(), v ? "1" : "0", true);
         }
     });
 
-    boilerSettings.onlyOncePerPeriod.setCallback([](bool v) {
+    boilerSettings.onlyOncePerPeriod->setCallback([](bool v) {
         if (mqtt.isConnected()) {
             mqtt.publish(topicOncePerPeriod.c_str(), v ? "1" : "0", true);
         }
@@ -923,7 +923,7 @@ static void setupMqttCallbacks()
 // Compute current period ID for once-per-period gating
 static long getCurrentPeriodId()
 {
-    const long periodMin = max(1, boilerSettings.boilerTimeMin.get());
+    const long periodMin = max(1, boilerSettings.boilerTimeMin->get());
     const long periodSec = periodMin * 60L;
     time_t now = time(nullptr);
     if (now > 24 * 60 * 60) {
@@ -951,9 +951,9 @@ static void publishMqttState(bool retained)
 
     mqtt.publish(topicActualState.c_str(), getBoilerState() ? "1" : "0", retained);
 
-    const bool canShower = (temperature >= boilerSettings.offThreshold.get()) && getBoilerState();
+    const bool canShower = (temperature >= boilerSettings.offThreshold->get()) && getBoilerState();
     youCanShowerNow = canShower;
-    if (!boilerSettings.onlyOncePerPeriod.get()) {
+    if (!boilerSettings.onlyOncePerPeriod->get()) {
         mqtt.publish(topicYouCanShowerNow.c_str(), canShower ? "1" : "0", retained);
         lastPublishedYouCanShower = canShower;
     } else {
@@ -1042,7 +1042,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
             return;
         }
         if (willShower) {
-            int mins = boilerSettings.boilerTimeMin.get();
+            int mins = boilerSettings.boilerTimeMin->get();
             if (mins <= 0) mins = 60;
             if (boilerTimeRemaining <= 0) {
                 boilerTimeRemaining = mins * 60;
@@ -1068,7 +1068,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         const bool v = messageTemp.equalsIgnoreCase("1") ||
                        messageTemp.equalsIgnoreCase("true") ||
                        messageTemp.equalsIgnoreCase("on");
-        boilerSettings.enabled.set(v);
+        boilerSettings.enabled->set(v);
         lmg.log(LL::Debug, "BoilerEnabled set to %s", v ? "true" : "false");
         return;
     }
@@ -1076,7 +1076,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
     if (strcmp(topic, topicOnThreshold.c_str()) == 0) {
         const float v = messageTemp.toFloat();
         if (v > 0) {
-            boilerSettings.onThreshold.set(v);
+            boilerSettings.onThreshold->set(v);
             lmg.log(LL::Debug, "OnThreshold set to %.1f", v);
         }
         return;
@@ -1085,7 +1085,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
     if (strcmp(topic, topicOffThreshold.c_str()) == 0) {
         const float v = messageTemp.toFloat();
         if (v > 0) {
-            boilerSettings.offThreshold.set(v);
+            boilerSettings.offThreshold->set(v);
             lmg.log(LL::Debug, "OffThreshold set to %.1f", v);
         }
         return;
@@ -1094,7 +1094,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
     if (strcmp(topic, topicBoilerTimeMin.c_str()) == 0) {
         const int v = messageTemp.toInt();
         if (v >= 0) {
-            boilerSettings.boilerTimeMin.set(v);
+            boilerSettings.boilerTimeMin->set(v);
             lmg.log(LL::Debug, "BoilerTimeMin set to %d", v);
             lastYouCanShower1PeriodId = -1;
             lastPublishedYouCanShower = false;
@@ -1106,7 +1106,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         const bool v = messageTemp.equalsIgnoreCase("1") ||
                        messageTemp.equalsIgnoreCase("true") ||
                        messageTemp.equalsIgnoreCase("on");
-        boilerSettings.stopTimerOnTarget.set(v);
+        boilerSettings.stopTimerOnTarget->set(v);
         lmg.log(LL::Debug, "StopTimerOnTarget set to %s", v ? "true" : "false");
         return;
     }
@@ -1115,7 +1115,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         const bool v = messageTemp.equalsIgnoreCase("1") ||
                        messageTemp.equalsIgnoreCase("true") ||
                        messageTemp.equalsIgnoreCase("on");
-        boilerSettings.onlyOncePerPeriod.set(v);
+        boilerSettings.onlyOncePerPeriod->set(v);
         lmg.log(LL::Debug, "OncePerPeriod set to %s", v ? "true" : "false");
         lastYouCanShower1PeriodId = -1;
         lastPublishedYouCanShower = false;
@@ -1125,7 +1125,7 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
     if (strcmp(topic, topicYouCanShowerPeriodMin.c_str()) == 0) {
         int v = messageTemp.toInt();
         if (v <= 0) v = 45;
-        boilerSettings.boilerTimeMin.set(v);
+        boilerSettings.boilerTimeMin->set(v);
         lmg.log(LL::Debug, "YouCanShowerPeriodMin mapped to BoilerTimeMin = %d", v);
         lastYouCanShower1PeriodId = -1;
         lastPublishedYouCanShower = false;
@@ -1273,10 +1273,10 @@ void WriteToDisplay()
 
 static void SetupStartDisplay()
 {
-    Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
-    Wire.setClock(static_cast<uint32_t>(i2cSettings.busFreq.get()));
+    Wire.begin(i2cSettings.sdaPin->get(), i2cSettings.sclPin->get());
+    Wire.setClock(static_cast<uint32_t>(i2cSettings.busFreq->get()));
 
-    display.begin(SSD1306_SWITCHCAPVCC, i2cSettings.displayAddr.get());
+    display.begin(SSD1306_SWITCHCAPVCC, i2cSettings.displayAddr->get());
     display.clearDisplay();
     display.drawRect(0, 0, 128, 24, WHITE);
     display.setTextSize(2);
@@ -1290,7 +1290,7 @@ void ShowDisplay()
 {
     displayTicker.detach();                                                // Stop the ticker to prevent multiple calls
     display.ssd1306_command(SSD1306_DISPLAYON);                            // Turn on the display
-    displayTicker.attach(displaySettings.onTimeSec.get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
+    displayTicker.attach(displaySettings.onTimeSec->get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
     displayActive = true;
 }
 
@@ -1300,7 +1300,7 @@ void ShowDisplayOff()
     display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
     // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
 
-    if (displaySettings.turnDisplayOff.get())
+    if (displaySettings.turnDisplayOff->get())
     {
         displayActive = false;
     }
@@ -1390,7 +1390,7 @@ static void handleShowerRequest(bool v)
     willShowerRequested = v;
     if (v) {
         if (boilerTimeRemaining <= 0) {
-            int mins = boilerSettings.boilerTimeMin.get();
+            int mins = boilerSettings.boilerTimeMin->get();
             if (mins <= 0) mins = 60;
             boilerTimeRemaining = mins * 60;
         }

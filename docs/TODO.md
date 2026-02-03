@@ -474,7 +474,7 @@ Open questions:
 1) [COMPLETED] Finalize UI terminology and defaults (SettingsPage/Card/Group; LivePage/Card/Group).
 2) [COMPLETED] Implement layout registries for Settings + Live (no IO changes yet).
 2a) [COMPLETED] Ensure the core settings bundles (WiFi/System/NTP) auto-register their standard page/group and allow overrides so sketches avoid repetitive layout boilerplate.
-3) Introduce Settings builder (`ConfigManager.settingX(...).name(...).defaultValue(...).persistSettings(true).build()`).
+3) [CURRENT] Introduce Settings builder (`ConfigManager.settingX(...).name(...).defaultValue(...).persistSettings(true).build()`).
 3a) [COMPLETED] Switch ConfigManager settings to hash-derived storage keys (with legacy fallback), keep logs per display name, and emit warnings when duplicate hashes would collide.
 4) [COMPLETED] Add generic placement methods for settings: `ConfigManager.addToSettingsGroup(...)`, `ConfigManager.addToLiveGroup(...)`.
 5) Refactor IOManager:
@@ -507,7 +507,7 @@ Workflow notes:
 
 1. [COMPLETED] Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
 2. [COMPLETED] Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
-3. Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
+3. [CURRENT] Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
 4. Hash-based storage keys: derive the Preferences key from an FNV1a hash of the provided `ConfigOptions::key` (or previous auto-generated key), keep the human-readable name for logs/UI, migrate legacy keys when the hash changes, and warn once if a hash collision would otherwise prevent persistence.
 4. [COMPLETED] Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
 5. IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.

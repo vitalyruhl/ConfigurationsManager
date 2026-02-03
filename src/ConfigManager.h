@@ -61,9 +61,9 @@ template <typename T>
 struct ConfigOptions
 {
     // Required fields
-    const char *key = nullptr;           // Storage key for preferences (if nullptr, auto-generated from name+category)
-    const char *name;                    // Display name in Settings UI
-    const char *category;                // Card name in Settings UI
+    const char *key = nullptr;           // Key hint used to derive the hashed storage key (if nullptr, derived from name+category)
+    const char *name;                    // Display name in Settings UI (if nullptr, falls back to key or "Default")
+    const char *category;                // Card name in Settings UI (if nullptr, falls back to "Default")
     T defaultValue;                      // Default value
 
     // Optional fields
@@ -328,7 +328,6 @@ protected:
     bool persistSetting = true;
     String storageKey;
     const char *storageKeyPtr = nullptr;
-    String legacyStorageKey;
     const char *category;
     const char *displayName;
     const char *categoryPrettyName = nullptr;
@@ -424,18 +423,34 @@ public:
     BaseSetting(const char* key, const char* name, const char* category, SettingType type,
                                 bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr,
                                 const char* card = nullptr, const char* cardPretty = nullptr, int cardOrder = 100)
-                : displayName(name), category(category), categoryPrettyName(categoryPretty),
+                : displayName(nullptr), category(nullptr), categoryPrettyName(categoryPretty),
                     cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder), type(type),
                     showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder)
     {
-        String legacyHint;
-        if (key && key[0] != '\0') {
-            legacyHint = key;
-        } else {
-            legacyHint = generateKeyFromNameAndCategory(name, category);
+        const char *fallbackName = "Default";
+        const char *resolvedCategory = (category && category[0] != '\0') ? category : fallbackName;
+        const char *resolvedName = (name && name[0] != '\0')
+            ? name
+            : ((key && key[0] != '\0') ? key : fallbackName);
+
+        displayName = resolvedName;
+        this->category = resolvedCategory;
+        if (!categoryPrettyName)
+        {
+            categoryPrettyName = resolvedCategory;
         }
-        legacyStorageKey = legacyHint;
-        storageKey = hashStringForStorage(legacyHint);
+
+        String keyHint;
+        if (key && key[0] != '\0')
+        {
+            keyHint = key;
+        }
+        else
+        {
+            keyHint = generateKeyFromNameAndCategory(resolvedName, resolvedCategory);
+        }
+
+        storageKey = hashStringForStorage(keyHint);
         storageKeyPtr = storageKey.c_str();
         if (!registerStorageKey(storageKey)) {
             hasKeyLengthError = true;
@@ -462,7 +477,6 @@ public:
     const char *getCardPretty() const { return cardPrettyName ? cardPrettyName : cardName; }
     int getCardOrder() const { return cardOrder; }
     const char *getName() const { return storageKeyPtr; }
-    const char *getLegacyKey() const { return legacyStorageKey.c_str(); }
     int getSortOrder() const { return sortOrder; }
     bool isSecret() const { return isPassword; }
     bool shouldShowInWeb() const { return showInWeb; }
@@ -524,7 +538,6 @@ public:
         }
 
         const char* storageKey = getKey();
-        const char* legacyKey = getLegacyKey();
         bool keyExists = prefs.isKey(storageKey);
         logVerbose("[PREFS] Setting %s.%s exists? %s", getCategory(), getDisplayName(), keyExists ? "true" : "false");
 
@@ -579,21 +592,8 @@ public:
 
         if (!keyExists)
         {
-            bool migrated = false;
-            if (legacyKey && legacyKey[0] != '\0' && strcmp(legacyKey, storageKey) != 0 && prefs.isKey(legacyKey))
-            {
-                value = readFrom(legacyKey);
-                persistValue(storageKey, "Migrated");
-                log("[PREFS] Migrated %s.%s from legacy key '%s'", getCategory(), getDisplayName(), legacyKey);
-                migrated = true;
-            }
-
-            if (!migrated)
-            {
-                value = defaultValue;
-                persistValue(storageKey, "Initialized (default)");
-            }
-
+            value = defaultValue;
+            persistValue(storageKey, "Initialized (default)");
             modified = false;
             return;
         }
@@ -668,7 +668,7 @@ public:
 
     void toJSON(JsonObject &obj) const override
     {
-        const char* jsonKey = (getCard() && getCard()[0]) ? getKey() : getDisplayName();
+        const char* jsonKey = getKey();
         JsonObject settingObj = obj.createNestedObject(jsonKey);
 
         if (isPassword)
@@ -865,6 +865,11 @@ public:
         {
             persistFlag = value;
             return *this;
+        }
+
+        SettingBuilder &persistSettings(bool value)
+        {
+            return persist(value);
         }
 
         SettingBuilder &ioPinRole(cm::io::IOPinRole role)
@@ -1389,19 +1394,6 @@ public:
                 {
                     return setting;
                 }
-                if (const char *legacyKey = setting->getLegacyKey(); legacyKey && legacyKey[0] != '\0' && String(legacyKey) == key)
-                {
-                    return setting;
-                }
-            }
-        }
-
-        // Backwards compatibility: older clients used displayName as the JSON key.
-        for (BaseSetting *setting : settings)
-        {
-            if (String(setting->getCategory()) == category && String(setting->getDisplayName()) == key)
-            {
-                return setting;
             }
         }
         return nullptr;
