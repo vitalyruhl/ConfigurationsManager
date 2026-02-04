@@ -1163,7 +1163,10 @@ private:
 
         const bool forced = getCurrentRequestContext().force;
         const bool shouldBlock = (result.severity == ValidationSeverity::Error) && !forced;
-        handleIOPinValidationFailure(category, key, value, result, isApply);
+        if (!forced)
+        {
+            handleIOPinValidationFailure(category, key, value, result, isApply);
+        }
         if (shouldBlock)
         {
             CM_CORE_LOG("[W] IO pin validation blocked %s.%s value '%s' (reason: %s)",
@@ -1397,6 +1400,16 @@ public:
             }
         }
         return nullptr;
+    }
+
+    BaseSetting *findSettingByKeyHint(const String &category, const char *keyHint)
+    {
+        if (!keyHint || !keyHint[0])
+        {
+            return nullptr;
+        }
+        const String hashedKey = hashStringForStorage(String(keyHint));
+        return findSetting(category, hashedKey);
     }
 
     BaseSetting *addSetting(std::unique_ptr<BaseSetting> setting)
@@ -1898,7 +1911,7 @@ public:
     {
         auto getString = [this](const char *category, const char *key, const String &fallback) -> String
         {
-            BaseSetting *s = findSetting(category, key);
+            BaseSetting *s = findSettingByKeyHint(category, key);
             if (!s)
             {
                 return fallback;
@@ -1912,7 +1925,7 @@ public:
 
         auto getBool = [this](const char *category, const char *key, bool fallback) -> bool
         {
-            BaseSetting *s = findSetting(category, key);
+            BaseSetting *s = findSettingByKeyHint(category, key);
             if (!s)
             {
                 return fallback;
@@ -1990,7 +2003,7 @@ public:
 
         auto getInt = [this](const char *category, const char *key, int fallback) -> int
         {
-            BaseSetting *s = findSetting(category, key);
+            BaseSetting *s = findSettingByKeyHint(category, key);
             if (!s)
             {
                 return fallback;
@@ -2049,7 +2062,7 @@ public:
 
         auto getInt = [this](const char *category, const char *key, int fallback) -> int
         {
-            BaseSetting *s = findSetting(category, key);
+            BaseSetting *s = findSettingByKeyHint(category, key);
             if (!s)
             {
                 return fallback;

@@ -136,25 +136,19 @@ void loop()
 
 
 static void createPageGroups(){
-    ConfigManager.addLivePage("system", 60);
-    ConfigManager.addLiveGroup("system", "System", "System", 60);
+    ConfigManager.addLivePage("System", 60);
+    ConfigManager.addLiveGroup("System", "System", "System", 60);
 }
 
 static void registerGUIForDI(){
+    ioManager.addDigitalInputToSettingsGroup("ap_mode", "Digital - I/O", "Digital Inputs", "AP Mode Button", 8);
+    ioManager.addDigitalInputToLive("ap_mode", 8, "DI", "Digital Inputs", "Digital Inputs", "AP Mode", false);
 
-    ConfigManager.addSettingsCard("Digital - I/O", "Digital Inputs", 20);
+    ioManager.addDigitalInputToSettingsGroup("reset", "Digital - I/O", "Digital Inputs", "Reset Button", 9);
+    ioManager.addDigitalInputToLive("reset", 9, "DI", "Digital Inputs", "Digital Inputs", "Reset", false);
 
-    ConfigManager.addLivePage("DI", 20);
-    ConfigManager.addLiveGroup("DI", "Digital Inputs", nullptr, 20);
-
-    ioManager.addInputSettingsToGUI("ap_mode", "Digital Inputs", 8);
-    ioManager.addInputRuntimeToGUI("ap_mode", 8, "AP Mode", "Digital Inputs", false);
-
-    ioManager.addInputSettingsToGUI("reset", "Digital Inputs", 9);
-    ioManager.addInputRuntimeToGUI("reset", 9, "Reset", "Digital Inputs", false);
-
-    ioManager.addInputSettingsToGUI("testbutton", "Digital Inputs", 10);
-    ioManager.addInputRuntimeToGUI("testbutton", 10, "Test Button", "Digital Inputs", false);
+    ioManager.addDigitalInputToSettingsGroup("testbutton", "Digital - I/O", "Digital Inputs", "Test Button", 10);
+    ioManager.addDigitalInputToLive("testbutton", 10, "DI", "Digital Inputs", "Digital Inputs", "Test Button", false);
 
 
     CRM().addRuntimeProvider("Digital Inputs", [](JsonObject& data) {
@@ -210,58 +204,28 @@ static void registerGUIForDI(){
 
 static void registerGUIForDO()
 {
-    ConfigManager.addSettingsCard("Digital - I/O", "Digital Outputs", 30);
+    ioManager.addDigitalOutputToSettingsGroup("heater", "Digital - I/O", "Digital Outputs", "Heater Relay", 2);
+    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::Checkbox, "heater", 2, "DO", "Digital Outputs", "Digital Outputs", "Heater")
+        .onChangeCallback([](bool state) { setHeaterState(state); });
 
-    ConfigManager.addLivePage("DO", 30);
-    ConfigManager.addLiveGroup("DO", "Digital Outputs", nullptr, 30);
-
-    ioManager.addIOtoGUI(
-        "heater",
-        "Digital Outputs",
-        2,
-        cm::IOManager::RuntimeControlType::Checkbox,
-        []() { return ioManager.getState("heater"); },
-        [](bool state) { setHeaterState(state); },
-        "Heater"
-    );
-
-    ioManager.addIOtoGUI(
-        "fan",
-        "Digital Outputs",
-        3,
-        cm::IOManager::RuntimeControlType::StateButton,
-        []() { return ioManager.getState("fan"); },
-        [](bool state) {
+    ioManager.addDigitalOutputToSettingsGroup("fan", "Digital - I/O", "Digital Outputs", "Cooling Fan Relay", 3);
+    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::StateButton, "fan", 3, "DO", "Digital Outputs", "Digital Outputs", "Fan")
+        .onChangeCallback([](bool state) {
             setFanState(state);
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
-        },
-        "Fan",
-        nullptr
-    );
+        });
 
-    ioManager.addIOtoGUI(
-        "hbtn",
-        "Digital Outputs",
-        4,
-        cm::IOManager::RuntimeControlType::MomentaryButton,
-        []() { return ioManager.getState("hbtn"); },
-        [](bool state) {
+    ioManager.addDigitalOutputToSettingsGroup("hbtn", "Digital - I/O", "Digital Outputs", "Hold Button", 4);
+    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::MomentaryButton, "hbtn", 4, "DO", "Digital Outputs", "Digital Outputs", "Hold")
+        .onChangeCallback([](bool state) {
             setHoldButtonState(state);
             Serial.printf("[HOLDBUTTON] State: %s\n", state ? "ON" : "OFF");
-        },
-        "Hold",
-        nullptr
-    );
+        });
 }
 
 static void registerGUIForAI(){
-
-    ConfigManager.addSettingsCard("Analog - I/O", "Analog Inputs", 40);
-
-    ConfigManager.addLivePage("AI", 40);
-    ConfigManager.addLiveGroup("AI", "Analog Inputs", nullptr, 40);
-
-    ioManager.addAnalogInputToGUI("ldr_VN", nullptr, 11, "LDR VN RAW", "Analog Inputs", true);
+    ioManager.addAnalogInputToSettingsGroup("ldr_s", "Analog - I/O", "Analog Inputs", "LDR VN", 11);
+    ioManager.addAnalogInputToLive("ldr_s", 11, "AI", "Analog Inputs", "Analog Inputs", "LDR VN RAW", true);
 
     RuntimeFieldMeta divider1;
     divider1.group = "Analog Inputs";
@@ -271,16 +235,16 @@ static void registerGUIForAI(){
     divider1.order = 20;
     CRM().addRuntimeMeta(divider1);
 
-    ioManager.addAnalogInputToGUI("ldr_VP", nullptr, 21, "LDR VP", "Analog Inputs");
-    ioManager.addAnalogInputToGUI("ldr_VP", nullptr, 22, "LDR VP RAW", "Analog Inputs", true);
+    ioManager.addAnalogInputToSettingsGroup("ldr_w", "Analog - I/O", "Analog Inputs", "LDR VP", 21);
+    ioManager.addAnalogInputToLive("ldr_w", 21, "AI", "Analog Inputs", "Analog Inputs", "LDR VP", false);
+    ioManager.addAnalogInputToLive("ldr_w", 22, "AI", "Analog Inputs", "Analog Inputs", "LDR VP RAW", true);
 
-    ioManager.addAnalogInputToGUIWithAlarm(
-    "ldr_VP",
-    "Analog Inputs",
-    23,
-    30.0f,
-    95.0f,
-    cm::IOManager::AnalogAlarmCallbacks{
+    ioManager.addAnalogInputToLiveWithAlarm(
+        "ldr_w",
+        23,
+        30.0f,
+        95.0f,
+        cm::IOManager::AnalogAlarmCallbacks{
             .onEnter = []() {
                 Serial.println("[ALARM][ldr_w] enter");
             },
@@ -288,8 +252,10 @@ static void registerGUIForAI(){
                 Serial.println("[ALARM][ldr_w] exit");
             },
         },
-        "LDR VP",
-        "Min Max Alarms Extra Card"
+        "AI",
+        "Analog Inputs",
+        "Min Max Alarms Extra Card",
+        "LDR VP"
     );
 
 
@@ -297,21 +263,17 @@ static void registerGUIForAI(){
 
 static void registerGUIForAO()
 {
-    ConfigManager.addSettingsCard("Analog - I/O", "Analog Outputs", 40);
-
-    ConfigManager.addLivePage("AO", 40);
-    ConfigManager.addLiveGroup("AO", "Analog Outputs", nullptr, 40);
-
-    ioManager.addAnalogOutputSliderToGUI(
+    ioManager.addAnalogOutputToSettingsGroup("ao_pct", "Analog - I/O", "Analog Outputs", "AO 0..100%", 41);
+    ioManager.addAnalogOutputToLive(
         "ao_pct",
-        "Analog Outputs",
         41,
         0.0f,
         100.0f,
-        1.0f,
         0,
-        "AO 0..100%",
+        "AO",
+        "Analog Outputs",
         "analog-outputs",
+        "AO 0..100%",
         "%"
     );
 
@@ -327,16 +289,17 @@ static void registerGUIForAO()
     divider2.order = 50;
     CRM().addRuntimeMeta(divider2);
 
-    ioManager.addAnalogOutputSliderToGUI(
+    ioManager.addAnalogOutputToSettingsGroup("ao_v", "Analog - I/O", "Analog Outputs", "AO 0..3.3V", 52);
+    ioManager.addAnalogOutputToLive(
         "ao_v",
-        "Analog Outputs",
         52,
         0.0f,
         3.3f,
-        0.05f,
         2,
-        "AO 0..3.3V",
+        "AO",
+        "Analog Outputs",
         "analog-outputs",
+        "AO 0..3.3V",
         "V"
     );
 
@@ -362,25 +325,9 @@ static void createDigitalInputs()
 {
     // Boot/action buttons (wired to 3.3V => active-high).
     // Use internal pulldown so idle is stable LOW.
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = "ap_mode",
-        .name = "AP Mode Button",
-        .defaultPin = 13,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput("ap_mode", "AP Mode Button", 13, true, true, false, true);
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = "reset",
-        .name = "Reset Button",
-        .defaultPin = 14,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput("reset", "Reset Button", 14, true, true, false, true);
 
     cm::IOManager::DigitalInputEventOptions apOptions;
     apOptions.longClickMs = 1200;
@@ -410,15 +357,7 @@ static void createDigitalInputs()
         resetOptions
     );
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = "testbutton",
-        .name = "Test Button",
-        .defaultPin = 33,
-        .defaultActiveLow = false,
-        .defaultPullup = false,
-        .defaultPulldown = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput("testbutton", "Test Button", 33, true, true, false, true);
 
     ioManager.configureDigitalInputEvents(
         "testbutton",
@@ -446,105 +385,32 @@ static void createDigitalInputs()
         }
     );
 
-    registerGUIForDI();
 }
 
 static void createDigitalOutputs()
 {
     // Digital outputs are settings-driven and owned by IOManager.
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "heater",
-        .name = "Heater Relay",
-        .defaultPin = 23,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalOutput("heater", "Heater Relay", 23, true, true);
 
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "fan",
-        .name = "Cooling Fan Relay",
-        .defaultPin = 27,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalOutput("fan", "Cooling Fan Relay", 27, true, true);
 
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = "hbtn",
-        .name = "Hold Button",
-        .defaultPin = 32,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalOutput("hbtn", "Hold Button", 32, true, true);
 }
 
 static void createAnalogInputs()
 {
-    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
-        .id = "ldr_s",
-        .name = "LDR VN",
-        .defaultPin = 39,//vn
-        .defaultRawMin = 0,
-        .defaultRawMax = 4095,
-        .defaultOutMin = 0.0f,
-        .defaultOutMax = 100.0f,
-        .defaultUnit = "%",
-        .defaultPrecision = 1,
-    });
-
-    ioManager.addAnalogInputToGUIWithAlarm(
-        "ldr_s",
-        nullptr,
-        10,
-        30.0f,
-        NAN,
-        cm::IOManager::AnalogAlarmCallbacks{
-            .onEnter = []() {
-                Serial.println("[ALARM][ldr_s] enter");
-            },
-            .onExit = []() {
-                Serial.println("[ALARM][ldr_s] exit");
-            },
-        },
-        "LDR VN",
-        "sensors"
-    );
-
-
-    ioManager.addAnalogInput(cm::IOManager::AnalogInputBinding{
-        .id = "ldr_w",
-        .name = "LDR VP",
-        .defaultPin = 36,//VP
-        .defaultRawMin = 0,
-        .defaultRawMax = 4095,
-        .defaultOutMin = 0.0f,
-        .defaultOutMax = 100.0f,
-        .defaultUnit = "%",
-        .defaultPrecision = 1,
-    });
+    ioManager.addAnalogInput("ldr_s", "LDR VN", 39, true, 0, 4095, 0.0f, 100.0f, "%", 1);
+    ioManager.addAnalogInput("ldr_w", "LDR VP", 36, true, 0, 4095, 0.0f, 100.0f, "%", 1);
 }
 
 static void createAnalogOutputs()
 {
     // 0..100 % -> 0..3.3V
-    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
-        .id = "ao_pct",
-        .name = "AO 0..100%",
-        .defaultPin = 25,
-        .valueMin = 0.0f,
-        .valueMax = 100.0f,
-        .reverse = false,
-    });
+    ioManager.addAnalogOutput("ao_pct", "AO 0..100%", 25, true, 0.0f, 100.0f, false);
 
 
     // 0..3.3V direct
-    ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
-        .id = "ao_v",
-        .name = "AO 0..3.3V",
-        .defaultPin = 25,
-        .valueMin = 0.0f,
-        .valueMax = 3.3f,
-        .reverse = false,
-    });
+    ioManager.addAnalogOutput("ao_v", "AO 0..3.3V", 26, true, 0.0f, 3.3f, false);
 
     // -100..100 % -> 0..3.3V (0% is mid = ~1.65V)
     // Disabled by default to keep the demo deterministic with only 2 physical outputs.

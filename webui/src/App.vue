@@ -226,6 +226,96 @@ function resolveCategoryLabel(categoryKey, settingsObj) {
   return categoryKey;
 }
 
+function normalizeSettingLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function findSettingContext(categoryKey, keyName) {
+  const categoryObj = config.value && config.value[categoryKey];
+  if (!categoryObj || typeof categoryObj !== "object") {
+    return { categoryObj: null, cardKey: null, cardObj: null, settingsObj: null, settingData: null };
+  }
+
+  if (categoryObj.cards && typeof categoryObj.cards === "object") {
+    for (const [cardKey, cardObj] of Object.entries(categoryObj.cards)) {
+      const settingsObj = cardObj && typeof cardObj === "object" ? cardObj.settings : null;
+      if (settingsObj && typeof settingsObj === "object" && Object.prototype.hasOwnProperty.call(settingsObj, keyName)) {
+        return { categoryObj, cardKey, cardObj, settingsObj, settingData: settingsObj[keyName] };
+      }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(categoryObj, keyName)) {
+    return { categoryObj, cardKey: null, cardObj: null, settingsObj: categoryObj, settingData: categoryObj[keyName] };
+  }
+
+  return { categoryObj, cardKey: null, cardObj: null, settingsObj: null, settingData: null };
+}
+
+function resolveSettingStatusLabel(categoryKey, keyName) {
+  const ctx = findSettingContext(categoryKey, keyName);
+  let categoryLabel = resolveCategoryLabel(categoryKey, ctx.categoryObj);
+  categoryLabel = categoryLabel.replace(/\s*-\s*I\/O\s*$/i, "").trim() || categoryLabel;
+  const cardPretty =
+    ctx.cardObj &&
+    typeof ctx.cardObj.cardPretty === "string" &&
+    ctx.cardObj.cardPretty.trim().length
+      ? ctx.cardObj.cardPretty
+      : ctx.cardKey
+        ? String(ctx.cardKey)
+        : "";
+  const settingLabel =
+    ctx.settingData && typeof ctx.settingData === "object"
+      ? (ctx.settingData.displayName || ctx.settingData.name || "")
+      : "";
+
+  if (cardPretty && settingLabel) return `${categoryLabel} - ${cardPretty} / ${settingLabel}`;
+  if (cardPretty) return `${categoryLabel} - ${cardPretty}`;
+  if (settingLabel) return `${categoryLabel} - ${settingLabel}`;
+  return `${categoryLabel}.${keyName}`;
+}
+
+function getSettingInputValue(categoryKey, keyName) {
+  const input = collectSettingsInputs().find((i) => i.name === `${categoryKey}.${keyName}`);
+  if (!input) return undefined;
+  if (input.type === "checkbox") return !!input.checked;
+  return input.value;
+}
+
+function setSettingInputValue(categoryKey, keyName, value) {
+  const input = collectSettingsInputs().find((i) => i.name === `${categoryKey}.${keyName}`);
+  if (!input) return;
+  if (input.type === "checkbox") {
+    input.checked = !!value;
+    return;
+  }
+  input.value = value;
+}
+
+function findPullPair(categoryKey, keyName) {
+  const ctx = findSettingContext(categoryKey, keyName);
+  const settingData = ctx.settingData;
+  if (!settingData || typeof settingData !== "object") return null;
+  const label = normalizeSettingLabel(settingData.displayName || settingData.name || "");
+  if (label !== "pull-up" && label !== "pull-down") return null;
+  const targetLabel = label === "pull-up" ? "pull-down" : "pull-up";
+  const settingsObj = ctx.settingsObj;
+  if (!settingsObj || typeof settingsObj !== "object") return null;
+  let otherKey = null;
+  for (const [k, data] of Object.entries(settingsObj)) {
+    if (k === "categoryPretty" || k === "categoryOrder" || k === "cards") continue;
+    const otherLabel = normalizeSettingLabel(data?.displayName || data?.name || "");
+    if (otherLabel === targetLabel) {
+      otherKey = k;
+      break;
+    }
+  }
+  if (!otherKey) return null;
+  return { otherKey, targetLabel };
+}
+
 function normalizeCategoryToken(value) {
   return String(value || '')
     .toLowerCase()
@@ -702,7 +792,17 @@ function buildGuiActionUrl(context, actionId) {
     }
     return url;
   }
-  const base = context ? (context.endpoint || defaultGuiEndpoint(context)) : null;
+  let base = context ? (context.endpoint || defaultGuiEndpoint(context)) : null;
+  if (context && base && context.category && context.key) {
+    const hasCategory = base.includes("category=");
+    const hasKey = base.includes("key=");
+    if (!hasCategory || !hasKey) {
+      const fallback = defaultGuiEndpoint(context);
+      if (fallback) {
+        base = fallback;
+      }
+    }
+  }
   if (!base) return null;
   if (actionId === "force" && context && context.forceParam) {
     const sep = base.includes("?") ? "&" : "?";
@@ -1096,22 +1196,36 @@ async function loadUserTheme() {
     }
   } catch (e) {}
 }
-async function applySingle(category, key, value) {
+async function applySingle(category, key, value, opts = {}) {
+  const { silent = false, skipMutex = false, skipLoad = false } = opts;
   const opKey = `${category}.${key}`;
   opBusy.value[opKey] = true;
-  const tid = notify(`Applying: ${opKey} ...`, "info", 7000, true);
+  const displayLabel = resolveSettingStatusLabel(category, key);
+  const tid = silent ? null : notify(`Applying: ${displayLabel} ...`, "info", 7000, true);
+  if (!skipMutex) {
+    const pair = findPullPair(category, key);
+    if (pair) {
+      const otherValue = value === true
+        ? false
+        : (getSettingInputValue(category, pair.otherKey) ?? false);
+      if (value === true) {
+        setSettingInputValue(category, pair.otherKey, false);
+      }
+      await applySingle(category, pair.otherKey, otherValue, { silent: true, skipMutex: true, skipLoad: true });
+    }
+  }
   try {
     // Get setting metadata to check if this is a password field
-    const settingData = config.value[category] && config.value[category][key];
+    const settingData = findSettingContext(category, key).settingData;
     if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
-      updateToast(tid, `Apply skipped ${opKey}: No new password entered`, "error");
+      if (tid) updateToast(tid, `Apply skipped ${displayLabel}: No new password entered`, "error");
       return;
     }
     if (isPasswordField(category, key, settingData)) {
       const inputEl = collectSettingsInputs().find((i) => i.name === `${category}.${key}`);
       const revealedValue = inputEl && inputEl.dataset ? inputEl.dataset.revealedValue : undefined;
       if (revealedValue !== undefined && String(value) === String(revealedValue)) {
-        updateToast(tid, `Apply skipped ${opKey}: Password unchanged`, "error");
+        if (tid) updateToast(tid, `Apply skipped ${displayLabel}: Password unchanged`, "error");
         return;
       }
     }
@@ -1126,34 +1240,51 @@ async function applySingle(category, key, value) {
     );
     const json = await r.json().catch(() => ({}));
     if (!r.ok || json.status !== "ok") throw new Error(json.reason || "Failed");
-    await loadSettings();
-    updateToast(tid, `Applied: ${opKey}`, "success");
+    if (!skipLoad) {
+      await loadSettings();
+    }
+    if (tid) updateToast(tid, `Applied: ${displayLabel}`, "success");
   } catch (e) {
-    updateToast(tid, `Apply failed ${opKey}: ${e.message}`, "error");
+    if (tid) updateToast(tid, `Apply failed ${displayLabel}: ${e.message}`, "error");
+    else notify(`Apply failed ${displayLabel}: ${e.message}`, "error", 8000);
   } finally {
     delete opBusy.value[opKey];
   }
 }
-async function saveSingle(category, key, value) {
+async function saveSingle(category, key, value, opts = {}) {
+  const { silent = false, skipMutex = false, skipLoad = false } = opts;
   const opKey = `${category}.${key}`;
   opBusy.value[opKey] = true;
-  const tid = notify(`Saving: ${opKey} ...`, "info", 7000, true);
+  const displayLabel = resolveSettingStatusLabel(category, key);
+  const tid = silent ? null : notify(`Saving: ${displayLabel} ...`, "info", 7000, true);
+  if (!skipMutex) {
+    const pair = findPullPair(category, key);
+    if (pair) {
+      const otherValue = value === true
+        ? false
+        : (getSettingInputValue(category, pair.otherKey) ?? false);
+      if (value === true) {
+        setSettingInputValue(category, pair.otherKey, false);
+      }
+      await saveSingle(category, pair.otherKey, otherValue, { silent: true, skipMutex: true, skipLoad: true });
+    }
+  }
   try {
     // Add timeout to HTTP request
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
     // Get setting metadata to check if this is a password field
-    const settingData = config.value[category] && config.value[category][key];
+    const settingData = findSettingContext(category, key).settingData;
     if (isPasswordField(category, key, settingData) && isUnsetPasswordValue(value)) {
-      updateToast(tid, `Save skipped ${opKey}: No new password entered`, "error");
+      if (tid) updateToast(tid, `Save skipped ${displayLabel}: No new password entered`, "error");
       return;
     }
     if (isPasswordField(category, key, settingData)) {
       const inputEl = collectSettingsInputs().find((i) => i.name === `${category}.${key}`);
       const revealedValue = inputEl && inputEl.dataset ? inputEl.dataset.revealedValue : undefined;
       if (revealedValue !== undefined && String(value) === String(revealedValue)) {
-        updateToast(tid, `Save skipped ${opKey}: Password unchanged`, "error");
+        if (tid) updateToast(tid, `Save skipped ${displayLabel}: Password unchanged`, "error");
         return;
       }
     }
@@ -1171,13 +1302,17 @@ async function saveSingle(category, key, value) {
     
     const json = await r.json().catch(() => ({}));
     if (!r.ok || json.status !== "ok") throw new Error(json.reason || "Failed");
-    await loadSettings();
-    updateToast(tid, `Saved: ${opKey}`, "success");
+    if (!skipLoad) {
+      await loadSettings();
+    }
+    if (tid) updateToast(tid, `Saved: ${displayLabel}`, "success");
   } catch (e) {
     if (e.name === 'AbortError') {
-      updateToast(tid, `Save timeout ${opKey}: Connection lost`, "error");
+      if (tid) updateToast(tid, `Save timeout ${displayLabel}: Connection lost`, "error");
+      else notify(`Save timeout ${displayLabel}: Connection lost`, "error", 8000);
     } else {
-      updateToast(tid, `Save failed ${opKey}: ${e.message}`, "error");
+      if (tid) updateToast(tid, `Save failed ${displayLabel}: ${e.message}`, "error");
+      else notify(`Save failed ${displayLabel}: ${e.message}`, "error", 8000);
     }
   } finally {
     delete opBusy.value[opKey];

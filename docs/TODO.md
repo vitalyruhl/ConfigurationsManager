@@ -535,6 +535,7 @@ Workflow notes:
 ## Medium Priority (Prio 5)
 
 - check where we kan safetly use  string_view  instead of  String  to reduce memory allocations/copies.
+- verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
 - Card layout/grid improvements
 - Alarm helpers (more UI, better formatting)
 - Allow overriding digital input definitions through a modular layer so incoming sensors can be remapped or replaced without touching the core registration (see Live Control override note above).

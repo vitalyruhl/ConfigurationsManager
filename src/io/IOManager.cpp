@@ -17,12 +17,12 @@ static constexpr const char* IO_CATEGORY_PRETTY = "I/O";
 namespace {
 static constexpr const char* IO_SETTINGS_PAGE = IO_CATEGORY_PRETTY;
 
-static void registerSettingPlacement(BaseSetting* setting, const String& cardName, const String& groupName)
+static void registerSettingPlacement(BaseSetting* setting, const String& pageName, const String& cardName, const String& groupName)
 {
     if (!setting || !setting->shouldShowInWeb()) {
         return;
     }
-    ConfigManager.addToSettingsGroup(setting->getKey(), IO_SETTINGS_PAGE, cardName.c_str(), groupName.c_str(), setting->getSortOrder());
+    ConfigManager.addToSettingsGroup(setting->getKey(), pageName.c_str(), cardName.c_str(), groupName.c_str(), setting->getSortOrder());
 }
 } // namespace
 
@@ -187,6 +187,7 @@ void IOManager::addAnalogInput(const AnalogInputBinding& binding)
     entry.defaultPrecision = binding.defaultPrecision;
     entry.defaultDeadband = binding.defaultDeadband;
     entry.defaultMinEventMs = binding.defaultMinEventMs;
+    entry.settingsCategory = cm::CoreCategories::IO;
 
     entry.registerSettings = binding.registerSettings;
     entry.showPinInWeb = binding.showPinInWeb;
@@ -238,6 +239,92 @@ void IOManager::addAnalogOutput(const AnalogOutputBinding& binding)
     entry.value = entry.desiredValue;
 
     analogOutputs.push_back(std::move(entry));
+}
+
+void IOManager::addDigitalInput(const char* id,
+                                const char* name,
+                                int gpioPin,
+                                bool activeLow,
+                                bool pullup,
+                                bool pulldown,
+                                bool persistSettings)
+{
+    DigitalInputBinding binding;
+    binding.id = id;
+    binding.name = name;
+    binding.defaultPin = gpioPin;
+    binding.defaultActiveLow = activeLow;
+    binding.defaultPullup = pullup;
+    binding.defaultPulldown = pulldown;
+    binding.defaultEnabled = true;
+    binding.registerSettings = persistSettings;
+    addDigitalInput(binding);
+}
+
+void IOManager::addDigitalOutput(const char* id,
+                                 const char* name,
+                                 int gpioPin,
+                                 bool activeLow,
+                                 bool persistSettings)
+{
+    DigitalOutputBinding binding;
+    binding.id = id;
+    binding.name = name;
+    binding.defaultPin = gpioPin;
+    binding.defaultActiveLow = activeLow;
+    binding.defaultEnabled = true;
+    binding.registerSettings = persistSettings;
+    addDigitalOutput(binding);
+}
+
+void IOManager::addAnalogInput(const char* id,
+                               const char* name,
+                               int adcPin,
+                               bool persistSettings,
+                               int rawMin,
+                               int rawMax,
+                               float outMin,
+                               float outMax,
+                               const char* unit,
+                               int precision,
+                               float deadband,
+                               uint32_t minEventMs)
+{
+    AnalogInputBinding binding;
+    binding.id = id;
+    binding.name = name;
+    binding.defaultPin = adcPin;
+    binding.defaultEnabled = true;
+    binding.defaultRawMin = rawMin;
+    binding.defaultRawMax = rawMax;
+    binding.defaultOutMin = outMin;
+    binding.defaultOutMax = outMax;
+    binding.defaultUnit = unit ? unit : "";
+    binding.defaultPrecision = precision;
+    binding.defaultDeadband = deadband;
+    binding.defaultMinEventMs = minEventMs;
+    binding.registerSettings = persistSettings;
+    addAnalogInput(binding);
+}
+
+void IOManager::addAnalogOutput(const char* id,
+                                const char* name,
+                                int dacOrPwmPin,
+                                bool persistSettings,
+                                float valueMin,
+                                float valueMax,
+                                bool reverse)
+{
+    AnalogOutputBinding binding;
+    binding.id = id;
+    binding.name = name;
+    binding.defaultPin = dacOrPwmPin;
+    binding.defaultEnabled = true;
+    binding.valueMin = valueMin;
+    binding.valueMax = valueMax;
+    binding.reverse = reverse;
+    binding.registerSettings = persistSettings;
+    addAnalogOutput(binding);
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
@@ -299,8 +386,8 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order)
         .ioPinRole(cm::io::IOPinRole::DigitalInput)
         .build();
 
-    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.activeLow, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.activeLow, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -395,10 +482,10 @@ void IOManager::addInputToGUI(const char* id, const char* cardName, int order,
         .cardOrder(entry.cardOrder)
         .build();
 
-    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.activeLow, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.pullup, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.pulldown, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.activeLow, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pullup, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pulldown, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
 
     entry.runtimeGroup = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("inputs");
     entry.runtimeLabel = (runtimeLabel && runtimeLabel[0]) ? String(runtimeLabel) : entry.name;
@@ -505,10 +592,10 @@ void IOManager::addInputSettingsToGUI(const char* id, const char* cardName, int 
         .cardOrder(entry.cardOrder)
         .build();
 
-    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.activeLow, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.pullup, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.pulldown, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.activeLow, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pullup, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pulldown, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -770,14 +857,14 @@ void IOManager::addAnalogInputToGUI(const char* id, const char* cardName, int or
         .cardOrder(entry.cardOrder)
         .build();
 
-    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.rawMin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.rawMax, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.outMin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.outMax, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.unit, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.deadband, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.minEventMs, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMax, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMax, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.unit, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.deadband, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.minEventMs, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
 
     entry.settingsRegistered = true;
 }
@@ -796,34 +883,38 @@ void IOManager::ensureAnalogAlarmSettings(AnalogInputEntry& entry,
         return;
     }
 
+    const char* categoryName = entry.settingsCategory.isEmpty()
+        ? cm::CoreCategories::IO
+        : entry.settingsCategory.c_str();
+
     if (!isnan(alarmMin) && !entry.alarmMinSetting) {
         entry.alarmMinSetting = &ConfigManager.addSettingFloat(entry.keyAlarmMinStable->c_str())
             .name("Alarm Min")
-            .category(cm::CoreCategories::IO)
+            .category(categoryName)
             .defaultValue(alarmMin)
             .showInWeb(true)
             .sortOrder(39)
-            .categoryPretty(IO_CATEGORY_PRETTY)
+            .categoryPretty(categoryName)
             .card(entry.cardKeyStable->c_str())
             .cardPretty(entry.cardPrettyStable->c_str())
             .cardOrder(entry.cardOrder)
             .build();
-        registerSettingPlacement(entry.alarmMinSetting, entry.cardPretty, entry.name);
+        registerSettingPlacement(entry.alarmMinSetting, categoryName, entry.cardPretty, entry.name);
     }
 
     if (!isnan(alarmMax) && !entry.alarmMaxSetting) {
         entry.alarmMaxSetting = &ConfigManager.addSettingFloat(entry.keyAlarmMaxStable->c_str())
             .name("Alarm Max")
-            .category(cm::CoreCategories::IO)
+            .category(categoryName)
             .defaultValue(alarmMax)
             .showInWeb(true)
             .sortOrder(40)
-            .categoryPretty(IO_CATEGORY_PRETTY)
+            .categoryPretty(categoryName)
             .card(entry.cardKeyStable->c_str())
             .cardPretty(entry.cardPrettyStable->c_str())
             .cardOrder(entry.cardOrder)
             .build();
-        registerSettingPlacement(entry.alarmMaxSetting, entry.cardPretty, entry.name);
+        registerSettingPlacement(entry.alarmMaxSetting, categoryName, entry.cardPretty, entry.name);
     }
 }
 
@@ -1035,14 +1126,14 @@ void IOManager::addAnalogInputToGUIWithAlarm(const char* id, const char* cardNam
         .cardOrder(entry.cardOrder)
         .build();
 
-    registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.rawMin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.rawMax, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.outMin, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.outMax, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.unit, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.deadband, entry.cardPretty, entry.name);
-    registerSettingPlacement(entry.minEventMs, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.pin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.rawMax, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.outMax, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.unit, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.deadband, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
+    registerSettingPlacement(entry.minEventMs, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
 
     IOManager::ensureAnalogAlarmSettings(entry, alarmMin, alarmMax);
 
@@ -1129,6 +1220,692 @@ void IOManager::configureDigitalInputEvents(const char* id,
 {
     DigitalInputEventOptions options;
     configureDigitalInputEvents(id, std::move(callbacks), options);
+}
+
+static void ensureSettingsLayout(const char* pageName, const char* cardName, const char* groupName, int order)
+{
+    if (!pageName || !pageName[0]) {
+        return;
+    }
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : pageName;
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+    ConfigManager.addSettingsPage(pageName, order);
+    ConfigManager.addSettingsCard(pageName, effectiveCard, order);
+    ConfigManager.addSettingsGroup(pageName, effectiveCard, effectiveGroup, order);
+}
+
+static void ensureLiveLayout(const char* pageName, const char* cardName, const char* groupName, int order)
+{
+    if (!pageName || !pageName[0]) {
+        return;
+    }
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : "Live Values";
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+    ConfigManager.addLivePage(pageName, order);
+    ConfigManager.addLiveCard(pageName, effectiveCard, order);
+    ConfigManager.addLiveGroup(pageName, effectiveCard, effectiveGroup, order);
+}
+
+void IOManager::addDigitalInputToSettings(const char* id, const char* pageName, int order)
+{
+    addDigitalInputToSettingsGroup(id, pageName, pageName, pageName, order);
+}
+
+void IOManager::addDigitalInputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order)
+{
+    addDigitalInputToSettingsGroup(id, pageName, pageName, groupName, order);
+}
+
+void IOManager::addDigitalInputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addDigitalInputToSettingsGroup: unknown input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    if (!entry.registerSettings) {
+        IO_LOG("[WARNING] addDigitalInputToSettingsGroup: input '%s' is not persisted", entry.id.c_str());
+        return;
+    }
+
+    const char* categoryName = (pageName && pageName[0]) ? pageName : cm::CoreCategories::IO;
+    const char* categoryPretty = categoryName;
+
+    if (!entry.settingsRegistered) {
+        entry.cardKey = entry.id;
+        if (groupName && groupName[0]) {
+            entry.cardPretty = String(groupName);
+        } else {
+            entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+        }
+        entry.cardOrder = order;
+
+        entry.cardKeyStable = makeStableString(entry.cardKey);
+        entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+        entry.keyPin = formatInputSlotKey(entry.slot, 'P');
+        entry.keyActiveLow = formatInputSlotKey(entry.slot, 'L');
+        entry.keyPullup = formatInputSlotKey(entry.slot, 'U');
+        entry.keyPulldown = formatInputSlotKey(entry.slot, 'D');
+
+        entry.keyPinStable = makeStableString(entry.keyPin);
+        entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+        entry.keyPullupStable = makeStableString(entry.keyPullup);
+        entry.keyPulldownStable = makeStableString(entry.keyPulldown);
+
+        entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+            .name("GPIO")
+            .category(categoryName)
+            .defaultValue(entry.defaultPin)
+            .showInWeb(entry.showPinInWeb)
+            .sortOrder(21)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
+            .name("LOW-Active")
+            .category(categoryName)
+            .defaultValue(entry.defaultActiveLow)
+            .showInWeb(entry.showActiveLowInWeb)
+            .sortOrder(22)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.pullup = &ConfigManager.addSettingBool(entry.keyPullupStable->c_str())
+            .name("Pull-up")
+            .category(categoryName)
+            .defaultValue(entry.defaultPullup)
+            .showInWeb(entry.showPullupInWeb)
+            .sortOrder(23)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.pulldown = &ConfigManager.addSettingBool(entry.keyPulldownStable->c_str())
+            .name("Pull-down")
+            .category(categoryName)
+            .defaultValue(entry.defaultPulldown)
+            .showInWeb(entry.showPulldownInWeb)
+            .sortOrder(24)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.settingsRegistered = true;
+    }
+
+    ensureSettingsLayout(pageName, cardName, groupName, order);
+    const String effectiveGroup = (groupName && groupName[0]) ? String(groupName) : entry.name;
+    const String effectiveCard = (cardName && cardName[0]) ? String(cardName) : entry.name;
+
+    registerSettingPlacement(entry.pin, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.activeLow, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.pullup, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.pulldown, pageName, effectiveCard, effectiveGroup);
+}
+
+void IOManager::addDigitalOutputToSettings(const char* id, const char* pageName, int order)
+{
+    addDigitalOutputToSettingsGroup(id, pageName, pageName, pageName, order);
+}
+
+void IOManager::addDigitalOutputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order)
+{
+    addDigitalOutputToSettingsGroup(id, pageName, pageName, groupName, order);
+}
+
+void IOManager::addDigitalOutputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order)
+{
+    const int idx = findIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addDigitalOutputToSettingsGroup: unknown output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
+    if (!entry.registerSettings) {
+        IO_LOG("[WARNING] addDigitalOutputToSettingsGroup: output '%s' is not persisted", entry.id.c_str());
+        return;
+    }
+
+    const char* categoryName = (pageName && pageName[0]) ? pageName : cm::CoreCategories::IO;
+    const char* categoryPretty = categoryName;
+
+    if (!entry.settingsRegistered) {
+        entry.cardKey = entry.id;
+        if (groupName && groupName[0]) {
+            entry.cardPretty = String(groupName);
+        } else {
+            entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+        }
+        entry.cardOrder = order;
+
+        entry.cardKeyStable = makeStableString(entry.cardKey);
+        entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+        entry.keyPin = formatSlotKey(entry.slot, 'P');
+        entry.keyActiveLow = formatSlotKey(entry.slot, 'L');
+
+        entry.keyPinStable = makeStableString(entry.keyPin);
+        entry.keyActiveLowStable = makeStableString(entry.keyActiveLow);
+
+        entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+            .name("GPIO")
+            .category(categoryName)
+            .defaultValue(entry.defaultPin)
+            .showInWeb(entry.showPinInWeb)
+            .sortOrder(11)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .ioPinRole(cm::io::IOPinRole::DigitalOutput)
+            .build();
+
+        entry.activeLow = &ConfigManager.addSettingBool(entry.keyActiveLowStable->c_str())
+            .name("LOW-Active")
+            .category(categoryName)
+            .defaultValue(entry.defaultActiveLow)
+            .showInWeb(entry.showActiveLowInWeb)
+            .sortOrder(12)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .ioPinRole(cm::io::IOPinRole::DigitalInput)
+            .build();
+
+        entry.settingsRegistered = true;
+    }
+
+    ensureSettingsLayout(pageName, cardName, groupName, order);
+    const String effectiveGroup = (groupName && groupName[0]) ? String(groupName) : entry.name;
+    const String effectiveCard = (cardName && cardName[0]) ? String(cardName) : entry.name;
+
+    registerSettingPlacement(entry.pin, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.activeLow, pageName, effectiveCard, effectiveGroup);
+}
+
+void IOManager::addAnalogInputToSettings(const char* id, const char* pageName, int order)
+{
+    addAnalogInputToSettingsGroup(id, pageName, pageName, pageName, order);
+}
+
+void IOManager::addAnalogInputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order)
+{
+    addAnalogInputToSettingsGroup(id, pageName, pageName, groupName, order);
+}
+
+void IOManager::addAnalogInputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addAnalogInputToSettingsGroup: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    if (!entry.registerSettings) {
+        IO_LOG("[WARNING] addAnalogInputToSettingsGroup: input '%s' is not persisted", entry.id.c_str());
+        return;
+    }
+
+    const char* categoryName = (pageName && pageName[0]) ? pageName : cm::CoreCategories::IO;
+    const char* categoryPretty = categoryName;
+
+    if (!entry.settingsRegistered) {
+        entry.cardKey = entry.id;
+        if (groupName && groupName[0]) {
+            entry.cardPretty = String(groupName);
+        } else {
+            entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+        }
+        entry.cardOrder = order;
+        entry.settingsCategory = categoryName;
+
+        entry.cardKeyStable = makeStableString(entry.cardKey);
+        entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+        entry.keyPin = formatAnalogSlotKey(entry.slot, 'P');
+        entry.keyRawMin = formatAnalogSlotKey(entry.slot, 'R');
+        entry.keyRawMax = formatAnalogSlotKey(entry.slot, 'S');
+        entry.keyOutMin = formatAnalogSlotKey(entry.slot, 'M');
+        entry.keyOutMax = formatAnalogSlotKey(entry.slot, 'N');
+        entry.keyUnit = formatAnalogSlotKey(entry.slot, 'U');
+        entry.keyDeadband = formatAnalogSlotKey(entry.slot, 'D');
+        entry.keyMinEventMs = formatAnalogSlotKey(entry.slot, 'E');
+        entry.keyAlarmMin = formatAnalogSlotKey(entry.slot, 'A');
+        entry.keyAlarmMax = formatAnalogSlotKey(entry.slot, 'B');
+
+        entry.keyPinStable = makeStableString(entry.keyPin);
+        entry.keyRawMinStable = makeStableString(entry.keyRawMin);
+        entry.keyRawMaxStable = makeStableString(entry.keyRawMax);
+        entry.keyOutMinStable = makeStableString(entry.keyOutMin);
+        entry.keyOutMaxStable = makeStableString(entry.keyOutMax);
+        entry.keyUnitStable = makeStableString(entry.keyUnit);
+        entry.keyDeadbandStable = makeStableString(entry.keyDeadband);
+        entry.keyMinEventMsStable = makeStableString(entry.keyMinEventMs);
+        entry.keyAlarmMinStable = makeStableString(entry.keyAlarmMin);
+        entry.keyAlarmMaxStable = makeStableString(entry.keyAlarmMax);
+
+        entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+            .name("GPIO")
+            .category(categoryName)
+            .defaultValue(entry.defaultPin)
+            .showInWeb(entry.showPinInWeb)
+            .sortOrder(31)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.rawMin = &ConfigManager.addSettingInt(entry.keyRawMinStable->c_str())
+            .name("Raw Min")
+            .category(categoryName)
+            .defaultValue(entry.defaultRawMin)
+            .showInWeb(entry.showMappingInWeb)
+            .sortOrder(32)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.rawMax = &ConfigManager.addSettingInt(entry.keyRawMaxStable->c_str())
+            .name("Raw Max")
+            .category(categoryName)
+            .defaultValue(entry.defaultRawMax)
+            .showInWeb(entry.showMappingInWeb)
+            .sortOrder(33)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.outMin = &ConfigManager.addSettingFloat(entry.keyOutMinStable->c_str())
+            .name("Out Min")
+            .category(categoryName)
+            .defaultValue(entry.defaultOutMin)
+            .showInWeb(entry.showMappingInWeb)
+            .sortOrder(34)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.outMax = &ConfigManager.addSettingFloat(entry.keyOutMaxStable->c_str())
+            .name("Out Max")
+            .category(categoryName)
+            .defaultValue(entry.defaultOutMax)
+            .showInWeb(entry.showMappingInWeb)
+            .sortOrder(35)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.unit = &ConfigManager.addSettingString(entry.keyUnitStable->c_str())
+            .name("Unit")
+            .category(categoryName)
+            .defaultValue(entry.defaultUnit)
+            .showInWeb(entry.showUnitInWeb)
+            .sortOrder(36)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.deadband = &ConfigManager.addSettingFloat(entry.keyDeadbandStable->c_str())
+            .name("Deadband")
+            .category(categoryName)
+            .defaultValue(entry.defaultDeadband)
+            .showInWeb(entry.showDeadbandInWeb)
+            .sortOrder(37)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.minEventMs = &ConfigManager.addSettingInt(entry.keyMinEventMsStable->c_str())
+            .name("Min Event (ms)")
+            .category(categoryName)
+            .defaultValue(static_cast<int>(entry.defaultMinEventMs))
+            .showInWeb(entry.showMinEventInWeb)
+            .sortOrder(38)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .build();
+
+        entry.settingsRegistered = true;
+    }
+
+    ensureSettingsLayout(pageName, cardName, groupName, order);
+    const String effectiveGroup = (groupName && groupName[0]) ? String(groupName) : entry.name;
+    const String effectiveCard = (cardName && cardName[0]) ? String(cardName) : entry.name;
+
+    registerSettingPlacement(entry.pin, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.rawMin, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.rawMax, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.outMin, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.outMax, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.unit, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.deadband, pageName, effectiveCard, effectiveGroup);
+    registerSettingPlacement(entry.minEventMs, pageName, effectiveCard, effectiveGroup);
+
+    ensureAnalogAlarmSettings(entry, entry.alarmMin, entry.alarmMax);
+}
+
+void IOManager::addAnalogOutputToSettings(const char* id, const char* pageName, int order)
+{
+    addAnalogOutputToSettingsGroup(id, pageName, pageName, pageName, order);
+}
+
+void IOManager::addAnalogOutputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order)
+{
+    addAnalogOutputToSettingsGroup(id, pageName, pageName, groupName, order);
+}
+
+void IOManager::addAnalogOutputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addAnalogOutputToSettingsGroup: unknown analog output '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    if (!entry.registerSettings) {
+        IO_LOG("[WARNING] addAnalogOutputToSettingsGroup: output '%s' is not persisted", entry.id.c_str());
+        return;
+    }
+
+    const char* categoryName = (pageName && pageName[0]) ? pageName : cm::CoreCategories::IO;
+    const char* categoryPretty = categoryName;
+
+    if (!entry.settingsRegistered) {
+        entry.cardKey = entry.id;
+        if (groupName && groupName[0]) {
+            entry.cardPretty = String(groupName);
+        } else {
+            entry.cardPretty = (cardName && cardName[0]) ? String(cardName) : entry.name;
+        }
+        entry.cardOrder = order;
+
+        entry.cardKeyStable = makeStableString(entry.cardKey);
+        entry.cardPrettyStable = makeStableString(entry.cardPretty);
+
+        entry.keyPin = formatAnalogOutputSlotKey(entry.slot, 'P');
+        entry.keyPinStable = makeStableString(entry.keyPin);
+
+        entry.pin = &ConfigManager.addSettingInt(entry.keyPinStable->c_str())
+            .name("GPIO")
+            .category(categoryName)
+            .defaultValue(entry.defaultPin)
+            .showInWeb(entry.showPinInWeb)
+            .sortOrder(41)
+            .categoryPretty(categoryPretty)
+            .card(entry.cardKeyStable->c_str())
+            .cardPretty(entry.cardPrettyStable->c_str())
+            .cardOrder(entry.cardOrder)
+            .ioPinRole(cm::io::IOPinRole::AnalogOutput)
+            .build();
+
+        entry.settingsRegistered = true;
+    }
+
+    ensureSettingsLayout(pageName, cardName, groupName, order);
+    const String effectiveGroup = (groupName && groupName[0]) ? String(groupName) : entry.name;
+    const String effectiveCard = (cardName && cardName[0]) ? String(cardName) : entry.name;
+    registerSettingPlacement(entry.pin, pageName, effectiveCard, effectiveGroup);
+}
+
+IOManager::LiveControlHandleBool IOManager::addDigitalInputToLive(const char* id, int order,
+                                                                  const char* pageName,
+                                                                  const char* cardName,
+                                                                  const char* groupName,
+                                                                  const char* labelOverride,
+                                                                  bool alarmWhenActive)
+{
+    const int idx = findInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addDigitalInputToLive: unknown input '%s'", id ? id : "(null)");
+        return {};
+    }
+
+    DigitalInputEntry& entry = digitalInputs[static_cast<size_t>(idx)];
+    const char* effectiveGroupName = (groupName && groupName[0]) ? groupName : ((cardName && cardName[0]) ? cardName : "inputs");
+    ensureLiveLayout(pageName, cardName, effectiveGroupName, order);
+
+    entry.runtimeGroup = String(effectiveGroupName);
+    entry.runtimeLabel = (labelOverride && labelOverride[0]) ? String(labelOverride) : entry.name;
+    entry.runtimeOrder = order;
+    entry.alarmWhenActive = alarmWhenActive;
+    ensureInputRuntimeProvider(entry.runtimeGroup);
+
+    RuntimeFieldMeta meta;
+    meta.group = entry.runtimeGroup;
+    meta.key = entry.id;
+    meta.label = entry.runtimeLabel;
+    meta.isBool = true;
+    meta.order = entry.runtimeOrder;
+    if (entry.alarmWhenActive) {
+        meta.boolAlarmValue = true;
+    }
+    ConfigManager.getRuntime().addRuntimeMeta(meta);
+
+    entry.runtimeRegistered = true;
+
+    LiveControlHandleBool handle;
+    handle.onChange = &entry.onChangeCallback;
+    return handle;
+}
+
+IOManager::LiveControlHandleBool IOManager::addDigitalOutputToLive(RuntimeControlType type,
+                                                                   const char* id,
+                                                                   int order,
+                                                                   const char* pageName,
+                                                                   const char* cardName,
+                                                                   const char* groupName,
+                                                                   const char* labelOverride,
+                                                                   const char* onLabel,
+                                                                   const char* offLabel)
+{
+    const int idx = findIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addDigitalOutputToLive: unknown output '%s'", id ? id : "(null)");
+        return {};
+    }
+
+    const char* effectiveGroupName = (groupName && groupName[0]) ? groupName : ((cardName && cardName[0]) ? cardName : "controls");
+    ensureLiveLayout(pageName, cardName, effectiveGroupName, order);
+
+    DigitalOutputEntry& entry = digitalOutputs[static_cast<size_t>(idx)];
+    const String group = String(effectiveGroupName);
+    const String label = (labelOverride && labelOverride[0]) ? String(labelOverride) : entry.name;
+    const String onLabelStr = (onLabel && onLabel[0]) ? String(onLabel) : String();
+    const String offLabelStr = (offLabel && offLabel[0]) ? String(offLabel) : String();
+
+    entry.runtimeGroup = group;
+    ensureOutputRuntimeProvider(entry.runtimeGroup);
+
+    if (type == RuntimeControlType::Button) {
+        ConfigManager.defineRuntimeButton(group, entry.id, label, [this, id]() {
+            const int outIdx = findIndex(id);
+            if (outIdx < 0) return;
+            auto& outEntry = digitalOutputs[static_cast<size_t>(outIdx)];
+            if (outEntry.onClickCallback) {
+                outEntry.onClickCallback();
+            }
+        }, String(), order);
+    } else {
+        auto getter = [this, id]() { return this->getState(id); };
+        auto setter = [this, id](bool state) {
+            this->setState(id, state);
+            const int outIdx = findIndex(id);
+            if (outIdx < 0) return;
+            auto& outEntry = digitalOutputs[static_cast<size_t>(outIdx)];
+            if (outEntry.onChangeCallback) {
+                outEntry.onChangeCallback(state);
+            }
+        };
+
+        switch (type) {
+            case RuntimeControlType::Checkbox:
+                ConfigManager.defineRuntimeCheckbox(group, entry.id, label, getter, setter, String(), order);
+                break;
+            case RuntimeControlType::MomentaryButton:
+                ConfigManager.defineRuntimeMomentaryButton(group, entry.id, label, getter, setter, String(), order, onLabelStr, offLabelStr);
+                break;
+            case RuntimeControlType::StateButton:
+                ConfigManager.defineRuntimeStateButton(group, entry.id, label, getter, setter, false, String(), order, onLabelStr, offLabelStr);
+                break;
+            default:
+                IO_LOG("[WARNING] addDigitalOutputToLive: unsupported control type for '%s'", entry.id.c_str());
+                break;
+        }
+    }
+
+    LiveControlHandleBool handle;
+    handle.onChange = &entry.onChangeCallback;
+    handle.onClick = &entry.onClickCallback;
+    return handle;
+}
+
+IOManager::LiveControlHandleFloat IOManager::addAnalogOutputToLive(const char* id,
+                                                                   int order,
+                                                                   float sliderMin,
+                                                                   float sliderMax,
+                                                                   int sliderPrecision,
+                                                                   const char* pageName,
+                                                                   const char* cardName,
+                                                                   const char* groupName,
+                                                                   const char* labelOverride,
+                                                                   const char* unit)
+{
+    const int idx = findAnalogOutputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addAnalogOutputToLive: unknown analog output '%s'", id ? id : "(null)");
+        return {};
+    }
+
+    const char* effectiveGroupName = (groupName && groupName[0]) ? groupName : ((cardName && cardName[0]) ? cardName : "controls");
+    ensureLiveLayout(pageName, cardName, effectiveGroupName, order);
+
+    AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+    const String group = String(effectiveGroupName);
+    const String label = (labelOverride && labelOverride[0]) ? String(labelOverride) : entry.name;
+    const String unitStr = (unit && unit[0]) ? String(unit) : String();
+
+    float initValue = sliderMin;
+    ConfigManager.defineRuntimeFloatSlider(
+        group,
+        entry.id,
+        label,
+        sliderMin,
+        sliderMax,
+        initValue,
+        sliderPrecision,
+        [this, id]() { return this->getValue(id); },
+        [this, id](float v) {
+            this->setValue(id, v);
+            const int outIdx = findAnalogOutputIndex(id);
+            if (outIdx < 0) return;
+            auto& outEntry = analogOutputs[static_cast<size_t>(outIdx)];
+            if (outEntry.onChangeCallback) {
+                outEntry.onChangeCallback(v);
+            }
+        },
+        unitStr,
+        String(),
+        order);
+
+    LiveControlHandleFloat handle;
+    handle.onChange = &entry.onChangeCallback;
+    return handle;
+}
+
+void IOManager::addAnalogInputToLive(const char* id, int order,
+                                     const char* pageName,
+                                     const char* cardName,
+                                     const char* groupName,
+                                     const char* labelOverride,
+                                     bool showRaw)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addAnalogInputToLive: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    const char* effectiveGroupName = (groupName && groupName[0]) ? groupName : ((cardName && cardName[0]) ? cardName : "analog");
+    ensureLiveLayout(pageName, cardName, effectiveGroupName, order);
+
+    const String group = String(effectiveGroupName);
+    const String label = (labelOverride && labelOverride[0]) ? String(labelOverride) : entry.name;
+    registerAnalogRuntimeField(group, entry.id, showRaw);
+    ensureAnalogRuntimeProvider(group);
+
+    if (showRaw) {
+        const String runtimeKey = entry.id + String("_raw");
+        addAnalogRuntimeMeta(ConfigManager.getRuntime(), group, runtimeKey, label, "", 0, order, false, 0.0f, 0.0f);
+    } else {
+        const String unitStr = entry.unit ? entry.unit->get() : entry.defaultUnit;
+        addAnalogRuntimeMeta(ConfigManager.getRuntime(), group, entry.id, label, unitStr, entry.defaultPrecision, order, false, 0.0f, 0.0f);
+    }
+}
+
+void IOManager::addAnalogInputToLiveWithAlarm(const char* id, int order,
+                                              float alarmMin,
+                                              float alarmMax,
+                                              AnalogAlarmCallbacks callbacks,
+                                              const char* pageName,
+                                              const char* cardName,
+                                              const char* groupName,
+                                              const char* labelOverride)
+{
+    const int idx = findAnalogInputIndex(id);
+    if (idx < 0) {
+        IO_LOG("[WARNING] addAnalogInputToLiveWithAlarm: unknown analog input '%s'", id ? id : "(null)");
+        return;
+    }
+
+    AnalogInputEntry& entry = analogInputs[static_cast<size_t>(idx)];
+    entry.alarmMin = alarmMin;
+    entry.alarmMax = alarmMax;
+    entry.alarmCallbacks = std::move(callbacks);
+
+    const char* effectiveGroupName = (groupName && groupName[0]) ? groupName : ((cardName && cardName[0]) ? cardName : "analog");
+    ensureLiveLayout(pageName, cardName, effectiveGroupName, order);
+
+    const String group = String(effectiveGroupName);
+    const String label = (labelOverride && labelOverride[0]) ? String(labelOverride) : entry.name;
+    registerAnalogRuntimeField(group, entry.id, false);
+    ensureAnalogRuntimeProvider(group);
+
+    const String unitStr = entry.unit ? entry.unit->get() : entry.defaultUnit;
+    addAnalogRuntimeMeta(ConfigManager.getRuntime(), group, entry.id, label, unitStr, entry.defaultPrecision, order, true, alarmMin, alarmMax);
+    addAnalogAlarmRuntimeIndicators(ConfigManager.getRuntime(), group, entry.id, order, !isnan(alarmMin), !isnan(alarmMax));
 }
 
 void IOManager::addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
@@ -1243,7 +2020,7 @@ void IOManager::addIOtoGUI(const char* id, const char* cardName, int order,
                 .ioPinRole(cm::io::IOPinRole::AnalogOutput)
                 .build();
 
-            registerSettingPlacement(entry.pin, entry.cardPretty, entry.name);
+            registerSettingPlacement(entry.pin, IO_SETTINGS_PAGE, entry.cardPretty, entry.name);
             entry.settingsRegistered = true;
         }
     }
@@ -1442,6 +2219,7 @@ void IOManager::begin()
         entry.hasLast = false;
         reconfigureIfNeeded(entry);
         readInputState(entry);
+        entry.hasLastStateForCallback = false;
 
         if (entry.eventsEnabled) {
             const uint32_t nowMs = millis();
@@ -1493,6 +2271,15 @@ void IOManager::update()
     for (auto& entry : digitalInputs) {
         reconfigureIfNeeded(entry);
         readInputState(entry);
+        if (entry.onChangeCallback) {
+            if (!entry.hasLastStateForCallback) {
+                entry.lastStateForCallback = entry.state;
+                entry.hasLastStateForCallback = true;
+            } else if (entry.lastStateForCallback != entry.state) {
+                entry.lastStateForCallback = entry.state;
+                entry.onChangeCallback(entry.state);
+            }
+        }
         processInputEvents(entry, nowMs);
     }
 
@@ -2381,6 +3168,24 @@ void IOManager::ensureInputRuntimeProvider(const String& group)
         for (const auto& entry : digitalInputs) {
             if (entry.runtimeGroup == group) {
                 data[entry.id] = entry.state;
+            }
+        }
+    }, 5);
+
+    registered.push_back(group);
+}
+
+void IOManager::ensureOutputRuntimeProvider(const String& group)
+{
+    static std::vector<String> registered;
+    for (const auto& g : registered) {
+        if (g == group) return;
+    }
+
+    ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
+        for (const auto& entry : digitalOutputs) {
+            if (entry.runtimeGroup == group) {
+                data[entry.id] = entry.desiredState;
             }
         }
     }, 5);

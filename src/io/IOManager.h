@@ -20,6 +20,36 @@ public:
         StateButton,
     };
 
+    struct LiveControlHandleBool {
+        std::function<void(bool)>* onChange = nullptr;
+        std::function<void()>* onClick = nullptr;
+
+        LiveControlHandleBool& onChangeCallback(std::function<void(bool)> cb) {
+            if (onChange) {
+                *onChange = std::move(cb);
+            }
+            return *this;
+        }
+
+        LiveControlHandleBool& onClickCallback(std::function<void()> cb) {
+            if (onClick) {
+                *onClick = std::move(cb);
+            }
+            return *this;
+        }
+    };
+
+    struct LiveControlHandleFloat {
+        std::function<void(float)>* onChange = nullptr;
+
+        LiveControlHandleFloat& onChangeCallback(std::function<void(float)> cb) {
+            if (onChange) {
+                *onChange = std::move(cb);
+            }
+            return *this;
+        }
+    };
+
     struct DigitalOutputBinding {
         const char* id = nullptr;
         const char* name = nullptr;
@@ -144,9 +174,44 @@ public:
     void addDigitalInput(const DigitalInputBinding& binding);
     void addAnalogInput(const AnalogInputBinding& binding);
 
+    // New parameter-list API (preferred)
+    void addDigitalInput(const char* id,
+                         const char* name,
+                         int gpioPin,
+                         bool activeLow,
+                         bool pullup,
+                         bool pulldown,
+                         bool persistSettings);
+
+    void addDigitalOutput(const char* id,
+                          const char* name,
+                          int gpioPin,
+                          bool activeLow,
+                          bool persistSettings);
+
+    void addAnalogInput(const char* id,
+                        const char* name,
+                        int adcPin,
+                        bool persistSettings,
+                        int rawMin = 0,
+                        int rawMax = 4095,
+                        float outMin = 0.0f,
+                        float outMax = 4095.0f,
+                        const char* unit = "",
+                        int precision = 2,
+                        float deadband = 0.01f,
+                        uint32_t minEventMs = 10000);
+
     // Analog output: value mapping (valueMin..valueMax) -> raw voltage (0..3.3V).
     // Note: initial implementation uses ESP32 DAC pins (GPIO25/26). PWM/LEDC is planned as a follow-up.
     void addAnalogOutput(const AnalogOutputBinding& binding);
+    void addAnalogOutput(const char* id,
+                         const char* name,
+                         int dacOrPwmPin,
+                         bool persistSettings,
+                         float valueMin = 0.0f,
+                         float valueMax = 100.0f,
+                         bool reverse = false);
 
     // Optional: enable non-blocking button-like events for a digital input.
     // Works independently from the GUI.
@@ -157,23 +222,75 @@ public:
                                     DigitalInputEventCallbacks callbacks,
                                     DigitalInputEventOptions options);
 
-    // Registers the IO item's settings into ConfigManager and groups them into a dedicated Settings card.
-    // The persisted category token remains cm::CoreCategories::IO.
-    void addIOtoGUI(const char* id, const char* cardName, int order);
+    // Settings placement (persisted IOs only)
+    void addDigitalInputToSettings(const char* id, const char* pageName, int order);
+    void addDigitalInputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
+    void addDigitalInputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
 
-    // Digital input settings + runtime indicator (bool dot).
-    // By default it sets boolAlarmValue=true (alarm when input is logically active).
+    void addDigitalOutputToSettings(const char* id, const char* pageName, int order);
+    void addDigitalOutputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
+    void addDigitalOutputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
+
+    void addAnalogInputToSettings(const char* id, const char* pageName, int order);
+    void addAnalogInputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
+    void addAnalogInputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
+
+    void addAnalogOutputToSettings(const char* id, const char* pageName, int order);
+    void addAnalogOutputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
+    void addAnalogOutputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
+
+    // Live placement (returns handle for callbacks)
+    LiveControlHandleBool addDigitalInputToLive(const char* id, int order,
+                                                const char* pageName = "Live",
+                                                const char* cardName = "Live Values",
+                                                const char* groupName = nullptr,
+                                                const char* labelOverride = nullptr,
+                                                bool alarmWhenActive = true);
+
+    LiveControlHandleBool addDigitalOutputToLive(RuntimeControlType type,
+                                                 const char* id,
+                                                 int order,
+                                                 const char* pageName = "Live",
+                                                 const char* cardName = "Live Values",
+                                                 const char* groupName = nullptr,
+                                                 const char* labelOverride = nullptr,
+                                                 const char* onLabel = nullptr,
+                                                 const char* offLabel = nullptr);
+
+    LiveControlHandleFloat addAnalogOutputToLive(const char* id,
+                                                 int order,
+                                                 float sliderMin,
+                                                 float sliderMax,
+                                                 int sliderPrecision,
+                                                 const char* pageName = "Live",
+                                                 const char* cardName = "Live Values",
+                                                 const char* groupName = nullptr,
+                                                 const char* labelOverride = nullptr,
+                                                 const char* unit = nullptr);
+
+    void addAnalogInputToLive(const char* id, int order,
+                              const char* pageName = "Live",
+                              const char* cardName = "Live Values",
+                              const char* groupName = nullptr,
+                              const char* labelOverride = nullptr,
+                              bool showRaw = false);
+
+    void addAnalogInputToLiveWithAlarm(const char* id, int order,
+                                       float alarmMin,
+                                       float alarmMax,
+                                       AnalogAlarmCallbacks callbacks = {},
+                                       const char* pageName = "Live",
+                                       const char* cardName = "Live Values",
+                                       const char* groupName = nullptr,
+                                       const char* labelOverride = nullptr);
+
+    // Legacy combined helpers (kept for now)
+    void addIOtoGUI(const char* id, const char* cardName, int order);
     void addInputToGUI(const char* id, const char* cardName, int order,
                        const char* runtimeLabel = nullptr,
                        const char* runtimeGroup = "inputs",
                        bool alarmWhenActive = true);
-
-    // Digital input settings only (no runtime/live view registration).
-    // Use this when you want the input configurable under Settings->IO, but do not want a live indicator in Runtime.
     void addInputSettingsToGUI(const char* id, const char* cardName, int order);
-
-    // Digital input runtime indicator only (no settings/persistence registration).
-    // Use this when you want a live indicator in Runtime, but keep Settings->IO clean (or register settings separately).
     void addInputRuntimeToGUI(const char* id, int order,
                               const char* runtimeLabel = nullptr,
                               const char* runtimeGroup = "inputs",
@@ -354,6 +471,11 @@ private:
 
         bool desiredState = false;
 
+        std::function<void(bool)> onChangeCallback;
+        std::function<void()> onClickCallback;
+
+        String runtimeGroup;
+
         int lastPin = -1;
         bool lastActiveLow = true;
         bool hasLast = false;
@@ -403,6 +525,9 @@ private:
         bool showPulldownInWeb = true;
 
         bool state = false;
+        bool lastStateForCallback = false;
+        bool hasLastStateForCallback = false;
+        std::function<void(bool)> onChangeCallback;
 
         int lastPin = -1;
         bool lastActiveLow = true;
@@ -437,6 +562,7 @@ private:
         uint8_t slot = 0;
 
         bool settingsRegistered = false;
+        String settingsCategory;
         String cardKey;
         String cardPretty;
         int cardOrder = 100;
@@ -552,6 +678,8 @@ private:
         float desiredValue = 0.0f;
         float value = 0.0f;
 
+        std::function<void(float)> onChangeCallback;
+
         int lastPin = -1;
         bool hasLast = false;
         bool warningLoggedInvalidPin = false;
@@ -627,6 +755,7 @@ private:
     void reconfigureIfNeeded(DigitalInputEntry& entry);
     void readInputState(DigitalInputEntry& entry);
     void processInputEvents(DigitalInputEntry& entry, uint32_t nowMs);
+    void ensureOutputRuntimeProvider(const String& group);
     void ensureInputRuntimeProvider(const String& group);
 
     bool isStartupLongPressWindowActive(uint32_t nowMs) const;
