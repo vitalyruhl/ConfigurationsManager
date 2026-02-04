@@ -510,7 +510,7 @@ Workflow notes:
 3. [CURRENT] Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
 4. Hash-based storage keys: derive the Preferences key from an FNV1a hash of the provided `ConfigOptions::key` (or previous auto-generated key), keep the human-readable name for logs/UI, migrate legacy keys when the hash changes, and warn once if a hash collision would otherwise prevent persistence.
 4. [COMPLETED] Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
-5. IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
+5. [COMPLETED] IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
 6. Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
 7. Generic Alarm Registry: Provide `addAlarm(AlarmConfig)`/`addAlarmAnalog`, separate trigger definition from UI placement, surface `onAlarmCome/Gone/Stay` hooks, and keep alarms on the Live side unless an explicit Settings toggle is added.
 8. MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
@@ -534,11 +534,8 @@ Workflow notes:
 
 ## Medium Priority (Prio 5)
 
-- check where we kan safetly use  string_view  instead of  String  to reduce memory allocations/copies.
 - verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
-- Card layout/grid improvements
-- Alarm helpers (more UI, better formatting)
-- Allow overriding digital input definitions through a modular layer so incoming sensors can be remapped or replaced without touching the core registration (see Live Control override note above).
+
 
 
 ## Low Priority (Prio 10)
@@ -546,17 +543,10 @@ Workflow notes:
 - SD card logging (CSV)
 - IOManager improvements (PWM/LEDC backend, ramping, fail-safe states)
 - Headless mode (no HTTP server)
-- WiFi failover
-- HTTPS support (wait for ESP32 core)
+
 
 
 ## Done / Resolved
 
-- Core HelperModule added (PulseOutput + computeDewPoint + mapFloat) and examples migrated.
-- Runtime meta serialization and live layout registration now respect the layout registry so the WebUI tabs/cards populate correctly.
-
 ## Status Notes
 
-- [CURRENT] Tracking the new GUIMode validation task (generic/ESP32/Arduino Uno rules, pre-save checks, compile-time warnings, selective JSON saves, and the new error/info popup components) so the plan does not get lost.
-- [PAUSED] IOManager refactor / io-refactoring work (Implementation Sequence step 5) remains on hold until the tooling situation stabilizes.
-- [COMPLETED] IOManager now auto-populates `live_layout.json` (tabs/cards/groups for Inputs, Controls, Analog, Sensors, Alerts, System) so RuntimeDashboard.vue can rely on structured pages without a manual JSON stub.

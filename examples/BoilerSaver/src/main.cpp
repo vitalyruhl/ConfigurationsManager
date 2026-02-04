@@ -734,7 +734,7 @@ static void registerIOBindings()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
-    ioManager.addIOtoGUI(IO_BOILER_ID, "Boiler Relay", 1);
+    ioManager.addDigitalOutputToSettingsGroup(IO_BOILER_ID, "I/O", "Boiler Relay", "Boiler Relay", 1);
 
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = IO_RESET_ID,
@@ -766,7 +766,8 @@ static void registerIOBindings()
         .defaultEnabled = true,
     });
 
-    ioManager.addInputToGUI(IO_SHOWER_ID, nullptr, 100, "Shower HW-Btn", "Boiler", false);
+    ioManager.addDigitalInputToSettingsGroup(IO_SHOWER_ID, "I/O", "Shower HW-Btn", "Shower HW-Btn", 100);
+    ioManager.addDigitalInputToLive(IO_SHOWER_ID, 100, "Boiler", "Live Values", "Boiler", "Shower HW-Btn", false);
 
     cm::IOManager::DigitalInputEventOptions resetOptions;
     resetOptions.longClickMs = resetHoldDurationMs;

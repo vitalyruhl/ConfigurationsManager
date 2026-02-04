@@ -625,7 +625,7 @@ static void registerIOBindings()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
-    ioManager.addIOtoGUI(IO_FAN_ID, "Cooling Fan Relay", 1);
+    ioManager.addDigitalOutputToSettingsGroup(IO_FAN_ID, "I/O", "Cooling Fan Relay", "Cooling Fan Relay", 1);
 
     ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
         .id = IO_HEATER_ID,
@@ -634,7 +634,7 @@ static void registerIOBindings()
         .defaultActiveLow = true,
         .defaultEnabled = true,
     });
-    ioManager.addIOtoGUI(IO_HEATER_ID, "Heater Relay", 2);
+    ioManager.addDigitalOutputToSettingsGroup(IO_HEATER_ID, "I/O", "Heater Relay", "Heater Relay", 2);
 
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = IO_RESET_ID,
@@ -645,7 +645,7 @@ static void registerIOBindings()
         .defaultPulldown = false,
         .defaultEnabled = true,
     });
-    ioManager.addInputSettingsToGUI(IO_RESET_ID, nullptr, 10);
+    ioManager.addDigitalInputToSettingsGroup(IO_RESET_ID, "I/O", "Reset Button", "Reset Button", 10);
 
     ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
         .id = IO_AP_ID,
@@ -656,7 +656,7 @@ static void registerIOBindings()
         .defaultPulldown = false,
         .defaultEnabled = true,
     });
-    ioManager.addInputSettingsToGUI(IO_AP_ID, nullptr, 11);
+    ioManager.addDigitalInputToSettingsGroup(IO_AP_ID, "I/O", "AP Mode Button", "AP Mode Button", 11);
 
     cm::IOManager::DigitalInputEventOptions resetOptions;
     resetOptions.longClickMs = 3000;
