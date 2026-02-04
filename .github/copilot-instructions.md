@@ -75,7 +75,7 @@ you are my coding assistant. Follow the instructions in this file carefully when
   - Comprehensive error handling
   - Thread-safe implementations for concurrent operations
   - Detailed logging for debugging (English messages only)
-  - IMMEDIATE EMOJI REPLACEMENT: If ANY emoji is detected in code, comments, or log messages, replace it immediately with plain text equivalent like [SUCCESS], [ERROR], [WARNING], [INFO]
+  - IMMEDIATE EMOJI REPLACEMENT: If ANY emoji is detected in code, comments, or log messages, replace it immediately with plain text equivalent like [S], [E], [W], [I]
   - Callbacks & Behavior Injection Policy (C++17 / ESP32):
     - Prefer callbacks over preprocessor conditionals (`#ifdef`, `#ifndef`) when behavior needs to vary at runtime or between modules.
     - Use `std::function` for callbacks, hooks, filters, and extension points when:
@@ -229,3 +229,72 @@ you are my coding assistant. Follow the instructions in this file carefully when
     - examples/
     - docs/
     - tests/
+- Global Logging Severity & Efficiency Policy (ESP32 / Flash-Optimized):
+
+  - ALL log messages MUST use short, ASCII-only severity tags.
+  - Allowed severity tags (mandatory, global):
+    - [E] = Error (fatal or incorrect behavior)
+    - [W] = Warning (unexpected but recoverable behavior)
+    - [I] = Info (important state or decision)
+    - [D] = Debug (developer-oriented diagnostics)
+    - [T] = Trace (very low-level, noisy, step-by-step diagnostics)
+
+  - Long tags are FORBIDDEN everywhere:
+    - [ERROR], [WARNING], [INFO], [DEBUG], [SUCCESS], etc.
+
+  - Verbose is NOT a severity level:
+    - Verbose is a build/runtime flag controlling WHETHER logs are emitted.
+    - Severity tags describe WHAT the log means.
+    - Verbose / trace-enabled logs may still use [I] or [W] if semantically correct.
+    - Use [T] only for very fine-grained, noisy diagnostics.
+
+  - This policy applies globally with NO exceptions:
+    - core code
+    - libraries
+    - IO / hardware logs
+    - GUI-related logs
+    - debug and trace output
+
+- Log Message Efficiency Rule (Flash-Aware):
+
+  - Log messages must be semantically clear but as short as reasonably possible.
+  - Prefer compression over verbosity to reduce flash usage, even if logs are compiled out in release builds.
+  - Avoid filler words and redundancy when meaning stays clear:
+    - "already exists" -> "exists"
+    - "both enabled" -> "both ON"
+    - "using pull-up" -> "use pull-up"
+  - Prefer standard abbreviations consistently:
+    - cfg, init, ok, fail, pull-up/down, adc, pwm, io
+  - Keep function names short when included in logs:
+    - addAO instead of addAnalogOutput
+  - Do NOT repeat information already encoded by:
+    - severity tag ([E]/[W]/[I]/[D]/[T])
+    - module prefix ([IO], [CM], etc.)
+    - surrounding function or context
+
+- IO / Low-Level Logging Guidance:
+
+  - IO and hardware-level logs are typically debug-oriented.
+  - Treat IO_LOG output as debug/trace by default and keep especially compact.
+  - Prefer [W] or [T] for IO diagnostics unless the condition is truly critical ([E]).
+
+- Emoji Policy (Hard Rule):
+
+  - Emojis are forbidden everywhere:
+    - code
+    - comments
+    - log messages
+    - outputs
+  - Use ASCII-only severity tags:
+    - [E], [W], [I], [D], [T]
+
+- Logging Examples (Guidance Only):
+
+  - BAD:
+    IO_LOG("[WARNING] Input '%s': pull-up and pull-down both enabled, using pull-up", id);
+
+  - GOOD:
+    IO_LOG("[W] Input '%s': pull-up/down both ON, use pull-up", id);
+
+  - TRACE example:
+    IO_LOG("[T] ADC raw=%u, avg=%u", raw, avg);
