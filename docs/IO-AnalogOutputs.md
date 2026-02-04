@@ -65,16 +65,17 @@ IOManager exposes three representations:
 Slider (writes scaled value via `setValue/getValue`):
 
 ```cpp
-ioManager.addAnalogOutputSliderToGUI(
+ioManager.addAnalogOutputToSettingsGroup("dac1", "Analog - I/O", "Analog Outputs", "DAC 1", 10);
+ioManager.addAnalogOutputToLive(
     "dac1",
-    nullptr,
     10,
     0.0f,
     100.0f,
-    1.0f,
     0,
-    "DAC 1",
+    "AO",
+    "Analog Outputs",
     "controls",
+    "DAC 1",
     "%"
 );
 ```
@@ -105,7 +106,7 @@ Important behavior:
 
 Typical sketch order:
 
-1. `addAnalogOutput(...)` / `addAnalogOutputSliderToGUI(...)` / optional value readouts
+1. `addAnalogOutput(...)` / `addAnalogOutputToSettingsGroup(...)` / optional `addAnalogOutputToLive(...)` / optional value readouts
 2. `ConfigManager.loadAll()` (loads persisted pin)
 3. `ioManager.begin()`
 4. In `loop()`: `ioManager.update()` continuously applies desired output values

@@ -61,15 +61,36 @@ If you reorder inputs in code, previously stored pins may appear to "move" to an
 Registering an input for the runtime UI:
 
 ```cpp
-// alarmWhenActive=false => pressed=green, released=gray (no alarm styling)
-ioManager.addInputToGUI("testbutton", nullptr, 10, "Test Button", "inputs", false);
+ioManager.addDigitalInputToLive(
+    "testbutton",
+    10,
+    "Live",
+    "Inputs",
+    "inputs",
+    "Test Button",
+    false
+);
 ```
 
-- `runtimeGroup`: runtime group name (e.g. `"inputs"`)
-- `runtimeLabel`: label shown in the UI
+- `pageName` / `cardName` / `groupName`: live layout placement
+- `labelOverride`: label shown in the UI
 - `alarmWhenActive`:
   - `true`: input active is treated as an alarm condition (red/orange styling)
   - `false`: input behaves like a normal boolean dot (green/gray)
+
+## Settings placement
+
+Place persisted inputs in the Settings UI:
+
+```cpp
+ioManager.addDigitalInputToSettingsGroup(
+    "testbutton",
+    "Digital - I/O",
+    "Digital Inputs",
+    "Test Button",
+    10
+);
+```
 
 ## Event engine (non-blocking)
 
@@ -83,10 +104,13 @@ ioManager.configureDigitalInputEvents(
         .onRelease = [](){ /* ... */ },
         .onClick = [](){ /* ... */ },
         .onDoubleClick = [](){ /* ... */ },
+        .onMultiClick = [](uint8_t count){ /* ... */ },
         .onLongClick = [](){ /* ... */ },
     }
 );
 ```
+
+If `onMultiClick` is set, IOManager will fire it after the double-click timeout with the number of clicks (1..n), and `onClick`/`onDoubleClick` are not emitted.
 
 ### Default timings
 
@@ -150,7 +174,7 @@ ioManager.configureDigitalInputEvents(
 
 Typical sketch order:
 
-1. `addDigitalInput(...)` / `addInputToGUI(...)` / `configureDigitalInputEvents(...)`
+1. `addDigitalInput(...)` / `addDigitalInputToSettingsGroup(...)` / `addDigitalInputToLive(...)` / `configureDigitalInputEvents(...)`
 2. `ConfigManager.loadAll()` (loads persisted pins/polarity)
 3. `ioManager.begin()` (applies `pinMode(...)` and initializes states)
 4. In `loop()`: `ioManager.update()` continuously reads inputs and emits events

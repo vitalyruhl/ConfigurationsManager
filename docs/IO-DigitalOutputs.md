@@ -6,7 +6,6 @@ This document describes how **digital outputs** work in `cm::IOManager`.
 
 `IOManager` digital outputs are settings-driven and provide:
 
-- GPIO configuration via Settings (pin, polarity, enabled)
 - GPIO configuration via Settings (pin, polarity)
 - A consistent API to set and read output state
 - Optional runtime controls (checkbox/state button/momentary button)
@@ -74,38 +73,38 @@ the manager stores `desiredState` and ensures the GPIO is configured and written
 
 ## Runtime controls (UI)
 
-`IOManager::addIOtoGUI(...)` registers the output settings and can also register runtime controls.
+Place settings separately, then register runtime controls via `addDigitalOutputToLive(...)`.
 
 Checkbox (toggle):
 
 ```cpp
-ioManager.addIOtoGUI(
-  "relay27",
-  nullptr,
-  5,
-  cm::IOManager::RuntimeControlType::Checkbox,
-  [](){ return ioManager.getState("relay27"); },
-  [](bool v){ ioManager.set("relay27", v); },
-  "Relay 27",
-  "controls"
-);
+ioManager.addDigitalOutputToSettingsGroup("relay27", "Digital - I/O", "Digital Outputs", "Relay 27", 5);
+ioManager.addDigitalOutputToLive(
+    cm::IOManager::RuntimeControlType::Checkbox,
+    "relay27",
+    5,
+    "DO",
+    "Digital Outputs",
+    "controls",
+    "Relay 27"
+).onChangeCallback([](bool v){ /* ... */ });
 ```
 
 Momentary button (press=true, release=false):
 
 ```cpp
-ioManager.addIOtoGUI(
-  "holdbutton",
-  nullptr,
-  4,
-  cm::IOManager::RuntimeControlType::MomentaryButton,
-  [](){ return ioManager.getState("holdbutton"); },
-  [](bool v){ ioManager.set("holdbutton", v); },
-  "Holdbutton",
-  "controls",
-  "Running",
-  "Push"
-);
+ioManager.addDigitalOutputToSettingsGroup("holdbutton", "Digital - I/O", "Digital Outputs", "Holdbutton", 4);
+ioManager.addDigitalOutputToLive(
+    cm::IOManager::RuntimeControlType::MomentaryButton,
+    "holdbutton",
+    4,
+    "DO",
+    "Digital Outputs",
+    "controls",
+    "Holdbutton",
+    "Running",
+    "Push"
+).onChangeCallback([](bool v){ /* ... */ });
 ```
 
 ## Notes
@@ -118,7 +117,7 @@ ioManager.addIOtoGUI(
 
 Typical sketch order:
 
-1. `addDigitalOutput(...)` / `addIOtoGUI(...)` (settings + optional runtime control)
+1. `addDigitalOutput(...)` / `addDigitalOutputToSettingsGroup(...)` / `addDigitalOutputToLive(...)`
 2. `ConfigManager.loadAll()` (loads persisted pins/polarity)
 3. `ioManager.begin()` (applies `pinMode(...)` and initializes states)
 4. In `loop()`: `ioManager.update()` continuously applies desired output states

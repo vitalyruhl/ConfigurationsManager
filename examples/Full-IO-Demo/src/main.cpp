@@ -412,18 +412,6 @@ static void createAnalogOutputs()
     // 0..3.3V direct
     ioManager.addAnalogOutput("ao_v", "AO 0..3.3V", 26, true, 0.0f, 3.3f, false);
 
-    // -100..100 % -> 0..3.3V (0% is mid = ~1.65V)
-    // Disabled by default to keep the demo deterministic with only 2 physical outputs.
-    // If you want this mapping mode, enable it and ensure it does NOT share a pin with another analog output.
-    // ioManager.addAnalogOutput(cm::IOManager::AnalogOutputBinding{
-    //     .id = "ao_sym",
-    //     .name = "AO -100..100%",
-    //     .defaultPin = 26,
-    //     .valueMin = -100.0f,
-    //     .valueMax = 100.0f,
-    //     .reverse = false,
-    // });
-
 }
 
 static void registerIO(){

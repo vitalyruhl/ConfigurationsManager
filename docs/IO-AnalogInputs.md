@@ -66,6 +66,20 @@ The settings exposed in the UI include:
 - `Deadband`: minimum delta to trigger an event/update
 - `Min Event (ms)`: emits an update at least every N ms (even if unchanged)
 
+### Settings placement
+
+Place persisted inputs in the Settings UI:
+
+```cpp
+ioManager.addAnalogInputToSettingsGroup(
+    "ldr_s",
+    "Analog - I/O",
+    "Analog Inputs",
+    "LDR South",
+    10
+);
+```
+
 ## Runtime UI (raw vs scaled)
 
 Analog channels can be registered for the runtime UI as:
@@ -78,13 +92,29 @@ These can be shown in different runtime cards/groups.
 Scaled value:
 
 ```cpp
-ioManager.addAnalogInputToGUI("ldr_s", nullptr, 10, "LDR South", "analog", false);
+ioManager.addAnalogInputToLive(
+    "ldr_s",
+    10,
+    "AI",
+    "Analog Inputs",
+    "analog",
+    "LDR South",
+    false
+);
 ```
 
 Raw value:
 
 ```cpp
-ioManager.addAnalogInputToGUI("ldr_s", nullptr, 11, "LDR South (raw)", "analog_raw", true);
+ioManager.addAnalogInputToLive(
+    "ldr_s",
+    11,
+    "AI",
+    "Analog Inputs",
+    "analog_raw",
+    "LDR South (raw)",
+    true
+);
 ```
 
 ## Alarms (min/max)
@@ -120,7 +150,7 @@ You can also use combined callbacks (`onEnter`/`onExit` or `onStateChanged`) if 
 
 Typical sketch order:
 
-1. `addAnalogInput(...)` / optional `addAnalogInputToGUI(...)` / optional `configureAnalogInputAlarm(...)`
+1. `addAnalogInput(...)` / `addAnalogInputToSettingsGroup(...)` / optional `addAnalogInputToLive(...)` / optional `addAnalogInputToLiveWithAlarm(...)`
 2. `ConfigManager.loadAll()` (loads persisted pins/mapping)
 3. `ioManager.begin()`
 4. In `loop()`: `ioManager.update()` continuously reads inputs, updates runtime values, and evaluates alarms

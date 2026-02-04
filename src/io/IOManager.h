@@ -23,6 +23,11 @@ public:
     struct LiveControlHandleBool {
         std::function<void(bool)>* onChange = nullptr;
         std::function<void()>* onClick = nullptr;
+        std::function<void()>* onPress = nullptr;
+        std::function<void()>* onRelease = nullptr;
+        std::function<void()>* onLongPress = nullptr;
+        std::function<void(uint8_t)>* onMultiClick = nullptr;
+        std::function<void()> enableEvents;
 
         LiveControlHandleBool& onChangeCallback(std::function<void(bool)> cb) {
             if (onChange) {
@@ -34,6 +39,49 @@ public:
         LiveControlHandleBool& onClickCallback(std::function<void()> cb) {
             if (onClick) {
                 *onClick = std::move(cb);
+            }
+            if (enableEvents) {
+                enableEvents();
+            }
+            return *this;
+        }
+
+        LiveControlHandleBool& onPressCallback(std::function<void()> cb) {
+            if (onPress) {
+                *onPress = std::move(cb);
+            }
+            if (enableEvents) {
+                enableEvents();
+            }
+            return *this;
+        }
+
+        LiveControlHandleBool& onReleaseCallback(std::function<void()> cb) {
+            if (onRelease) {
+                *onRelease = std::move(cb);
+            }
+            if (enableEvents) {
+                enableEvents();
+            }
+            return *this;
+        }
+
+        LiveControlHandleBool& onLongPressCallback(std::function<void()> cb) {
+            if (onLongPress) {
+                *onLongPress = std::move(cb);
+            }
+            if (enableEvents) {
+                enableEvents();
+            }
+            return *this;
+        }
+
+        LiveControlHandleBool& onMultiClickCallback(std::function<void(uint8_t)> cb) {
+            if (onMultiClick) {
+                *onMultiClick = std::move(cb);
+            }
+            if (enableEvents) {
+                enableEvents();
             }
             return *this;
         }
@@ -93,6 +141,7 @@ public:
         std::function<void()> onRelease;
         std::function<void()> onClick;
         std::function<void()> onDoubleClick;
+        std::function<void(uint8_t)> onMultiClick;
         std::function<void()> onLongClick;
         std::function<void()> onLongPressOnStartup;
     };
@@ -284,40 +333,6 @@ public:
                                        const char* groupName = nullptr,
                                        const char* labelOverride = nullptr);
 
-    // Legacy combined helpers (kept for now)
-    void addIOtoGUI(const char* id, const char* cardName, int order);
-    void addInputToGUI(const char* id, const char* cardName, int order,
-                       const char* runtimeLabel = nullptr,
-                       const char* runtimeGroup = "inputs",
-                       bool alarmWhenActive = true);
-    void addInputSettingsToGUI(const char* id, const char* cardName, int order);
-    void addInputRuntimeToGUI(const char* id, int order,
-                              const char* runtimeLabel = nullptr,
-                              const char* runtimeGroup = "inputs",
-                              bool alarmWhenActive = true);
-
-    // Analog input settings + runtime values.
-    // Shows either scaled OR raw value (depending on showRaw).
-    // Call this function multiple times with different runtimeGroup values to show the same input in multiple cards.
-    void addAnalogInputToGUI(const char* id, const char* cardName, int order,
-                             const char* runtimeLabel = nullptr,
-                             const char* runtimeGroup = "analog",
-                             bool showRaw = false);
-
-    // Registers the scaled value with alarm thresholds.
-    // Alarm triggers when value < alarmMin OR value > alarmMax.
-    void addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
-                                      float alarmMin, float alarmMax,
-                                      const char* runtimeLabel = nullptr,
-                                      const char* runtimeGroup = "analog");
-
-    // Overload: same as above, but also sets callbacks for alarm transitions.
-    void addAnalogInputToGUIWithAlarm(const char* id, const char* cardName, int order,
-                                      float alarmMin, float alarmMax,
-                                      AnalogAlarmCallbacks callbacks,
-                                      const char* runtimeLabel = nullptr,
-                                      const char* runtimeGroup = "analog");
-
     // Configure analog alarm thresholds + callbacks.
     // Use NAN for alarmMin and/or alarmMax to disable that boundary.
     // Alarm is evaluated on the scaled value (getAnalogValue / runtime scaled field).
@@ -325,44 +340,6 @@ public:
                                    float alarmMin,
                                    float alarmMax,
                                    AnalogAlarmCallbacks callbacks = {});
-
-    // Overload: also registers a runtime control.
-    // - Use RuntimeControlType::Button with a single callback (momentary action)
-    // - Use RuntimeControlType::MomentaryButton with getter + setter (button UI; sets true on press, false on release)
-    // - Use RuntimeControlType::{Checkbox,StateButton} with getter + setter (switch)
-    void addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
-                    std::function<void()> onPress,
-                    const char* runtimeLabel = nullptr,
-                    const char* runtimeGroup = "controls");
-
-    void addIOtoGUI(const char* id, const char* cardName, int order, RuntimeControlType type,
-                    std::function<bool()> getter,
-                    std::function<void(bool)> setter,
-                    const char* runtimeLabel = nullptr,
-                    const char* runtimeGroup = "controls",
-                    const char* runtimeOnLabel = nullptr,
-                    const char* runtimeOffLabel = nullptr);
-
-    // Analog output runtime slider (float).
-    // Uses setValue/getValue internally.
-    void addIOtoGUI(const char* id, const char* cardName, int order,
-                    float sliderMin,
-                    float sliderMax,
-                    float sliderStep,
-                    int sliderPrecision,
-                    const char* runtimeLabel = nullptr,
-                    const char* runtimeGroup = "controls",
-                    const char* unit = nullptr);
-
-    // Analog output helpers (naming aligned with AnalogInput helpers)
-    void addAnalogOutputSliderToGUI(const char* id, const char* cardName, int order,
-                                    float sliderMin,
-                                    float sliderMax,
-                                    float sliderStep,
-                                    int sliderPrecision,
-                                    const char* runtimeLabel = nullptr,
-                                    const char* runtimeGroup = "controls",
-                                    const char* unit = nullptr);
 
     // Read-only analog output values in runtime dashboard.
     // These do NOT change the output; they only display current values.
@@ -754,6 +731,8 @@ private:
 
     void reconfigureIfNeeded(DigitalInputEntry& entry);
     void readInputState(DigitalInputEntry& entry);
+    void resetDigitalInputEventState(DigitalInputEntry& entry, uint32_t nowMs);
+    void enableDigitalInputEvents(const char* id);
     void processInputEvents(DigitalInputEntry& entry, uint32_t nowMs);
     void ensureOutputRuntimeProvider(const String& group);
     void ensureInputRuntimeProvider(const String& group);

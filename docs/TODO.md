@@ -481,7 +481,7 @@ Open questions:
    - Split IO definition from UI placement.
    - Implement `add*ToSettingsGroup` (guarded by persistSettings).
    - Implement `add*ToLive` returning a handle/builder.
-6) Implement Live callback builder API (digital/analog) + unify multi-click.
+6) [COMPLETED] Implement Live callback builder API (digital/analog) + unify multi-click.
 7) Implement generic alarm registry (`addAlarm(...)`) + UI for alarms (Live first).
 8) Refactor MQTTManager to the same pattern (define -> settings placement -> live placement) and let its attach helpers create the default MQTT tabs/groups (with override hooks) so the layout matches other core bundles.
 9) Check all examples + docs:
@@ -511,7 +511,7 @@ Workflow notes:
 4. Hash-based storage keys: derive the Preferences key from an FNV1a hash of the provided `ConfigOptions::key` (or previous auto-generated key), keep the human-readable name for logs/UI, migrate legacy keys when the hash changes, and warn once if a hash collision would otherwise prevent persistence.
 4. [COMPLETED] Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
 5. [COMPLETED] IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
-6. Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
+6. [COMPLETED] Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
 7. Generic Alarm Registry: Provide `addAlarm(AlarmConfig)`/`addAlarmAnalog`, separate trigger definition from UI placement, surface `onAlarmCome/Gone/Stay` hooks, and keep alarms on the Live side unless an explicit Settings toggle is added.
 8. MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
 9. Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
