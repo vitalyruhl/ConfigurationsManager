@@ -279,7 +279,7 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
 
     bool first = true;
     for (const auto& m : metaSorted) {
-        StaticJsonDocument<768> entryDoc;
+        StaticJsonDocument<1536> entryDoc;
         JsonObject o = entryDoc.to<JsonObject>();
         o["group"] = m.group;
         o["key"] = m.key;
@@ -341,6 +341,26 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         }
         if (m.offLabel.length()) {
             o["offLabel"] = m.offLabel;
+        }
+        if (!m.style.empty()) {
+            JsonObject styleObj = o.createNestedObject("style");
+            for (const auto& rule : m.style.rules) {
+                if (!rule.target.length()) {
+                    continue;
+                }
+                JsonObject ruleObj = styleObj.createNestedObject(rule.target);
+                if (rule.hasVisible) {
+                    ruleObj["visible"] = rule.visible;
+                }
+                if (rule.className.length()) {
+                    ruleObj["className"] = rule.className;
+                }
+                for (const auto& prop : rule.properties) {
+                    if (prop.key.length()) {
+                        ruleObj[prop.key] = prop.value;
+                    }
+                }
+            }
         }
 
         String entryJson;

@@ -277,7 +277,6 @@ void loop()
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
-    ConfigManager.handleRuntimeAlarms();
 
     static unsigned long lastLoopLog = 0;
     if (millis() - lastLoopLog > 60000)

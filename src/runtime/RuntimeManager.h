@@ -18,6 +18,71 @@ struct RuntimeValueProvider {
         : name(n), fill(f), order(o) {}
 };
 
+struct RuntimeStyleProperty {
+    String key;
+    String value;
+};
+
+struct RuntimeStyleRule {
+    String target;
+    std::vector<RuntimeStyleProperty> properties;
+    bool hasVisible = false;
+    bool visible = true;
+    String className;
+
+    RuntimeStyleRule& set(const char* property, const char* value) {
+        if (!property || !property[0]) {
+            return *this;
+        }
+        for (auto& prop : properties) {
+            if (prop.key == property) {
+                prop.value = value ? value : "";
+                return *this;
+            }
+        }
+        properties.push_back(RuntimeStyleProperty{String(property), value ? String(value) : String()});
+        return *this;
+    }
+
+    RuntimeStyleRule& setVisible(bool value) {
+        hasVisible = true;
+        visible = value;
+        return *this;
+    }
+
+    RuntimeStyleRule& addCSSClass(const char* cssClass) {
+        if (!cssClass || !cssClass[0]) {
+            return *this;
+        }
+        if (!className.isEmpty()) {
+            className += " ";
+        }
+        className += cssClass;
+        return *this;
+    }
+};
+
+struct RuntimeFieldStyle {
+    std::vector<RuntimeStyleRule> rules;
+
+    RuntimeStyleRule& rule(const char* targetName) {
+        String target = targetName ? String(targetName) : String();
+        for (auto& rule : rules) {
+            if (rule.target == target) {
+                return rule;
+            }
+        }
+        RuntimeStyleRule created;
+        created.target = target;
+        rules.push_back(std::move(created));
+        return rules.back();
+    }
+
+    bool empty() const {
+        return rules.empty();
+    }
+};
+
 // Runtime field metadata structure
 struct RuntimeFieldMeta {
     String group;
@@ -57,6 +122,7 @@ struct RuntimeFieldMeta {
     bool initialState = false;
     String staticValue;
     String card;
+    RuntimeFieldStyle style;
 };
 
 // Interactive control structures

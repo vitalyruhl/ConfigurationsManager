@@ -20,6 +20,7 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 #include "io/IOManager.h"
+#include "alarm/AlarmManager.h"
 #include "logging/LoggingManager.h"
 
 #define CM_MQTT_NO_DEFAULT_HOOKS
@@ -84,6 +85,7 @@ static cm::LoggingManager &lmg = cm::LoggingManager::instance();
 using LL = cm::LoggingManager::Level;
 static cm::MQTTManager &mqtt = cm::MQTTManager::instance();
 static cm::IOManager ioManager;
+static cm::AlarmManager alarmManager;
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
@@ -128,8 +130,8 @@ bool boilerState = false;    // current state of the heater (on/off)
 static bool displayActive = true; // flag to indicate if the display is active
 
 static bool globalAlarmState = false;// Global alarm state for temperature monitoring
-static constexpr char TEMP_ALARM_ID[] = "temp_low";
-static constexpr char SENSOR_FAULT_ALARM_ID[] = "sensor_fault";
+static constexpr char TEMP_ALARM_ID[] = "AL_Status";
+static constexpr char SENSOR_FAULT_ALARM_ID[] = "SF_Status";
 static bool sensorFaultState = false; // Global alarm state for sensor fault monitoring
 
 static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
@@ -296,7 +298,7 @@ void loop()
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
-    ConfigManager.handleRuntimeAlarms();
+    alarmManager.update();
 
     // Non-blocking display updates
     if (millis() - lastDisplayUpdate > displayUpdateInterval)
@@ -311,7 +313,6 @@ void loop()
     {
         lastAlarmEval = millis();
         UpdateBoilerAlarmState();
-        CRM().updateAlarms();
     }
 
     mqtt.loop();
@@ -424,42 +425,44 @@ void setupGUI()
     }
 
     // Add alarms provider for min Temperature monitoring with hysteresis
-    CRM().registerRuntimeAlarm(TEMP_ALARM_ID);
-    CRM().registerRuntimeAlarm(SENSOR_FAULT_ALARM_ID);
     CRM().addRuntimeProvider("Alarms",
         [](JsonObject &o)
         {
-            o["AL_Status"] = globalAlarmState;
-            o["SF_Status"] = sensorFaultState;
             o["On_Threshold"] = boilerSettings.onThreshold->get();
             o["Off_Threshold"] = boilerSettings.offThreshold->get();
         });
 
-    // Define alarm metadata fields
-    RuntimeFieldMeta alarmMeta{};
-    alarmMeta.group = "Alarms";
-    alarmMeta.key = "AL_Status";
-    alarmMeta.label = "Under Temperature Alarm (Boiler Error?)";
-    alarmMeta.precision = 0;
-    alarmMeta.order = 1;
-    alarmMeta.isBool = true;
-    alarmMeta.boolAlarmValue = true;
-    alarmMeta.alarmWhenTrue = true;
-    alarmMeta.hasAlarm = true;
-    CRM().addRuntimeMeta(alarmMeta);
+    alarmManager.addDigitalAlarm(
+        TEMP_ALARM_ID,
+        "Under Temperature Alarm (Boiler Error?)",
+        []() { return globalAlarmState; },
+        cm::AlarmKind::DigitalActive,
+        true,
+        cm::AlarmSeverity::Alarm);
+    alarmManager.addAlarmToLive(
+        TEMP_ALARM_ID,
+        1,
+        "Alarms",
+        "Live Values",
+        "Alarms",
+        "Under Temperature Alarm (Boiler Error?)");
 
-    // Define sensor fault alarm metadata
-    RuntimeFieldMeta sensorFaultMeta{};
-    sensorFaultMeta.group = "Alarms";
-    sensorFaultMeta.key = "SF_Status";
-    sensorFaultMeta.label = "Temperature Sensor Fault";
-    sensorFaultMeta.precision = 0;
-    sensorFaultMeta.order = 2;
-    sensorFaultMeta.isBool = true;
-    sensorFaultMeta.boolAlarmValue = true;
-    sensorFaultMeta.alarmWhenTrue = true;
-    sensorFaultMeta.hasAlarm = true;
-    CRM().addRuntimeMeta(sensorFaultMeta);
+    alarmManager.addDigitalWarning(
+        {
+            .id = SENSOR_FAULT_ALARM_ID,
+            .name = "Temperature Sensor Fault",
+            .kind = cm::AlarmKind::DigitalActive,
+            .severity = cm::AlarmSeverity::Warning,
+            .enabled = true,
+            .getter = []() { return sensorFaultState; },
+        });
+    alarmManager.addWarningToLive(
+        SENSOR_FAULT_ALARM_ID,
+        2,
+        "Alarms",
+        "Live Values",
+        "Alarms",
+        "Temperature Sensor Fault");
 
     // show some Info
     {
@@ -495,7 +498,6 @@ void setupGUI()
         /*helpText*/ "Request hot water now; toggles boiler for a shower",
         /*sortOrder*/ 90
     );
-    CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
 }
 
 void UpdateBoilerAlarmState()
@@ -523,7 +525,6 @@ void UpdateBoilerAlarmState()
         //todo -a add a new LL:state:Alarm for alarms
         lmg.log(LL::Error, "Temperature %.1f°C -> %s",
                 temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF");
-        CRM().setRuntimeAlarmActive(TEMP_ALARM_ID, globalAlarmState, false);
         handeleBoilerState(true); // Force boiler if the temperature is too low
     }
 }
@@ -631,7 +632,6 @@ static void cb_readTempSensor() {
     if (sensorError) {
         if (!sensorFaultState) {
             sensorFaultState = true;
-            CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, true, false);
             lmg.log(LL::Error, "SENSOR FAULT detected! Reading: %.2f°C", t);
         }
         lmg.log(LL::Warn, "Invalid temperature reading: %.2f°C (sensor fault)", t);
@@ -642,14 +642,11 @@ static void cb_readTempSensor() {
         // Clear sensor fault if it was set
         if (sensorFaultState) {
             sensorFaultState = false;
-            CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, false, false);
             lmg.log(LL::Debug,"Sensor fault cleared! Reading: %.2f°C", t);
         }
 
         temperature = t + tempSensorSettings.corrOffset->get();
         lmg.log(LL::Trace, "Temperature updated: %.2f°C (offset: %.2f°C)", temperature, tempSensorSettings.corrOffset->get());
-        // Optionally: push alarms now
-        // CRM().updateAlarms(); // cheap
     }
 }
 
@@ -680,14 +677,12 @@ static void setupTempSensor() {
 
         // Set sensor fault alarm if no devices found
         sensorFaultState = true;
-        CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, true, false);
         lmg.log(LL::Warn, "Sensor fault alarm activated - no devices found");
     } else {
         lmg.log(LL::Info, "Found %d DS18B20 sensor(s) on GPIO %d", deviceCount, pin);
 
         // Clear sensor fault alarm if devices are found
         sensorFaultState = false;
-        CRM().setRuntimeAlarmActive(SENSOR_FAULT_ALARM_ID, false, false);
 
         // Check if sensor is using parasitic power
         bool parasitic = ds18->readPowerSupply(0);

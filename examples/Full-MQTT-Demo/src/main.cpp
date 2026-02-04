@@ -236,14 +236,6 @@ void loop()
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
-    ConfigManager.handleRuntimeAlarms();
-
-    static unsigned long lastAlarmEval = 0;
-    if (millis() - lastAlarmEval > 1500)
-    {
-        lastAlarmEval = millis();
-        CRM().updateAlarms();
-    }
 
     mqtt.loop();
     lmg.loop();

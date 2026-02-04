@@ -8,6 +8,7 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 #include "io/IOManager.h"
+#include "alarm/AlarmManager.h"
 
 #if __has_include("secret/wifiSecret.h")
 #include "secret/wifiSecret.h"
@@ -29,6 +30,7 @@ static cm::CoreSystemSettings &systemSettings = coreSettings.system;            
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;                     // WiFi: SSID, password, DHCP/static networking
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;                        // NTP: sync interval, servers, timezone
 static cm::IOManager ioManager;
+static cm::AlarmManager alarmManager;
 static cm::CoreWiFiServices wifiServices;
 
 static uint32_t testPressPulseUntilMs = 0;
@@ -115,6 +117,7 @@ void loop()
     ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
     ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
     ioManager.update(); // Apply IO setting changes and keep inputs/outputs state current
+    alarmManager.update(); // Evaluate alarms and fire callbacks
     ConfigManager.handleClient(); // Handle web server client requests
     ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
@@ -239,19 +242,28 @@ static void registerGUIForAI(){
     ioManager.addAnalogInputToLive("ldr_w", 21, "AI", "Analog Inputs", "Analog Inputs", "LDR VP", false);
     ioManager.addAnalogInputToLive("ldr_w", 22, "AI", "Analog Inputs", "Analog Inputs", "LDR VP RAW", true);
 
-    ioManager.addAnalogInputToLiveWithAlarm(
-        "ldr_w",
-        23,
+    alarmManager.addAnalogAlarm(
+        "ldr_w_alarm",
+        "LDR VP",
+        []() { return ioManager.getAnalogValue("ldr_w"); },
+        cm::AlarmKind::AnalogOutsideWindow,
         30.0f,
         95.0f,
-        cm::IOManager::AnalogAlarmCallbacks{
-            .onEnter = []() {
-                Serial.println("[ALARM][ldr_w] enter");
-            },
-            .onExit = []() {
-                Serial.println("[ALARM][ldr_w] exit");
-            },
-        },
+        true,
+        true,
+        true,
+        cm::AlarmSeverity::Alarm
+    )
+    .onAlarmCome([]() {
+        Serial.println("[ALARM][ldr_w] enter");
+    })
+    .onAlarmGone([]() {
+        Serial.println("[ALARM][ldr_w] exit");
+    });
+
+    alarmManager.addAlarmToLive(
+        "ldr_w_alarm",
+        23,
         "AI",
         "Analog Inputs",
         "Min Max Alarms Extra Card",

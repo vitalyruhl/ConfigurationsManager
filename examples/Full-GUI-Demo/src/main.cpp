@@ -8,6 +8,7 @@
 
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
+#include "alarm/AlarmManager.h"
 
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Full-GUI-Demo"
@@ -38,6 +39,7 @@ static cm::CoreSystemSettings &systemSettings = coreSettings.system;
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
+static cm::AlarmManager alarmManager;
 
 // Settings shown in the Settings tab (GUI demo).
 struct ExampleSettings
@@ -220,13 +222,12 @@ void loop()
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
-    ConfigManager.handleRuntimeAlarms();
 
     static unsigned long lastAlarmEval = 0;
     if (millis() - lastAlarmEval > 1500)
     {
         lastAlarmEval = millis();
-        CRM().updateAlarms();
+        alarmManager.update();
     }
 
     delay(10);
@@ -317,33 +318,37 @@ static void setupGUI()
         26);
 
     // Alarms demo.
-    ConfigManager.defineRuntimeAlarm("alerts", "overheat", "Overheat Warning", []() {
-        return mockedTemperatureC > 26.0f;
-    });
+    alarmManager.addDigitalWarning(
+        {
+            .id = "overheat",
+            .name = "Overheat Warning",
+            .kind = cm::AlarmKind::DigitalActive,
+            .severity = cm::AlarmSeverity::Warning,
+            .enabled = true,
+            .getter = []() { return mockedTemperatureC > 26.0f; },
+        })
+        .addCSSClass("stateDotOnAlarm", "alarm-overheat");
+    alarmManager.addWarningToLive(
+        "overheat",
+        28,
+        "alerts",
+        "Live Values",
+        "Alerts",
+        "Overheat Warning");
 
-    CRM().addRuntimeProvider("alerts", [](JsonObject &data) {
+    CRM().addRuntimeProvider("Alerts", [](JsonObject &data) {
         data["connected"] = WiFi.status() == WL_CONNECTED;
-        data["overheat"] = CRM().isRuntimeAlarmActive("alerts.overheat");
     }, 1);
 
     RuntimeFieldMeta connectedMeta;
-    connectedMeta.group = "alerts";
+    connectedMeta.group = "Alerts";
     connectedMeta.key = "connected";
     connectedMeta.label = "Connected";
     connectedMeta.order = 29;
     connectedMeta.isBool = true;
     CRM().addRuntimeMeta(connectedMeta);
 
-    RuntimeFieldMeta overheatMeta;
-    overheatMeta.group = "alerts";
-    overheatMeta.key = "overheat";
-    overheatMeta.label = "Overheat Warning";
-    overheatMeta.order = 28;
-    overheatMeta.isBool = true;
-    overheatMeta.hasAlarm = true;
-    overheatMeta.alarmWhenTrue = true;
-    overheatMeta.boolAlarmValue = true;
-    CRM().addRuntimeMeta(overheatMeta);
+    // Overheat alarm meta is provided by AlarmManager
 
     // Runtime provider injection into the built-in system card.
     CRM().addRuntimeProvider("system", [](JsonObject &data) {

@@ -17,6 +17,7 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 #include "io/IOManager.h"
+#include "alarm/AlarmManager.h"
 #include "logging/LoggingManager.h"
 
 #define CM_MQTT_NO_DEFAULT_HOOKS
@@ -115,6 +116,7 @@ using LL = cm::LoggingManager::Level;
 static cm::MQTTManager &mqtt = cm::MQTTManager::instance();
 static cm::MQTTManager::Settings &mqttSettings = mqtt.settings();
 static cm::IOManager ioManager;
+static cm::AlarmManager alarmManager;
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
@@ -342,7 +344,7 @@ void loop()
     ConfigManager.handleClient();
     ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
-    ConfigManager.handleRuntimeAlarms();
+    alarmManager.update();
 
     if (mqttSettings.enableMQTT.get() && ConfigManager.getWiFiManager().isConnected() && !ConfigManager.getWiFiManager().isInAPMode())
     {
@@ -559,36 +561,26 @@ void setupGUI()
       heaterMeta.order = 2;
       CRM().addRuntimeMeta(heaterMeta);
 
-      RuntimeFieldMeta dewpointRiskMeta;
-      dewpointRiskMeta.group = "Outputs";
-      dewpointRiskMeta.key = "dewpoint_risk";
-      dewpointRiskMeta.label = "Dewpoint Risk";
-      dewpointRiskMeta.isBool = true;
-      dewpointRiskMeta.hasAlarm = true;
-      dewpointRiskMeta.alarmWhenTrue = true;
-      dewpointRiskMeta.boolAlarmValue = true;
-      dewpointRiskMeta.order = 3;
-      CRM().addRuntimeMeta(dewpointRiskMeta);
-
-      // Alarm: temperature is close to dewpoint (risk of condensation)
-      ConfigManager.defineRuntimeAlarm(
-        "Outputs",
-        "dewpoint_risk",
-        "Dewpoint Risk",
-        [](){
-          return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow->get();
-        },
-        [](){
-          dewpointRiskActive = true;
-          lmg.logTag(LL::Warn, "ALARM", "Dewpoint risk ENTER");
-          EvaluateHeater(temperature);
-        },
-        [](){
-          dewpointRiskActive = false;
-          lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
-          EvaluateHeater(temperature);
-        }
-      );
+      alarmManager.addDigitalWarning(
+          {
+              .id = "dewpoint_risk",
+              .name = "Dewpoint Risk",
+              .kind = cm::AlarmKind::DigitalActive,
+              .severity = cm::AlarmSeverity::Warning,
+              .enabled = true,
+              .getter = []() { return (temperature - Dewpoint) <= tempSettings.dewpointRiskWindow->get(); },
+          })
+          .onAlarmCome([]() {
+              dewpointRiskActive = true;
+              lmg.logTag(LL::Warn, "ALARM", "Dewpoint risk ENTER");
+              EvaluateHeater(temperature);
+          })
+          .onAlarmGone([]() {
+              dewpointRiskActive = false;
+              lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
+              EvaluateHeater(temperature);
+          });
+      alarmManager.addWarningToLive("dewpoint_risk", 3, "Outputs", "Live Values", "Outputs", "Dewpoint Risk");
   //endregion relay outputs
 
 }
