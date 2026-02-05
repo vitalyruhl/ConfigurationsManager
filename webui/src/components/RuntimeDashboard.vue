@@ -159,8 +159,8 @@
               v-else-if="
                 hasRuntimeValue(f)
               "
-                :class="['rw', valueClasses(runtimeValue(f), f, fieldSourceGroup(f))]"
-                :data-group="fieldSourceGroup(f)"
+              :class="['rw', valueClasses(runtimeValue(f), f, fieldSourceGroup(f)), ...fieldClasses(f, 'row')]"
+              :data-group="fieldSourceGroup(f)"
               :data-key="f.key"
               :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
               :data-state="
@@ -843,14 +843,21 @@ function normalizeStyle(style) {
   const normalized = {};
   Object.entries(style).forEach(([ruleKey, ruleValue]) => {
     if (!ruleValue || typeof ruleValue !== "object") return;
-    const { visible, ...rest } = ruleValue;
+    const { visible, className, classes, ...rest } = ruleValue;
     const cssProps = { ...rest };
-    normalized[ruleKey] = {
+    const entry = {
       css: cssProps,
       visible: Object.prototype.hasOwnProperty.call(ruleValue, "visible")
         ? !!visible
         : undefined,
     };
+    if (typeof className === "string") {
+      entry.className = className;
+    }
+    if (typeof classes !== "undefined") {
+      entry.classes = classes;
+    }
+    normalized[ruleKey] = entry;
   });
   return Object.keys(normalized).length ? normalized : null;
 }
@@ -1678,6 +1685,35 @@ function fieldCss(meta, key) {
   const rule = fieldRule(meta, key);
   if (!rule) return {};
   return rule.css || {};
+}
+
+function normalizeClassTokens(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => normalizeClassTokens(entry))
+      .filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function fieldClasses(meta, key) {
+  const rule = fieldRule(meta, key);
+  if (!rule) return [];
+  const classes = [];
+  if (typeof rule.className === "string") {
+    classes.push(...normalizeClassTokens(rule.className));
+  }
+  if (typeof rule.classes !== "undefined") {
+    classes.push(...normalizeClassTokens(rule.classes));
+  }
+  return classes;
 }
 
 function boolAlarmMatch(val, meta) {

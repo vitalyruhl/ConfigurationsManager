@@ -22,8 +22,8 @@ static const char SETTINGS_PASSWORD[] = "cm";
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .card h3 { color: orange; text-decoration: underline; font-weight: 900 !important; font-size: 1.2rem !important; }
 /* Apply to the whole row (label + value + unit) */
-.rw[data-group="sensors"][data-key="temp"]{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
-.rw[data-group="sensors"][data-key="temp"] *{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
+.myCSSTemperatureClass { color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
+.myCSSTemperatureClass * { color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
 
 /* select the injected Value */
 .rw[data-group="system"][data-key="testValue"]{ color:red !important; }
@@ -115,6 +115,10 @@ static ExampleSettings exampleSettings;
 static Ticker sensorMockTicker;
 static float mockedTemperatureC = 21.0f;
 static float mockedTemperatureOffsetC = 0.0f;
+static float mockedHumidity = 45.0f;
+static float mockedPressure = 1013.0f;
+static float mockedDewPointC = 10.0f;
+static bool mockedDewpointRisk = false;
 static int mockedAdjustValue = 0;
 static bool demoCheckboxState = false;
 static bool demoStateButton = false;
@@ -130,6 +134,11 @@ static void updateMockedSensors()
 {
     const float base = randomFloat(18.0f, 28.0f);
     mockedTemperatureC = base + mockedTemperatureOffsetC + (float)mockedAdjustValue * 0.1f;
+    mockedHumidity = randomFloat(35.0f, 70.0f);
+    mockedPressure = randomFloat(990.0f, 1030.0f);
+    const float dewpointNoise = randomFloat(-1.5f, 3.0f);
+    mockedDewPointC = mockedTemperatureC - ((100.0f - mockedHumidity) / 5.0f) + dewpointNoise;
+    mockedDewpointRisk = mockedTemperatureC < mockedDewPointC;
 }
 
 void onWiFiConnected();
@@ -179,7 +188,9 @@ void setup()
 
     // Keep the runtime tabs ordered for the custom providers we register.
     ConfigManager.addLivePage("sensors", 10);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Sensors", 10);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Temperature", 10);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Humidity & Pressure", 20);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Dewpoint & Status", 30);
     ConfigManager.addLivePage("controls", 20);
     ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 20);
     ConfigManager.addLivePage("alerts", 30);
@@ -226,19 +237,77 @@ static void setupGUI()
 {
     Serial.println("[GUI] setupGUI() start");
 
-    // Sensors card (GUI-only demo, values are mocked).
-    CRM().addRuntimeProvider("sensors", [](JsonObject &data) {
+    // Temperature card (GUI-only demo, values are mocked).
+    CRM().addRuntimeProvider("Temperature", [](JsonObject &data) {
         data["temp"] = roundf(mockedTemperatureC * 10.0f) / 10.0f;
     }, 2);
 
     RuntimeFieldMeta tempMeta;
-    tempMeta.group = "sensors";
+    tempMeta.group = "Temperature";
     tempMeta.key = "temp";
     tempMeta.label = "Temperature [MOCKED DATA]";
     tempMeta.unit = "°C";
     tempMeta.precision = 1;
     tempMeta.order = 10;
+    tempMeta.style.rule("row").addCSSClass("myCSSTemperatureClass");
     CRM().addRuntimeMeta(tempMeta);
+
+    // Humidity + pressure card.
+    CRM().addRuntimeProvider("Humidity & Pressure", [](JsonObject &data) {
+        data["hum"] = roundf(mockedHumidity * 10.0f) / 10.0f;
+        data["pressure"] = roundf(mockedPressure * 10.0f) / 10.0f;
+    }, 3);
+
+    RuntimeFieldMeta humMeta;
+    humMeta.group = "Humidity & Pressure";
+    humMeta.key = "hum";
+    humMeta.label = "Humidity";
+    humMeta.unit = "%";
+    humMeta.precision = 1;
+    humMeta.order = 20;
+    CRM().addRuntimeMeta(humMeta);
+
+    RuntimeFieldMeta pressureMeta;
+    pressureMeta.group = "Humidity & Pressure";
+    pressureMeta.key = "pressure";
+    pressureMeta.label = "Pressure";
+    pressureMeta.unit = "hPa";
+    pressureMeta.precision = 1;
+    pressureMeta.order = 30;
+    CRM().addRuntimeMeta(pressureMeta);
+
+    // Dewpoint + status card.
+    CRM().addRuntimeProvider("Dewpoint & Status", [](JsonObject &data) {
+        data["dew"] = roundf(mockedDewPointC * 10.0f) / 10.0f;
+        data["dewRisk"] = mockedDewpointRisk;
+    }, 4);
+
+    RuntimeFieldMeta dewMeta;
+    dewMeta.group = "Dewpoint & Status";
+    dewMeta.key = "dew";
+    dewMeta.label = "Dewpoint";
+    dewMeta.unit = "°C";
+    dewMeta.precision = 1;
+    dewMeta.order = 40;
+    CRM().addRuntimeMeta(dewMeta);
+
+    RuntimeFieldMeta dewDivider;
+    dewDivider.group = "Dewpoint & Status";
+    dewDivider.key = "dewStatusDivider";
+    dewDivider.label = "Status";
+    dewDivider.isDivider = true;
+    dewDivider.order = 45;
+    CRM().addRuntimeMeta(dewDivider);
+
+    RuntimeFieldMeta dewRiskMeta;
+    dewRiskMeta.group = "Dewpoint & Status";
+    dewRiskMeta.key = "dewRisk";
+    dewRiskMeta.label = "Dewpoint Risk";
+    dewRiskMeta.order = 50;
+    dewRiskMeta.isBool = true;
+    dewRiskMeta.hasAlarm = true;
+    dewRiskMeta.boolAlarmValue = true;
+    CRM().addRuntimeMeta(dewRiskMeta);
 
     // Controls card (GUI interaction demo, no hardware IO here).
     CRM().addRuntimeProvider("controls", [](JsonObject &data) {
