@@ -728,7 +728,14 @@ bool AlarmManager::readAnalogSource(const AlarmEntry& entry, float& value) const
 
 void AlarmManager::update()
 {
-    const auto now = std::chrono::milliseconds(millis());
+    const uint32_t nowMsRaw = millis();
+    if (updateIntervalMs > 0 && lastUpdateMs != 0) {
+        if (static_cast<uint32_t>(nowMsRaw - lastUpdateMs) < updateIntervalMs) {
+            return;
+        }
+    }
+    lastUpdateMs = nowMsRaw;
+    const auto now = std::chrono::milliseconds(nowMsRaw);
     for (auto& entry : alarms) {
         bool nextActive = false;
         AlarmState nextState = AlarmState::Ok;
@@ -815,6 +822,12 @@ void AlarmManager::update()
             }
         }
     }
+}
+
+void AlarmManager::setUpdateInterval(uint32_t intervalMs)
+{
+    updateIntervalMs = intervalMs;
+    lastUpdateMs = 0;
 }
 
 } // namespace cm

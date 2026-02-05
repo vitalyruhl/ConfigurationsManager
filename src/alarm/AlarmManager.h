@@ -141,6 +141,7 @@ public:
                                  const char* groupName,
                                  int order);
 
+    void setUpdateInterval(uint32_t intervalMs);
     void update();
 
 private:
@@ -197,6 +198,9 @@ private:
         RuntimeFieldStyle style;
         std::vector<AlarmPlacement> placements;
     };
+
+    uint32_t updateIntervalMs = 1500;
+    uint32_t lastUpdateMs = 0;
 
     struct AlarmLiveGroup {
         String group;

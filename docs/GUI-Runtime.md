@@ -111,11 +111,14 @@ dew.value("dew", []() { return dewPoint; })
 ### Supported field types (builder)
 
 - `value(key, getter)` for numeric/string/bool (auto type)
+- `value(getter)` auto key (`field_#`) for quick demos
 - `boolValue(key, getter)` with alarm semantics
 - `divider(label, order)`
 - `button`, `checkbox`, `stateButton`, `momentaryButton`
 - `intSlider`, `floatSlider`
 - `intInput`, `floatInput`
+
+Auto keys are generated in creation order; use explicit keys for stable CSS/automation.
 
 ## 6. Alarms
 

@@ -20,9 +20,9 @@ static const char SETTINGS_PASSWORD[] = "cm";
 // Global theme override demo.
 // Served via /user_theme.css and auto-injected by the frontend if present.
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-.card h3 { color: orange; text-decoration: underline; font-weight: 900 !important; font-size: 1.2rem !important; }
+.card h3 { color: sandybrown !important; font-weight: 900 !important; font-size: 1.3rem !important; }
 /* Apply to the whole row (label + value + unit) */
-.myCSSTemperatureClass * { color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
+.myCSSTemperatureClass * { color:rgb(198, 16, 16) !important; font-weight:900 !important; font-size: 1.2rem !important; }
 
 /* select the injected Value */
 .rw[data-group="system"][data-key="testValue"]{ color:red !important; }
@@ -120,6 +120,9 @@ static bool mockedDewpointRisk = false;
 static int mockedAdjustValue = 0;
 static bool demoCheckboxState = false;
 static bool demoStateButton = false;
+static bool demoMomentaryState = false;
+static int demoIntInputValue = 5;
+static float demoFloatInputValue = 1.0f;
 
 static float randomFloat(float minValue, float maxValue)
 {
@@ -144,6 +147,9 @@ void onWiFiDisconnected();
 void onWiFiAPMode();
 
 static void setupGUI();
+static void setupGuiSensors();
+static void setupGuiIoTest();
+static void setupGuiSystem();
 static void cbTestButton();
 
 void setup()
@@ -189,12 +195,7 @@ void loop()
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
 
-    static unsigned long lastAlarmEval = 0;
-    if (millis() - lastAlarmEval > 1500)
-    {
-        lastAlarmEval = millis();
-        alarmManager.update();
-    }
+    alarmManager.update();
 
     delay(10);
 }
@@ -205,78 +206,109 @@ static void setupGUI()
 
     // Live layout is defined by the builder calls below.
 
-    // Temperature card (GUI-only demo, values are mocked).
-    auto tempCard = ConfigManager.liveGroup("Temperature")
-                        .page("Live", 10)
-                        .card("Temperature", 10);
+    setupGuiSensors();
+    setupGuiIoTest();
+    setupGuiSystem();
 
-    tempCard.value("temp", []() { return roundf(mockedTemperatureC * 10.0f) / 10.0f; })
+    Serial.println("[GUI] setupGUI() end");
+}
+
+static void setupGuiSensors()
+{
+    // BME280-style sensor card (GUI-only demo, values are mocked).
+    auto sensors = ConfigManager.liveGroup("sensors")
+                       .page("Sensors", 10)
+                       .card("BME280 - Temperature Sensor", 10);
+
+    sensors.value("temp", []() { return roundf(mockedTemperatureC * 10.0f) / 10.0f; })
         .label("Temperature [MOCKED DATA]")
         .unit("°C")
         .precision(1)
         .order(10)
         .addCSSClass("myCSSTemperatureClass");
 
-    // Humidity + pressure card.
-    auto humCard = ConfigManager.liveGroup("Humidity & Pressure")
-                        .page("Live", 10)
-                        .card("Humidity & Pressure", 20);
-
-    humCard.value("hum", []() { return roundf(mockedHumidity * 10.0f) / 10.0f; })
+    sensors.value([]() { return roundf(mockedHumidity * 10.0f) / 10.0f; })
         .label("Humidity")
         .unit("%")
         .precision(1)
-        .order(20);
+        .order(11);
 
-    humCard.value("pressure", []() { return roundf(mockedPressure * 10.0f) / 10.0f; })
+    sensors.value([]() { return roundf(mockedPressure * 10.0f) / 10.0f; })
         .label("Pressure")
         .unit("hPa")
         .precision(1)
-        .order(30);
+        .order(12);
 
-    // Dewpoint + status card.
-    auto dewCard = ConfigManager.liveGroup("Dewpoint & Status")
-                        .page("Live", 10)
-                        .card("Dewpoint & Status", 30);
+    auto dewpointGroup = ConfigManager.liveGroup("sensors")
+                            .page("Sensors", 10)
+                            .card("BME280 - Temperature Sensor", 10)
+                            .group("Dewpoint", 20);
 
-    dewCard.value("dew", []() { return roundf(mockedDewPointC * 10.0f) / 10.0f; })
+    dewpointGroup.value("dew", []() { return roundf(mockedDewPointC * 10.0f) / 10.0f; })
         .label("Dewpoint")
         .unit("°C")
         .precision(1)
-        .order(40);
-
-    dewCard.divider("Status", 45);
-
-    dewCard.boolValue("dewRisk", []() { return mockedDewpointRisk; })
-        .label("Dewpoint Risk")
-        .order(50);
-
-    // Controls card (GUI interaction demo, no hardware IO here).
-    auto controls = ConfigManager.liveGroup("controls")
-                        .page("Live", 10)
-                        .card("Controls", 40);
-
-    controls.button("testBtn", "Test Button", []() { cbTestButton(); })
         .order(20);
 
-    controls.checkbox(
+    alarmManager.addDigitalWarning(
+        {
+            .id = "dewRisk",
+            .name = "Condensation Risk",
+            .kind = cm::AlarmKind::DigitalActive,
+            .severity = cm::AlarmSeverity::Warning,
+            .enabled = true,
+            .getter = []() { return mockedDewpointRisk; },
+        });
+    alarmManager.addWarningToLive(
+        "dewRisk",
+        30,
+        "Sensors",
+        "BME280 - Temperature Sensor",
+        "Dewpoint",
+        "Condensation Risk");
+}
+
+static void setupGuiIoTest()
+{
+    // IO test page (GUI interaction demo, no hardware IO here).
+    auto ioButtons = ConfigManager.liveGroup("io-test")
+                         .page("IO Test", 20)
+                         .card("Buttons", 10);
+
+    ioButtons.button("testBtn", "Test Button", []() { cbTestButton(); })
+        .order(10);
+
+    ioButtons.checkbox(
         "demoCheckbox",
         "Demo Checkbox",
         []() { return demoCheckboxState; },
         [](bool state) { demoCheckboxState = state; })
-        .order(21);
+        .order(11);
 
-    controls.stateButton(
+    ioButtons.stateButton(
         "demoState",
         "Demo State",
         []() { return demoStateButton; },
         [](bool state) { demoStateButton = state; },
-        false)
-        .order(22);
+        false,
+        "On",
+        "Off")
+        .order(12);
 
-    controls.divider("Analog", 23);
+    ioButtons.momentaryButton(
+        "demoMomentary",
+        "Momentary Button",
+        []() { return demoMomentaryState; },
+        [](bool state) { demoMomentaryState = state; },
+        "Press",
+        "Release")
+        .order(13);
 
-    controls.intSlider(
+    auto ioSliders = ConfigManager.liveGroup("io-test")
+                         .page("IO Test", 20)
+                         .card("Sliders", 20);
+
+    ioSliders.intSlider(
         "adjust",
         "Adjustment",
         -10,
@@ -285,9 +317,9 @@ static void setupGUI()
         []() { return mockedAdjustValue; },
         [](int value) { mockedAdjustValue = value; },
         "UNIT")
-        .order(25);
+        .order(10);
 
-    controls.floatSlider(
+    ioSliders.floatSlider(
         "tempOffset",
         "Temperature Offset",
         -5.0f,
@@ -297,37 +329,38 @@ static void setupGUI()
         []() { return mockedTemperatureOffsetC; },
         [](float value) { mockedTemperatureOffsetC = value; },
         "°C")
-        .order(26);
+        .order(11);
 
-    // Alarms demo.
-    alarmManager.addDigitalWarning(
-        {
-            .id = "overheat",
-            .name = "Overheat Warning",
-            .kind = cm::AlarmKind::DigitalActive,
-            .severity = cm::AlarmSeverity::Warning,
-            .enabled = true,
-            .getter = []() { return mockedTemperatureC > 26.0f; },
-        })
-        .addCSSClass("stateDotOnAlarm", "alarm-overheat");
-    alarmManager.addWarningToLive(
-        "overheat",
-        28,
-        "Live",
-        "Alerts",
-        "Warnings",
-        "Overheat Warning");
+    auto ioInputs = ConfigManager.liveGroup("io-test")
+                        .page("IO Test", 20)
+                        .card("Inputs", 30);
 
-    auto alerts = ConfigManager.liveGroup("Alerts")
-                      .page("Live", 10)
-                      .card("Alerts", 50);
+    ioInputs.intInput(
+        "demoIntInput",
+        "Int Input",
+        -100,
+        100,
+        demoIntInputValue,
+        []() { return demoIntInputValue; },
+        [](int value) { demoIntInputValue = value; },
+        "UNIT")
+        .order(10);
 
-    alerts.value("connected", []() { return WiFi.status() == WL_CONNECTED; })
-        .label("Connected")
-        .order(29);
+    ioInputs.floatInput(
+        "demoFloatInput",
+        "Float Input",
+        -10.0f,
+        10.0f,
+        demoFloatInputValue,
+        2,
+        []() { return demoFloatInputValue; },
+        [](float value) { demoFloatInputValue = value; },
+        "°C")
+        .order(11);
+}
 
-    // Overheat alarm meta is provided by AlarmManager
-
+static void setupGuiSystem()
+{
     auto systemCard = ConfigManager.liveGroup("system")
                          .page("System", 90)
                          .card("System", 90);
@@ -339,8 +372,6 @@ static void setupGUI()
         .unit("°C")
         .precision(1)
         .order(99);
-
-    Serial.println("[GUI] setupGUI() end");
 }
 
 static void cbTestButton()

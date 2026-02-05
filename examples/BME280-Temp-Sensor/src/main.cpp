@@ -259,12 +259,7 @@ void loop()
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
 
-    static unsigned long lastAlarmEval = 0;
-    if (millis() - lastAlarmEval > 1500)
-    {
-        lastAlarmEval = millis();
-        alarmManager.update();
-    }
+    alarmManager.update();
 
     static unsigned long lastLoopLog = 0;
     if (millis() - lastLoopLog > 60000)

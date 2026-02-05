@@ -1163,6 +1163,14 @@ public:
             return makeValueBuilder<Ret>(key, std::function<Ret()>(getter));
         }
 
+        template<typename Getter>
+        LiveFieldBuilder value(Getter getter)
+        {
+            using Ret = std::decay_t<std::invoke_result_t<Getter>>;
+            const String autoKey = nextAutoKey();
+            return makeValueBuilder<Ret>(autoKey.c_str(), std::function<Ret()>(getter));
+        }
+
         LiveFieldBuilder boolValue(const char *key, std::function<bool()> getter)
         {
             auto builder = makeValueBuilder<bool>(key, std::move(getter));
@@ -1425,6 +1433,12 @@ public:
         {
             static uint32_t counter = 0;
             return String("divider_") + String(counter++);
+        }
+
+        String nextAutoKey()
+        {
+            static uint32_t counter = 0;
+            return String("field_") + String(counter++);
         }
 
         template<typename T>
