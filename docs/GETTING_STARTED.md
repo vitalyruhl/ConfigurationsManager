@@ -187,5 +187,5 @@ void loop()
 
 - WiFi details and best practices: see `docs/WIFI.md`
 - OTA and Web UI flashing: see `docs/OTA.md`
-- Runtime providers and alarms: see `docs/RUNTIME.md`
+- GUI runtime (live, styling, theming): see `docs/GUI-Runtime.md`
 - Settings and OptionGroup patterns: see `docs/SETTINGS.md`

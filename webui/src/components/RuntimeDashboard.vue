@@ -165,6 +165,7 @@
                   <span
                     v-if="fieldVisible(f, 'label')"
                     class="lab bl"
+                    :class="fieldClasses(f, 'label')"
                     :style="fieldCss(f, 'label')"
                   >
                     <span
@@ -180,6 +181,7 @@
                   <span
                     v-if="hasVisibleAlarm && showBoolStateText && fieldVisible(f, 'state')"
                     class="val"
+                    :class="fieldClasses(f, 'state')"
                     :style="fieldCss(f, 'state')"
                   >
                     {{ formatBool(runtimeValue(f), f) }}
@@ -189,6 +191,7 @@
                   <span
                     v-if="fieldVisible(f, 'unit', false)"
                     class="un"
+                    :class="fieldClasses(f, 'unit')"
                     :style="fieldCss(f, 'unit')"
                   ></span>
                   <span v-else class="un"></span>
@@ -197,6 +200,7 @@
                   <span
                     v-if="fieldVisible(f, 'label')"
                     class="lab"
+                    :class="fieldClasses(f, 'label')"
                     :style="fieldCss(f, 'label')"
                   >
                     {{ f.label }}
@@ -206,6 +210,7 @@
                   <span
                     v-if="fieldVisible(f, 'values')"
                     class="val"
+                    :class="fieldClasses(f, 'values')"
                     :style="fieldCss(f, 'values')"
                   >
                     {{ formatValue(runtimeValue(f), f) }}
@@ -215,6 +220,7 @@
                   <span
                     v-if="fieldVisible(f, 'unit', !!f.unit)"
                     class="un"
+                    :class="fieldClasses(f, 'unit')"
                     :style="fieldCss(f, 'unit')"
                   >
                     {{ f.unit }}
@@ -304,6 +310,7 @@
                     <span
                       v-if="fieldVisible(f, 'label')"
                       class="lab bl"
+                      :class="fieldClasses(f, 'label')"
                       :style="fieldCss(f, 'label')"
                     >
                       <span
@@ -319,6 +326,7 @@
                     <span
                       v-if="hasVisibleAlarm && showBoolStateText && fieldVisible(f, 'state')"
                       class="val"
+                      :class="fieldClasses(f, 'state')"
                       :style="fieldCss(f, 'state')"
                     >
                       {{ formatBool(runtimeValue(f), f) }}
@@ -328,6 +336,7 @@
                     <span
                       v-if="fieldVisible(f, 'unit', false)"
                       class="un"
+                      :class="fieldClasses(f, 'unit')"
                       :style="fieldCss(f, 'unit')"
                     ></span>
                     <span v-else class="un"></span>
@@ -336,6 +345,7 @@
                     <span
                       v-if="fieldVisible(f, 'label')"
                       class="lab"
+                      :class="fieldClasses(f, 'label')"
                       :style="fieldCss(f, 'label')"
                     >
                       {{ f.label }}
@@ -345,6 +355,7 @@
                     <span
                       v-if="fieldVisible(f, 'values')"
                       class="val"
+                      :class="fieldClasses(f, 'values')"
                       :style="fieldCss(f, 'values')"
                     >
                       {{ formatValue(runtimeValue(f), f) }}
@@ -354,6 +365,7 @@
                     <span
                       v-if="fieldVisible(f, 'unit', !!f.unit)"
                       class="un"
+                      :class="fieldClasses(f, 'unit')"
                       :style="fieldCss(f, 'unit')"
                     >
                       {{ f.unit }}
@@ -2849,17 +2861,17 @@ label.switch input:checked + .slider:before {
   border-radius: 4px;
 }
 .grp {
-  border: 1px solid #30363d;
+  border: 1px solid var(--cm-group-border, var(--cm-card-border));
   border-radius: 8px;
   padding: 0.45rem 0.6rem 0.5rem;
   margin-top: 0.6rem;
-  background: rgba(13, 17, 23, 0.4);
+  background: var(--cm-group-bg, transparent);
 }
 .grp-title {
   font-size: 0.68rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: #8b949e;
+  color: var(--cm-group-title, var(--cm-fg));
   margin-bottom: 0.35rem;
 }
 .grp .tbl {

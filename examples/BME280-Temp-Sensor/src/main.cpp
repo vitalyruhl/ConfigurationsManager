@@ -6,6 +6,7 @@
 
 #include "ConfigManager.h"
 
+#include "alarm/AlarmManager.h"
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 #include "helpers/HelperModule.h"
@@ -32,6 +33,7 @@ static cm::CoreSystemSettings &systemSettings = coreSettings.system;
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
+static cm::AlarmManager alarmManager;
 
 static BME280_I2C bme280;
 static Ticker temperatureTicker;
@@ -40,6 +42,11 @@ static float temperature = 0.0f;
 static float dewPoint = 0.0f;
 static float humidity = 0.0f;
 static float pressure = 0.0f;
+
+static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
+.myCSSTempClass { color:rgb(198, 16, 16) !important; font-weight:900!important; font-size: 1.2rem!important; }
+)CSS";
+
 
 // Global WiFi event hooks used by ConfigManager.
 // These are invoked internally by ConfigManager's WiFi manager on state transitions.
@@ -100,13 +107,13 @@ static void setupRuntimeUI()
 {
     auto live = ConfigManager.liveGroup("sensors")
                     .page("Sensors", 10)
-                    .card("BME280 - Temperature Sensor")
-                    .group("Sensor Readings", 10);
+                    .card("BME280 - Temperature Sensor");
 
     live.value("temp", []() { return temperature; })
         .label("Temperature")
         .unit("C")
         .precision(1)
+        .addCSSClass("myCSSTempClass")
         .order(10);
 
     live.value("hum", []() { return humidity; })
@@ -115,19 +122,39 @@ static void setupRuntimeUI()
         .precision(1)
         .order(11);
 
-    live.divider("Derived", 20);
-
-    live.value("dew", []() { return dewPoint; })
-        .label("Dewpoint")
-        .unit("C")
-        .precision(1)
-        .order(21);
-
     live.value("pressure", []() { return pressure; })
         .label("Pressure")
         .unit("hPa")
         .precision(1)
-        .order(22);
+        .order(12);
+
+    auto dewpointGroup = ConfigManager.liveGroup("sensors")
+                            .page("Sensors", 10)
+                            .card("BME280 - Temperature Sensor")
+                            .group("Dewpoint", 20);
+
+    dewpointGroup.value("dew", []() { return dewPoint; })
+        .label("Dewpoint")
+        .unit("C")
+        .precision(1)
+        .order(20);
+
+    alarmManager.addDigitalWarning({
+        .id = "dewRisk",
+        .name = "Condensation Risk",
+        .kind = cm::AlarmKind::DigitalActive,
+        .severity = cm::AlarmSeverity::Warning,
+        .enabled = true,
+        .getter = []() { return temperature < dewPoint; },
+    });
+
+    alarmManager.addWarningToLive(
+        "dewRisk",
+        30,
+        "Sensors",
+        "BME280 - Temperature Sensor",
+        "Dewpoint",
+        "Condensation Risk");
 }
 
 static void readBme280()
@@ -187,6 +214,8 @@ void setup()
 
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
+
 
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
@@ -229,6 +258,13 @@ void loop()
 {
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
+
+    static unsigned long lastAlarmEval = 0;
+    if (millis() - lastAlarmEval > 1500)
+    {
+        lastAlarmEval = millis();
+        alarmManager.update();
+    }
 
     static unsigned long lastLoopLog = 0;
     if (millis() - lastLoopLog > 60000)

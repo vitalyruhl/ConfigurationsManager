@@ -477,7 +477,7 @@ Open questions:
 4) Backend-Placement refactor: Live-Layout nutzt Layout-Ziele, Values holen Daten weiterhin aus `sourceGroup`.
 5) WebUI anpassen: `fieldSourceGroup()` nutzt `sourceGroup` aus Meta; Layout bleibt über Live-Layout JSON.
 6) Examples migrieren: zuerst `BME280-Temp-Sensor`, dann `Full-GUI-Demo`, danach alle übrigen.
-7) Doku aktualisieren: `docs/RUNTIME.md`, `docs/STYLING.md`, `docs/THEMING.md`.
+7) Doku aktualisieren: `docs/GUI-Runtime.md`.
 8) Build/Smoke: `pio run -d examples/BME280-Temp-Sensor -e usb`, danach `pio run -d examples/Full-GUI-Demo -e usb`.
 
 

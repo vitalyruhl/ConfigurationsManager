@@ -905,6 +905,19 @@ public:
         cm::io::IOPinRole ioPinRoleValue = cm::io::IOPinRole::DigitalInput;
     };
 
+    enum class LiveCssTarget : uint8_t
+    {
+        Row,
+        Label,
+        Value,
+        Unit,
+        State,
+        Dot,
+        DotOnTrue,
+        DotOnFalse,
+        DotOnAlarm
+    };
+
     class LiveFieldBuilder
     {
     public:
@@ -955,6 +968,28 @@ public:
         LiveFieldBuilder &precision(int value)
         {
             meta.precision = value;
+            return *this;
+        }
+
+        LiveFieldBuilder &addCSSClass(const char *cssClass)
+        {
+            if (!cssClass || !cssClass[0])
+            {
+                return *this;
+            }
+            addCSSClass(cssClass, LiveCssTarget::Row);
+            addCSSClass(cssClass, LiveCssTarget::Label);
+            addCSSClass(cssClass, LiveCssTarget::Value);
+            addCSSClass(cssClass, LiveCssTarget::Unit);
+            return *this;
+        }
+
+        LiveFieldBuilder &addCSSClass(const char *cssClass, LiveCssTarget target)
+        {
+            if (cssClass && cssClass[0])
+            {
+                applyCssClass(cssClass, target);
+            }
             return *this;
         }
 
@@ -1017,6 +1052,46 @@ public:
         }
 
     private:
+        void applyCssClass(const char *cssClass, LiveCssTarget target)
+        {
+            switch (target)
+            {
+            case LiveCssTarget::Row:
+                meta.style.rule("row").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::Label:
+                meta.style.rule("label").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::Value:
+                meta.style.rule("values").addCSSClass(cssClass);
+                meta.style.rule("state").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::Unit:
+                meta.style.rule("unit").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::State:
+                meta.style.rule("state").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::Dot:
+                meta.style.rule("stateDotOnTrue").addCSSClass(cssClass);
+                meta.style.rule("stateDotOnFalse").addCSSClass(cssClass);
+                meta.style.rule("stateDotOnAlarm").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::DotOnTrue:
+                meta.style.rule("stateDotOnTrue").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::DotOnFalse:
+                meta.style.rule("stateDotOnFalse").addCSSClass(cssClass);
+                break;
+            case LiveCssTarget::DotOnAlarm:
+                meta.style.rule("stateDotOnAlarm").addCSSClass(cssClass);
+                break;
+            default:
+                meta.style.rule("row").addCSSClass(cssClass);
+                break;
+            }
+        }
+
         void commit()
         {
             if (committed || !runtime)

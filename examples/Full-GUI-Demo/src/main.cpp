@@ -174,9 +174,6 @@ void setup()
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
 
-    // Keep OTA enable flag reactive (optional), even though OTA init happens in wifiServices.onConnected().
-    });
-
     // WiFi AP MAC priority (kept as requested).
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
 
@@ -201,19 +198,6 @@ void setup()
     Serial.println("[MOCKED DATA] Sensor values are randomized every 3 seconds");
     updateMockedSensors();
     sensorMockTicker.attach(3.0f, updateMockedSensors);
-
-    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA)
-    {
-        Serial.printf("[INFO] Webserver running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
-    }
-    else if (WiFi.status() == WL_CONNECTED)
-    {
-        Serial.printf("[INFO] Webserver running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
-    }
-    else
-    {
-        Serial.println("[INFO] Webserver running (IP not available)");
-    }
 
     Serial.println("[MAIN] Setup completed successfully. Starting main loop...");
 }

@@ -10,6 +10,9 @@
   --cm-tab-active-fg: #ffffff;
   --cm-card-bg: #ffffff;
   --cm-card-border: rgba(0, 0, 0, .06);
+  --cm-group-bg: rgba(17, 24, 39, .03);
+  --cm-group-border: rgba(0, 0, 0, .08);
+  --cm-group-title: #374151;
 
   --btn-primary-bg: #1976d2;
   --btn-primary-hover: #125a9f;
@@ -32,6 +35,9 @@
   --cm-tab-active-fg: #ffffff;
   --cm-card-bg: #161b22;
   --cm-card-border: #30363d;
+  --cm-group-bg: rgba(13, 17, 23, 0.4);
+  --cm-group-border: #30363d;
+  --cm-group-title: #8b949e;
 
   --switch-track-off: #6b7280;
   --switch-thumb-bg: #e5e7eb;

@@ -34,7 +34,7 @@ The runtime JSON includes OTA status information used by the Web UI:
 - `runtime.system.allowOTA`: true when OTA is enabled on the device (HTTP endpoint ready)
 - `runtime.system.otaActive`: true after `ArduinoOTA.begin()` has run (informational)
 
-See also `docs/RUNTIME.md`.
+See also `docs/GUI-Runtime.md`.
 
 ## Notes
 

@@ -70,16 +70,14 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | Getting Started (minimal pattern)         | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)     |
 | WiFi (DHCP/static/AP/reconnect)           | [docs/WIFI.md](docs/WIFI.md)                           |
 | Settings & OptionGroup                    | [docs/SETTINGS.md](docs/SETTINGS.md)                   |
-| Runtime Providers & Alarms                | [docs/RUNTIME.md](docs/RUNTIME.md)                     |
-| Logging                                  | [docs/LOGGING.md](docs/LOGGING.md)                     |
+| GUI Runtime (Live + Styling + Theming)    | [docs/GUI-Runtime.md](docs/GUI-Runtime.md)             |
+| Logging                                   | [docs/LOGGING.md](docs/LOGGING.md)                     |
 | IOManager: Digital Inputs                 | [docs/IO-DigitalInputs.md](docs/IO-DigitalInputs.md)   |
 | IOManager: Digital Outputs                | [docs/IO-DigitalOutputs.md](docs/IO-DigitalOutputs.md) |
 | IOManager: Analog Inputs                  | [docs/IO-AnalogInputs.md](docs/IO-AnalogInputs.md)     |
 | IOManager: Analog Outputs                 | [docs/IO-AnalogOutputs.md](docs/IO-AnalogOutputs.md)   |
 | OTA + Web UI flashing                     | [docs/OTA.md](docs/OTA.md)                             |
 | Security Notes (password transport)       | [docs/SECURITY.md](docs/SECURITY.md)                   |
-| Styling (per-field metadata)              | [docs/STYLING.md](docs/STYLING.md)                     |
-| Theming (global CSS + disabling metadata) | [docs/THEMING.md](docs/THEMING.md)                     |
 | Troubleshooting                           | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)     |
 | MQTT Module                               | [docs/MQTT.md](docs/MQTT.md)                           |
 | Changelog                                 | [docs/CHANGELOG.md](docs/CHANGELOG.md)                 |

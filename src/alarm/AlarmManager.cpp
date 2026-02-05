@@ -620,6 +620,9 @@ void AlarmManager::registerPlacement(AlarmEntry& entry,
 
     RuntimeFieldMeta meta;
     meta.group = effectiveGroup;
+    meta.sourceGroup = effectiveGroup;
+    meta.page = effectivePage;
+    meta.card = effectiveCard;
     meta.key = entry.id;
     meta.label = labelOverride && labelOverride[0] ? labelOverride : entry.name;
     meta.isBool = true;
