@@ -376,178 +376,97 @@ void loop()
 void setupGUI()
 {
   // region sensor fields BME280
-    CRM().addRuntimeProvider("sensors", [](JsonObject &data)
-      {
-          // Apply precision to sensor values to reduce JSON size
-          data["temp"] = roundf(temperature * 10.0f) / 10.0f;     // 1 decimal place
-          data["hum"] = roundf(Humidity * 10.0f) / 10.0f;        // 1 decimal place
-          data["dew"] = roundf(Dewpoint * 10.0f) / 10.0f;        // 1 decimal place
-          data["pressure"] = roundf(Pressure * 10.0f) / 10.0f;   // 1 decimal place
-    }, 2);
+    auto sensors = ConfigManager.liveGroup("sensors")
+                      .card("Sensors");
 
+    sensors.value("temp", []() { return roundf(temperature * 10.0f) / 10.0f; })
+        .label("Temperature")
+        .unit("°C")
+        .precision(1)
+        .order(2);
 
-      // Define sensor display fields using addRuntimeMeta
-      RuntimeFieldMeta tempMeta;
-      tempMeta.group = "sensors";
-      tempMeta.key = "temp";
-      tempMeta.label = "Temperature";
-      tempMeta.unit = "°C";
-      tempMeta.precision = 1;
-      tempMeta.order = 2;
-      CRM().addRuntimeMeta(tempMeta);
+    sensors.value("hum", []() { return roundf(Humidity * 10.0f) / 10.0f; })
+        .label("Humidity")
+        .unit("%")
+        .precision(1)
+        .order(11);
 
-      RuntimeFieldMeta humMeta;
-      humMeta.group = "sensors";
-      humMeta.key = "hum";
-      humMeta.label = "Humidity";
-      humMeta.unit = "%";
-      humMeta.precision = 1;
-      humMeta.order = 11;
-      CRM().addRuntimeMeta(humMeta);
+    sensors.value("dew", []() { return roundf(Dewpoint * 10.0f) / 10.0f; })
+        .label("Dewpoint")
+        .unit("°C")
+        .precision(1)
+        .order(12);
 
-      RuntimeFieldMeta dewMeta;
-      dewMeta.group = "sensors";
-      dewMeta.key = "dew";
-      dewMeta.label = "Dewpoint";
-      dewMeta.unit = "°C";
-      dewMeta.precision = 1;
-      dewMeta.order = 12;
-      CRM().addRuntimeMeta(dewMeta);
-
-      RuntimeFieldMeta pressureMeta;
-      pressureMeta.group = "sensors";
-      pressureMeta.key = "pressure";
-      pressureMeta.label = "Pressure";
-      pressureMeta.unit = "hPa";
-      pressureMeta.precision = 1;
-      pressureMeta.order = 13;
-      CRM().addRuntimeMeta(pressureMeta);
-
-
-      RuntimeFieldMeta rangeMeta;
-      rangeMeta.group = "sensors";
-      rangeMeta.key = "range";
-      rangeMeta.label = "Sensor Range";
-      rangeMeta.unit = "V";
-      rangeMeta.precision = 1;
-      rangeMeta.order = 14;
-      CRM().addRuntimeMeta(rangeMeta);
+    sensors.value("pressure", []() { return roundf(Pressure * 10.0f) / 10.0f; })
+        .label("Pressure")
+        .unit("hPa")
+        .precision(1)
+        .order(13);
     // endregion sensor fields
 
 
   //region Limiter
-      CRM().addRuntimeProvider("Limiter", [](JsonObject &data)
-      {
-          // Apply precision to sensor values to reduce JSON size
-          data["gridIn"] = currentGridImportW;
-          data["invSet"] = inverterSetValue;
-          data["solar"] = solarPowerW;
-          data["enabled"] = limiterSettings.enableController->get();
-      }, 1);
+    auto limiter = ConfigManager.liveGroup("Limiter")
+                      .card("Limiter");
 
-      // Define sensor display fields using addRuntimeMeta
-      RuntimeFieldMeta gridInMeta;
-      gridInMeta.group = "Limiter";
-      gridInMeta.key = "gridIn";
-      gridInMeta.label = "Grid Import";
-      gridInMeta.unit = "W";
-      gridInMeta.precision = 0;
-      gridInMeta.order = 2;
-      CRM().addRuntimeMeta(gridInMeta);
+    limiter.value("enabled", []() { return limiterSettings.enableController->get(); })
+        .label("Limiter Enabled")
+        .order(1);
 
-      RuntimeFieldMeta invSetMeta;
-      invSetMeta.group = "Limiter";
-      invSetMeta.key = "invSet";
-      invSetMeta.label = "Inverter Setpoint";
-      invSetMeta.unit = "W";
-      invSetMeta.precision = 0;
-      invSetMeta.order = 3;
-      CRM().addRuntimeMeta(invSetMeta);
+    limiter.value("gridIn", []() { return currentGridImportW; })
+        .label("Grid Import")
+        .unit("W")
+        .precision(0)
+        .order(2);
 
-      RuntimeFieldMeta limiterEnabledMeta;
-      limiterEnabledMeta.group = "Limiter";
-      limiterEnabledMeta.key = "enabled";
-      limiterEnabledMeta.label = "Limiter Enabled";
-      limiterEnabledMeta.isBool = true;
-      limiterEnabledMeta.order = 1;
-      CRM().addRuntimeMeta(limiterEnabledMeta);
+    limiter.value("invSet", []() { return inverterSetValue; })
+        .label("Inverter Setpoint")
+        .unit("W")
+        .precision(0)
+        .order(3);
 
-      RuntimeFieldMeta solarMeta;
-      solarMeta.group = "Limiter";
-      solarMeta.key = "solar";
-      solarMeta.label = "Solar power";
-      solarMeta.unit = "W";
-      solarMeta.precision = 0;
-      solarMeta.order = 4;
-      CRM().addRuntimeMeta(solarMeta);
+    limiter.value("solar", []() { return solarPowerW; })
+        .label("Solar power")
+        .unit("W")
+        .precision(0)
+        .order(4);
   //endregion Limiter
 
 
   //region relay outputs
-      CRM().addRuntimeProvider("Outputs", [](JsonObject &data)
-      {
-          data["ventilator"] = getFanRelay();
-          data["heater"] = getHeaterRelay();
-          data["dewpoint_risk"] = dewpointRiskActive;
-          data["manual_override"] = manualOverrideActive;
-      }, 3);
+    auto outputs = ConfigManager.liveGroup("Outputs")
+                     .card("Outputs");
 
-      CRM().defineRuntimeCheckbox(
-          "Outputs",
-          "manual_override",
-          "Manual Override",
-          []() { return manualOverrideActive; },
-          [](bool on) { setManualOverride(on); },
-          String(),   // optional Hilfetext
-          0);
+    outputs.checkbox(
+        "manual_override",
+        "Manual Override",
+        []() { return manualOverrideActive; },
+        [](bool on) { setManualOverride(on); })
+        .order(0);
 
-      CRM().defineRuntimeStateButton(
-          "Outputs",
-          "ventilator",
-          "Ventilator Relay",
-          []() { return getFanRelay(); },
-          [](bool on) { setFanRelay(on); },
-          getFanRelay(),
-          String(),
-          1,
-          "On",
-          "Off");
+    outputs.stateButton(
+        "ventilator",
+        "Ventilator Relay Active",
+        []() { return getFanRelay(); },
+        [](bool on) { setFanRelay(on); },
+        getFanRelay(),
+        "On",
+        "Off")
+        .order(1);
 
-      CRM().defineRuntimeStateButton(
-          "Outputs",
-          "heater",
-          "Heater Relay",
-          []() { return getHeaterRelay(); },
-          [](bool on) { setHeaterRelay(on); },
-          getHeaterRelay(),
-          String(),
-          2,
-          "On",
-          "Off");
+    outputs.stateButton(
+        "heater",
+        "Heater Relay Active",
+        []() { return getHeaterRelay(); },
+        [](bool on) { setHeaterRelay(on); },
+        getHeaterRelay(),
+        "On",
+        "Off")
+        .order(2);
 
-      // RuntimeFieldMeta manualOverrideMeta;
-      // manualOverrideMeta.group = "Outputs";
-      // manualOverrideMeta.key = "manual_override";
-      // manualOverrideMeta.label = "Manual Override";
-      // manualOverrideMeta.isBool = true;
-      // manualOverrideMeta.order = 0;
-      // CRM().addRuntimeMeta(manualOverrideMeta);
-
-      RuntimeFieldMeta ventilatorMeta;
-      ventilatorMeta.group = "Outputs";
-      ventilatorMeta.key = "ventilator";
-      ventilatorMeta.label = "Ventilator Relay Active";
-      ventilatorMeta.isBool = true;
-      ventilatorMeta.order = 1;
-      CRM().addRuntimeMeta(ventilatorMeta);
-
-      RuntimeFieldMeta heaterMeta;
-      heaterMeta.group = "Outputs";
-      heaterMeta.key = "heater";
-      heaterMeta.label = "Heater Relay Active";
-      heaterMeta.isBool = true;
-      heaterMeta.order = 2;
-      CRM().addRuntimeMeta(heaterMeta);
+    outputs.boolValue("dewpoint_risk", []() { return dewpointRiskActive; })
+        .label("Dewpoint Risk")
+        .order(3);
 
       alarmManager.addDigitalWarning(
           {
@@ -568,7 +487,6 @@ void setupGUI()
               lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
               EvaluateHeater(temperature);
           });
-      alarmManager.addWarningToLive("dewpoint_risk", 3, "Outputs", "Live Values", "Outputs", "Dewpoint Risk");
   //endregion relay outputs
 
 }

@@ -46,7 +46,7 @@ void setup()
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    ConfigManager.enableBuiltinSystemProvider();
+    ConfigManager.enableBuiltinSystemProvider(); // you dont need it for minimal functions, but it helpfull
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
 
     coreSettings.attachWiFi(ConfigManager, "WLAN", "WLAN-Einstellungen", 10);
@@ -54,7 +54,7 @@ void setup()
     // coreSettings.attachNtp(ConfigManager); // you dont need it for this minimal example, but you can easily add it back if you want to use the NTP features
     ConfigManager.loadAll();
 
-    checkWifiCredentials();
+    checkWifiCredentials(); // you dont need it for minimal functions, but it helpfull - look at wifiSecret.example.h for details
 
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// you dont need it, bi ut it makes testing easier for me
 

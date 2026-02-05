@@ -313,64 +313,38 @@ void setupMqtt()
     mqtt.addMqttTopicToLiveGroup(ConfigManager, "washing_machine_energy_yesterday", livePage, liveReceivedCard, liveReceivedGroup, 4);
     mqtt.addMqttTopicToLiveGroup(ConfigManager, "solar_limiter_set_value_w", livePage, liveReceivedCard, liveReceivedGroup, 5);
 
-    // GUI examples: other infos via runtime provider
-    ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject &data)
-                                                  {
-        data["lastTopic"] = mqtt.getLastTopic();
-        data["lastPayload"] = mqtt.getLastPayload();
-        data["lastMsgAgeMs"] = mqtt.getLastMessageAgeMs();
-        data["washing_machine_energy_total_mwh"] = washingMachineEnergyTotalMWh;
-        data["tasmotaLastError"] = tasmotaLastError; }, 3);
+    // GUI examples: other infos via runtime values
+    auto mqttOther = ConfigManager.liveGroup("mqtt")
+                        .page(livePage)
+                        .card("MQTT Other Infos");
 
-    RuntimeFieldMeta lastTopicMeta;
-    lastTopicMeta.group = "mqtt";
-    lastTopicMeta.key = "lastTopic";
-    lastTopicMeta.label = "Last Topic";
-    lastTopicMeta.order = 22;
-    lastTopicMeta.card = "MQTT Other Infos";
-    ConfigManager.getRuntime().addRuntimeMeta(lastTopicMeta);
-    ConfigManager.addToLiveGroup("lastTopic", livePage, "MQTT Other Infos", "MQTT Other Infos", 22);
+    mqttOther.value("lastMsgAgeMs", []() { return mqtt.getLastMessageAgeMs(); })
+        .label("Last Message Age")
+        .unit("ms")
+        .order(20);
 
-    RuntimeFieldMeta lastPayloadMeta;
-    lastPayloadMeta.group = "mqtt";
-    lastPayloadMeta.key = "lastPayload";
-    lastPayloadMeta.label = "Last Payload";
-    lastPayloadMeta.isString = true;
-    lastPayloadMeta.order = 21;
-    lastPayloadMeta.card = "MQTT Other Infos";
-    ConfigManager.getRuntime().addRuntimeMeta(lastPayloadMeta);
-    ConfigManager.addToLiveGroup("lastPayload", livePage, "MQTT Other Infos", "MQTT Other Infos", 21);
+    mqttOther.value("lastPayload", []() { return mqtt.getLastPayload(); })
+        .label("Last Payload")
+        .order(21);
 
-    RuntimeFieldMeta lastAgeMeta;
-    lastAgeMeta.group = "mqtt";
-    lastAgeMeta.key = "lastMsgAgeMs";
-    lastAgeMeta.label = "Last Message Age";
-    lastAgeMeta.unit = "ms";
-    lastAgeMeta.order = 20;
-    lastAgeMeta.card = "MQTT Other Infos";
-    ConfigManager.getRuntime().addRuntimeMeta(lastAgeMeta);
-    ConfigManager.addToLiveGroup("lastMsgAgeMs", livePage, "MQTT Other Infos", "MQTT Other Infos", 20);
+    mqttOther.value("lastTopic", []() { return mqtt.getLastTopic(); })
+        .label("Last Topic")
+        .order(22);
 
-    RuntimeFieldMeta mwhMeta;
-    mwhMeta.group = "mqtt";
-    mwhMeta.key = "washing_machine_energy_total_mwh";
-    mwhMeta.label = "Washing Machine Energy Total";
-    mwhMeta.unit = "MWh";
-    mwhMeta.precision = 2;
-    mwhMeta.order = 4;
-    mwhMeta.card = "MQTT-Received";
-    ConfigManager.getRuntime().addRuntimeMeta(mwhMeta);
-    ConfigManager.addToLiveGroup("washing_machine_energy_total_mwh", livePage, liveReceivedCard, liveReceivedGroup, 4);
+    mqttOther.value("tasmotaLastError", []() { return tasmotaLastError; })
+        .label("Tasmota Last Error")
+        .order(30);
 
-    RuntimeFieldMeta tasmotaErrorMeta;
-    tasmotaErrorMeta.group = "mqtt";
-    tasmotaErrorMeta.key = "tasmotaLastError";
-    tasmotaErrorMeta.label = "Tasmota Last Error";
-    tasmotaErrorMeta.isString = true;
-    tasmotaErrorMeta.order = 30;
-    tasmotaErrorMeta.card = "MQTT Other Infos";
-    ConfigManager.getRuntime().addRuntimeMeta(tasmotaErrorMeta);
-    ConfigManager.addToLiveGroup("tasmotaLastError", livePage, "MQTT Other Infos", "MQTT Other Infos", 30);
+    auto mqttReceived = ConfigManager.liveGroup("mqtt")
+                           .page(livePage)
+                           .card(liveReceivedCard)
+                           .group(liveReceivedGroup);
+
+    mqttReceived.value("washing_machine_energy_total_mwh", []() { return washingMachineEnergyTotalMWh; })
+        .label("Washing Machine Energy Total")
+        .unit("MWh")
+        .precision(2)
+        .order(4);
 }
 
 void Initial_logging_Serial()

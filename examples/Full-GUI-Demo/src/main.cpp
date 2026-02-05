@@ -22,7 +22,6 @@ static const char SETTINGS_PASSWORD[] = "cm";
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .card h3 { color: orange; text-decoration: underline; font-weight: 900 !important; font-size: 1.2rem !important; }
 /* Apply to the whole row (label + value + unit) */
-.myCSSTemperatureClass { color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
 .myCSSTemperatureClass * { color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
 
 /* select the injected Value */
@@ -31,7 +30,6 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 
 )CSS";
 
-static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
 
 // Built-in core settings templates.
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
@@ -173,27 +171,13 @@ void setup()
 
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
-
-    // WiFi AP MAC priority (kept as requested).
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
-
-    // Settings-driven WiFi startup (DHCP/static/AP fallback).
-    ConfigManager.startWebServer();
-
+    
     setupGUI();
 
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
+    ConfigManager.startWebServer();
 
-    // Keep the runtime tabs ordered for the custom providers we register.
-    ConfigManager.addLivePage("sensors", 10);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Temperature", 10);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Humidity & Pressure", 20);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Dewpoint & Status", 30);
-    ConfigManager.addLivePage("controls", 20);
-    ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 20);
-    ConfigManager.addLivePage("alerts", 30);
-    ConfigManager.addLiveGroup("alerts", "Live Values", "Alerts", 30);
-    ConfigManager.addLivePage("system", 40);
-    ConfigManager.addLiveGroup("system", "Live Values", "System", 40);
+
 
     Serial.println("[MOCKED DATA] Sensor values are randomized every 3 seconds");
     updateMockedSensors();
@@ -221,119 +205,90 @@ static void setupGUI()
 {
     Serial.println("[GUI] setupGUI() start");
 
-    // Temperature card (GUI-only demo, values are mocked).
-    CRM().addRuntimeProvider("Temperature", [](JsonObject &data) {
-        data["temp"] = roundf(mockedTemperatureC * 10.0f) / 10.0f;
-    }, 2);
+    // Keep the runtime tabs ordered for the custom providers we register.
+    ConfigManager.addLivePage("sensors", 10);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Temperature", 10);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Humidity & Pressure", 20);
+    ConfigManager.addLiveGroup("sensors", "Live Values", "Dewpoint & Status", 30);
+    ConfigManager.addLivePage("controls", 20);
+    ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 20);
+    ConfigManager.addLivePage("alerts", 30);
+    ConfigManager.addLiveGroup("alerts", "Live Values", "Alerts", 30);
+    ConfigManager.addLivePage("system", 40);
+    ConfigManager.addLiveGroup("system", "Live Values", "System", 40);
 
-    RuntimeFieldMeta tempMeta;
-    tempMeta.group = "Temperature";
-    tempMeta.key = "temp";
-    tempMeta.label = "Temperature [MOCKED DATA]";
-    tempMeta.unit = "°C";
-    tempMeta.precision = 1;
-    tempMeta.order = 10;
-    tempMeta.style.rule("row").addCSSClass("myCSSTemperatureClass");
-    CRM().addRuntimeMeta(tempMeta);
+    // Temperature card (GUI-only demo, values are mocked).
+    auto tempCard = ConfigManager.liveGroup("Temperature")
+                        .page("Live", 10)
+                        .card("Temperature", 10);
+
+    tempCard.value("temp", []() { return roundf(mockedTemperatureC * 10.0f) / 10.0f; })
+        .label("Temperature [MOCKED DATA]")
+        .unit("°C")
+        .precision(1)
+        .order(10)
+        .addCSSClass("myCSSTemperatureClass");
 
     // Humidity + pressure card.
-    CRM().addRuntimeProvider("Humidity & Pressure", [](JsonObject &data) {
-        data["hum"] = roundf(mockedHumidity * 10.0f) / 10.0f;
-        data["pressure"] = roundf(mockedPressure * 10.0f) / 10.0f;
-    }, 3);
+    auto humCard = ConfigManager.liveGroup("Humidity & Pressure")
+                        .page("Live", 10)
+                        .card("Humidity & Pressure", 20);
 
-    RuntimeFieldMeta humMeta;
-    humMeta.group = "Humidity & Pressure";
-    humMeta.key = "hum";
-    humMeta.label = "Humidity";
-    humMeta.unit = "%";
-    humMeta.precision = 1;
-    humMeta.order = 20;
-    CRM().addRuntimeMeta(humMeta);
+    humCard.value("hum", []() { return roundf(mockedHumidity * 10.0f) / 10.0f; })
+        .label("Humidity")
+        .unit("%")
+        .precision(1)
+        .order(20);
 
-    RuntimeFieldMeta pressureMeta;
-    pressureMeta.group = "Humidity & Pressure";
-    pressureMeta.key = "pressure";
-    pressureMeta.label = "Pressure";
-    pressureMeta.unit = "hPa";
-    pressureMeta.precision = 1;
-    pressureMeta.order = 30;
-    CRM().addRuntimeMeta(pressureMeta);
+    humCard.value("pressure", []() { return roundf(mockedPressure * 10.0f) / 10.0f; })
+        .label("Pressure")
+        .unit("hPa")
+        .precision(1)
+        .order(30);
 
     // Dewpoint + status card.
-    CRM().addRuntimeProvider("Dewpoint & Status", [](JsonObject &data) {
-        data["dew"] = roundf(mockedDewPointC * 10.0f) / 10.0f;
-        data["dewRisk"] = mockedDewpointRisk;
-    }, 4);
+    auto dewCard = ConfigManager.liveGroup("Dewpoint & Status")
+                        .page("Live", 10)
+                        .card("Dewpoint & Status", 30);
 
-    RuntimeFieldMeta dewMeta;
-    dewMeta.group = "Dewpoint & Status";
-    dewMeta.key = "dew";
-    dewMeta.label = "Dewpoint";
-    dewMeta.unit = "°C";
-    dewMeta.precision = 1;
-    dewMeta.order = 40;
-    CRM().addRuntimeMeta(dewMeta);
+    dewCard.value("dew", []() { return roundf(mockedDewPointC * 10.0f) / 10.0f; })
+        .label("Dewpoint")
+        .unit("°C")
+        .precision(1)
+        .order(40);
 
-    RuntimeFieldMeta dewDivider;
-    dewDivider.group = "Dewpoint & Status";
-    dewDivider.key = "dewStatusDivider";
-    dewDivider.label = "Status";
-    dewDivider.isDivider = true;
-    dewDivider.order = 45;
-    CRM().addRuntimeMeta(dewDivider);
+    dewCard.divider("Status", 45);
 
-    RuntimeFieldMeta dewRiskMeta;
-    dewRiskMeta.group = "Dewpoint & Status";
-    dewRiskMeta.key = "dewRisk";
-    dewRiskMeta.label = "Dewpoint Risk";
-    dewRiskMeta.order = 50;
-    dewRiskMeta.isBool = true;
-    dewRiskMeta.hasAlarm = true;
-    dewRiskMeta.boolAlarmValue = true;
-    CRM().addRuntimeMeta(dewRiskMeta);
+    dewCard.boolValue("dewRisk", []() { return mockedDewpointRisk; })
+        .label("Dewpoint Risk")
+        .order(50);
 
     // Controls card (GUI interaction demo, no hardware IO here).
-    CRM().addRuntimeProvider("controls", [](JsonObject &data) {
-        data["checkbox"] = demoCheckboxState;
-        data["state"] = demoStateButton;
-        data["adjust"] = mockedAdjustValue;
-        data["tempOffset"] = mockedTemperatureOffsetC;
-    }, 3);
+    auto controls = ConfigManager.liveGroup("controls")
+                        .page("Live", 10)
+                        .card("Controls", 40);
 
-    ConfigManager.defineRuntimeButton("controls", "testBtn", "Test Button", []() {
-        cbTestButton();
-    }, "", 20);
+    controls.button("testBtn", "Test Button", []() { cbTestButton(); })
+        .order(20);
 
-    ConfigManager.defineRuntimeCheckbox(
-        "controls",
+    controls.checkbox(
         "demoCheckbox",
         "Demo Checkbox",
         []() { return demoCheckboxState; },
-        [](bool state) { demoCheckboxState = state; },
-        "",
-        21);
+        [](bool state) { demoCheckboxState = state; })
+        .order(21);
 
-    ConfigManager.defineRuntimeStateButton(
-        "controls",
+    controls.stateButton(
         "demoState",
         "Demo State",
         []() { return demoStateButton; },
         [](bool state) { demoStateButton = state; },
-        false,
-        "",
-        22);
+        false)
+        .order(22);
 
-    RuntimeFieldMeta analogDividerMeta;
-    analogDividerMeta.group = "controls";
-    analogDividerMeta.key = "analogDivider";
-    analogDividerMeta.label = "Analog";
-    analogDividerMeta.isDivider = true;
-    analogDividerMeta.order = 23;
-    CRM().addRuntimeMeta(analogDividerMeta);
+    controls.divider("Analog", 23);
 
-    ConfigManager.defineRuntimeIntSlider(
-        "controls",
+    controls.intSlider(
         "adjust",
         "Adjustment",
         -10,
@@ -341,12 +296,10 @@ static void setupGUI()
         0,
         []() { return mockedAdjustValue; },
         [](int value) { mockedAdjustValue = value; },
-        "UNIT",
-        "steps",
-        25);
+        "UNIT")
+        .order(25);
 
-    ConfigManager.defineRuntimeFloatSlider(
-        "controls",
+    controls.floatSlider(
         "tempOffset",
         "Temperature Offset",
         -5.0f,
@@ -355,9 +308,8 @@ static void setupGUI()
         2,
         []() { return mockedTemperatureOffsetC; },
         [](float value) { mockedTemperatureOffsetC = value; },
-        "°C",
-        "",
-        26);
+        "°C")
+        .order(26);
 
     // Alarms demo.
     alarmManager.addDigitalWarning(
@@ -373,46 +325,32 @@ static void setupGUI()
     alarmManager.addWarningToLive(
         "overheat",
         28,
-        "alerts",
-        "Live Values",
+        "Live",
         "Alerts",
+        "Warnings",
         "Overheat Warning");
 
-    CRM().addRuntimeProvider("Alerts", [](JsonObject &data) {
-        data["connected"] = WiFi.status() == WL_CONNECTED;
-    }, 1);
+    auto alerts = ConfigManager.liveGroup("Alerts")
+                      .page("Live", 10)
+                      .card("Alerts", 50);
 
-    RuntimeFieldMeta connectedMeta;
-    connectedMeta.group = "Alerts";
-    connectedMeta.key = "connected";
-    connectedMeta.label = "Connected";
-    connectedMeta.order = 29;
-    connectedMeta.isBool = true;
-    CRM().addRuntimeMeta(connectedMeta);
+    alerts.value("connected", []() { return WiFi.status() == WL_CONNECTED; })
+        .label("Connected")
+        .order(29);
 
     // Overheat alarm meta is provided by AlarmManager
 
-    // Runtime provider injection into the built-in system card.
-    CRM().addRuntimeProvider("system", [](JsonObject &data) {
-        data["testValue"] = roundf(mockedTemperatureC * 10.0f) / 10.0f;
-    }, 99);
+    auto systemCard = ConfigManager.liveGroup("system")
+                         .page("System", 90)
+                         .card("System", 90);
 
-    RuntimeFieldMeta systemCustomDivider;
-    systemCustomDivider.group = "system";
-    systemCustomDivider.key = "customDivider";
-    systemCustomDivider.label = "Custom";
-    systemCustomDivider.isDivider = true;
-    systemCustomDivider.order = 98;
-    CRM().addRuntimeMeta(systemCustomDivider);
+    systemCard.divider("Custom", 98);
 
-    RuntimeFieldMeta testValueMeta;
-    testValueMeta.group = "system";
-    testValueMeta.key = "testValue";
-    testValueMeta.label = "Injected Value";
-    testValueMeta.order = 99;
-    testValueMeta.unit = "°C";
-    testValueMeta.precision = 1;
-    CRM().addRuntimeMeta(testValueMeta);
+    systemCard.value("testValue", []() { return roundf(mockedTemperatureC * 10.0f) / 10.0f; })
+        .label("Injected Value")
+        .unit("°C")
+        .precision(1)
+        .order(99);
 
     Serial.println("[GUI] setupGUI() end");
 }

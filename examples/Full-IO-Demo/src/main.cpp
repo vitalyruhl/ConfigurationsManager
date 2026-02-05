@@ -23,7 +23,6 @@
 static const char SETTINGS_PASSWORD[] = ""; // NOTE: Empty string disables password protection for the Settings tab.
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
-static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();              // Core container for settings templates
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;               // System: OTA, WiFi reboot timeout, version
@@ -151,54 +150,32 @@ static void registerGUIForDI(){
     ioManager.addDigitalInputToLive("testbutton", 10, "DI", "Digital Inputs", "Digital Inputs", "Test Button", false);
 
 
-    CRM().addRuntimeProvider("Digital Inputs", [](JsonObject& data) {
-        data["test_press"] = isPulseActive(testPressPulseUntilMs);
-        data["test_release"] = isPulseActive(testReleasePulseUntilMs);
-        data["test_click"] = isPulseActive(testClickPulseUntilMs);
-        data["test_doubleclick_toggle"] = testDoubleClickToggle;
-        data["test_longpress_toggle"] = testLongPressToggle;
-    }, 6);
+    auto diEvents = ConfigManager.liveGroup("Digital Inputs")
+                        .page("DI")
+                        .card("Digital Inputs")
+                        .group("Digital Inputs");
 
-    RuntimeFieldMeta divider;
-    divider.group = "Digital Inputs";
-    divider.key = "testbutton_events";
-    divider.label = "Test Button Events";
-    divider.isDivider = true;
-    divider.order = 11;
-    CRM().addRuntimeMeta(divider);
+    diEvents.divider("Test Button Events", 11);
 
-    RuntimeFieldMeta meta;
-    meta.group = "Digital Inputs";
+    diEvents.value("test_press", []() { return isPulseActive(testPressPulseUntilMs); })
+        .label("Press")
+        .order(12);
 
-    meta.key = "test_press";
-    meta.label = "Press";
-    meta.isBool = true;
-    meta.order = 12;
-    CRM().addRuntimeMeta(meta);
+    diEvents.value("test_release", []() { return isPulseActive(testReleasePulseUntilMs); })
+        .label("Release")
+        .order(13);
 
-    meta.key = "test_release";
-    meta.label = "Release";
-    meta.isBool = true;
-    meta.order = 13;
-    CRM().addRuntimeMeta(meta);
+    diEvents.value("test_click", []() { return isPulseActive(testClickPulseUntilMs); })
+        .label("Click")
+        .order(14);
 
-    meta.key = "test_click";
-    meta.label = "Click";
-    meta.isBool = true;
-    meta.order = 14;
-    CRM().addRuntimeMeta(meta);
+    diEvents.value("test_doubleclick_toggle", []() { return testDoubleClickToggle; })
+        .label("DoubleClick (Toggle)")
+        .order(15);
 
-    meta.key = "test_doubleclick_toggle";
-    meta.label = "DoubleClick (Toggle)";
-    meta.isBool = true;
-    meta.order = 15;
-    CRM().addRuntimeMeta(meta);
-
-    meta.key = "test_longpress_toggle";
-    meta.label = "LongPress (Toggle)";
-    meta.isBool = true;
-    meta.order = 16;
-    CRM().addRuntimeMeta(meta);
+    diEvents.value("test_longpress_toggle", []() { return testLongPressToggle; })
+        .label("LongPress (Toggle)")
+        .order(16);
 
 }
 
@@ -227,13 +204,12 @@ static void registerGUIForAI(){
     ioManager.addAnalogInputToSettingsGroup("ldr_s", "Analog - I/O", "Analog Inputs", "LDR VN", 11);
     ioManager.addAnalogInputToLive("ldr_s", 11, "AI", "Analog Inputs", "Analog Inputs", "LDR VN RAW", true);
 
-    RuntimeFieldMeta divider1;
-    divider1.group = "Analog Inputs";
-    divider1.key = "s_divider";
-    divider1.label = "s_divider";
-    divider1.isDivider = true;
-    divider1.order = 20;
-    CRM().addRuntimeMeta(divider1);
+    auto aiGroup = ConfigManager.liveGroup("Analog Inputs")
+                       .page("AI")
+                       .card("Analog Inputs")
+                       .group("Analog Inputs");
+
+    aiGroup.divider("s_divider", 20);
 
     ioManager.addAnalogInputToSettingsGroup("ldr_w", "Analog - I/O", "Analog Inputs", "LDR VP", 21);
     ioManager.addAnalogInputToLive("ldr_w", 21, "AI", "Analog Inputs", "Analog Inputs", "LDR VP", false);
@@ -290,13 +266,12 @@ static void registerGUIForAO()
     ioManager.addAnalogOutputValueRawToGUI("ao_pct", "Analog Outputs", 44, "AO 0..100% (DAC 0..255)", "analog-outputs");
     ioManager.addAnalogOutputValueVoltToGUI("ao_pct", "Analog Outputs", 45, "AO 0..100% (Volts)", "analog-outputs", 3);
 
-    RuntimeFieldMeta divider2;
-    divider2.group = "Analog Outputs";
-    divider2.key = "ao2_divider";
-    divider2.label = "Analog Output 2 divider";
-    divider2.isDivider = true;
-    divider2.order = 50;
-    CRM().addRuntimeMeta(divider2);
+    auto aoGroup = ConfigManager.liveGroup("analog-outputs")
+                       .page("AO")
+                       .card("Analog Outputs")
+                       .group("analog-outputs");
+
+    aoGroup.divider("Analog Output 2 divider", 50);
 
     ioManager.addAnalogOutputToSettingsGroup("ao_v", "Analog - I/O", "Analog Outputs", "AO 0..3.3V", 52);
     ioManager.addAnalogOutputToLive(
