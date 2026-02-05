@@ -166,11 +166,7 @@ void setup()
     ConfigManager.loadAll();
 
     // Keep OTA enable flag reactive (optional), even though OTA init happens in wifiServices.onConnected().
-    systemSettings.allowOTA.setCallback([](bool enabled) {
-        Serial.printf("[MAIN] OTA setting changed to: %s\n", enabled ? "enabled" : "disabled");
-        ConfigManager.getOTAManager().enable(enabled);
     });
-    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
     // WiFi AP MAC priority (kept as requested).
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
@@ -215,7 +211,6 @@ void loop()
 {
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleOTA();
 
     static unsigned long lastAlarmEval = 0;
     if (millis() - lastAlarmEval > 1500)

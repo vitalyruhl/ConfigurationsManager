@@ -1627,6 +1627,14 @@ public:
 
         // Side-effects: keep runtime subsystems in sync with specific settings
         if (result) {
+            if (BaseSetting *otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting)
+            {
+                if (setting->getType() == SettingType::BOOL)
+                {
+                    otaManager.enable(static_cast<Config<bool> *>(setting)->get());
+                }
+            }
+
             // Heuristic: treat keys containing both "ota" and "pass" (case-insensitive) as OTA password
             auto containsNoCase = [](const String &hay, const char *needle) {
                 String h = hay; h.toLowerCase();
@@ -1722,6 +1730,14 @@ public:
             }
 
             // Side-effects: keep runtime subsystems in sync with specific settings
+            if (BaseSetting *otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting)
+            {
+                if (setting->getType() == SettingType::BOOL)
+                {
+                    otaManager.enable(static_cast<Config<bool> *>(setting)->get());
+                }
+            }
+
             // Heuristic: treat keys containing both "ota" and "pass" (case-insensitive) as OTA password
             auto containsNoCase = [](const String &hay, const char *needle) {
                 String h = hay; h.toLowerCase();
@@ -2053,6 +2069,10 @@ public:
         runtimeManager.begin(this);
         WebSocketPush(true, 250);
         setPushOnConnect(true);
+        if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
+        {
+            otaManager.enable(static_cast<Config<bool> *>(otaEnable)->get());
+        }
 
         CM_CORE_LOG("ConfigManager modules initialized - WiFi connecting in background");
     }
@@ -2111,6 +2131,10 @@ public:
         runtimeManager.begin(this);
         WebSocketPush(true, 250);
         setPushOnConnect(true);
+        if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
+        {
+            otaManager.enable(static_cast<Config<bool> *>(otaEnable)->get());
+        }
     }
 
     void startAccessPoint(const String &apSSID = "", const String &apPassword = "")
@@ -2142,6 +2166,10 @@ public:
         runtimeManager.begin(this);
         WebSocketPush(true, 250);
         setPushOnConnect(true);
+        if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
+        {
+            otaManager.enable(static_cast<Config<bool> *>(otaEnable)->get());
+        }
 
         webManager.defineAllRoutes();
         otaManager.begin(this);
@@ -2153,6 +2181,7 @@ public:
     {
         updateLoopTiming();
         handleWebsocketPush();
+        handleOTA();
     }
 
     // WiFi status and control

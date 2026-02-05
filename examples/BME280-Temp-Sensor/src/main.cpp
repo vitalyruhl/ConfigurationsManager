@@ -17,7 +17,6 @@
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-BME280-Temp-Sensor"
 
-// Minimal skeleton: do not hardcode WiFi credentials in code.
 // Leave SSID empty to start in AP mode and configure via Web UI.
 static const char SETTINGS_PASSWORD[] = "cm";
 
@@ -101,6 +100,10 @@ static TempSettings tempSettings;
 
 static void setupRuntimeUI()
 {
+
+    ConfigManager.addLivePage("Sensors", 10);
+    ConfigManager.addLiveGroup("Sensors", "BME280 - Temperature Sensor", "Sensor Readings", 10);
+
     CRM().addRuntimeProvider("sensors", [](JsonObject &data) {
         data["temp"] = temperature;
         data["hum"] = humidity;
@@ -158,11 +161,10 @@ static void readBme280()
 
 static void setupTemperatureMeasuring()
 {
-    Serial.println("[TEMP] Initializing BME280 sensor...");
+    Serial.println("[I] Initializing BME280 sensor...");
 
     bme280.setAddress(BME280_ADDRESS, I2C_SDA, I2C_SCL);
 
-    Serial.println("[TEMP] Starting BME280.begin()...");
     const bool ok = bme280.begin(
         bme280.BME280_STANDBY_0_5,
         bme280.BME280_FILTER_OFF,
@@ -174,11 +176,11 @@ static void setupTemperatureMeasuring()
 
     if (!ok)
     {
-        Serial.println("[TEMP] BME280 not initialized - continuing without temperature sensor");
+        Serial.println("[E] BME280 not initialized - continuing without temperature sensor");
         return;
     }
 
-    Serial.println("[TEMP] BME280 ready! Starting temperature ticker...");
+    Serial.println("[I] BME280 ready! Starting temperature ticker...");
     int interval = tempSettings.readIntervalSec->get();
     if (interval < 2)
     {
@@ -193,7 +195,7 @@ void setup()
     Serial.begin(115200);
 
     ConfigManagerClass::setLogger([](const char *msg) {
-        Serial.print("[ConfigManager] ");
+        Serial.print("[CM] ");
         Serial.println(msg);
     });
 
@@ -208,42 +210,17 @@ void setup()
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
 
-    // Keep OTA enable flag reactive (optional), even though OTA init happens in wifiServices.onConnected().
-    systemSettings.allowOTA.setCallback([](bool enabled) {
-        Serial.printf("[MAIN] OTA setting changed to: %s\n", enabled ? "enabled" : "disabled");
-        ConfigManager.getOTAManager().enable(enabled);
-    });
-
     tempSettings.create();
     tempSettings.placeInUi();
 
     ConfigManager.loadAll();
 
-    // Ensure OTAManager state matches the persisted setting.
-    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
-
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
-    ConfigManager.startWebServer();
-
-    ConfigManager.addLivePage("Sensors", 10);
-    ConfigManager.addLiveGroup("Sensors", "Sensors", "Sensor Readings", 10);
     setupRuntimeUI();
-
 
     setupTemperatureMeasuring();
 
-    if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA)
-    {
-        Serial.printf("[MAIN] Web server running at: %s (AP Mode)\n", WiFi.softAPIP().toString().c_str());
-    }
-    else if (WiFi.status() == WL_CONNECTED)
-    {
-        Serial.printf("[MAIN] Web server running at: %s (Station Mode)\n", WiFi.localIP().toString().c_str());
-    }
-    else
-    {
-        Serial.println("[MAIN] Web server running (IP not available)");
-    }
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// my dev-Station AP
+    ConfigManager.startWebServer();
 
     Serial.println("[MAIN] Setup completed successfully. Starting main loop...");
 }
@@ -270,7 +247,6 @@ void loop()
 {
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleOTA();
 
     static unsigned long lastLoopLog = 0;
     if (millis() - lastLoopLog > 60000)

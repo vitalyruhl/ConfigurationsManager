@@ -39,7 +39,7 @@ void setup()
 
     ConfigManagerClass::setLogger([](const char *msg)
         {
-            Serial.print("[Main-Min] ");
+            Serial.print("[CM] ");
             Serial.println(msg);
         });
 

@@ -184,9 +184,6 @@ void setup()
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
 
-    systemSettings.allowOTA.setCallback([](bool enabled) {
-        lmg.log(LL::Info, "Setting changed to: %s", enabled ? "enabled" : "disabled");
-        ConfigManager.getOTAManager().enable(enabled);
     });
 
     initializeAllSettings();
@@ -246,7 +243,6 @@ void setup()
 #endif
     }
 
-    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
     ioManager.begin();
     
@@ -292,7 +288,6 @@ void loop()
     ioManager.update();
 
     ConfigManager.handleClient();
-    ConfigManager.handleOTA();
     alarmManager.update();
 
     // Non-blocking display updates

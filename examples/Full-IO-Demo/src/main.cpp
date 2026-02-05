@@ -118,7 +118,6 @@ void loop()
     ioManager.update(); // Apply IO setting changes and keep inputs/outputs state current
     alarmManager.update(); // Evaluate alarms and fire callbacks
     ConfigManager.handleClient(); // Handle web server client requests
-    ConfigManager.handleOTA();           // Handle OTA updates
     //-------------------------------------------------------------------------------------------------------------
 
     static unsigned long lastLoopLog = 0;

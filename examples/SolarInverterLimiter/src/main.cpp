@@ -279,13 +279,8 @@ void setup()
 #endif
     }
 
-    systemSettings.allowOTA.setCallback(
-      [](bool enabled){
-            lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
-            ConfigManager.getOTAManager().enable(enabled);
           });
 
-    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
     ioManager.begin();
 
@@ -337,7 +332,6 @@ void loop()
 
     // Services managed by ConfigManager.
     ConfigManager.handleClient();
-    ConfigManager.handleOTA();
     alarmManager.update();
 
     if (mqttSettings.enableMQTT.get() && ConfigManager.getWiFiManager().isConnected() && !ConfigManager.getWiFiManager().isInAPMode())

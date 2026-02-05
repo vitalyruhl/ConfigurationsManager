@@ -197,11 +197,6 @@ void setup()
 #endif
     }
 
-    systemSettings.allowOTA.setCallback([](bool enabled)
-                                        {
-        lmg.logTag(LL::Info, "OTA", "Setting changed to: %s", enabled ? "enabled" : "disabled");
-        ConfigManager.getOTAManager().enable(enabled); });
-    ConfigManager.getOTAManager().enable(systemSettings.allowOTA.get());
 
     pinMode(BUTTON_PIN, INPUT_PULLDOWN);
 
@@ -221,7 +216,6 @@ void loop()
 {
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleOTA();
 
     mqtt.loop();
     lmg.loop();
