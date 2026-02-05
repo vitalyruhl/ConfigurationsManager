@@ -905,6 +905,487 @@ public:
         cm::io::IOPinRole ioPinRoleValue = cm::io::IOPinRole::DigitalInput;
     };
 
+    class LiveFieldBuilder
+    {
+    public:
+        LiveFieldBuilder(ConfigManagerRuntime &runtime,
+                         RuntimeFieldMeta metaValue,
+                         std::function<void(JsonObject &)> providerFunc,
+                         const String &providerGroupName,
+                         std::function<void(ConfigManagerRuntime &)> onCommitFunc = nullptr)
+            : runtime(&runtime),
+              meta(std::move(metaValue)),
+              provider(std::move(providerFunc)),
+              providerGroup(providerGroupName),
+              onCommit(std::move(onCommitFunc))
+        {
+        }
+
+        LiveFieldBuilder(const LiveFieldBuilder &) = delete;
+        LiveFieldBuilder &operator=(const LiveFieldBuilder &) = delete;
+
+        LiveFieldBuilder(LiveFieldBuilder &&other) noexcept
+            : runtime(other.runtime),
+              meta(std::move(other.meta)),
+              provider(std::move(other.provider)),
+              providerGroup(std::move(other.providerGroup)),
+              onCommit(std::move(other.onCommit)),
+              committed(other.committed)
+        {
+            other.committed = true;
+        }
+
+        ~LiveFieldBuilder()
+        {
+            commit();
+        }
+
+        LiveFieldBuilder &label(const char *text)
+        {
+            meta.label = text ? text : "";
+            return *this;
+        }
+
+        LiveFieldBuilder &unit(const char *text)
+        {
+            meta.unit = text ? text : "";
+            return *this;
+        }
+
+        LiveFieldBuilder &precision(int value)
+        {
+            meta.precision = value;
+            return *this;
+        }
+
+        LiveFieldBuilder &order(int value)
+        {
+            meta.order = value;
+            return *this;
+        }
+
+        LiveFieldBuilder &onLabel(const char *text)
+        {
+            meta.onLabel = text ? text : "";
+            return *this;
+        }
+
+        LiveFieldBuilder &offLabel(const char *text)
+        {
+            meta.offLabel = text ? text : "";
+            return *this;
+        }
+
+        LiveFieldBuilder &alarmOnTrue(bool alarmValue = true)
+        {
+            meta.hasAlarm = true;
+            meta.boolAlarmValue = alarmValue;
+            meta.alarmWhenTrue = true;
+            return *this;
+        }
+
+        LiveFieldBuilder &warnMin(float value)
+        {
+            meta.warnMin = value;
+            return *this;
+        }
+
+        LiveFieldBuilder &warnMax(float value)
+        {
+            meta.warnMax = value;
+            return *this;
+        }
+
+        LiveFieldBuilder &alarmMin(float value)
+        {
+            meta.alarmMin = value;
+            meta.hasAlarm = true;
+            return *this;
+        }
+
+        LiveFieldBuilder &alarmMax(float value)
+        {
+            meta.alarmMax = value;
+            meta.hasAlarm = true;
+            return *this;
+        }
+
+        LiveFieldBuilder &staticValue(const char *value)
+        {
+            meta.staticValue = value ? value : "";
+            return *this;
+        }
+
+    private:
+        void commit()
+        {
+            if (committed || !runtime)
+            {
+                return;
+            }
+            runtime->addRuntimeMeta(meta);
+            if (provider && providerGroup.length())
+            {
+                runtime->addRuntimeProvider(providerGroup, provider, meta.order);
+            }
+            if (onCommit)
+            {
+                onCommit(*runtime);
+            }
+            committed = true;
+        }
+
+        ConfigManagerRuntime *runtime = nullptr;
+        RuntimeFieldMeta meta;
+        std::function<void(JsonObject &)> provider;
+        String providerGroup;
+        std::function<void(ConfigManagerRuntime &)> onCommit;
+        bool committed = false;
+    };
+
+    class LiveGroupBuilder
+    {
+    public:
+        LiveGroupBuilder(ConfigManagerClass &owner, const char *sourceGroupName)
+            : manager(owner), sourceGroup(sourceGroupName ? sourceGroupName : "")
+        {
+        }
+
+        LiveGroupBuilder &page(const char *name, int order = -1)
+        {
+            pageName = name ? name : "";
+            pageOrder = order;
+            return *this;
+        }
+
+        LiveGroupBuilder &card(const char *name, int order = -1)
+        {
+            cardName = name ? name : "";
+            cardOrder = order;
+            return *this;
+        }
+
+        LiveGroupBuilder &group(const char *name, int order = -1)
+        {
+            groupName = name ? name : "";
+            groupOrder = order;
+            return *this;
+        }
+
+        LiveFieldBuilder divider(const char *label, int order = DEFAULT_LAYOUT_ORDER)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(nextDividerKey());
+            meta.isDivider = true;
+            meta.label = label ? label : "";
+            meta.order = order;
+            return LiveFieldBuilder(manager.getRuntime(), std::move(meta), nullptr, sourceGroup);
+        }
+
+        template<typename Getter>
+        LiveFieldBuilder value(const char *key, Getter getter)
+        {
+            using Ret = std::decay_t<std::invoke_result_t<Getter>>;
+            return makeValueBuilder<Ret>(key, std::function<Ret()>(getter));
+        }
+
+        LiveFieldBuilder boolValue(const char *key, std::function<bool()> getter)
+        {
+            auto builder = makeValueBuilder<bool>(key, std::move(getter));
+            builder.alarmOnTrue(true);
+            return builder;
+        }
+
+        LiveFieldBuilder button(const char *key, const char *label, std::function<void()> onPress)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isButton = true;
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), onPress](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeButton(group, keyStr, onPress);
+                });
+        }
+
+        LiveFieldBuilder checkbox(const char *key, const char *label,
+                                  std::function<bool()> getter, std::function<void(bool)> setter)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isCheckbox = true;
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeCheckbox(group, keyStr, getter, setter);
+                });
+        }
+
+        LiveFieldBuilder stateButton(const char *key, const char *label,
+                                     std::function<bool()> getter, std::function<void(bool)> setter,
+                                     bool initState = false,
+                                     const char *onLabelText = nullptr,
+                                     const char *offLabelText = nullptr)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isStateButton = true;
+            meta.initialState = initState;
+            if (onLabelText)
+            {
+                meta.onLabel = onLabelText;
+            }
+            if (offLabelText)
+            {
+                meta.offLabel = offLabelText;
+            }
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeStateButton(group, keyStr, getter, setter);
+                });
+        }
+
+        LiveFieldBuilder momentaryButton(const char *key, const char *label,
+                                         std::function<bool()> getter, std::function<void(bool)> setter,
+                                         const char *onLabelText = nullptr,
+                                         const char *offLabelText = nullptr)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isMomentaryButton = true;
+            if (onLabelText)
+            {
+                meta.onLabel = onLabelText;
+            }
+            if (offLabelText)
+            {
+                meta.offLabel = offLabelText;
+            }
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeMomentaryButton(group, keyStr, getter, setter);
+                });
+        }
+
+        LiveFieldBuilder intSlider(const char *key, const char *label,
+                                   int minValue, int maxValue, int initValue,
+                                   std::function<int()> getter, std::function<void(int)> setter,
+                                   const char *unitText = nullptr)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isIntSlider = true;
+            meta.intMin = minValue;
+            meta.intMax = maxValue;
+            meta.intInit = initValue;
+            if (unitText)
+            {
+                meta.unit = unitText;
+            }
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter, minValue, maxValue](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeIntSlider(group, keyStr, getter, setter, minValue, maxValue);
+                });
+        }
+
+        LiveFieldBuilder floatSlider(const char *key, const char *label,
+                                     float minValue, float maxValue, float initValue, int precision,
+                                     std::function<float()> getter, std::function<void(float)> setter,
+                                     const char *unitText = nullptr)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isFloatSlider = true;
+            meta.floatMin = minValue;
+            meta.floatMax = maxValue;
+            meta.floatInit = initValue;
+            meta.floatPrecision = precision;
+            meta.precision = precision;
+            if (unitText)
+            {
+                meta.unit = unitText;
+            }
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter, minValue, maxValue](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeFloatSlider(group, keyStr, getter, setter, minValue, maxValue);
+                });
+        }
+
+        LiveFieldBuilder intInput(const char *key, const char *label,
+                                  int minValue, int maxValue, int initValue,
+                                  std::function<int()> getter, std::function<void(int)> setter,
+                                  const char *unitText = nullptr)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isIntInput = true;
+            meta.intMin = minValue;
+            meta.intMax = maxValue;
+            meta.intInit = initValue;
+            if (unitText)
+            {
+                meta.unit = unitText;
+            }
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter, minValue, maxValue](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeIntInput(group, keyStr, getter, setter, minValue, maxValue);
+                });
+        }
+
+        LiveFieldBuilder floatInput(const char *key, const char *label,
+                                    float minValue, float maxValue, float initValue, int precision,
+                                    std::function<float()> getter, std::function<void(float)> setter,
+                                    const char *unitText = nullptr)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            meta.label = label ? label : meta.key;
+            meta.isFloatInput = true;
+            meta.floatMin = minValue;
+            meta.floatMax = maxValue;
+            meta.floatInit = initValue;
+            meta.floatPrecision = precision;
+            meta.precision = precision;
+            if (unitText)
+            {
+                meta.unit = unitText;
+            }
+            return LiveFieldBuilder(
+                manager.getRuntime(),
+                std::move(meta),
+                nullptr,
+                sourceGroup,
+                [group = sourceGroup, keyStr = String(key), getter, setter, minValue, maxValue](ConfigManagerRuntime &runtime)
+                {
+                    runtime.registerRuntimeFloatInput(group, keyStr, getter, setter, minValue, maxValue);
+                });
+        }
+
+    private:
+        RuntimeFieldMeta createBaseMeta(const char *key)
+        {
+            RuntimeFieldMeta meta;
+            meta.key = key ? key : "";
+            meta.label = meta.key;
+            meta.sourceGroup = sourceGroup;
+
+            String resolvedPage;
+            String resolvedCard;
+            String resolvedGroup;
+            resolveLayout(resolvedPage, resolvedCard, resolvedGroup);
+
+            meta.page = resolvedPage;
+            meta.card = resolvedCard;
+            meta.group = resolvedGroup;
+
+            return meta;
+        }
+
+        RuntimeFieldMeta createBaseMeta(const String &key)
+        {
+            return createBaseMeta(key.c_str());
+        }
+
+        void resolveLayout(String &resolvedPage, String &resolvedCard, String &resolvedGroup)
+        {
+            const bool hasPage = pageName.length() > 0;
+            resolvedPage = hasPage ? pageName : String();
+            if (cardName.length())
+            {
+                resolvedCard = cardName;
+            }
+            else if (hasPage)
+            {
+                resolvedCard = resolvedPage;
+            }
+            else
+            {
+                resolvedCard = String();
+            }
+            resolvedGroup = groupName;
+
+            if (hasPage)
+            {
+                manager.addLivePage(resolvedPage.c_str(), pageOrder);
+                manager.addLiveCard(resolvedPage.c_str(), resolvedCard.c_str(), cardOrder);
+                if (resolvedGroup.length())
+                {
+                    manager.addLiveGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), groupOrder);
+                }
+            }
+        }
+
+        String nextDividerKey()
+        {
+            static uint32_t counter = 0;
+            return String("divider_") + String(counter++);
+        }
+
+        template<typename T>
+        LiveFieldBuilder makeValueBuilder(const char *key, std::function<T()> getter)
+        {
+            RuntimeFieldMeta meta = createBaseMeta(key);
+            if (std::is_same<T, bool>::value)
+            {
+                meta.isBool = true;
+            }
+            if (std::is_same<T, String>::value || std::is_same<T, const char *>::value)
+            {
+                meta.isString = true;
+            }
+            if (std::is_integral<T>::value && !std::is_same<T, bool>::value)
+            {
+                meta.precision = 0;
+            }
+            String keyStr = meta.key;
+            auto provider = [keyStr, getter](JsonObject &data)
+            {
+                data[keyStr] = getter();
+            };
+            return LiveFieldBuilder(manager.getRuntime(), std::move(meta), provider, sourceGroup);
+        }
+
+        ConfigManagerClass &manager;
+        String sourceGroup;
+        String pageName;
+        String cardName;
+        String groupName;
+        int pageOrder = -1;
+        int cardOrder = -1;
+        int groupOrder = -1;
+    };
+
     static constexpr const char *DEFAULT_LAYOUT_NAME = "Default";
     static constexpr int DEFAULT_LAYOUT_ORDER = 100;
     static constexpr const char *DEFAULT_LIVE_CARD_NAME = "Live Values";
@@ -1292,6 +1773,7 @@ private:
 
     std::vector<LayoutPage> settingsPages;
     std::vector<LayoutPage> livePages;
+    bool liveLayoutEnabled = false;
     std::set<String> layoutWarnings;
     std::map<String, CategoryLayoutOverride> categoryLayoutOverrides;
 
@@ -1305,6 +1787,7 @@ private:
     void logLayoutWarningOnce(const String &key, const String &message);
 public:
     void setCategoryLayoutOverride(const char *category, const char *page, const char *card, const char *group, int order);
+    void registerLivePlacement(const RuntimeFieldMeta& meta);
     void registerLivePlacement(const String& liveGroup,
                                const String& key,
                                const String& label,
@@ -1487,8 +1970,14 @@ public:
     void addToSettingsGroup(const char *itemId, const char *pageName, const char *groupName, int order);
     void addToSettingsGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order);
     void addToLive(const char *itemId, const char *pageName, int order);
+    void addToLiveCard(const char *itemId, const char *pageName, const char *cardName, int order);
     void addToLiveGroup(const char *itemId, const char *pageName, const char *groupName, int order);
     void addToLiveGroup(const char *itemId, const char *pageName, const char *cardName, const char *groupName, int order);
+
+    inline LiveGroupBuilder liveGroup(const char *sourceGroup)
+    {
+        return LiveGroupBuilder(*this, sourceGroup);
+    }
 
     inline SettingBuilder<bool> addSettingBool(const char *key = nullptr)
     {

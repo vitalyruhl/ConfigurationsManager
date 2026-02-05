@@ -246,11 +246,13 @@ void ConfigManagerClass::addSettingsGroup(const char *pageName, const char *card
 
 void ConfigManagerClass::addLivePage(const char *pageName, int order)
 {
+    liveLayoutEnabled = true;
     ensureLayoutPage(livePages, pageName, order, false);
 }
 
 void ConfigManagerClass::addLiveCard(const char *pageName, const char *cardName, int order)
 {
+    liveLayoutEnabled = true;
     String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
     String normalizedPage = normalizeLayoutName(resolvedPageName);
     bool pageExists = findLayoutPage(livePages, normalizedPage) != nullptr;
@@ -260,6 +262,7 @@ void ConfigManagerClass::addLiveCard(const char *pageName, const char *cardName,
 
 void ConfigManagerClass::addLiveGroup(const char *pageName, const char *cardName, const char *groupName, int order)
 {
+    liveLayoutEnabled = true;
     String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
     String normalizedPage = normalizeLayoutName(resolvedPageName);
     bool pageExists = findLayoutPage(livePages, normalizedPage) != nullptr;
@@ -365,6 +368,14 @@ void ConfigManagerClass::addToLive(const char *itemId, const char *pageName, int
     addToLiveGroup(itemId, pageName, DEFAULT_LIVE_CARD_NAME, DEFAULT_LIVE_CARD_NAME, order);
 }
 
+void ConfigManagerClass::addToLiveCard(const char *itemId, const char *pageName, const char *cardName, int order)
+{
+    String resolvedPage = resolvePlacementName(pageName, DEFAULT_LAYOUT_NAME);
+    String resolvedCard = resolvePlacementName(cardName, DEFAULT_LIVE_CARD_NAME);
+    addLiveCard(resolvedPage.c_str(), resolvedCard.c_str(), order);
+    livePlacements.push_back({itemId, resolvedPage, resolvedCard, String(), order});
+}
+
 void ConfigManagerClass::addToLiveGroup(const char *itemId, const char *pageName, const char *groupName, int order)
 {
     addToLiveGroup(itemId, pageName, DEFAULT_LIVE_CARD_NAME, groupName, order);
@@ -379,6 +390,92 @@ void ConfigManagerClass::addToLiveGroup(const char *itemId, const char *pageName
     livePlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
 }
 
+void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta)
+{
+    if (meta.key.isEmpty())
+    {
+        return;
+    }
+
+    String pageName = meta.page;
+    String cardName = meta.card;
+    String groupName = meta.group;
+    pageName.trim();
+    cardName.trim();
+    groupName.trim();
+
+    if (!pageName.isEmpty())
+    {
+        liveLayoutEnabled = true;
+    }
+
+    if (cardName.isEmpty() && groupName.length())
+    {
+        cardName = groupName;
+        groupName = String();
+    }
+
+    String resolvedPage = pageName;
+    String resolvedCard = cardName;
+    String resolvedGroup = groupName;
+
+    if (!liveLayoutEnabled)
+    {
+        for (auto &placement : livePlacements)
+        {
+            if (placement.id == meta.key)
+            {
+                placement.page = resolvedPage;
+                placement.card = resolvedCard;
+                placement.group = resolvedGroup;
+                placement.order = meta.order;
+                return;
+            }
+        }
+        livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order});
+        return;
+    }
+
+    if (resolvedPage.isEmpty())
+    {
+        const String sourceGroup = meta.sourceGroup.length() ? meta.sourceGroup : meta.group;
+        if (sourceGroup.equalsIgnoreCase("system"))
+        {
+            resolvedPage = "System";
+            if (resolvedCard.isEmpty())
+            {
+                resolvedCard = "System";
+            }
+        }
+    }
+
+    resolvedPage = resolvePlacementName(resolvedPage.c_str(), DEFAULT_LAYOUT_NAME);
+    resolvedCard = resolvePlacementName(resolvedCard.c_str(), DEFAULT_LIVE_CARD_NAME);
+
+    addLivePage(resolvedPage.c_str(), -1);
+    addLiveCard(resolvedPage.c_str(), resolvedCard.c_str(), -1);
+
+    if (!resolvedGroup.isEmpty())
+    {
+        resolvedGroup = resolvePlacementName(resolvedGroup.c_str(), resolvedCard.c_str());
+        addLiveGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), -1);
+    }
+
+    for (auto &placement : livePlacements)
+    {
+        if (placement.id == meta.key)
+        {
+            placement.page = resolvedPage;
+            placement.card = resolvedCard;
+            placement.group = resolvedGroup;
+            placement.order = meta.order;
+            return;
+        }
+    }
+
+    livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order});
+}
+
 void ConfigManagerClass::registerLivePlacement(const String &liveGroup,
                                                const String &key,
                                                const String &label,
@@ -388,6 +485,7 @@ void ConfigManagerClass::registerLivePlacement(const String &liveGroup,
     {
         return;
     }
+    liveLayoutEnabled = true;
 
     String resolvedGroup = liveGroup;
     resolvedGroup.trim();
@@ -518,6 +616,23 @@ String ConfigManagerClass::buildLiveLayoutJSON() const
     DynamicJsonDocument doc(16384);
     JsonObject root = doc.to<JsonObject>();
     JsonArray pagesArray = root.createNestedArray("pages");
+    if (!liveLayoutEnabled)
+    {
+        JsonObject placementsObj = root.createNestedObject("placements");
+        for (const auto &placement : livePlacements)
+        {
+            JsonObject placementObj = placementsObj.createNestedObject(placement.id);
+            placementObj["page"] = placement.page;
+            placementObj["card"] = placement.card;
+            placementObj["group"] = placement.group;
+            placementObj["order"] = placement.order;
+        }
+        root["defaultPage"] = String();
+
+        String output;
+        serializeJson(doc, output);
+        return output;
+    }
 
     const auto normalizeToken = [this](const String &value) -> String {
         return normalizeLayoutName(value);
@@ -589,6 +704,9 @@ String ConfigManagerClass::buildLiveLayoutJSON() const
             cardObj["name"] = card->name;
             cardObj["title"] = card->name;
             cardObj["order"] = card->order;
+
+            JsonArray itemsArray = cardObj.createNestedArray("items");
+            collectPlacements(page->name, card->name, String(), itemsArray);
 
             JsonArray groupsArray = cardObj.createNestedArray("groups");
             const auto sortedGroups = makeSortedPointers(card->groups);

@@ -86,6 +86,8 @@ struct RuntimeFieldStyle {
 // Runtime field metadata structure
 struct RuntimeFieldMeta {
     String group;
+    String sourceGroup;
+    String page;
     String key;
     String label;
     String unit;
@@ -354,4 +356,25 @@ public:
                                  std::function<float()> getter, std::function<void(float)> setter,
                                  const String& unit = String(), const String& card = String(), int order = 100);
     void handleFloatInputChange(const String& group, const String& key, float value);
+
+    // Live runtime control registrations (meta handled externally)
+    void registerRuntimeButton(const String& group, const String& key, std::function<void()> onPress);
+    void registerRuntimeCheckbox(const String& group, const String& key,
+                                 std::function<bool()> getter, std::function<void(bool)> setter);
+    void registerRuntimeStateButton(const String& group, const String& key,
+                                    std::function<bool()> getter, std::function<void(bool)> setter);
+    void registerRuntimeMomentaryButton(const String& group, const String& key,
+                                        std::function<bool()> getter, std::function<void(bool)> setter);
+    void registerRuntimeIntSlider(const String& group, const String& key,
+                                  std::function<int()> getter, std::function<void(int)> setter,
+                                  int minValue, int maxValue);
+    void registerRuntimeFloatSlider(const String& group, const String& key,
+                                    std::function<float()> getter, std::function<void(float)> setter,
+                                    float minValue, float maxValue);
+    void registerRuntimeIntInput(const String& group, const String& key,
+                                 std::function<int()> getter, std::function<void(int)> setter,
+                                 int minValue, int maxValue);
+    void registerRuntimeFloatInput(const String& group, const String& key,
+                                   std::function<float()> getter, std::function<void(float)> setter,
+                                   float minValue, float maxValue);
 };

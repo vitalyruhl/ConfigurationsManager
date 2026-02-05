@@ -85,235 +85,368 @@
       </div>
 
       <div class="live-cards">
-        <div class="card" v-for="group in displayRuntimeGroups" :key="group.name">
-        <h3>{{ group.title }}</h3>
+        <div class="card" v-for="card in displayRuntimeCards" :key="card.key">
+          <h3>{{ card.title }}</h3>
 
-        <div class="tbl">
-          <template v-for="f in group.fields" :key="f.key">
-            <hr v-if="f.isDivider" class="dv" :data-label="f.label" />
+          <div v-if="card.items && card.items.length" class="tbl">
+            <template v-for="f in card.items" :key="f.key">
+              <hr v-if="f.isDivider" class="dv" :data-label="f.label" />
 
-            <RuntimeActionButton
-              v-else-if="f.isButton"
+              <RuntimeActionButton
+                v-else-if="f.isButton"
                 :group="fieldSourceGroup(f)"
-              :field="f"
-              @action="handleRuntimeButton"
-            />
+                :field="f"
+                @action="handleRuntimeButton"
+              />
 
-            <RuntimeMomentaryButton
-              v-else-if="f.isMomentaryButton"
+              <RuntimeMomentaryButton
+                v-else-if="f.isMomentaryButton"
                 :group="fieldSourceGroup(f)"
-              :field="f"
+                :field="f"
                 :value="runtimeValue(f)"
-              @set="handleMomentarySet"
-            />
+                @set="handleMomentarySet"
+              />
 
-            <RuntimeStateButton
-              v-else-if="f.isStateButton"
+              <RuntimeStateButton
+                v-else-if="f.isStateButton"
                 :group="fieldSourceGroup(f)"
-              :field="f"
+                :field="f"
                 :value="runtimeValue(f)"
-              @toggle="handleStateToggle"
-            />
+                @toggle="handleStateToggle"
+              />
 
-            <RuntimeSlider
-              v-else-if="f.isIntSlider || f.isFloatSlider"
+              <RuntimeSlider
+                v-else-if="f.isIntSlider || f.isFloatSlider"
                 :group="fieldSourceGroup(f)"
-              :field="f"
+                :field="f"
                 :value="runtimeValue(f)"
-              :mode="f.isFloatSlider ? 'float' : 'int'"
-              @commit="handleSliderCommit"
-            />
+                :mode="f.isFloatSlider ? 'float' : 'int'"
+                @commit="handleSliderCommit"
+              />
 
-            <RuntimeNumberInput
-              v-else-if="f.isIntInput || f.isFloatInput"
+              <RuntimeNumberInput
+                v-else-if="f.isIntInput || f.isFloatInput"
                 :group="fieldSourceGroup(f)"
-              :field="f"
+                :field="f"
                 :value="runtimeValue(f)"
-              :mode="f.isFloatInput ? 'float' : 'int'"
-              @commit="handleInputCommit"
-            />
+                :mode="f.isFloatInput ? 'float' : 'int'"
+                @commit="handleInputCommit"
+              />
 
-            <RuntimeCheckbox
-              v-else-if="f.isCheckbox"
+              <RuntimeCheckbox
+                v-else-if="f.isCheckbox"
                 :group="fieldSourceGroup(f)"
-              :field="f"
+                :field="f"
                 :value="runtimeValue(f)"
-              @change="handleCheckboxChange"
-            />
+                @change="handleCheckboxChange"
+              />
 
-            <div v-else-if="f.isString" class="rw str">
-              <span class="lab">{{ f.label }}</span>
-              <span class="val">
-                <template v-if="f.staticValue">{{ f.staticValue }}</template>
-                <template
-                  v-else-if="hasRuntimeValue(f)"
-                >
-                  {{ runtimeValue(f) }}
+              <div v-else-if="f.isString" class="rw str">
+                <span class="lab">{{ f.label }}</span>
+                <span class="val">
+                  <template v-if="f.staticValue">{{ f.staticValue }}</template>
+                  <template v-else-if="hasRuntimeValue(f)">
+                    {{ runtimeValue(f) }}
+                  </template>
+                  <template v-else>—</template>
+                </span>
+                <span class="un"></span>
+              </div>
+
+              <div
+                v-else-if="hasRuntimeValue(f)"
+                :class="['rw', valueClasses(runtimeValue(f), f, fieldSourceGroup(f)), ...fieldClasses(f, 'row')]"
+                :data-group="fieldSourceGroup(f)"
+                :data-key="f.key"
+                :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
+                :data-state="f.isBool ? boolState(runtimeValue(f), f) : null"
+              >
+                <template v-if="f.isBool">
+                  <span
+                    v-if="fieldVisible(f, 'label')"
+                    class="lab bl"
+                    :style="fieldCss(f, 'label')"
+                  >
+                    <span
+                      v-if="boolDotVisible(runtimeValue(f), f)"
+                      class="bd"
+                      :class="boolDotClasses(runtimeValue(f), f)"
+                      :style="boolDotStyle(runtimeValue(f), f)"
+                    ></span>
+                    {{ f.label }}
+                  </span>
+                  <span v-else class="lab bl"></span>
+
+                  <span
+                    v-if="hasVisibleAlarm && showBoolStateText && fieldVisible(f, 'state')"
+                    class="val"
+                    :style="fieldCss(f, 'state')"
+                  >
+                    {{ formatBool(runtimeValue(f), f) }}
+                  </span>
+                  <span v-else class="val"></span>
+
+                  <span
+                    v-if="fieldVisible(f, 'unit', false)"
+                    class="un"
+                    :style="fieldCss(f, 'unit')"
+                  ></span>
+                  <span v-else class="un"></span>
                 </template>
-                <template v-else>—</template>
-              </span>
-              <span class="un"></span>
-            </div>
+                <template v-else>
+                  <span
+                    v-if="fieldVisible(f, 'label')"
+                    class="lab"
+                    :style="fieldCss(f, 'label')"
+                  >
+                    {{ f.label }}
+                  </span>
+                  <span v-else class="lab"></span>
 
-            <div
-              v-else-if="
-                hasRuntimeValue(f)
-              "
-              :class="['rw', valueClasses(runtimeValue(f), f, fieldSourceGroup(f)), ...fieldClasses(f, 'row')]"
-              :data-group="fieldSourceGroup(f)"
-              :data-key="f.key"
-              :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
-              :data-state="
-                f.isBool ? boolState(runtimeValue(f), f) : null
+                  <span
+                    v-if="fieldVisible(f, 'values')"
+                    class="val"
+                    :style="fieldCss(f, 'values')"
+                  >
+                    {{ formatValue(runtimeValue(f), f) }}
+                  </span>
+                  <span v-else class="val"></span>
+
+                  <span
+                    v-if="fieldVisible(f, 'unit', !!f.unit)"
+                    class="un"
+                    :style="fieldCss(f, 'unit')"
+                  >
+                    {{ f.unit }}
+                  </span>
+                  <span v-else class="un"></span>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <div v-for="group in card.groups" :key="group.key" class="grp">
+            <div v-if="group.title" class="grp-title">{{ group.title }}</div>
+            <div class="tbl">
+              <template v-for="f in group.fields" :key="f.key">
+                <hr v-if="f.isDivider" class="dv" :data-label="f.label" />
+
+                <RuntimeActionButton
+                  v-else-if="f.isButton"
+                  :group="fieldSourceGroup(f)"
+                  :field="f"
+                  @action="handleRuntimeButton"
+                />
+
+                <RuntimeMomentaryButton
+                  v-else-if="f.isMomentaryButton"
+                  :group="fieldSourceGroup(f)"
+                  :field="f"
+                  :value="runtimeValue(f)"
+                  @set="handleMomentarySet"
+                />
+
+                <RuntimeStateButton
+                  v-else-if="f.isStateButton"
+                  :group="fieldSourceGroup(f)"
+                  :field="f"
+                  :value="runtimeValue(f)"
+                  @toggle="handleStateToggle"
+                />
+
+                <RuntimeSlider
+                  v-else-if="f.isIntSlider || f.isFloatSlider"
+                  :group="fieldSourceGroup(f)"
+                  :field="f"
+                  :value="runtimeValue(f)"
+                  :mode="f.isFloatSlider ? 'float' : 'int'"
+                  @commit="handleSliderCommit"
+                />
+
+                <RuntimeNumberInput
+                  v-else-if="f.isIntInput || f.isFloatInput"
+                  :group="fieldSourceGroup(f)"
+                  :field="f"
+                  :value="runtimeValue(f)"
+                  :mode="f.isFloatInput ? 'float' : 'int'"
+                  @commit="handleInputCommit"
+                />
+
+                <RuntimeCheckbox
+                  v-else-if="f.isCheckbox"
+                  :group="fieldSourceGroup(f)"
+                  :field="f"
+                  :value="runtimeValue(f)"
+                  @change="handleCheckboxChange"
+                />
+
+                <div v-else-if="f.isString" class="rw str">
+                  <span class="lab">{{ f.label }}</span>
+                  <span class="val">
+                    <template v-if="f.staticValue">{{ f.staticValue }}</template>
+                    <template v-else-if="hasRuntimeValue(f)">
+                      {{ runtimeValue(f) }}
+                    </template>
+                    <template v-else>—</template>
+                  </span>
+                  <span class="un"></span>
+                </div>
+
+                <div
+                  v-else-if="hasRuntimeValue(f)"
+                  :class="['rw', valueClasses(runtimeValue(f), f, fieldSourceGroup(f)), ...fieldClasses(f, 'row')]"
+                  :data-group="fieldSourceGroup(f)"
+                  :data-key="f.key"
+                  :data-type="f.isBool ? 'bool' : f.isString ? 'string' : 'numeric'"
+                  :data-state="f.isBool ? boolState(runtimeValue(f), f) : null"
+                >
+                  <template v-if="f.isBool">
+                    <span
+                      v-if="fieldVisible(f, 'label')"
+                      class="lab bl"
+                      :style="fieldCss(f, 'label')"
+                    >
+                      <span
+                        v-if="boolDotVisible(runtimeValue(f), f)"
+                        class="bd"
+                        :class="boolDotClasses(runtimeValue(f), f)"
+                        :style="boolDotStyle(runtimeValue(f), f)"
+                      ></span>
+                      {{ f.label }}
+                    </span>
+                    <span v-else class="lab bl"></span>
+
+                    <span
+                      v-if="hasVisibleAlarm && showBoolStateText && fieldVisible(f, 'state')"
+                      class="val"
+                      :style="fieldCss(f, 'state')"
+                    >
+                      {{ formatBool(runtimeValue(f), f) }}
+                    </span>
+                    <span v-else class="val"></span>
+
+                    <span
+                      v-if="fieldVisible(f, 'unit', false)"
+                      class="un"
+                      :style="fieldCss(f, 'unit')"
+                    ></span>
+                    <span v-else class="un"></span>
+                  </template>
+                  <template v-else>
+                    <span
+                      v-if="fieldVisible(f, 'label')"
+                      class="lab"
+                      :style="fieldCss(f, 'label')"
+                    >
+                      {{ f.label }}
+                    </span>
+                    <span v-else class="lab"></span>
+
+                    <span
+                      v-if="fieldVisible(f, 'values')"
+                      class="val"
+                      :style="fieldCss(f, 'values')"
+                    >
+                      {{ formatValue(runtimeValue(f), f) }}
+                    </span>
+                    <span v-else class="val"></span>
+
+                    <span
+                      v-if="fieldVisible(f, 'unit', !!f.unit)"
+                      class="un"
+                      :style="fieldCss(f, 'unit')"
+                    >
+                      {{ f.unit }}
+                    </span>
+                    <span v-else class="un"></span>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <hr
+            v-if="cardHasRuntimeSource(card, 'system') && runtime.uptime !== undefined"
+            class="dv"
+          />
+
+          <p
+            v-if="cardHasRuntimeSource(card, 'system') && runtime.uptime !== undefined"
+            class="uptime"
+          >
+            Uptime: {{ formatUptime(runtime.uptime) }}
+          </p>
+          <p
+            v-if="
+              cardHasRuntimeSource(card, 'system') &&
+              runtime.system &&
+              runtime.system.loopAvg !== undefined
+            "
+            class="uptime"
+          >
+            Loop Avg:
+            {{
+              typeof runtime.system.loopAvg === "number"
+                ? runtime.system.loopAvg.toFixed(2)
+                : runtime.system.loopAvg
+            }}
+            ms
+          </p>
+          <p v-if="cardHasRuntimeSource(card, 'system')" class="uptime ota-status">
+            OTA:
+            <span
+              v-if="otaEndpointAvailable === null"
+              class="badge off"
+              title="probing..."
+              >checking...</span
+            >
+            <span
+              v-else
+              :class="[
+                'badge',
+                otaEnabled
+                  ? runtime.system?.otaActive
+                    ? 'on-active'
+                    : 'on'
+                  : 'off',
+              ]"
+              :title="
+                otaEnabled
+                  ? runtime.system?.otaActive
+                    ? 'OTA server active'
+                    : 'OTA enabled (not active yet)'
+                  : 'OTA disabled'
               "
             >
-              <template v-if="f.isBool">
-                <span
-                  v-if="fieldVisible(f, 'label')"
-                  class="lab bl"
-                  :style="fieldCss(f, 'label')"
-                >
-                  <span
-                    v-if="boolDotVisible(runtimeValue(f), f)"
-                    class="bd"
-                    :class="boolDotClasses(runtimeValue(f), f)"
-                    :style="boolDotStyle(runtimeValue(f), f)"
-                  ></span>
-                  {{ f.label }}
-                </span>
-                <span v-else class="lab bl"></span>
+              {{
+                otaEnabled
+                  ? runtime.system?.otaActive
+                    ? "active"
+                    : "enabled"
+                  : "disabled"
+              }}
+            </span>
+          </p>
 
-                <span
-                  v-if="hasVisibleAlarm && showBoolStateText && fieldVisible(f, 'state')"
-                  class="val"
-                  :style="fieldCss(f, 'state')"
-                >
-                  {{ formatBool(runtimeValue(f), f) }}
-                </span>
-                <span v-else class="val"></span>
-
-                <span
-                  v-if="fieldVisible(f, 'unit', false)"
-                  class="un"
-                  :style="fieldCss(f, 'unit')"
-                ></span>
-                <span v-else class="un"></span>
-              </template>
-              <template v-else>
-                <span
-                  v-if="fieldVisible(f, 'label')"
-                  class="lab"
-                  :style="fieldCss(f, 'label')"
-                >
-                  {{ f.label }}
-                </span>
-                <span v-else class="lab"></span>
-
-                <span
-                  v-if="fieldVisible(f, 'values')"
-                  class="val"
-                  :style="fieldCss(f, 'values')"
-                >
-                  {{ formatValue(runtimeValue(f), f) }}
-                </span>
-                <span v-else class="val"></span>
-
-                <span
-                  v-if="fieldVisible(f, 'unit', !!f.unit)"
-                  class="un"
-                  :style="fieldCss(f, 'unit')"
-                >
-                  {{ f.unit }}
-                </span>
-                <span v-else class="un"></span>
-              </template>
+          <div
+            v-if="cardHasRuntimeSource(card, 'system') && runtime.uptime !== undefined && hasVisibleAlarm"
+            class="tbl"
+          >
+            <div class="rw cr">
+              <span class="lab">Show state text</span>
+              <label class="switch val">
+                <input
+                  type="checkbox"
+                  v-model="showBoolStateText"
+                  class="switch"
+                />
+                <span class="slider round"></span>
+              </label>
             </div>
-          </template>
-        </div>
-
-        <hr
-          v-if="groupHasRuntimeSource(group, 'system') && runtime.uptime !== undefined"
-          class="dv"
-        />
-
-        <p
-          v-if="groupHasRuntimeSource(group, 'system') && runtime.uptime !== undefined"
-          class="uptime"
-        >
-          Uptime: {{ formatUptime(runtime.uptime) }}
-        </p>
-        <p
-          v-if="
-            groupHasRuntimeSource(group, 'system') &&
-            runtime.system &&
-            runtime.system.loopAvg !== undefined
-          "
-          class="uptime"
-        >
-          Loop Avg:
-          {{
-            typeof runtime.system.loopAvg === "number"
-              ? runtime.system.loopAvg.toFixed(2)
-              : runtime.system.loopAvg
-          }}
-          ms
-        </p>
-        <p v-if="groupHasRuntimeSource(group, 'system')" class="uptime ota-status">
-          OTA:
-          <span
-            v-if="otaEndpointAvailable === null"
-            class="badge off"
-            title="probing..."
-            >checking...</span
-          >
-          <span
-            v-else
-            :class="[
-              'badge',
-              otaEnabled
-                ? runtime.system?.otaActive
-                  ? 'on-active'
-                  : 'on'
-                : 'off',
-            ]"
-            :title="
-              otaEnabled
-                ? runtime.system?.otaActive
-                  ? 'OTA server active'
-                  : 'OTA enabled (not active yet)'
-                : 'OTA disabled'
-            "
-          >
-            {{
-              otaEnabled
-                ? runtime.system?.otaActive
-                  ? "active"
-                  : "enabled"
-                : "disabled"
-            }}
-          </span>
-        </p>
-
-        <div
-          v-if="groupHasRuntimeSource(group, 'system') && runtime.uptime !== undefined && hasVisibleAlarm"
-          class="tbl"
-        >
-          <div class="rw cr">
-            <span class="lab">Show state text</span>
-            <label class="switch val">
-              <input
-                type="checkbox"
-                v-model="showBoolStateText"
-                class="switch"
-              />
-              <span class="slider round"></span>
-            </label>
           </div>
-        </div>
         </div>
       </div>
     </div>
-
     <div class="live-status">
       Mode: {{ wsConnected ? "WebSocket" : "Polling" }}
     </div>
@@ -416,6 +549,56 @@ function fieldSourceGroup(field) {
   return '';
 }
 
+function createRuntimeField(meta, layoutGroup, sourceGroup) {
+  return {
+    key: meta.key,
+    label: meta.label,
+    onLabel: meta.onLabel || "",
+    offLabel: meta.offLabel || "",
+    unit: meta.unit,
+    precision: meta.precision,
+    warnMin: meta.warnMin,
+    warnMax: meta.warnMax,
+    alarmMin: meta.alarmMin,
+    alarmMax: meta.alarmMax,
+    isBool: meta.isBool,
+    isButton: meta.isButton || false,
+    isMomentaryButton: meta.isMomentaryButton || false,
+    isStateButton: meta.isStateButton || false,
+    isIntSlider: meta.isIntSlider || false,
+    isFloatSlider: meta.isFloatSlider || false,
+    isCheckbox: meta.isCheckbox || false,
+    card: meta.card || null,
+    min: meta.min,
+    max: meta.max,
+    init: meta.init,
+    isIntInput: meta.isIntInput || false,
+    isFloatInput: meta.isFloatInput || false,
+    boolAlarmValue:
+      typeof meta.boolAlarmValue === "boolean"
+        ? !!meta.boolAlarmValue
+        : undefined,
+    isString: meta.isString || false,
+    isDivider: meta.isDivider || false,
+    staticValue: meta.staticValue || "",
+    triggerOnPress: meta.triggerOnPress === true,
+    order: meta.order !== undefined ? meta.order : 100,
+    style: meta.style || null,
+    styleRules: normalizeStyle(meta.style || null),
+    group: layoutGroup,
+    sourceGroup: sourceGroup,
+    page: meta.page || null,
+  };
+}
+
+function sortRuntimeFields(fields) {
+  fields.sort((a, b) => {
+    if (a.isDivider && b.isDivider) return a.order - b.order;
+    if (a.order === b.order) return a.label.localeCompare(b.label);
+    return a.order - b.order;
+  });
+}
+
 function runtimeValue(field) {
   const groupName = fieldSourceGroup(field);
   if (!groupName || !runtime.value) return undefined;
@@ -432,10 +615,10 @@ function hasRuntimeValue(field) {
   return Object.prototype.hasOwnProperty.call(groupData, field.key);
 }
 
-function groupHasRuntimeSource(group, sourceName) {
-  if (!group || !sourceName) return false;
+function cardHasRuntimeSource(card, sourceName) {
+  if (!card || !sourceName) return false;
   const token = normalizeGroupToken(sourceName);
-  const sources = Array.isArray(group.runtimeSources) ? group.runtimeSources : [];
+  const sources = Array.isArray(card.runtimeSources) ? card.runtimeSources : [];
   return sources.some((entry) => normalizeGroupToken(entry) === token);
 }
 
@@ -480,73 +663,104 @@ function buildLiveLayoutPages(groups, layout) {
     const pageTitle = page?.title || page?.name || `Live ${pageIndex + 1}`;
     const pageKey = normalizeGroupToken(page?.key || page?.slug || page?.name) || `page_${pageIndex}`;
     const cards = sortByOrder(page?.cards || []);
-    const groupsForPage = [];
+    const cardsForPage = [];
 
     cards.forEach((card, cardIndex) => {
+      const cardTitle = card?.title || card?.name || pageTitle;
+      const cardKey = normalizeGroupToken(card?.key || card?.slug || card?.name) || `card_${pageIndex}_${cardIndex}`;
+      const cardItems = [];
+      const cardSources = new Set();
+
+      const itemIds = Array.isArray(card?.items) ? card.items : [];
+      itemIds.forEach((id) => {
+        if (!fieldMap.has(id)) return;
+        const field = fieldMap.get(id);
+        cardItems.push(field);
+        const source = fieldSourceGroup(field);
+        if (source) cardSources.add(source);
+        assigned.add(id);
+      });
+
+      const groupsForCard = [];
       const groupsList = sortByOrder(card?.groups || []);
       groupsList.forEach((groupEntry, groupIndex) => {
-        const itemIds = Array.isArray(groupEntry?.items) ? groupEntry.items : [];
+        const itemList = Array.isArray(groupEntry?.items) ? groupEntry.items : [];
         const collectedFields = [];
-        const runtimeSources = new Set();
-        itemIds.forEach((id) => {
+        const groupSources = new Set();
+        itemList.forEach((id) => {
           if (!fieldMap.has(id)) return;
           const field = fieldMap.get(id);
           collectedFields.push(field);
           const source = fieldSourceGroup(field);
-          if (source) runtimeSources.add(source);
+          if (source) {
+            groupSources.add(source);
+            cardSources.add(source);
+          }
           assigned.add(id);
         });
         if (collectedFields.length) {
           const normalizedGroupName = normalizeGroupToken(groupEntry?.name || groupEntry?.title) || `group_${cardIndex}_${groupIndex}`;
-          groupsForPage.push({
-            name: `${pageKey}::${normalizedGroupName}`,
-            title: groupEntry?.title || groupEntry?.name || card?.title || card?.name || pageTitle,
+          groupsForCard.push({
+            key: normalizedGroupName,
+            title: groupEntry?.title || groupEntry?.name || '',
+            order: typeof groupEntry?.order === 'number' ? groupEntry.order : 1000 + groupIndex,
             fields: collectedFields,
-            runtimeSources: Array.from(runtimeSources),
-            pageKey,
+            runtimeSources: Array.from(groupSources),
           });
         }
       });
+
+      if (cardItems.length || groupsForCard.length) {
+        cardsForPage.push({
+          key: cardKey,
+          title: cardTitle,
+          order: typeof card?.order === 'number' ? card.order : 1000 + cardIndex,
+          items: cardItems,
+          groups: groupsForCard,
+          runtimeSources: Array.from(cardSources),
+        });
+      }
     });
 
-    if (groupsForPage.length) {
+    if (cardsForPage.length) {
       pages.push({
         key: pageKey,
         title: pageTitle,
         order: typeof page?.order === 'number' ? page.order : 1000 + pageIndex,
-        groups: groupsForPage,
+        cards: cardsForPage,
       });
     }
   });
 
   if (fieldMap.size && assigned.size < fieldMap.size) {
-    const fallbackGroups = new Map();
+    const fallbackCards = new Map();
     for (const [fieldKey, field] of fieldMap.entries()) {
       if (assigned.has(fieldKey)) continue;
       const bucketKey = fieldSourceGroup(field) || 'other';
-      if (!fallbackGroups.has(bucketKey)) {
-        fallbackGroups.set(bucketKey, {
-          name: `fallback::${bucketKey}`,
+      if (!fallbackCards.has(bucketKey)) {
+        fallbackCards.set(bucketKey, {
+          key: `fallback_${bucketKey}`,
           title: fallbackBucketTitle(bucketKey),
-          fields: [],
+          order: 1000,
+          items: [],
+          groups: [],
           runtimeSources: [],
-          pageKey: '__unassigned__',
         });
       }
-      const bucket = fallbackGroups.get(bucketKey);
-      bucket.fields.push(field);
-      const sourceSet = new Set(bucket.runtimeSources);
+      const bucket = fallbackCards.get(bucketKey);
+      bucket.items.push(field);
       const source = fieldSourceGroup(field);
-      if (source) sourceSet.add(source);
-      bucket.runtimeSources = Array.from(sourceSet);
+      if (source && !bucket.runtimeSources.includes(source)) {
+        bucket.runtimeSources.push(source);
+      }
     }
 
-    if (fallbackGroups.size) {
+    if (fallbackCards.size) {
       pages.push({
         key: '__unassigned__',
         title: 'Other',
         order: Number.MAX_SAFE_INTEGER,
-        groups: Array.from(fallbackGroups.values()),
+        cards: Array.from(fallbackCards.values()),
       });
     }
   }
@@ -566,18 +780,188 @@ function buildLiveLayoutPages(groups, layout) {
   };
 
   pages.forEach((page) => {
-    page.groups.sort((a, b) => {
-      const ao = groupOrderValue(a);
-      const bo = groupOrderValue(b);
-      if (ao === bo) {
-        return a.title.localeCompare(b.title);
-      }
+    page.cards.sort((a, b) => {
+      const ao = typeof a.order === 'number' ? a.order : 1000;
+      const bo = typeof b.order === 'number' ? b.order : 1000;
+      if (ao === bo) return a.title.localeCompare(b.title);
       return ao - bo;
+    });
+    page.cards.forEach((card) => {
+      card.groups.sort((a, b) => {
+        const ao = groupOrderValue(a);
+        const bo = groupOrderValue(b);
+        if (ao === bo) return a.title.localeCompare(b.title);
+        return ao - bo;
+      });
     });
   });
 
   return pages;
 }
+
+function buildCardsFromMeta(metaList) {
+  if (!Array.isArray(metaList) || !metaList.length) {
+    return [];
+  }
+
+  const cards = new Map();
+
+  const ensureCard = (key, title) => {
+    if (!cards.has(key)) {
+      cards.set(key, {
+        key,
+        title,
+        order: 1000,
+        items: [],
+        groups: [],
+        runtimeSources: [],
+        _groups: new Map(),
+        _minOrder: Number.POSITIVE_INFINITY,
+      });
+    }
+    return cards.get(key);
+  };
+
+  const ensureGroup = (card, key, title) => {
+    if (!card._groups.has(key)) {
+      card._groups.set(key, {
+        key,
+        title,
+        order: 1000,
+        fields: [],
+        runtimeSources: [],
+        _minOrder: Number.POSITIVE_INFINITY,
+      });
+    }
+    return card._groups.get(key);
+  };
+
+  metaList.forEach((m, idx) => {
+    if (m.group === "system" && builtinSystemHiddenFields.has(m.key)) {
+      return;
+    }
+    const sourceGroup = typeof m.sourceGroup === 'string' && m.sourceGroup.length
+      ? m.sourceGroup
+      : m.group;
+    let cardTitle = typeof m.card === 'string' && m.card.length ? m.card : '';
+    let groupTitle = typeof m.group === 'string' && m.group.length ? m.group : '';
+    if (!cardTitle && groupTitle) {
+      cardTitle = groupTitle;
+      groupTitle = '';
+    }
+    if (!cardTitle) {
+      cardTitle = sourceGroup || 'default';
+    }
+    const cardKey = normalizeGroupToken(cardTitle) || `card_${idx}`;
+    const card = ensureCard(cardKey, cardTitle);
+
+    const field = createRuntimeField(m, groupTitle || cardTitle, sourceGroup);
+    const orderValue = typeof field.order === 'number' ? field.order : 1000;
+    card._minOrder = Math.min(card._minOrder, orderValue);
+
+    if (groupTitle) {
+      const groupKey = normalizeGroupToken(groupTitle) || `group_${card._groups.size}`;
+      const group = ensureGroup(card, groupKey, groupTitle);
+      group.fields.push(field);
+      group._minOrder = Math.min(group._minOrder, orderValue);
+      if (sourceGroup && !group.runtimeSources.includes(sourceGroup)) {
+        group.runtimeSources.push(sourceGroup);
+      }
+    } else {
+      card.items.push(field);
+    }
+
+    if (sourceGroup && !card.runtimeSources.includes(sourceGroup)) {
+      card.runtimeSources.push(sourceGroup);
+    }
+  });
+
+  try {
+    const sys = runtime.value.system || {};
+    if (sys && typeof sys === 'object') {
+      for (const card of cards.values()) {
+        const hasSystem = card.runtimeSources.some((entry) => normalizeGroupToken(entry) === 'system')
+          || normalizeGroupToken(card.title) === 'system';
+        if (!hasSystem) {
+          continue;
+        }
+        const existingKeys = new Set();
+        card.items.forEach((f) => existingKeys.add(f.key));
+        card._groups.forEach((g) => g.fields.forEach((f) => existingKeys.add(f.key)));
+
+        Object.keys(sys).forEach((k) => {
+          if (builtinSystemHiddenFields.has(k)) return;
+          if (existingKeys.has(k)) return;
+          card.items.push({
+            key: k,
+            label: capitalize(k),
+            unit: k === "freeHeap" ? "KB" : k === "loopAvg" ? "ms" : "",
+            precision: k === "loopAvg" ? 2 : 0,
+            order: 999,
+            isBool: typeof sys[k] === "boolean",
+            isString: typeof sys[k] === "string",
+            isButton: false,
+            isCheckbox: false,
+            isDivider: false,
+            staticValue: "",
+            style: null,
+            styleRules: null,
+            group: "system",
+            sourceGroup: "system",
+            page: null,
+          });
+          card._minOrder = Math.min(card._minOrder, 999);
+          if (!card.runtimeSources.includes("system")) {
+            card.runtimeSources.push("system");
+          }
+        });
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
+  const result = [];
+  for (const card of cards.values()) {
+    sortRuntimeFields(card.items);
+
+    const groupList = Array.from(card._groups.values());
+    groupList.forEach((group) => {
+      sortRuntimeFields(group.fields);
+      if (!Array.isArray(group.runtimeSources) || !group.runtimeSources.length) {
+        group.runtimeSources = [...card.runtimeSources];
+      }
+      group.order = Number.isFinite(group._minOrder) ? group._minOrder : 1000;
+      delete group._minOrder;
+    });
+    groupList.sort((a, b) => {
+      const ao = typeof a.order === 'number' ? a.order : 1000;
+      const bo = typeof b.order === 'number' ? b.order : 1000;
+      if (ao === bo) return a.title.localeCompare(b.title);
+      return ao - bo;
+    });
+
+    const cardOrder = Number.isFinite(card._minOrder) ? card._minOrder : 1000;
+    result.push({
+      key: card.key,
+      title: card.title,
+      order: cardOrder,
+      items: card.items,
+      groups: groupList,
+      runtimeSources: card.runtimeSources,
+    });
+  }
+
+  result.sort((a, b) => {
+    const ao = typeof a.order === 'number' ? a.order : 1000;
+    const bo = typeof b.order === 'number' ? b.order : 1000;
+    if (ao === bo) return a.title.localeCompare(b.title);
+    return ao - bo;
+  });
+
+  return result;
+}
+
 
 let pollTimer = null;
 let ws = null;
@@ -714,14 +1098,25 @@ const sortedRuntimeGroups = computed(() => {
 const layoutPages = computed(() => buildLiveLayoutPages(sortedRuntimeGroups.value, liveLayout.value));
 const layoutTabs = computed(() => layoutPages.value.map((page) => ({ key: page.key, title: page.title })));
 
-const displayRuntimeGroups = computed(() => {
+const displayRuntimeCards = computed(() => {
   if (!layoutPages.value.length) {
-    return sortedRuntimeGroups.value;
+    const cardsFromMeta = buildCardsFromMeta(runtimeMeta.value);
+    if (cardsFromMeta.length) {
+      return cardsFromMeta;
+    }
+    return sortedRuntimeGroups.value.map((group) => ({
+      key: group.name,
+      title: group.title,
+      order: typeof group.order === 'number' ? group.order : 1000,
+      items: Array.isArray(group.fields) ? group.fields : [],
+      groups: [],
+      runtimeSources: Array.isArray(group.runtimeSources) ? group.runtimeSources : [],
+    }));
   }
   const fallback = layoutPages.value[0];
   const currentKey = activeLivePage.value || (fallback ? fallback.key : '');
   const currentPage = layoutPages.value.find((page) => page.key === currentKey) || fallback;
-  return currentPage ? currentPage.groups : sortedRuntimeGroups.value;
+  return currentPage ? currentPage.cards : [];
 });
 
 watch(layoutPages, (pages) => {
@@ -1118,52 +1513,25 @@ function buildRuntimeGroups() {
       if (m.group === "system" && builtinSystemHiddenFields.has(m.key)) {
         continue;
       }
-      if (!grouped[m.group]) {
-        grouped[m.group] = {
-          name: m.group,
-          title: capitalize(m.group),
+      const sourceGroup = typeof m.sourceGroup === 'string' && m.sourceGroup.length
+        ? m.sourceGroup
+        : m.group;
+      const layoutGroup = typeof m.group === 'string' && m.group.length
+        ? m.group
+        : (m.card || sourceGroup || 'default');
+      const groupKey = layoutGroup || (m.card || sourceGroup || 'default');
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          name: groupKey,
+          title: capitalize(groupKey),
           fields: [],
-          runtimeSources: [m.group],
+          runtimeSources: [],
         };
       }
-      grouped[m.group].fields.push({
-        key: m.key,
-        label: m.label,
-        onLabel: m.onLabel || "",
-        offLabel: m.offLabel || "",
-        unit: m.unit,
-        precision: m.precision,
-        warnMin: m.warnMin,
-        warnMax: m.warnMax,
-        alarmMin: m.alarmMin,
-        alarmMax: m.alarmMax,
-        isBool: m.isBool,
-        isButton: m.isButton || false,
-        isMomentaryButton: m.isMomentaryButton || false,
-        isStateButton: m.isStateButton || false,
-        isIntSlider: m.isIntSlider || false,
-        isFloatSlider: m.isFloatSlider || false,
-        isCheckbox: m.isCheckbox || false,
-        card: m.card || null,
-        min: m.min,
-        max: m.max,
-        init: m.init,
-        isIntInput: m.isIntInput || false,
-        isFloatInput: m.isFloatInput || false,
-        boolAlarmValue:
-          typeof m.boolAlarmValue === "boolean"
-            ? !!m.boolAlarmValue
-            : undefined,
-        isString: m.isString || false,
-        isDivider: m.isDivider || false,
-        staticValue: m.staticValue || "",
-        triggerOnPress: m.triggerOnPress === true,
-        order: m.order !== undefined ? m.order : 100,
-        style: m.style || null,
-        styleRules: normalizeStyle(m.style || null),
-        group: m.group,
-        sourceGroup: m.group,
-      });
+      grouped[groupKey].fields.push(createRuntimeField(m, layoutGroup, sourceGroup));
+      if (sourceGroup && !grouped[groupKey].runtimeSources.includes(sourceGroup)) {
+        grouped[groupKey].runtimeSources.push(sourceGroup);
+      }
     }
 
     try {
@@ -1192,6 +1560,7 @@ function buildRuntimeGroups() {
               styleRules: null,
               group: "system",
               sourceGroup: "system",
+              page: null,
             });
           }
         });
@@ -1201,61 +1570,17 @@ function buildRuntimeGroups() {
     }
 
     runtimeGroups.value = Object.values(grouped).map((g) => {
-      g.fields.sort((a, b) => {
-        if (a.isDivider && b.isDivider) return a.order - b.order;
-        if (a.order === b.order) return a.label.localeCompare(b.label);
-        return a.order - b.order;
-      });
+      sortRuntimeFields(g.fields);
       if (!Array.isArray(g.runtimeSources) || !g.runtimeSources.length) {
         g.runtimeSources = [g.name];
       }
       return g;
     });
-
-    const extraCards = {};
-    for (const g of runtimeGroups.value) {
-      g.fields = g.fields.filter((f) => {
-        if (f.card) {
-          if (!extraCards[f.card]) {
-            extraCards[f.card] = {
-              name: f.card,
-              title: capitalize(f.card),
-              fields: [],
-              runtimeSources: [],
-            };
-          }
-          extraCards[f.card].fields.push(f);
-          const source = fieldSourceGroup(f);
-          if (source && !extraCards[f.card].runtimeSources.includes(source)) {
-            extraCards[f.card].runtimeSources.push(source);
-          }
-          return false;
-        }
-        return true;
-      });
-    }
-
-    for (const cardName in extraCards) {
-      extraCards[cardName].fields.sort((a, b) => {
-        if (a.order === b.order) return a.label.localeCompare(b.label);
-        return a.order - b.order;
-      });
-      if (!extraCards[cardName].runtimeSources.length) {
-        const inferred = Array.from(
-          new Set(
-            extraCards[cardName].fields
-              .map((field) => fieldSourceGroup(field))
-              .filter((source) => !!source)
-          )
-        );
-        extraCards[cardName].runtimeSources = inferred.length ? inferred : [cardName];
-      }
-      runtimeGroups.value.push(extraCards[cardName]);
-    }
     return;
   }
 
   const fallback = [];
+
   if (runtime.value.sensors) {
     fallback.push({
       name: "sensors",
@@ -2522,6 +2847,23 @@ label.switch input:checked + .slider:before {
 .tbl::-webkit-scrollbar-thumb {
   background: #30363d;
   border-radius: 4px;
+}
+.grp {
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem 0.5rem;
+  margin-top: 0.6rem;
+  background: rgba(13, 17, 23, 0.4);
+}
+.grp-title {
+  font-size: 0.68rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #8b949e;
+  margin-bottom: 0.35rem;
+}
+.grp .tbl {
+  margin-top: 0;
 }
 
 /* Boolean dot alarm styling - fallback when style rules are disabled */

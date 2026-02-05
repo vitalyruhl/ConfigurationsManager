@@ -28,7 +28,7 @@ void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
     RUNTIME_LOG("Runtime manager initialized");
     if (configManager) {
         for (const auto& meta : runtimeMeta) {
-            configManager->registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
+            configManager->registerLivePlacement(meta);
         }
     }
 }
@@ -47,16 +47,24 @@ void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<
 }
 
 void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
-    runtimeMeta.push_back(meta);
-    RUNTIME_LOG("Added meta: %s.%s", meta.group.c_str(), meta.key.c_str());
+    RuntimeFieldMeta normalized = meta;
+    if (normalized.sourceGroup.isEmpty()) {
+        normalized.sourceGroup = normalized.group;
+        if (normalized.page.isEmpty() && normalized.card.isEmpty()) {
+            normalized.group = String();
+        }
+    }
+    runtimeMeta.push_back(normalized);
+    const String& logGroup = normalized.sourceGroup.length() ? normalized.sourceGroup : normalized.group;
+    RUNTIME_LOG("Added meta: %s.%s", logGroup.c_str(), normalized.key.c_str());
     if (configManager) {
-        configManager->registerLivePlacement(meta.group, meta.key, meta.label, meta.order);
+        configManager->registerLivePlacement(normalized);
     }
 }
 
 RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {
     for (auto& meta : runtimeMeta) {
-        if (meta.group == group && meta.key == key) {
+        if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
             return &meta;
         }
     }
@@ -282,6 +290,15 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
         StaticJsonDocument<1536> entryDoc;
         JsonObject o = entryDoc.to<JsonObject>();
         o["group"] = m.group;
+        if (m.sourceGroup.length()) {
+            o["sourceGroup"] = m.sourceGroup;
+        }
+        if (m.page.length()) {
+            o["page"] = m.page;
+        }
+        if (m.card.length()) {
+            o["card"] = m.card;
+        }
         o["key"] = m.key;
         o["label"] = m.label;
         if (m.unit.length()) {
@@ -446,6 +463,57 @@ void ConfigManagerRuntime::handleFloatInputChange(const String& group, const Str
         }
     }
     RUNTIME_LOG("Float input not found: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::registerRuntimeButton(const String& group, const String& key, std::function<void()> onPress) {
+    runtimeButtons.emplace_back(group, key, onPress);
+    RUNTIME_LOG("Added button: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::registerRuntimeCheckbox(const String& group, const String& key,
+                                                   std::function<bool()> getter, std::function<void(bool)> setter) {
+    runtimeCheckboxes.emplace_back(group, key, getter, setter);
+    RUNTIME_LOG("Added checkbox: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::registerRuntimeStateButton(const String& group, const String& key,
+                                                      std::function<bool()> getter, std::function<void(bool)> setter) {
+    runtimeStateButtons.emplace_back(group, key, getter, setter);
+    RUNTIME_LOG("Added state button: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::registerRuntimeMomentaryButton(const String& group, const String& key,
+                                                          std::function<bool()> getter, std::function<void(bool)> setter) {
+    runtimeStateButtons.emplace_back(group, key, getter, setter);
+    RUNTIME_LOG("Added momentary button: %s.%s", group.c_str(), key.c_str());
+}
+
+void ConfigManagerRuntime::registerRuntimeIntSlider(const String& group, const String& key,
+                                                    std::function<int()> getter, std::function<void(int)> setter,
+                                                    int minValue, int maxValue) {
+    runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::registerRuntimeFloatSlider(const String& group, const String& key,
+                                                      std::function<float()> getter, std::function<void(float)> setter,
+                                                      float minValue, float maxValue) {
+    runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::registerRuntimeIntInput(const String& group, const String& key,
+                                                   std::function<int()> getter, std::function<void(int)> setter,
+                                                   int minValue, int maxValue) {
+    runtimeIntInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("Added int input: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
+}
+
+void ConfigManagerRuntime::registerRuntimeFloatInput(const String& group, const String& key,
+                                                     std::function<float()> getter, std::function<void(float)> setter,
+                                                     float minValue, float maxValue) {
+    runtimeFloatInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    RUNTIME_LOG("Added float input: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
 #if CM_ENABLE_SYSTEM_PROVIDER

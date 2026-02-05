@@ -469,67 +469,16 @@ Open questions:
 - Settings should not auto-appear; they only show up after the caller places them with the right parameters, which allows pushing MQTT content into either the standard MQTT tab or an extra tab if needed.
 
 
-### Implementation Sequence (Suggested)
+## Realisierungsschritte (Live/Runtime Builder)
 
-1) [COMPLETED] Finalize UI terminology and defaults (SettingsPage/Card/Group; LivePage/Card/Group).
-2) [COMPLETED] Implement layout registries for Settings + Live (no IO changes yet).
-2a) [COMPLETED] Ensure the core settings bundles (WiFi/System/NTP) auto-register their standard page/group and allow overrides so sketches avoid repetitive layout boilerplate.
-3) [CURRENT] Introduce Settings builder (`ConfigManager.settingX(...).name(...).defaultValue(...).persistSettings(true).build()`).
-3a) [COMPLETED] Switch ConfigManager settings to hash-derived storage keys (with legacy fallback), keep logs per display name, and emit warnings when duplicate hashes would collide.
-4) [COMPLETED] Add generic placement methods for settings: `ConfigManager.addToSettingsGroup(...)`, `ConfigManager.addToLiveGroup(...)`.
-5) Refactor IOManager:
-   - Split IO definition from UI placement.
-   - Implement `add*ToSettingsGroup` (guarded by persistSettings).
-   - Implement `add*ToLive` returning a handle/builder.
-6) [COMPLETED] Implement Live callback builder API (digital/analog) + unify multi-click.
-7) [COMPLETED] Implement generic alarm registry (`addAlarm(...)`) + UI for alarms (Live first).
-8) [COMPLETED] Refactor MQTTManager to the same pattern (define -> settings placement -> live placement) and let its attach helpers create the default MQTT tabs/groups (with override hooks) so the layout matches other core bundles.
-9) [CURRENT] Check all examples + docs:
-   - Consistancy + completeness pass.
-   - Ensure at the PlatformIO build passes (deploy all, let user test it all)
-10) [COMPLETED] Align runtime metadata + live layout placement so `runtime_meta.json` becomes a proper array and live tabs/cards use the defined layout registry.
-
-### Implementation Details (from refactoring-plan)
-
-Workflow notes:
-- Rebuild order:
-  1. Minimal – must remain translatable
-  2. BME280 – must be translatable and deployable
-  3. Full-GUI
-  4. Full-IO
-  5. Full-Logging
-  6. Full-MQTT
-  7. Boilersaver
-  8. SolarInverterLimiter – must be flashable; larger test
-- After each step, rebuild and test the examples mentioned above while the remaining examples stay in refactor-only mode for the moment.
-- Commit and push an intermediate snapshot after the associated examples pass, and only then start the next step.
-- Mark each step as [COMPLETED] in both the Implementation Sequence and Implementation Details when done.
-
-1. [COMPLETED] Terminology & Default Layout: Agree on SettingsPage/Card/Group vs LivePage/Card/Group names, describe fallback rules for unknown entries, and document defaults such as SettingsCard = page name, LiveCard = "Live Values".
-2. [COMPLETED] Layout Registries: Build `addSettingsPage/Card/Group` and `addLivePage/Card/Group`, keep case-insensitive lookup, warn once on typos, and store order for rendering without creating any IO/setting data.
-3. [CURRENT] Fluent Settings Builder: Replace `ConfigOptions<T>` with builder methods (`addSettingInt`, `addSettingFloat`, etc.), compute stable human-readable keys, default `.persist()` to true, and avoid heap allocations in builder objects.
-4. Hash-based storage keys: derive the Preferences key from an FNV1a hash of the provided `ConfigOptions::key` (or previous auto-generated key), keep the human-readable name for logs/UI, migrate legacy keys when the hash changes, and warn once if a hash collision would otherwise prevent persistence.
-4. [COMPLETED] Placement Helpers for Settings/Live: Implement `addToSettings`, `addToSettingsGroup`, `addToLive`, and `addToLiveGroup`, reuse the layout registries for validation, and ensure settings only surface after builder construction.
-5. [COMPLETED] IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
-6. [COMPLETED] Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
-7. [COMPLETED] Generic Alarm Registry: Provide `addAlarm(AlarmConfig)`/`addAlarmAnalog`, separate trigger definition from UI placement, surface `onAlarmCome/Gone/Stay` hooks, and keep alarms on the Live side unless an explicit Settings toggle is added.
-8. [COMPLETED] MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
-9. [CURRENT] Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
-
-### Example validation plan
-- Steps 1‑2 (terminology/layout registries) use the `minimal` example for fast iteration.
-- IOManager work (step 5) validates against `examples/Full-IO-Demo` to exercise digital/analog registration.
-- Live/GUI step additions (steps 6–7) target `examples/Full-GUI-Demo` so Live and Settings UI remain stable.
-- MQTTManager refactor (step 8) uses `examples/Full-MQTT-Demo` to cover topic definition/placement.
-- Final migration run can sample whichever example changed most, but keep one PlatformIO build per touched area to catch integration issues.
-
-### Feasibility / Risks (ESP32)
-
-- Builder objects must not allocate heavily on heap; avoid accidental copies.
-- `std::function` capture size can be expensive; consider lightweight delegates if needed.
-- Multi-click + long press needs a clear state machine and robust debounce.
-- Stable external keys vs internal hashed keys must be decided early to avoid breaking REST/MQTT/backups.
-- Layout registry plus fluent builder pattern looks feasible in the existing codebase, but we must confirm that the hashed-key generation stays collision-free and consistent, and that the new registries remain performant for long-running firmware.
+1) Builder-API definieren: `ConfigManager.liveGroup(source)` mit `.page()`, `.card()`, `.group()` (group optional), plus `value()/bool()/divider()/control()` für Live-Items.
+2) Datenmodell erweitern: `RuntimeFieldMeta` bekommt `sourceGroup` (Datenquelle) und getrennte Layout-Ziele (page/card/group) oder einen neuen Placement-Block.
+3) Runtime-JSON anpassen: `runtime_meta.json` liefert `sourceGroup` + Layout-Info pro Feld.
+4) Backend-Placement refactor: Live-Layout nutzt Layout-Ziele, Values holen Daten weiterhin aus `sourceGroup`.
+5) WebUI anpassen: `fieldSourceGroup()` nutzt `sourceGroup` aus Meta; Layout bleibt über Live-Layout JSON.
+6) Examples migrieren: zuerst `BME280-Temp-Sensor`, dann `Full-GUI-Demo`, danach alle übrigen.
+7) Doku aktualisieren: `docs/RUNTIME.md`, `docs/STYLING.md`, `docs/THEMING.md`.
+8) Build/Smoke: `pio run -d examples/BME280-Temp-Sensor -e usb`, danach `pio run -d examples/Full-GUI-Demo -e usb`.
 
 
 ## Medium Priority (Prio 5)

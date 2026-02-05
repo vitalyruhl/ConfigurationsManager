@@ -24,8 +24,6 @@ static const char SETTINGS_PASSWORD[] = "cm";
 #define I2C_SDA 21
 #define I2C_SCL 22
 
-static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
-
 extern ConfigManagerClass ConfigManager;
 
 // Built-in core settings templates.
@@ -100,52 +98,36 @@ static TempSettings tempSettings;
 
 static void setupRuntimeUI()
 {
+    auto live = ConfigManager.liveGroup("sensors")
+                    .page("Sensors", 10)
+                    .card("BME280 - Temperature Sensor")
+                    .group("Sensor Readings", 10);
 
-    ConfigManager.addLivePage("Sensors", 10);
-    ConfigManager.addLiveGroup("Sensors", "BME280 - Temperature Sensor", "Sensor Readings", 10);
+    live.value("temp", []() { return temperature; })
+        .label("Temperature")
+        .unit("C")
+        .precision(1)
+        .order(10);
 
-    CRM().addRuntimeProvider("Sensors", [](JsonObject &data) {
-        data["temp"] = temperature;
-        data["hum"] = humidity;
-        data["dew"] = dewPoint;
-        data["pressure"] = pressure;
-    });
+    live.value("hum", []() { return humidity; })
+        .label("Humidity")
+        .unit("%")
+        .precision(1)
+        .order(11);
 
-    RuntimeFieldMeta tempMeta;
-    tempMeta.group = "Sensors";
-    tempMeta.key = "temp";
-    tempMeta.label = "Temperature";
-    tempMeta.unit = "C";
-    tempMeta.precision = 1;
-    tempMeta.order = 10;
-    CRM().addRuntimeMeta(tempMeta);
+    live.divider("Derived", 20);
 
-    RuntimeFieldMeta humMeta;
-    humMeta.group = "Sensors";
-    humMeta.key = "hum";
-    humMeta.label = "Humidity";
-    humMeta.unit = "%";
-    humMeta.precision = 1;
-    humMeta.order = 11;
-    CRM().addRuntimeMeta(humMeta);
+    live.value("dew", []() { return dewPoint; })
+        .label("Dewpoint")
+        .unit("C")
+        .precision(1)
+        .order(21);
 
-    RuntimeFieldMeta dewMeta;
-    dewMeta.group = "Sensors";
-    dewMeta.key = "dew";
-    dewMeta.label = "Dewpoint";
-    dewMeta.unit = "C";
-    dewMeta.precision = 1;
-    dewMeta.order = 12;
-    CRM().addRuntimeMeta(dewMeta);
-
-    RuntimeFieldMeta pressureMeta;
-    pressureMeta.group = "Sensors";
-    pressureMeta.key = "pressure";
-    pressureMeta.label = "Pressure";
-    pressureMeta.unit = "hPa";
-    pressureMeta.precision = 1;
-    pressureMeta.order = 13;
-    CRM().addRuntimeMeta(pressureMeta);
+    live.value("pressure", []() { return pressure; })
+        .label("Pressure")
+        .unit("hPa")
+        .precision(1)
+        .order(22);
 }
 
 static void readBme280()
