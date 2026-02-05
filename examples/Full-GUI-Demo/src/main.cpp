@@ -177,13 +177,9 @@ void setup()
 
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     setupGUI();
 
-    ConfigManager.enableWebSocketPush();
-    ConfigManager.setWebSocketInterval(1000);
-    ConfigManager.setPushOnConnect(true);
 
     // Keep the runtime tabs ordered for the custom providers we register.
     ConfigManager.addLivePage("sensors", 10);
@@ -217,10 +213,8 @@ void setup()
 
 void loop()
 {
-    ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
 
     static unsigned long lastAlarmEval = 0;

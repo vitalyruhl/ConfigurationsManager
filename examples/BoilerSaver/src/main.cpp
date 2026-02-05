@@ -265,9 +265,6 @@ void setup()
 
     setupGUI();
 
-    ConfigManager.enableWebSocketPush();
-    ConfigManager.setWebSocketInterval(1000);
-    ConfigManager.setPushOnConnect(true);
 
     ConfigManager.enableSmartRoaming(true);
     ConfigManager.setRoamingThreshold(-75);
@@ -289,14 +286,12 @@ void setup()
 void loop()
 {
     lmg.scopedTag("loop");
-    ConfigManager.updateLoopTiming();
     
     ConfigManager.getWiFiManager().update();
     boilerState = getBoilerState();
     ioManager.update();
 
     ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
     alarmManager.update();
 

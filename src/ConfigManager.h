@@ -2019,6 +2019,7 @@ public:
         const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
 
         // Start WiFi connection non-blocking
+        wifiManager.setAutoRebootTimeout(autoRebootMin);
         wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
         wifiManager.setCallbacks(
             [this]()
@@ -2077,6 +2078,7 @@ public:
         const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
         const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
 
+        wifiManager.setAutoRebootTimeout(autoRebootMin);
         wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
         wifiManager.setCallbacks(
             [this]()
@@ -2147,7 +2149,11 @@ public:
     }
 
     // Non-blocking client handling
-    void handleClient() { /* no-op for async */ }
+    void handleClient()
+    {
+        updateLoopTiming();
+        handleWebsocketPush();
+    }
 
     // WiFi status and control
     bool getWiFiStatus() { return wifiManager.isConnected(); }

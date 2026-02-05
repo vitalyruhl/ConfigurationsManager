@@ -54,7 +54,6 @@ void setup()
 
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     delay(1000);
     logging_Example1();
@@ -74,10 +73,8 @@ void loop()
         lmg.logTag(LL::Error, "DT-Error", "DateTime tagged error example (value=%d)", randomValue);
     }
 
-    ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
     lmg.loop(); // process logging tasks
     delay(10);  // avoid busy loop
 }

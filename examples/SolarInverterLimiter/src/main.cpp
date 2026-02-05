@@ -290,13 +290,9 @@ void setup()
     ioManager.begin();
 
     // Apply WiFi reboot timeout from settings (minutes)
-    ConfigManager.getWiFiManager().setAutoRebootTimeout(static_cast<unsigned long>(wifiSettings.rebootTimeoutMin.get()));
 
     ConfigManager.startWebServer();
 
-    ConfigManager.enableWebSocketPush();
-    ConfigManager.setWebSocketInterval(1000);
-    ConfigManager.setPushOnConnect(true);
 
     ConfigManager.enableSmartRoaming(true);
     ConfigManager.setRoamingThreshold(-75);
@@ -335,14 +331,12 @@ void setup()
 
 void loop()
 {
-    ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     lmg.loop();
     ioManager.update();
 
     // Services managed by ConfigManager.
     ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
     alarmManager.update();
 

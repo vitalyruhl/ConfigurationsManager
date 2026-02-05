@@ -224,15 +224,11 @@ void setup()
 
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 
     ConfigManager.addLivePage("Sensors", 10);
     ConfigManager.addLiveGroup("Sensors", "Sensors", "Sensor Readings", 10);
     setupRuntimeUI();
 
-    ConfigManager.enableWebSocketPush();
-    ConfigManager.setWebSocketInterval(1000);
-    ConfigManager.setPushOnConnect(true);
 
     setupTemperatureMeasuring();
 
@@ -272,10 +268,8 @@ void onWiFiAPMode()
 
 void loop()
 {
-    ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
 
     static unsigned long lastLoopLog = 0;

@@ -114,12 +114,10 @@ void loop()
 
     //-------------------------------------------------------------------------------------------------------------
     // for working with the ConfigManager nessesary in loop
-    ConfigManager.updateLoopTiming(); // Update internal loop timing metrics for system provider
     ConfigManager.getWiFiManager().update(); // Update WiFi Manager - handles all WiFi logic
     ioManager.update(); // Apply IO setting changes and keep inputs/outputs state current
     alarmManager.update(); // Evaluate alarms and fire callbacks
     ConfigManager.handleClient(); // Handle web server client requests
-    ConfigManager.handleWebsocketPush(); // Handle WebSocket push updates
     ConfigManager.handleOTA();           // Handle OTA updates
     //-------------------------------------------------------------------------------------------------------------
 

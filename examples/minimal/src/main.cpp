@@ -23,7 +23,6 @@ void checkWifiCredentials();
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
-// Minimal skeleton: do not hardcode WiFi credentials in code.
 // Leave SSID empty to start in AP mode and configure via Web UI.
 static const char SETTINGS_PASSWORD[] = "";
 
@@ -52,20 +51,18 @@ void setup()
 
     coreSettings.attachWiFi(ConfigManager, "WLAN", "WLAN-Einstellungen", 10);
     coreSettings.attachSystem(ConfigManager);
-    // coreSettings.attachNtp(ConfigManager);
+    // coreSettings.attachNtp(ConfigManager); // you dont need it for this minimal example, but you can easily add it back if you want to use the NTP features
     ConfigManager.loadAll();
 
     checkWifiCredentials();
 
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// you dont need it, bi ut it makes testing easier for me
 
     ConfigManager.startWebServer();
-    ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
 }
 
 void loop()
 {
-    ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
 }

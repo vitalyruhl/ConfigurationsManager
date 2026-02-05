@@ -208,9 +208,6 @@ void setup()
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
 
-    ConfigManager.enableWebSocketPush();
-    ConfigManager.setWebSocketInterval(1000);
-    ConfigManager.setPushOnConnect(true);
 
     mqtt.clearRetain("test_topic_publish_immediately");
     mqtt.publishAllNow();
@@ -222,10 +219,8 @@ void setup()
 
 void loop()
 {
-    ConfigManager.updateLoopTiming();
     ConfigManager.getWiFiManager().update();
     ConfigManager.handleClient();
-    ConfigManager.handleWebsocketPush();
     ConfigManager.handleOTA();
 
     mqtt.loop();
