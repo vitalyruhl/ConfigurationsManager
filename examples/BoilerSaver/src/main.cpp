@@ -722,44 +722,14 @@ static void registerIOBindings()
     lmg.scopedTag("IO");
     analogReadResolution(12);
 
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = IO_BOILER_ID,
-        .name = "Boiler Relay",
-        .defaultPin = 23,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalOutput(IO_BOILER_ID, "Boiler Relay", 23, true, true);
     ioManager.addDigitalOutputToSettingsGroup(IO_BOILER_ID, "I/O", "Boiler Relay", "Boiler Relay", 1);
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = IO_RESET_ID,
-        .name = "Reset Button",
-        .defaultPin = 14,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput(IO_RESET_ID, "Reset Button", 14, true, true, false, true);
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = IO_AP_ID,
-        .name = "AP Mode Button",
-        .defaultPin = 13,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput(IO_AP_ID, "AP Mode Button", 13, true, true, false, true);
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = IO_SHOWER_ID,
-        .name = "Shower Request Button",
-        .defaultPin = 19,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput(IO_SHOWER_ID, "Shower Request Button", 19, true, true, false, true);
 
     ioManager.addDigitalInputToSettingsGroup(IO_SHOWER_ID, "I/O", "Shower HW-Btn", "Shower HW-Btn", 100);
     ioManager.addDigitalInputToLive(IO_SHOWER_ID, 100, "Boiler", "Live Values", "Boiler", "Shower HW-Btn", false);
@@ -826,7 +796,6 @@ static void setupMQTT()
 {
     mqtt.attach(ConfigManager);
     mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
-    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
 
     static bool mqttLogAdded = false;
     if (!mqttLogAdded) {

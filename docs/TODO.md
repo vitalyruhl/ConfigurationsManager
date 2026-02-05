@@ -483,8 +483,8 @@ Open questions:
    - Implement `add*ToLive` returning a handle/builder.
 6) [COMPLETED] Implement Live callback builder API (digital/analog) + unify multi-click.
 7) [COMPLETED] Implement generic alarm registry (`addAlarm(...)`) + UI for alarms (Live first).
-8) Refactor MQTTManager to the same pattern (define -> settings placement -> live placement) and let its attach helpers create the default MQTT tabs/groups (with override hooks) so the layout matches other core bundles.
-9) Check all examples + docs:
+8) [COMPLETED] Refactor MQTTManager to the same pattern (define -> settings placement -> live placement) and let its attach helpers create the default MQTT tabs/groups (with override hooks) so the layout matches other core bundles.
+9) [CURRENT] Check all examples + docs:
    - Consistancy + completeness pass.
    - Ensure at the PlatformIO build passes (deploy all, let user test it all)
 10) [COMPLETED] Align runtime metadata + live layout placement so `runtime_meta.json` becomes a proper array and live tabs/cards use the defined layout registry.
@@ -513,8 +513,8 @@ Workflow notes:
 5. [COMPLETED] IOManager Refactor: Define digital/analog IOs through parameter lists with a `persistSettings` flag, drop `settingsCategory`, add registry calls for settings placement, and ensure only persisted items reach the UI while `add*ToLive` returns callback handles.
 6. [COMPLETED] Live Callback Builder & UI Handles: Create `RuntimeControlType`, return handles that configure events like `onChange`, `onClick`, `onMultiClick`, etc., add fallbacks (e.g., slider -> checkbox), and expose timing defaults with optional overrides.
 7. [COMPLETED] Generic Alarm Registry: Provide `addAlarm(AlarmConfig)`/`addAlarmAnalog`, separate trigger definition from UI placement, surface `onAlarmCome/Gone/Stay` hooks, and keep alarms on the Live side unless an explicit Settings toggle is added.
-8. MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
-9. Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
+8. [COMPLETED] MQTTManager Restructure: Define topics via `addTopicReceive*`, add settings/live grouping helpers, and keep layout decisions within `ConfigManager` while letting MQTTManager use its functions for button/page registration.
+9. [CURRENT] Migrate Examples & Docs: Update each example to the new APIs, refresh WebUI/docs to match the new naming, and verify at least one PlatformIO environment (`examples/Full-GUI-Demo` suggested) builds successfully.
 
 ### Example validation plan
 - Steps 1‑2 (terminology/layout registries) use the `minimal` example for fast iteration.

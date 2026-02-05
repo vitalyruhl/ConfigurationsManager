@@ -305,8 +305,6 @@ void setupMqtt()
     mqtt.addTopicReceiveFloat("washing_machine_energy_yesterday", "Washing Machine Energy Yesterday", "tele/tasmota_1DEE45/SENSOR", &washingMachineEnergyYesterday, "kWh", 3, "ENERGY.Yesterday");
     mqtt.addTopicReceiveInt("solar_limiter_set_value_w", "Solar Limiter Set Value", "SolarLimiter/SetValue", &solarLimiterSetValueW, "W", "none");
 
-    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
-
     const char* mqttTopicsPage = "MQTT-Topics";
     const char* mqttTopicsCard = "MQTT-Topics";
     const char* mqttTopicsGroup = "MQTT-Received";

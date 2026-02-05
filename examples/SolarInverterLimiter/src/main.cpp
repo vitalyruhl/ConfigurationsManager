@@ -610,44 +610,16 @@ static void registerIOBindings()
     lmg.scopedTag("IO");
     analogReadResolution(12);
 
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = IO_FAN_ID,
-        .name = "Cooling Fan Relay",
-        .defaultPin = 23,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalOutput(IO_FAN_ID, "Cooling Fan Relay", 23, true, true);
     ioManager.addDigitalOutputToSettingsGroup(IO_FAN_ID, "I/O", "Cooling Fan Relay", "Cooling Fan Relay", 1);
 
-    ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{
-        .id = IO_HEATER_ID,
-        .name = "Heater Relay",
-        .defaultPin = 27,
-        .defaultActiveLow = true,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalOutput(IO_HEATER_ID, "Heater Relay", 27, true, true);
     ioManager.addDigitalOutputToSettingsGroup(IO_HEATER_ID, "I/O", "Heater Relay", "Heater Relay", 2);
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = IO_RESET_ID,
-        .name = "Reset Button",
-        .defaultPin = 14,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput(IO_RESET_ID, "Reset Button", 14, true, true, false, true);
     ioManager.addDigitalInputToSettingsGroup(IO_RESET_ID, "I/O", "Reset Button", "Reset Button", 10);
 
-    ioManager.addDigitalInput(cm::IOManager::DigitalInputBinding{
-        .id = IO_AP_ID,
-        .name = "AP Mode Button",
-        .defaultPin = 13,
-        .defaultActiveLow = true,
-        .defaultPullup = true,
-        .defaultPulldown = false,
-        .defaultEnabled = true,
-    });
+    ioManager.addDigitalInput(IO_AP_ID, "AP Mode Button", 13, true, true, false, true);
     ioManager.addDigitalInputToSettingsGroup(IO_AP_ID, "I/O", "AP Mode Button", "AP Mode Button", 11);
 
     cm::IOManager::DigitalInputEventOptions resetOptions;
@@ -739,13 +711,8 @@ static void setupMqtt()
         }
     });
 
-    // mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
+    // Optional: show receive topics in runtime UI
     // mqtt.addMqttTopicToLiveGroup(ConfigManager, "grid_import_w", "mqtt", "MQTT-Received", "MQTT-Received", 1);
-
-    // // Optional: show meta fields in runtime UI
-    // mqtt.addLastTopicToGUI(ConfigManager, "mqtt", 20, "Last Topic", "MQTT");
-    // mqtt.addLastPayloadToGUI(ConfigManager, "mqtt", 21, "Last Payload", "MQTT");
-    // mqtt.addLastMessageAgeToGUI(ConfigManager, "mqtt", 22, "Last Message Age", "ms", "MQTT");
 
     static bool mqttLogAdded = false;
     if (!mqttLogAdded)
