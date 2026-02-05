@@ -689,26 +689,27 @@ static void registerIOBindings()
 static void setupMqtt()
 {
     mqtt.attach(ConfigManager);
-    // mqtt.addMQTTReceiveSettingsToGUI(ConfigManager);
+    mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 
     // Receive: grid import W (from power meter JSON)
-    mqtt.addMQTTTopicReceiveInt(
+    mqtt.addTopicReceiveInt(
         "grid_import_w",
         "Grid Import",
         "tele/powerMeter/powerMeter/SENSOR",
         &currentGridImportW,
         "W",
-        "E320.Power_in",
-        true);
+        "E320.Power_in");
 
-    mqtt.addMQTTTopicReceiveInt(
+    mqtt.addTopicReceiveInt(
         "solar_power_w",
         "Solar power",
         "tele/tasmota_1DEE45/SENSOR",
         &solarPowerW,
         "W",
-        "ENERGY.Power",
-        true);
+        "ENERGY.Power");
+
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "grid_import_w", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 50);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "solar_power_w", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 50);
 
     mqtt.onConnected([](){
         const char* topic = "tele/tasmota_1DEE45/SENSOR";
@@ -739,7 +740,7 @@ static void setupMqtt()
     });
 
     // mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
-    // mqtt.addMQTTTopicTooGUI(ConfigManager, "grid_import_w", "MQTT-Received", 1);
+    // mqtt.addMqttTopicToLiveGroup(ConfigManager, "grid_import_w", "mqtt", "MQTT-Received", "MQTT-Received", 1);
 
     // // Optional: show meta fields in runtime UI
     // mqtt.addLastTopicToGUI(ConfigManager, "mqtt", 20, "Last Topic", "MQTT");

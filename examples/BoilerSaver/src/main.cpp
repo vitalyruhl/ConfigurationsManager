@@ -825,6 +825,7 @@ static bool getBoilerState()
 static void setupMQTT()
 {
     mqtt.attach(ConfigManager);
+    mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
 
     static bool mqttLogAdded = false;

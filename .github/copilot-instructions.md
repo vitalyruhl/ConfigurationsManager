@@ -203,6 +203,8 @@ TOOLING & SEARCH POLICY
 - Preferred search tool:
   - ALWAYS use ripgrep (rg) for code searches, audits, and reference checks.
     - if is not installed, give instructions to install it first. (choco install ripgrep)
+  - ALWAYS use sharkdp.fd (fd) for file searches, audits, and reference checks.
+    - if is not installed, give instructions to install it first. (winget install sharkdp.fd)
 - When reporting search results:
   - Include the rg pattern used.
 

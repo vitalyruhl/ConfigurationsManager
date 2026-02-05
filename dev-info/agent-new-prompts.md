@@ -63,6 +63,15 @@ D) Concept unification:
    - Use exactly one term per concept.
    - No synonyms (State vs Status, Analog vs Adc, etc.).
    - Enforce consistent acronym casing (GUI, DAC, IO, Wifi).
+   
+E) Subsystem context rule:
+- Method names MUST NOT repeat the owning subsystem or class name.
+- If a symbol is accessed via an instance or namespace (e.g. mqtt.*),
+  the subsystem identifier (e.g. Mqtt, MQTT) is forbidden in the method name.
+- Subsystem identity belongs to the type/namespace, not the method.
+Examples:
+  mqtt.addTopicToSettingsGroup()   ✔
+  mqtt.addMqttTopicToSettingsGroup() ✘ (redundant context)
 
 Tasks:
 4) Parse all public API method names.

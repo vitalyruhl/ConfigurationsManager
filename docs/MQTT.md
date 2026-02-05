@@ -5,7 +5,7 @@ This repository provides an **optional** MQTT helper module.
 - Module header: `src/mqtt/MQTTManager.h`
 - You must explicitly include it from your sketch.
 - You must add `PubSubClient` to your project dependencies.
-- The recommended init pattern is **Option A**: call `mqtt.attach(ConfigManager)` from `setup()`.
+- The recommended init pattern is **Option A**: call `mqtt.attach(ConfigManager)` from `setup()` and register settings explicitly.
 
 ## Minimal Usage
 
@@ -31,10 +31,13 @@ static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
 ```cpp
 void setup()
 {
-    // Registers baseline MQTT settings automatically.
+    // Layout only (MQTT + MQTT-Topics pages/groups).
     mqtt.attach(ConfigManager);
 
-    // Registers runtime provider only (no GUI fields are auto-added).
+    // Baseline MQTT settings are explicit.
+    mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
+
+    // Registers runtime provider only (live fields are explicit).
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
 
     // Optional: global hooks (define them in your sketch)
@@ -57,15 +60,21 @@ void setup()
     mqtt.attach(ConfigManager);
 
     // Plain payload example: topic "device/power" => "123.4"
-    mqtt.addMQTTTopicReceiveFloat("power_w", "Power", "device/power", &powerInW, "W", 1, "none", true);
+    mqtt.addTopicReceiveFloat("power_w", "Power", "device/power", &powerInW, "W", 1, "none");
 
     // JSON example: topic "tele/tasmota/SENSOR" => {"ENERGY":{"Total":12.34}}
-    mqtt.addMQTTTopicReceiveFloat("energy_total", "Energy Total", "tele/tasmota/SENSOR", &powerInW, "kWh", 3, "ENERGY.Total", true);
+    mqtt.addTopicReceiveFloat("energy_total", "Energy Total", "tele/tasmota/SENSOR", &powerInW, "kWh", 3, "ENERGY.Total");
 
     // GUI entries are explicit
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "power_w", "MQTT-Received");
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "energy_total", "MQTT-Received");
+
+    // Settings placement (MQTT Topics tab)
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "power_w", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 50);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "energy_total", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 50);
+
+    // Live placement
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "power_w", "mqtt", "MQTT-Received", "MQTT-Received", 1);
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "energy_total", "mqtt", "MQTT-Received", "MQTT-Received", 2);
 }
 ```
 
@@ -77,20 +86,20 @@ void setup()
 
 ## Settings for receive topics (MQTT Topics tab)
 
-All `addMQTTTopicReceive*` methods accept `addToSettings` (default: `false`).
+`addTopicReceive*` only defines items. Settings are explicit:
 
-- If `true`, two settings are created under the **MQTT Topics** tab:
+- Call `addMqttTopicToSettingsGroup(...)` to create two settings under the **MQTT Topics** tab:
   - `<Label> Topic`
   - `<Label> JSON Key`
 - Changes apply immediately on Save/Apply (subscriptions update on the fly).
-- If `false`, defaults are used and **no settings** are created.
+- If you never call `addMqttTopicToSettingsGroup(...)`, defaults are used and **no settings** are created.
 
 ## GUI / Runtime helpers
 
 - `addMQTTRuntimeProviderToGUI(...)` registers the runtime provider only.
-- Receive items are shown **only** when explicitly added via `addMQTTTopicTooGUI(...)`.
+- Receive items are shown **only** when explicitly placed via `addMqttTopicToLiveGroup(...)`.
 - `getLastTopic()`, `getLastPayload()`, `getLastMessageAgeMs()` can be exposed via runtime providers.
-- `addMQTTReceiveSettingsToGUI(...)` registers the MQTT receive-topic settings in the Settings UI (MQTT Topics tab).
+- `addMqttTopicToSettingsGroup(...)` registers the MQTT receive-topic settings in the Settings UI (MQTT Topics tab).
 
 ## Callbacks
 
@@ -117,7 +126,7 @@ Example:
 namespace cm {
 void onMQTTConnected()
 {
-    CM_LOG("[MQTT][INFO] connected");
+    CM_LOG("[MQTT][I] connected");
 }
 } // namespace cm
 ```
@@ -198,7 +207,7 @@ void onNewMQTTMessage(const char* topic, const char* payload, unsigned int lengt
 
     String msg(payload, length);
     msg.trim();
-    CM_LOG((String("[TASMOTA][ERROR] ") + t + " => " + msg).c_str());
+    CM_LOG((String("[TASMOTA][E] ") + t + " => " + msg).c_str());
 }
 } // namespace cm
 ```
@@ -209,9 +218,9 @@ void onNewMQTTMessage(const char* topic, const char* payload, unsigned int lengt
 // Register runtime provider
 mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
 
-// Explicit GUI entries
-mqtt.addMQTTTopicTooGUI(ConfigManager, "boiler_temp_c", "MQTT-Received");
-mqtt.addMQTTTopicTooGUI(ConfigManager, "powermeter_power_in_w", "MQTT-Received");
+// Explicit live entries
+mqtt.addMqttTopicToLiveGroup(ConfigManager, "boiler_temp_c", "mqtt", "MQTT-Received", "MQTT-Received", 1);
+mqtt.addMqttTopicToLiveGroup(ConfigManager, "powermeter_power_in_w", "mqtt", "MQTT-Received", "MQTT-Received", 2);
 
 // Runtime provider for "other infos"
 ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject& data) {
@@ -239,15 +248,16 @@ Publish / subscribe:
   - Overloads cover `(retained, qos)` and `ConfigManager` variants where applicable.
 
 Receive helpers:
-- `addMQTTTopicReceiveFloat(...)` (1 overload)
-- `addMQTTTopicReceiveInt(...)` (1 overload)
-- `addMQTTTopicReceiveBool(...)` (1 overload)
-- `addMQTTTopicReceiveString(...)` (1 overload)
+- `addTopicReceiveFloat(...)` (1 overload)
+- `addTopicReceiveInt(...)` (1 overload)
+- `addTopicReceiveBool(...)` (1 overload)
+- `addTopicReceiveString(...)` (1 overload)
 
 GUI helpers:
+- `addMqttSettingsToSettingsGroup(...)` (2 overloads)
+- `addMqttTopicToSettingsGroup(...)` (2 overloads)
+- `addMqttTopicToLiveGroup(...)` (2 overloads)
 - `addMQTTRuntimeProviderToGUI(...)` (1 overload)
-- `addMQTTReceiveSettingsToGUI(...)` (1 overload)
-- `addMQTTTopicTooGUI(...)` (1 overload)
 - `addLastTopicToGUI(...)` (1 overload)
 - `addLastPayloadToGUI(...)` (1 overload)
 - `addLastMessageAgeToGUI(...)` (1 overload)

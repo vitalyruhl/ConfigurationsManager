@@ -112,9 +112,20 @@ public:
     Settings& settings() { return settings_; }
     const Settings& settings() const { return settings_; }
 
-    // Attach to ConfigManager and auto-register baseline settings.
+    // Attach to ConfigManager (layout only; settings are explicit).
     // This keeps MQTT optional: only projects that include this header and call attach() use it.
-    void attach(ConfigManagerClass& configManager);
+    void attach(ConfigManagerClass& configManager, const char* basePageName = "MQTT");
+
+    // Baseline MQTT settings (host/user/pass/etc) are explicit.
+    void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
+                                        const char* pageName,
+                                        const char* groupName,
+                                        int order);
+    void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
+                                        const char* pageName,
+                                        const char* cardName,
+                                        const char* groupName,
+                                        int order);
 
     // One-liner helper similar to IOManager GUI helpers.
     // Registers the MQTT runtime provider (no GUI fields are auto-added).
@@ -122,8 +133,18 @@ public:
                                      const char* runtimeGroup = "mqtt",
                                      int providerOrder = 2,
                                      int baseOrder = 10);
-    // Registers MQTT receive-topic settings in the Settings UI (MQTT tab).
-    void addMQTTReceiveSettingsToGUI(ConfigManagerClass& configManager);
+    // Settings placement for receive topics.
+    void addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
+                                     const char* topicId,
+                                     const char* pageName,
+                                     const char* groupName,
+                                     int order);
+    void addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
+                                     const char* topicId,
+                                     const char* pageName,
+                                     const char* cardName,
+                                     const char* groupName,
+                                     int order);
 
     static const char* mqttStateToString(ConnectionState state);
     String getMqttBaseTopic() const;
@@ -176,12 +197,18 @@ public:
                                 const char* unit = "ms",
                                 const char* card = nullptr);
 
-    // Explicit GUI opt-in for MQTT receive items.
-    void addMQTTTopicTooGUI(ConfigManagerClass& configManager,
-                            const char* id,
-                            const char* card = nullptr,
-                            int order = -1,
-                            const char* runtimeGroup = "mqtt");
+    // Live placement for receive items.
+    void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
+                                 const char* topicId,
+                                 const char* pageName,
+                                 const char* groupName,
+                                 int order);
+    void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
+                                 const char* topicId,
+                                 const char* pageName,
+                                 const char* cardName,
+                                 const char* groupName,
+                                 int order);
 
     // Hooks (names preferred by you). Old onConnected/onDisconnected/onMessage remain available.
     void onMQTTConnect(ConnectedCallback callback) { onMqttConnect_ = std::move(callback); }
@@ -256,40 +283,35 @@ public:
     bool subscribeWildcard(const char* topicFilter, uint8_t qos = 0);
     bool unsubscribe(const char* topic);
 
-    // Topic receive helpers: creates Settings entries (topic + optional json key path), stores the parsed value.
-    // GUI entries are explicit via addMQTTTopicTooGUI().
+    // Topic receive helpers: define receive items (settings/live placement is explicit).
     // - If jsonKeyPath is empty or "none": payload is interpreted as plain value.
     // - If payload is JSON and jsonKeyPath is set (example: "E320.Power_in"): value is extracted.
-    void addMQTTTopicReceiveFloat(const char* id,
-                                 const char* label,
-                                 const char* defaultTopic,
-                                 float* target,
-                                 const char* unit = nullptr,
-                                 int precision = 2,
-                                 const char* defaultJsonKeyPath = "none",
-                                 bool addToSettings = false);
+    void addTopicReceiveFloat(const char* id,
+                              const char* label,
+                              const char* defaultTopic,
+                              float* target,
+                              const char* unit = nullptr,
+                              int precision = 2,
+                              const char* defaultJsonKeyPath = "none");
 
-    void addMQTTTopicReceiveInt(const char* id,
+    void addTopicReceiveInt(const char* id,
+                            const char* label,
+                            const char* defaultTopic,
+                            int* target,
+                            const char* unit = nullptr,
+                            const char* defaultJsonKeyPath = "none");
+
+    void addTopicReceiveBool(const char* id,
+                             const char* label,
+                             const char* defaultTopic,
+                             bool* target,
+                             const char* defaultJsonKeyPath = "none");
+
+    void addTopicReceiveString(const char* id,
                                const char* label,
                                const char* defaultTopic,
-                               int* target,
-                               const char* unit = nullptr,
-                               const char* defaultJsonKeyPath = "none",
-                               bool addToSettings = false);
-
-    void addMQTTTopicReceiveBool(const char* id,
-                                const char* label,
-                                const char* defaultTopic,
-                                bool* target,
-                                const char* defaultJsonKeyPath = "none",
-                                bool addToSettings = false);
-
-    void addMQTTTopicReceiveString(const char* id,
-                                  const char* label,
-                                  const char* defaultTopic,
-                                  String* target,
-                                  const char* defaultJsonKeyPath = "none",
-                                  bool addToSettings = false);
+                               String* target,
+                               const char* defaultJsonKeyPath = "none");
 
 private:
     MQTTManager();
@@ -301,6 +323,14 @@ private:
         Bool,
         String,
     };
+
+    static constexpr const char* DEFAULT_SETTINGS_PAGE = "MQTT";
+    static constexpr const char* DEFAULT_TOPICS_CATEGORY = "MQTT-Topics";
+    static constexpr const char* DEFAULT_SETTINGS_GROUP = "MQTT Settings";
+    static constexpr const char* DEFAULT_TOPICS_GROUP = "MQTT Topics";
+    static constexpr const char* DEFAULT_RUNTIME_GROUP = "mqtt";
+    static constexpr int DEFAULT_SETTINGS_ORDER = 40;
+    static constexpr int DEFAULT_TOPICS_ORDER = 50;
 
     struct ReceiveItem {
         String id;
@@ -314,14 +344,16 @@ private:
         std::unique_ptr<char[]> jsonKeyKeyC;
         std::unique_ptr<char[]> jsonKeyNameC;
 
-        std::unique_ptr<Config<String>> topic;
-        std::unique_ptr<Config<String>> jsonKeyPath;
+        std::unique_ptr<char[]> cardKeyC;
+        std::unique_ptr<char[]> cardPrettyC;
+
+        Config<String>* topic = nullptr;
+        Config<String>* jsonKeyPath = nullptr;
         String topicValue;
         String jsonKeyPathValue;
         String lastSubscribedTopic;
-        bool addToSettings = false;
-
-        bool settingsAdded = false;
+        bool settingsRegistered = false;
+        int settingsCardOrder = 0;
 
         const char* unit = nullptr;
         int precision = 2;
@@ -339,6 +371,7 @@ private:
     ConfigManagerClass* configManager_ = nullptr;
     bool settingsRegistered_ = false;
     bool runtimeProviderRegistered_ = false;
+    String runtimeGroupName_ = "mqtt";
     bool systemGuiRegistered_ = false;
 
     // Connection behavior
@@ -379,6 +412,8 @@ private:
 
     void configureFromSettings_();
     void applySettingsCallbacks_();
+    void registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName);
+    void registerMqttSettings_(ConfigManagerClass& configManager);
     void maybePublishSendItems_();
     void maybePublishSystemInfo_();
     void resetPublishSchedule_();
@@ -396,12 +431,32 @@ private:
     String getReceiveTopic_(const ReceiveItem& item) const;
     String getReceiveJsonKeyPath_(const ReceiveItem& item) const;
     bool buildReceivePayload_(const ReceiveItem& item, String& outPayload) const;
+    void registerReceiveItemSettings_(ReceiveItem& item,
+                                      const char* pageName,
+                                      const char* cardName,
+                                      const char* groupName,
+                                      int order);
 
     static bool isNoneKeyPath_(const String& keyPath);
     static bool isLikelyNumberString_(const String& value);
     static bool tryExtractJsonValueAsString_(const String& payload, const String& keyPath, String& outValue);
     static bool tryParseBool_(const String& value, bool& outBool);
     static String formatUptimeHuman_(uint32_t uptimeMs);
+    static void ensureSettingsLayout_(ConfigManagerClass& configManager,
+                                      const char* pageName,
+                                      const char* cardName,
+                                      const char* groupName,
+                                      int order);
+    static void ensureLiveLayout_(ConfigManagerClass& configManager,
+                                  const char* pageName,
+                                  const char* cardName,
+                                  const char* groupName,
+                                  int order);
+    static void registerSettingPlacement_(ConfigManagerClass& configManager,
+                                          BaseSetting* setting,
+                                          const char* pageName,
+                                          const char* cardName,
+                                          const char* groupName);
 
     template <typename TInt>
     static bool tryParseInt_(const String& value, TInt& outInt)
@@ -426,7 +481,6 @@ private:
         return true;
     }
 
-    void ensureReceiveSettingsRegistered_();
     void registerReceiveItemSettings_(ReceiveItem& item);
     void registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
                                         ReceiveItem& item,
@@ -573,24 +627,51 @@ inline MQTTManager::~MQTTManager()
     }
 }
 
-inline void MQTTManager::attach(ConfigManagerClass& configManager)
+inline void MQTTManager::attach(ConfigManagerClass& configManager, const char* basePageName)
 {
     configManager_ = &configManager;
-    if (!settingsRegistered_) {
-        configManager.addSetting(&settings_.enableMQTT);
-        configManager.addSetting(&settings_.server);
-        configManager.addSetting(&settings_.port);
-        configManager.addSetting(&settings_.username);
-        configManager.addSetting(&settings_.password);
-        configManager.addSetting(&settings_.clientId);
-        configManager.addSetting(&settings_.publishTopicBase);
-        configManager.addSetting(&settings_.publishIntervalSec);
-        configManager.addSetting(&settings_.listenIntervalMs);
-        settingsRegistered_ = true;
-    }
-
+    registerDefaultLayout_(configManager, basePageName);
     applySettingsCallbacks_();
     configureFromSettings_();
+}
+
+inline void MQTTManager::registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName)
+{
+    const char* resolvedBase = (basePageName && basePageName[0]) ? basePageName : DEFAULT_SETTINGS_PAGE;
+    const String topicsPage = String(resolvedBase) + "-Topics";
+
+    configManager.setCategoryLayoutOverride(DEFAULT_SETTINGS_PAGE,
+                                            resolvedBase,
+                                            resolvedBase,
+                                            DEFAULT_SETTINGS_GROUP,
+                                            DEFAULT_SETTINGS_ORDER);
+    configManager.setCategoryLayoutOverride(DEFAULT_TOPICS_CATEGORY,
+                                            topicsPage.c_str(),
+                                            topicsPage.c_str(),
+                                            DEFAULT_TOPICS_GROUP,
+                                            DEFAULT_TOPICS_ORDER);
+
+    configManager.addSettingsPage(resolvedBase, DEFAULT_SETTINGS_ORDER);
+    configManager.addSettingsGroup(resolvedBase, resolvedBase, DEFAULT_SETTINGS_GROUP, DEFAULT_SETTINGS_ORDER);
+    configManager.addSettingsPage(topicsPage.c_str(), DEFAULT_TOPICS_ORDER);
+    configManager.addSettingsGroup(topicsPage.c_str(), topicsPage.c_str(), DEFAULT_TOPICS_GROUP, DEFAULT_TOPICS_ORDER);
+}
+
+inline void MQTTManager::registerMqttSettings_(ConfigManagerClass& configManager)
+{
+    if (settingsRegistered_) {
+        return;
+    }
+    configManager.addSetting(&settings_.enableMQTT);
+    configManager.addSetting(&settings_.server);
+    configManager.addSetting(&settings_.port);
+    configManager.addSetting(&settings_.username);
+    configManager.addSetting(&settings_.password);
+    configManager.addSetting(&settings_.clientId);
+    configManager.addSetting(&settings_.publishTopicBase);
+    configManager.addSetting(&settings_.publishIntervalSec);
+    configManager.addSetting(&settings_.listenIntervalMs);
+    settingsRegistered_ = true;
 }
 
 inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configManager,
@@ -605,8 +686,10 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
     }
 
     if (!runtimeProviderRegistered_) {
+        const char* resolvedGroup = (runtimeGroup && runtimeGroup[0]) ? runtimeGroup : DEFAULT_RUNTIME_GROUP;
+        runtimeGroupName_ = String(resolvedGroup);
         // Provider contains runtime values only. GUI fields are opt-in.
-        configManager.getRuntime().addRuntimeProvider(runtimeGroup, [this](JsonObject& data) {
+        configManager.getRuntime().addRuntimeProvider(runtimeGroupName_, [this](JsonObject& data) {
             data["enabled"] = settings_.enableMQTT.get();
             data["wifi"] = WiFi.isConnected();
             data["connected"] = isConnected();
@@ -640,6 +723,8 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
         }, providerOrder);
 
         runtimeProviderRegistered_ = true;
+    } else if (runtimeGroup && runtimeGroup[0] && runtimeGroupName_ != runtimeGroup) {
+        MQTT_LOG("[W] addMQTTRuntimeProviderToGUI: runtime group locked to '%s'", runtimeGroupName_.c_str());
     }
 
     if (!systemGuiRegistered_) {
@@ -682,13 +767,134 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
     }
 }
 
-inline void MQTTManager::addMQTTReceiveSettingsToGUI(ConfigManagerClass& configManager)
+inline void MQTTManager::addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
+                                                        const char* pageName,
+                                                        const char* groupName,
+                                                        int order)
+{
+    addMqttSettingsToSettingsGroup(configManager, pageName, pageName, groupName, order);
+}
+
+inline void MQTTManager::addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
+                                                        const char* pageName,
+                                                        const char* cardName,
+                                                        const char* groupName,
+                                                        int order)
 {
     if (!configManager_) {
         configManager_ = &configManager;
     }
 
-    ensureReceiveSettingsRegistered_();
+    registerDefaultLayout_(configManager, pageName);
+    registerMqttSettings_(configManager);
+    applySettingsCallbacks_();
+    configureFromSettings_();
+
+    const char* effectivePage = (pageName && pageName[0]) ? pageName : DEFAULT_SETTINGS_PAGE;
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+
+    ensureSettingsLayout_(configManager, effectivePage, effectiveCard, effectiveGroup, order);
+    registerSettingPlacement_(configManager, &settings_.enableMQTT, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.server, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.port, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.username, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.password, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.clientId, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.publishTopicBase, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.publishIntervalSec, effectivePage, effectiveCard, effectiveGroup);
+    registerSettingPlacement_(configManager, &settings_.listenIntervalMs, effectivePage, effectiveCard, effectiveGroup);
+}
+
+inline void MQTTManager::addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
+                                                     const char* topicId,
+                                                     const char* pageName,
+                                                     const char* groupName,
+                                                     int order)
+{
+    addMqttTopicToSettingsGroup(configManager, topicId, pageName, pageName, groupName, order);
+}
+
+inline void MQTTManager::addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
+                                                     const char* topicId,
+                                                     const char* pageName,
+                                                     const char* cardName,
+                                                     const char* groupName,
+                                                     int order)
+{
+    if (!configManager_) {
+        configManager_ = &configManager;
+    }
+
+    if (!topicId || !topicId[0]) {
+        MQTT_LOG("[W] addMqttTopicToSettingsGroup: id is empty");
+        return;
+    }
+
+    ReceiveItem* item = findReceiveItemById_(topicId);
+    if (!item) {
+        MQTT_LOG("[W] addMqttTopicToSettingsGroup: id not found: %s", topicId);
+        return;
+    }
+
+    const char* effectivePage = (pageName && pageName[0]) ? pageName : DEFAULT_TOPICS_CATEGORY;
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+
+    ensureSettingsLayout_(configManager, effectivePage, effectiveCard, effectiveGroup, order);
+    registerReceiveItemSettings_(*item, effectivePage, effectiveCard, effectiveGroup, order);
+    if (item->topic) {
+        registerSettingPlacement_(configManager, item->topic, effectivePage, effectiveCard, effectiveGroup);
+    }
+    if (item->jsonKeyPath) {
+        registerSettingPlacement_(configManager, item->jsonKeyPath, effectivePage, effectiveCard, effectiveGroup);
+    }
+}
+
+inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
+                                                 const char* topicId,
+                                                 const char* pageName,
+                                                 const char* groupName,
+                                                 int order)
+{
+    addMqttTopicToLiveGroup(configManager, topicId, pageName, pageName, groupName, order);
+}
+
+inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
+                                                 const char* topicId,
+                                                 const char* pageName,
+                                                 const char* cardName,
+                                                 const char* groupName,
+                                                 int order)
+{
+    if (!configManager_) {
+        configManager_ = &configManager;
+    }
+
+    if (!topicId || !topicId[0]) {
+        MQTT_LOG("[W] addMqttTopicToLiveGroup: id is empty");
+        return;
+    }
+
+    ReceiveItem* item = findReceiveItemById_(topicId);
+    if (!item) {
+        MQTT_LOG("[W] addMqttTopicToLiveGroup: id not found: %s", topicId);
+        return;
+    }
+
+    if (!runtimeProviderRegistered_) {
+        addMQTTRuntimeProviderToGUI(configManager, runtimeGroupName_.c_str());
+    }
+
+    const int resolvedOrder = (order >= 0) ? order : item->runtimeOrder;
+    const char* effectivePage = (pageName && pageName[0]) ? pageName : ConfigManagerClass::DEFAULT_LAYOUT_NAME;
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+    const char* runtimeGroup = runtimeGroupName_.length() ? runtimeGroupName_.c_str() : DEFAULT_RUNTIME_GROUP;
+
+    const char* itemKey = item->idKeyC ? item->idKeyC.get() : item->id.c_str();
+    registerReceiveItemRuntimeMeta_(configManager, *item, runtimeGroup, resolvedOrder, effectiveCard);
+    configManager.addToLiveGroup(itemKey, effectivePage, effectiveCard, effectiveGroup, resolvedOrder);
 }
 
 inline const char* MQTTManager::mqttStateToString(ConnectionState state)
@@ -809,32 +1015,6 @@ inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManage
         lastAgeMeta.card = card;
     }
     configManager.getRuntime().addRuntimeMeta(lastAgeMeta);
-}
-
-inline void MQTTManager::addMQTTTopicTooGUI(ConfigManagerClass& configManager,
-                                            const char* id,
-                                            const char* card,
-                                            int order,
-                                            const char* runtimeGroup)
-{
-    if (!runtimeProviderRegistered_) {
-        addMQTTRuntimeProviderToGUI(configManager, runtimeGroup);
-    }
-
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] addMQTTTopicTooGUI: id is empty");
-        return;
-    }
-
-    auto it = std::find_if(receiveItems_.begin(), receiveItems_.end(),
-                           [id](const ReceiveItem& item) { return item.id == id; });
-    if (it == receiveItems_.end()) {
-        MQTT_LOG("[WARNING] addMQTTTopicTooGUI: id not found: %s", id);
-        return;
-    }
-
-    const int resolvedOrder = (order >= 0) ? order : it->runtimeOrder;
-    registerReceiveItemRuntimeMeta_(configManager, *it, runtimeGroup, resolvedOrder, card);
 }
 
 inline bool MQTTManager::publishTopic(const char* id)
@@ -1426,14 +1606,13 @@ inline bool MQTTManager::unsubscribe(const char* topic)
     return mqttClient_.unsubscribe(topic);
 }
 
-inline void MQTTManager::addMQTTTopicReceiveFloat(const char* id,
-                                                  const char* label,
-                                                  const char* defaultTopic,
-                                                  float* target,
-                                                  const char* unit,
-                                                  int precision,
-                                                  const char* defaultJsonKeyPath,
-                                                  bool addToSettings)
+inline void MQTTManager::addTopicReceiveFloat(const char* id,
+                                              const char* label,
+                                              const char* defaultTopic,
+                                              float* target,
+                                              const char* unit,
+                                              int precision,
+                                              const char* defaultJsonKeyPath)
 {
     ReceiveItem item;
     item.id = id ? String(id) : String();
@@ -1443,7 +1622,8 @@ inline void MQTTManager::addMQTTTopicReceiveFloat(const char* id,
     item.precision = precision;
     item.target = target;
     item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.addToSettings = addToSettings;
+    item.topicValue = String(defaultTopic ? defaultTopic : "");
+    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
     item.idKeyC = makeCString_(item.id);
     item.labelC = makeCString_(item.label);
@@ -1452,38 +1632,15 @@ inline void MQTTManager::addMQTTTopicReceiveFloat(const char* id,
     item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
     item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    if (addToSettings) {
-        item.topic = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.topicKeyC.get(),
-            .name = item.topicNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultTopic ? defaultTopic : ""),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-
-        item.jsonKeyPath = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.jsonKeyKeyC.get(),
-            .name = item.jsonKeyNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none"),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-    } else {
-        item.topicValue = String(defaultTopic ? defaultTopic : "");
-        item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
-    }
-
     receiveItems_.push_back(std::move(item));
-    ensureReceiveSettingsRegistered_();
 }
 
-inline void MQTTManager::addMQTTTopicReceiveInt(const char* id,
-                                                const char* label,
-                                                const char* defaultTopic,
-                                                int* target,
-                                                const char* unit,
-                                                const char* defaultJsonKeyPath,
-                                                bool addToSettings)
+inline void MQTTManager::addTopicReceiveInt(const char* id,
+                                            const char* label,
+                                            const char* defaultTopic,
+                                            int* target,
+                                            const char* unit,
+                                            const char* defaultJsonKeyPath)
 {
     ReceiveItem item;
     item.id = id ? String(id) : String();
@@ -1493,7 +1650,8 @@ inline void MQTTManager::addMQTTTopicReceiveInt(const char* id,
     item.precision = 0;
     item.target = target;
     item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.addToSettings = addToSettings;
+    item.topicValue = String(defaultTopic ? defaultTopic : "");
+    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
     item.idKeyC = makeCString_(item.id);
     item.labelC = makeCString_(item.label);
@@ -1502,37 +1660,14 @@ inline void MQTTManager::addMQTTTopicReceiveInt(const char* id,
     item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
     item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    if (addToSettings) {
-        item.topic = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.topicKeyC.get(),
-            .name = item.topicNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultTopic ? defaultTopic : ""),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-
-        item.jsonKeyPath = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.jsonKeyKeyC.get(),
-            .name = item.jsonKeyNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none"),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-    } else {
-        item.topicValue = String(defaultTopic ? defaultTopic : "");
-        item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
-    }
-
     receiveItems_.push_back(std::move(item));
-    ensureReceiveSettingsRegistered_();
 }
 
-inline void MQTTManager::addMQTTTopicReceiveBool(const char* id,
-                                                 const char* label,
-                                                 const char* defaultTopic,
-                                                 bool* target,
-                                                 const char* defaultJsonKeyPath,
-                                                 bool addToSettings)
+inline void MQTTManager::addTopicReceiveBool(const char* id,
+                                             const char* label,
+                                             const char* defaultTopic,
+                                             bool* target,
+                                             const char* defaultJsonKeyPath)
 {
     ReceiveItem item;
     item.id = id ? String(id) : String();
@@ -1540,7 +1675,8 @@ inline void MQTTManager::addMQTTTopicReceiveBool(const char* id,
     item.type = ValueType::Bool;
     item.target = target;
     item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.addToSettings = addToSettings;
+    item.topicValue = String(defaultTopic ? defaultTopic : "");
+    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
     item.idKeyC = makeCString_(item.id);
     item.labelC = makeCString_(item.label);
@@ -1549,37 +1685,14 @@ inline void MQTTManager::addMQTTTopicReceiveBool(const char* id,
     item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
     item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    if (addToSettings) {
-        item.topic = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.topicKeyC.get(),
-            .name = item.topicNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultTopic ? defaultTopic : ""),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-
-        item.jsonKeyPath = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.jsonKeyKeyC.get(),
-            .name = item.jsonKeyNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none"),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-    } else {
-        item.topicValue = String(defaultTopic ? defaultTopic : "");
-        item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
-    }
-
     receiveItems_.push_back(std::move(item));
-    ensureReceiveSettingsRegistered_();
 }
 
-inline void MQTTManager::addMQTTTopicReceiveString(const char* id,
-                                                   const char* label,
-                                                   const char* defaultTopic,
-                                                   String* target,
-                                                   const char* defaultJsonKeyPath,
-                                                   bool addToSettings)
+inline void MQTTManager::addTopicReceiveString(const char* id,
+                                               const char* label,
+                                               const char* defaultTopic,
+                                               String* target,
+                                               const char* defaultJsonKeyPath)
 {
     ReceiveItem item;
     item.id = id ? String(id) : String();
@@ -1587,7 +1700,8 @@ inline void MQTTManager::addMQTTTopicReceiveString(const char* id,
     item.type = ValueType::String;
     item.target = target;
     item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.addToSettings = addToSettings;
+    item.topicValue = String(defaultTopic ? defaultTopic : "");
+    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
     item.idKeyC = makeCString_(item.id);
     item.labelC = makeCString_(item.label);
@@ -1596,29 +1710,7 @@ inline void MQTTManager::addMQTTTopicReceiveString(const char* id,
     item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
     item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    if (addToSettings) {
-        item.topic = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.topicKeyC.get(),
-            .name = item.topicNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultTopic ? defaultTopic : ""),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-
-        item.jsonKeyPath = std::make_unique<Config<String>>(ConfigOptions<String>{
-            .key = item.jsonKeyKeyC.get(),
-            .name = item.jsonKeyNameC.get(),
-            .category = "MQTT-Topics",
-            .defaultValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none"),
-            .sortOrder = nextReceiveSortOrder_++,
-            .categoryPretty = "MQTT-Topcs"});
-    } else {
-        item.topicValue = String(defaultTopic ? defaultTopic : "");
-        item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
-    }
-
     receiveItems_.push_back(std::move(item));
-    ensureReceiveSettingsRegistered_();
 }
 
 inline void MQTTManager::configureFromSettings_()
@@ -2184,43 +2276,106 @@ inline String MQTTManager::formatUptimeHuman_(uint32_t uptimeMs)
     return out;
 }
 
-inline void MQTTManager::ensureReceiveSettingsRegistered_()
-{
-    if (!configManager_ || receiveItems_.empty()) {
-        return;
-    }
-
-    // Register settings for newly added receive items.
-    for (auto& item : receiveItems_) {
-        registerReceiveItemSettings_(item);
-    }
-}
-
-inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item)
+inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item,
+                                                      const char* pageName,
+                                                      const char* cardName,
+                                                      const char* groupName,
+                                                      int order)
 {
     if (!configManager_) {
         return;
     }
-    if (!item.addToSettings || !item.topic || !item.jsonKeyPath) {
+
+    if (!item.settingsRegistered) {
+        const String cardKey = (cardName && cardName[0]) ? String(cardName) : String(pageName ? pageName : DEFAULT_TOPICS_CATEGORY);
+        const String cardPretty = (groupName && groupName[0]) ? String(groupName) : cardKey;
+        item.cardKeyC = makeCString_(cardKey);
+        item.cardPrettyC = makeCString_(cardPretty);
+        item.settingsCardOrder = order;
+
+        item.topic = &configManager_->addSettingString(item.topicKeyC.get())
+            .name(item.topicNameC.get())
+            .category(DEFAULT_TOPICS_CATEGORY)
+            .defaultValue(item.topicValue)
+            .showInWeb(true)
+            .sortOrder(nextReceiveSortOrder_++)
+            .categoryPretty(DEFAULT_TOPICS_GROUP)
+            .card(item.cardKeyC.get())
+            .cardPretty(item.cardPrettyC.get())
+            .cardOrder(order)
+            .build();
+
+        item.jsonKeyPath = &configManager_->addSettingString(item.jsonKeyKeyC.get())
+            .name(item.jsonKeyNameC.get())
+            .category(DEFAULT_TOPICS_CATEGORY)
+            .defaultValue(item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none"))
+            .showInWeb(true)
+            .sortOrder(nextReceiveSortOrder_++)
+            .categoryPretty(DEFAULT_TOPICS_GROUP)
+            .card(item.cardKeyC.get())
+            .cardPretty(item.cardPrettyC.get())
+            .cardOrder(order)
+            .build();
+
+        CM_LOG_VERBOSE("[INFO] Registered receive setting keys: %s / %s",
+                       item.topic->getKey(), item.jsonKeyPath->getKey());
+        const String itemId = item.id;
+        item.topic->setCallback([this, itemId](const String&) {
+            ReceiveItem* targetItem = findReceiveItemById_(itemId.c_str());
+            if (targetItem) {
+                updateReceiveSubscription_(*targetItem, true);
+            }
+        });
+        item.settingsRegistered = true;
+    }
+}
+
+inline void MQTTManager::ensureSettingsLayout_(ConfigManagerClass& configManager,
+                                               const char* pageName,
+                                               const char* cardName,
+                                               const char* groupName,
+                                               int order)
+{
+    if (!pageName || !pageName[0]) {
         return;
     }
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : pageName;
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+    configManager.addSettingsPage(pageName, order);
+    configManager.addSettingsCard(pageName, effectiveCard, order);
+    configManager.addSettingsGroup(pageName, effectiveCard, effectiveGroup, order);
+}
 
-    if (item.settingsAdded) {
+inline void MQTTManager::ensureLiveLayout_(ConfigManagerClass& configManager,
+                                           const char* pageName,
+                                           const char* cardName,
+                                           const char* groupName,
+                                           int order)
+{
+    if (!pageName || !pageName[0]) {
         return;
     }
+    const char* effectiveCard = (cardName && cardName[0]) ? cardName : ConfigManagerClass::DEFAULT_LIVE_CARD_NAME;
+    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+    configManager.addLivePage(pageName, order);
+    configManager.addLiveCard(pageName, effectiveCard, order);
+    configManager.addLiveGroup(pageName, effectiveCard, effectiveGroup, order);
+}
 
-    configManager_->addSetting(item.topic.get());
-    configManager_->addSetting(item.jsonKeyPath.get());
-    CM_LOG_VERBOSE("[INFO] Registered receive setting keys: %s / %s",
-                   item.topic->getKey(), item.jsonKeyPath->getKey());
-    const String itemId = item.id;
-    item.topic->setCallback([this, itemId](const String&) {
-        ReceiveItem* targetItem = findReceiveItemById_(itemId.c_str());
-        if (targetItem) {
-            updateReceiveSubscription_(*targetItem, true);
-        }
-    });
-    item.settingsAdded = true;
+inline void MQTTManager::registerSettingPlacement_(ConfigManagerClass& configManager,
+                                                   BaseSetting* setting,
+                                                   const char* pageName,
+                                                   const char* cardName,
+                                                   const char* groupName)
+{
+    if (!setting) {
+        return;
+    }
+    configManager.addToSettingsGroup(setting->getKey(),
+                                     pageName,
+                                     cardName,
+                                     groupName,
+                                     setting->getSortOrder());
 }
 
 inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,

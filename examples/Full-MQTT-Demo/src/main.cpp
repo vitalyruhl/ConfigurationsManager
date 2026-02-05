@@ -129,18 +129,9 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
-    // coreSettings owns WiFi/System/NTP layout registration, keep the MQTT tabs we need.
-    ConfigManager.addSettingsPage("MQTT", 40);
-    ConfigManager.addSettingsGroup("MQTT", "MQTT", "MQTT Settings", 40);
-    ConfigManager.addSettingsPage("MQTT-Topics", 50);
-    ConfigManager.addSettingsGroup("MQTT-Topics", "MQTT-Topics", "MQTT Topics", 50);
-
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
-
-    ConfigManager.addLivePage("mqtt", 10);
-    ConfigManager.addLiveGroup("mqtt", "MQTT", "MQTT Status", 10);
 
     setupMqtt();
 
@@ -297,6 +288,7 @@ void loop()
 void setupMqtt()
 {
     mqtt.attach(ConfigManager);
+    mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 
     // Classic callbacks (mirror PubSubClient signatures)
     // mqtt.onConnected([]() { CM_LOG("[Full-MQTT-Demo][INFO] MQTT connected (classic)"); });
@@ -304,26 +296,35 @@ void setupMqtt()
     // mqtt.onMessage([](char* topic, byte* payload, unsigned int length) { /* ... */ });
 
     // Receive test topics
-    mqtt.addMQTTTopicReceiveFloat("boiler_temp_c", "Boiler Temperature", "BoilerSaver/TemperatureBoiler", &boilerTemperatureC, "C", 1, "none", false); // not added to settings GUI
-    mqtt.addMQTTTopicReceiveString("boiler_time_remaining", "Boiler Time Remaining", "BoilerSaver/TimeRemaining", &boilerTimeRemaining, "none");       // not added to settings GUI per default
-    mqtt.addMQTTTopicReceiveBool("boiler_shower_now", "You Can Shower Now", "BoilerSaver/YouCanShowerNow", &boilerYouCanShowerNow, "none", true);
-    mqtt.addMQTTTopicReceiveFloat("powermeter_power_in_w", "Power Meter Power In", "tele/powerMeter/powerMeter/SENSOR", &powerMeterPowerInW, "W", 0, "E320.Power_in", true);
+    mqtt.addTopicReceiveFloat("boiler_temp_c", "Boiler Temperature", "BoilerSaver/TemperatureBoiler", &boilerTemperatureC, "C", 1, "none"); // no settings UI
+    mqtt.addTopicReceiveString("boiler_time_remaining", "Boiler Time Remaining", "BoilerSaver/TimeRemaining", &boilerTimeRemaining, "none");   // no settings UI
+    mqtt.addTopicReceiveBool("boiler_shower_now", "You Can Shower Now", "BoilerSaver/YouCanShowerNow", &boilerYouCanShowerNow, "none");
+    mqtt.addTopicReceiveFloat("powermeter_power_in_w", "Power Meter Power In", "tele/powerMeter/powerMeter/SENSOR", &powerMeterPowerInW, "W", 0, "E320.Power_in");
 
-    mqtt.addMQTTTopicReceiveFloat("washing_machine_energy_total", "Washing Machine Energy Total", "tele/tasmota_F0C5AC/SENSOR", &washingMachineEnergyTotal, "kWh", 3, "ENERGY.Total", true);
-    mqtt.addMQTTTopicReceiveFloat("washing_machine_energy_yesterday", "Washing Machine Energy Yesterday", "tele/tasmota_1DEE45/SENSOR", &washingMachineEnergyYesterday, "kWh", 3, "ENERGY.Yesterday", true);
-    mqtt.addMQTTTopicReceiveInt("solar_limiter_set_value_w", "Solar Limiter Set Value", "SolarLimiter/SetValue", &solarLimiterSetValueW, "W", "none", false);
+    mqtt.addTopicReceiveFloat("washing_machine_energy_total", "Washing Machine Energy Total", "tele/tasmota_F0C5AC/SENSOR", &washingMachineEnergyTotal, "kWh", 3, "ENERGY.Total");
+    mqtt.addTopicReceiveFloat("washing_machine_energy_yesterday", "Washing Machine Energy Yesterday", "tele/tasmota_1DEE45/SENSOR", &washingMachineEnergyYesterday, "kWh", 3, "ENERGY.Yesterday");
+    mqtt.addTopicReceiveInt("solar_limiter_set_value_w", "Solar Limiter Set Value", "SolarLimiter/SetValue", &solarLimiterSetValueW, "W", "none");
 
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt", 2, 10);
-    mqtt.addMQTTReceiveSettingsToGUI(ConfigManager); // Register receive-topic settings in MQTT tab (only addToSettings=true)
+
+    const char* mqttTopicsPage = "MQTT-Topics";
+    const char* mqttTopicsCard = "MQTT-Topics";
+    const char* mqttTopicsGroup = "MQTT-Received";
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "boiler_shower_now", mqttTopicsPage, mqttTopicsCard, mqttTopicsGroup, 50);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "powermeter_power_in_w", mqttTopicsPage, mqttTopicsCard, mqttTopicsGroup, 50);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "washing_machine_energy_total", mqttTopicsPage, mqttTopicsCard, mqttTopicsGroup, 50);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "washing_machine_energy_yesterday", mqttTopicsPage, mqttTopicsCard, mqttTopicsGroup, 50);
 
     mqtt.subscribeWildcard("tasmota/+/main/error");
 
-    // GUI examples: explicitly opt-in the receive fields
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "boiler_temp_c", "MQTT-Received", 1);
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "powermeter_power_in_w", "MQTT-Received", 2);
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "washing_machine_energy_total", "MQTT-Received", 3);
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "washing_machine_energy_yesterday", "MQTT-Received", 4);
-    mqtt.addMQTTTopicTooGUI(ConfigManager, "solar_limiter_set_value_w", "MQTT-Received", 5);
+    const char* livePage = "mqtt";
+    const char* liveReceivedCard = "MQTT-Received";
+    const char* liveReceivedGroup = "MQTT-Received";
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "boiler_temp_c", livePage, liveReceivedCard, liveReceivedGroup, 1);
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "powermeter_power_in_w", livePage, liveReceivedCard, liveReceivedGroup, 2);
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "washing_machine_energy_total", livePage, liveReceivedCard, liveReceivedGroup, 3);
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "washing_machine_energy_yesterday", livePage, liveReceivedCard, liveReceivedGroup, 4);
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "solar_limiter_set_value_w", livePage, liveReceivedCard, liveReceivedGroup, 5);
 
     // GUI examples: other infos via runtime provider
     ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject &data)
@@ -341,6 +342,7 @@ void setupMqtt()
     lastTopicMeta.order = 22;
     lastTopicMeta.card = "MQTT Other Infos";
     ConfigManager.getRuntime().addRuntimeMeta(lastTopicMeta);
+    ConfigManager.addToLiveGroup("lastTopic", livePage, "MQTT Other Infos", "MQTT Other Infos", 22);
 
     RuntimeFieldMeta lastPayloadMeta;
     lastPayloadMeta.group = "mqtt";
@@ -350,6 +352,7 @@ void setupMqtt()
     lastPayloadMeta.order = 21;
     lastPayloadMeta.card = "MQTT Other Infos";
     ConfigManager.getRuntime().addRuntimeMeta(lastPayloadMeta);
+    ConfigManager.addToLiveGroup("lastPayload", livePage, "MQTT Other Infos", "MQTT Other Infos", 21);
 
     RuntimeFieldMeta lastAgeMeta;
     lastAgeMeta.group = "mqtt";
@@ -359,6 +362,7 @@ void setupMqtt()
     lastAgeMeta.order = 20;
     lastAgeMeta.card = "MQTT Other Infos";
     ConfigManager.getRuntime().addRuntimeMeta(lastAgeMeta);
+    ConfigManager.addToLiveGroup("lastMsgAgeMs", livePage, "MQTT Other Infos", "MQTT Other Infos", 20);
 
     RuntimeFieldMeta mwhMeta;
     mwhMeta.group = "mqtt";
@@ -369,6 +373,7 @@ void setupMqtt()
     mwhMeta.order = 4;
     mwhMeta.card = "MQTT-Received";
     ConfigManager.getRuntime().addRuntimeMeta(mwhMeta);
+    ConfigManager.addToLiveGroup("washing_machine_energy_total_mwh", livePage, liveReceivedCard, liveReceivedGroup, 4);
 
     RuntimeFieldMeta tasmotaErrorMeta;
     tasmotaErrorMeta.group = "mqtt";
@@ -376,7 +381,9 @@ void setupMqtt()
     tasmotaErrorMeta.label = "Tasmota Last Error";
     tasmotaErrorMeta.isString = true;
     tasmotaErrorMeta.order = 30;
+    tasmotaErrorMeta.card = "MQTT Other Infos";
     ConfigManager.getRuntime().addRuntimeMeta(tasmotaErrorMeta);
+    ConfigManager.addToLiveGroup("tasmotaLastError", livePage, "MQTT Other Infos", "MQTT Other Infos", 30);
 }
 
 void Initial_logging_Serial()
