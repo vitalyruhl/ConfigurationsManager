@@ -177,8 +177,6 @@ void setup()
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
     ConfigManager.startWebServer();
 
-
-
     Serial.println("[MOCKED DATA] Sensor values are randomized every 3 seconds");
     updateMockedSensors();
     sensorMockTicker.attach(3.0f, updateMockedSensors);
@@ -205,17 +203,7 @@ static void setupGUI()
 {
     Serial.println("[GUI] setupGUI() start");
 
-    // Keep the runtime tabs ordered for the custom providers we register.
-    ConfigManager.addLivePage("sensors", 10);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Temperature", 10);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Humidity & Pressure", 20);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Dewpoint & Status", 30);
-    ConfigManager.addLivePage("controls", 20);
-    ConfigManager.addLiveGroup("controls", "Live Values", "Controls", 20);
-    ConfigManager.addLivePage("alerts", 30);
-    ConfigManager.addLiveGroup("alerts", "Live Values", "Alerts", 30);
-    ConfigManager.addLivePage("system", 40);
-    ConfigManager.addLiveGroup("system", "Live Values", "System", 40);
+    // Live layout is defined by the builder calls below.
 
     // Temperature card (GUI-only demo, values are mocked).
     auto tempCard = ConfigManager.liveGroup("Temperature")

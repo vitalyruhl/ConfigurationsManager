@@ -56,7 +56,6 @@ void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
 
-static void createPageGroups();
 static void registerIO();
 static void registerGUIforIO();
 
@@ -84,7 +83,6 @@ void setup()
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
 
-    createPageGroups();
     registerIO();
     registerGUIforIO();
     ConfigManager.enableBuiltinSystemProvider(); // enable the builtin system provider (uptime, freeHeap, rssi etc.)
@@ -133,11 +131,6 @@ void loop()
 // GUI creation functions
 //----------------------------------------
 
-
-static void createPageGroups(){
-    ConfigManager.addLivePage("System", 60);
-    ConfigManager.addLiveGroup("System", "System", "System", 60);
-}
 
 static void registerGUIForDI(){
     ioManager.addDigitalInputToSettingsGroup("ap_mode", "Digital - I/O", "Digital Inputs", "AP Mode Button", 8);

@@ -58,9 +58,6 @@ static void cb_readTempSensor();
 static void setupTempSensor();
 static void handleShowerRequest(bool requested);
 
-// Shorthand helper for RuntimeManager access
-static inline ConfigManagerRuntime& CRM() { return ConfigManager.getRuntime(); }
-
 // Global pulse helper: built-in LED
 static cm::helpers::PulseOutput buildinLED(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh);
 
@@ -184,8 +181,6 @@ void setup()
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
 
-    });
-
     initializeAllSettings();
     registerIOBindings();
 
@@ -249,15 +244,6 @@ void setup()
     updateMqttTopics();
     setupMqttCallbacks();
     setBoilerState(false);
-
-    ConfigManager.addLivePage("Boiler", 10);
-    ConfigManager.addLiveGroup("Boiler", "Live Values", "Boiler", 10);
-    ConfigManager.addLivePage("Alarms", 20);
-    ConfigManager.addLiveGroup("Alarms", "Live Values", "Alarms", 20);
-    ConfigManager.addLivePage("mqtt", 30);
-    ConfigManager.addLiveGroup("mqtt", "Live Values", "MQTT", 30);
-    ConfigManager.addLivePage("system", 40);
-    ConfigManager.addLiveGroup("system", "Live Values", "System", 40);
 
     setupGUI();
 
@@ -327,100 +313,68 @@ void loop()
 void setupGUI()
 {
     lmg.scopedTag("setupGUI");
-    CRM().addRuntimeProvider("Boiler",
-        [](JsonObject &o)
+    ConfigManager.getRuntime().addRuntimeProvider("Boiler", [](JsonObject &o)
         {
-            o["Bo_EN_Set"] = boilerSettings.enabled->get();
-            o["Bo_EN"] = getBoilerState();
-            o["Bo_Temp"] = temperature;
-            o["Bo_SettedTime"] = boilerSettings.boilerTimeMin->get();
-            // Expose time left both in seconds and formatted HH:MM:SS
-            o["Bo_TimeLeft"] = boilerTimeRemaining; // raw seconds for API consumers
-            {
-                int total = max(0, boilerTimeRemaining);
-                int h = total / 3600;
-                int m = (total % 3600) / 60;
-                int s = total % 60;
-                char buf[12];
-                snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
-                o["Bo_TimeLeftFmt"] = String(buf);
-            }
-            // Derived readiness: can shower when current temp >= off threshold
-            bool canShower = (temperature >= boilerSettings.offThreshold->get()) && getBoilerState();
-            o["Bo_CanShower"] = canShower;
-            youCanShowerNow = canShower; // keep MQTT status aligned
+            o["Bo_TimeLeft"] = boilerTimeRemaining;
         });
 
-    // Add metadata for Boiler provider fields
-    // Show whether boiler control is enabled (setting) and actual relay state
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Boiler";
-        meta.key = "Bo_EN_Set";
-        meta.label = "Enabled";
-        meta.precision = 0;
-        meta.order = 1;
-        meta.isBool = true;
-        CRM().addRuntimeMeta(meta);
-    }
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Boiler";
-        meta.key = "Bo_EN";
-        meta.label = "Relay On";
-        meta.precision = 0;
-        meta.order = 2;
-        meta.isBool = true;
-        CRM().addRuntimeMeta(meta);
-    }
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Boiler";
-        meta.key = "Bo_CanShower";
-        meta.label = "You can shower now";
-        meta.precision = 0;
-        meta.order = 5;
-        meta.isBool = true;
-        CRM().addRuntimeMeta(meta);
-    }
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Boiler";
-        meta.key = "Bo_Temp";
-        meta.label = "Temperature";
-        meta.unit = "°C";
-        meta.precision = 1;
-        meta.order = 10;
-        CRM().addRuntimeMeta(meta);
-    }
-    // Show formatted time remaining as HH:MM:SS
-    {
-        RuntimeFieldMeta timeFmtMeta{};
-        timeFmtMeta.group = "Boiler";
-        timeFmtMeta.key = "Bo_TimeLeftFmt";
-        timeFmtMeta.label = "Time remaining";
-        timeFmtMeta.order = 21;
-        timeFmtMeta.isString = true;
-        CRM().addRuntimeMeta(timeFmtMeta);
-    }
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Boiler";
-        meta.key = "Bo_SettedTime";
-        meta.label = "Time Set";
-        meta.unit = "min";
-        meta.precision = 0;
-        meta.order = 22;
-        CRM().addRuntimeMeta(meta);
-    }
+    auto boilerCard = ConfigManager.liveGroup("Boiler")
+                         .page("Boiler", 10)
+                         .card("Boiler", 10);
 
-    // Add alarms provider for min Temperature monitoring with hysteresis
-    CRM().addRuntimeProvider("Alarms",
-        [](JsonObject &o)
-        {
-            o["On_Threshold"] = boilerSettings.onThreshold->get();
-            o["Off_Threshold"] = boilerSettings.offThreshold->get();
-        });
+    boilerCard.value("Bo_EN_Set", []() { return boilerSettings.enabled->get(); })
+        .label("Enabled")
+        .order(1);
+
+    boilerCard.value("Bo_EN", []() { return getBoilerState(); })
+        .label("Relay On")
+        .order(2);
+
+    boilerCard.value("Bo_CanShower", []() {
+            const bool canShower = (temperature >= boilerSettings.offThreshold->get()) && getBoilerState();
+            youCanShowerNow = canShower;
+            return canShower;
+        })
+        .label("You can shower now")
+        .order(5);
+
+    boilerCard.value("Bo_Temp", []() { return temperature; })
+        .label("Temperature")
+        .unit("°C")
+        .precision(1)
+        .order(10);
+
+    boilerCard.value("Bo_TimeLeftFmt", []() {
+            int total = max(0, boilerTimeRemaining);
+            int h = total / 3600;
+            int m = (total % 3600) / 60;
+            int s = total % 60;
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
+            return String(buf);
+        })
+        .label("Time remaining")
+        .order(21);
+
+    boilerCard.value("Bo_SettedTime", []() { return boilerSettings.boilerTimeMin->get(); })
+        .label("Time Set")
+        .unit("min")
+        .precision(0)
+        .order(22);
+
+    boilerCard.stateButton(
+        "sb_mode",
+        "Will Shower",
+        []() { return willShowerRequested; },
+        [](bool v) { handleShowerRequest(v); },
+        false,
+        "On",
+        "Off")
+        .order(90);
+
+    auto alarmsCard = ConfigManager.liveGroup("Alarms")
+                         .page("Alarms", 20)
+                         .card("Alarms", 10);
 
     alarmManager.addDigitalAlarm(
         TEMP_ALARM_ID,
@@ -433,7 +387,7 @@ void setupGUI()
         TEMP_ALARM_ID,
         1,
         "Alarms",
-        "Live Values",
+        "Alarms",
         "Alarms",
         "Under Temperature Alarm (Boiler Error?)");
 
@@ -450,44 +404,21 @@ void setupGUI()
         SENSOR_FAULT_ALARM_ID,
         2,
         "Alarms",
-        "Live Values",
+        "Alarms",
         "Alarms",
         "Temperature Sensor Fault");
 
-    // show some Info
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Alarms";
-        meta.key = "On_Threshold";
-        meta.label = "Alarm Under Temperature";
-        meta.unit = "°C";
-        meta.precision = 1;
-        meta.order = 101;
-        CRM().addRuntimeMeta(meta);
-    }
-    {
-        RuntimeFieldMeta meta{};
-        meta.group = "Alarms";
-        meta.key = "Off_Threshold";
-        meta.label = "You can shower now temperature";
-        meta.unit = "°C";
-        meta.precision = 1;
-        meta.order = 102;
-        CRM().addRuntimeMeta(meta);
-    }
-    // Ensure interactive control is placed under Boiler group (project convention)
+    alarmsCard.value("On_Threshold", []() { return boilerSettings.onThreshold->get(); })
+        .label("Alarm Under Temperature")
+        .unit("°C")
+        .precision(1)
+        .order(101);
 
-    // State button to manually control the boiler relay (under Boiler card)
-    ConfigManager.defineRuntimeStateButton(
-        "Boiler",              // group (Boiler section)
-        "sb_mode",             // key (short, URL-safe)
-        "Will Shower",         // label shown in the UI
-        []() { return willShowerRequested; },   // getter
-        [](bool v) { handleShowerRequest(v); }, // setter
-        /*defaultState*/ false,
-        /*helpText*/ "Request hot water now; toggles boiler for a shower",
-        /*sortOrder*/ 90
-    );
+    alarmsCard.value("Off_Threshold", []() { return boilerSettings.offThreshold->get(); })
+        .label("You can shower now temperature")
+        .unit("°C")
+        .precision(1)
+        .order(102);
 }
 
 void UpdateBoilerAlarmState()

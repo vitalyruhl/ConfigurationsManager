@@ -28,8 +28,6 @@
 #define APP_NAME "CM-Full-MQTT-Demo"
 
 extern ConfigManagerClass ConfigManager;
-static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); }
-
 static const char SETTINGS_PASSWORD[] = "";
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();

@@ -1,16 +1,6 @@
 # TODO / Roadmap / Refactor Notes (Planning)
 
-This file collects the intended refactor direction for the next API version.
-Goal: clarify naming, reduce method explosion, keep parameter order consistent, and separate:
-Goal: keep user programs minimal while offering maximal flexibility; defaults should be applied automatically and only overridden when explicitly requested.
-
-1) Definition/registration of an IO/Setting (programmable object)
-2) Persistence (NVS) (optional)
-3) Placement in Settings UI (optional, only for persisted items)
-4) Placement in Live/Runtime UI (optional, for any item)
-
-
-## Terminology (as in the UI)
+## Terminology
 
 - Top buttons: Live / Settings / Flash / Theme (always visible)
 - Settings:
@@ -22,463 +12,73 @@ Goal: keep user programs minimal while offering maximal flexibility; defaults sh
   - LiveCard = card container inside a live page
   - LiveGroup = if we want a second nesting level like Settings
 
-Decision preference (based on screenshot):
-- Keep SettingsCard + SettingsGroup (do not merge them), but provide strong defaults so typical usage is short:
-  - default SettingsCard = SettingsPage name
-  - SettingsGroup is the thing you actively name (e.g. "Grid Import Topic", "Solar power Topic")
-
-
-## Guiding Principles (API)
-
-- Consistent naming:
-  - define/register = create the object (IO / Setting / Topic)
-  - addToSettings* = UI placement in Settings
-  - addToLive* = UI placement in Live/Runtime
-- Consistent parameter order everywhere:
-  - (type if needed) -> id/key -> order -> page -> card -> group -> label override -> misc
-- Avoid dozens of overloads by returning small builder/handle objects for:
-  - Live control events (onClick, onChange, multi-click, long press, ...)
-  - Alarms (generic addAlarm() API instead of hidden bool flags)
-- No backwards compatibility required (not released yet) => all examples will be migrated in the refactor branch.
-
-
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
-Prior to implementing this batch, create an intermediate commit and a dedicated branch so these changes stay isolated. The core requirement is a new `GUIMode` variable inside `ConfigManager` that supports at least three modes: `generic` (no pin validation), `esp32` (validate against the ESP32 pin matrix), and `arduinoUno` (validate against the Arduino Uno pin set). The design must stay extensible, so each mode gets its own rule definition pair in the `io` subdirectory (e.g., `esp32-io-definition.h/.cpp`). `ConfigManager` should include a top-level `ioDefinitions.h` that imports the relevant definitions, defaulting to the ESP32 rules. Validation must happen before saving configurations (not inside the Vue app) and also emit a warning during compilation when an invalid pin is bound (the `Full-IO-Demo` currently hardcodes a wrong pin for testing: `ioManager.addDigitalOutput(cm::IOManager::DigitalOutputBinding{ .id = "holdbutton", .defaultPin = 34, ... });`). For Arduino pin mappings, pull the reference data from up-to-date online sources.
 
-The GUI will only dispatch the JSON entry that was actually interacted with; however, the “save all” flow submits every entry and so must validate them all. In addition, add a reusable notification layer: `errorMessage` (pushes an error up via WebSocket, can be triggered programmatically through `ConfigManager::sendErrorMessage("short description", "long description", callbacks ok/retry/cancel)`) and `infoMessage` (same concept with a calmer presentation). Structure the notification system so that further popups (e.g., modal input for analog prompts) can be added later, but for now only implement error and info popups.
+### integrate update calls in alarmManager.update();
 
-### A) Core: UI layout registry (Settings + Live)
+>The current approach of manually calling alarmManager.update() every 1.5 seconds in the main loop is error-prone and can lead to missed alarm evaluations if the user forgets to include it. We should integrate the timing mechanism directly into the AlarmManager class so that users only need to call update() without worrying about the timing.
 
-These are "layout only" utilities. They should not create IOs/settings; only define where UI elements live.
-
+#### This Time
 ```cpp
-// Settings layout
-void addSettingsPage(const char* pageName, int order);
-void addSettingsCard(const char* pageName, const char* cardName, int order);
-void addSettingsGroup(const char* pageName, const char* cardName, const char* groupName, int order);
-
-// Live layout
-void addLivePage(const char* pageName, int order);
-void addLiveCard(const char* pageName, const char* cardName, int order);
-void addLiveGroup(const char* pageName, const char* cardName, const char* groupName, int order);
+static unsigned long lastAlarmEval = 0;
+    if (millis() - lastAlarmEval > 1500)
+    {
+        lastAlarmEval = millis();
+        alarmManager.update();
+    }
 ```
 
-Defaults / robustness:
-- Case-insensitive page/card/group matching.
-- Unknown names fall back to defaults and emit a warning once.
-- Default SettingsCard = pageName (if card not specified).
-- Default LiveCard = "Live Values" (or pageName).
-- Each `ConfigManager.addSetting()` call now mirrors the associated category/card into the layout registry automatically, so examples only need explicit `addSettings*`/`addToSettingsGroup()` calls when deviating from the default grouping or order.
-
-### B) Settings builder API (ConfigOptions replacement)
-
-Target:
-- Replace `ConfigOptions<T>{...}` boilerplate with a fluent builder that keeps IDE hover/signature help useful.
-- Placement in UI happens separately (via `addToSettings...` and `addToLive...`).
-- Internally we can still store `key_hashed` for NVS; but we must keep a stable "human key" alias.
-
+#### Proposed
 ```cpp
-// Creation/build (no UI placement here)
-auto& warnDelay = ConfigManager.addSettingInt("Warndelay")
-  .name("Delay before Warning pushes")
-  .defaultValue(42)
-  .persist(true)     // aka: store in NVS; final name: persistSettings
-  .build();
-```
-
-Placement (Settings):
-```cpp
-// Minimal: add to a SettingsGroup (page/card defaulted)
-ConfigManager.addToSettingsGroup("Warndelay", /*page*/ "MQTT-Topics", /*group*/ "Grid Import Topic", /*order*/ 1);
-
-// Full: explicit page/card/group
-ConfigManager.addToSettingsGroup("Warndelay", "MQTT-Topics", "MQTT-Topics", "Grid Import Topic", 1);
-```
-
-Placement (Live/Runtime):
-```cpp
-ConfigManager.addToLiveGroup("Warndelay", /*page*/ "Live", /*group*/ "Door Sensor", /*order*/ 1);
-```
-
-Expected overloads (Settings placement):
-```cpp
-// Shorthand: add directly to the default card/group for that page (implementation defines what "default" means)
-void addToSettings(const char* settingKey, const char* pageName, int order);
-
-void addToSettingsGroup(const char* settingKey, const char* pageName, const char* groupName, int order);
-void addToSettingsGroup(const char* settingKey, const char* pageName, const char* cardName, const char* groupName, int order);
-```
-
-Expected overloads (Live placement):
-```cpp
-// Shorthand: add directly to the default card/group for that page
-void addToLive(const char* itemIdOrKey, const char* pageName, int order);
-
-void addToLiveGroup(const char* itemIdOrKey, const char* pageName, const char* groupName, int order);
-void addToLiveGroup(const char* itemIdOrKey, const char* pageName, const char* cardName, const char* groupName, int order);
-```
-
-Settings structs (TempSettings/WiFiSettings) remain possible:
-- The struct becomes a collection of `Config<T>*` (or references), with a split:
-  - `create()` builds settings
-  - `placeInUi()` attaches to Settings/Live layout
-
-Example (TempSettings):
-```cpp
-struct TempSettings
+void setup()
 {
-  Config<float>* tempCorrection = nullptr;
-  Config<float>* humidityCorrection = nullptr;
-  Config<int>* seaLevelPressure = nullptr;
-  Config<int>* readIntervalSec = nullptr;
-  Config<float>* dewpointRiskWindow = nullptr;
+    // other setup code...
+    alarmManager.setUpdateInterval(3000); // you dont need this if you are fine with the default 1,5s interval
+}
 
-  void create()
-  {
-    tempCorrection = &ConfigManager.addSettingFloat("TCO")
-      .name("Temperature Correction")
-      .defaultValue(0.1f)
-      .persist(true)
-      .build();
-
-    // ...
-  }
-
-  void placeInUi()
-  {
-    ConfigManager.addSettingsPage("Temp", 1);
-    ConfigManager.addSettingsGroup("Temp", "Temp", "BME280", 1);
-
-    ConfigManager.addToSettingsGroup("TCO", "Temp", "Temp", "BME280", 1);
-    // ...
-  }
-};
-```
-
-Resolved decisions:
-- `.persist(true)` defaults to `true` since persistence is the typical mode for settings; the fluent builder exposes `.persist(false)` for temporary configuration values.
-- The hashed key stays internally constant (8 characters) and is derived from the sanitized `.name(...)` (drop spaces/special chars, lowercase, truncate) so REST/MQTT/backups continue to rely on a stable identifier while the human-readable key remains unchanged.
-
-
-### C) IOManager: define/register IO objects (no JSON/struct init)
-
-Preference: parameter list (so IDE signature help shows names).
-Name decision: keep `addDigitalInput` (current mental model) or rename to `defineDigitalInput`.
-
-Digital IO definition:
-```cpp
-// persistSettings = store pin/flags in NVS and allow Settings UI placement
-void addDigitalInput(const char* id,
-                     const char* name,
-                     int gpioPin,
-                     bool activeLow,
-                     bool pullup,
-                     bool pulldown,
-                     bool persistSettings);
-
-void addDigitalOutput(const char* id,
-                      const char* name,
-                      int gpioPin,
-                      bool activeLow,
-                      bool persistSettings);
-```
-
-Analog IO definition (draft; exact scaling/range TBD):
-```cpp
-void addAnalogInput(const char* id,
-                    const char* name,
-                    int adcPin,
-                    bool persistSettings
-                    /* + calibration/scaling */);
-
-void addAnalogOutput(const char* id,
-                     const char* name,
-                     int dacOrPwmChannelOrPin,
-                     bool persistSettings
-                     /* + range */);
-```
-
-Decision:
-- Remove `.defaultEnabled`. If we need enable/disable, model it as a separate persisted setting and/or runtime toggle.
-
-
-### D) IOManager: add IOs to Settings UI (only for persisted IOs)
-
-Replace `settingsCategory` with the Settings layout (page/card/group).
-
-Minimal placement:
-```cpp
-// Input/Output placement - only allowed if persistSettings=true, otherwise warning/error.
-void addDigitalInputToSettings(const char* id, const char* pageName, int order);
-void addDigitalInputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
-void addDigitalOutputToSettings(const char* id, const char* pageName, int order);
-void addDigitalOutputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
-void addAnalogInputToSettings(const char* id, const char* pageName, int order);
-void addAnalogInputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
-void addAnalogOutputToSettings(const char* id, const char* pageName, int order);
-void addAnalogOutputToSettingsGroup(const char* id, const char* pageName, const char* groupName, int order);
-```
-
-Full placement (explicit card):
-```cpp
-void addDigitalInputToSettings(const char* id, const char* pageName, const char* cardName, int order);
-void addDigitalInputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
-void addDigitalOutputToSettings(const char* id, const char* pageName, const char* cardName, int order);
-void addDigitalOutputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
-void addAnalogInputToSettings(const char* id, const char* pageName, const char* cardName, int order);
-void addAnalogInputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
-void addAnalogOutputToSettings(const char* id, const char* pageName, const char* cardName, int order);
-void addAnalogOutputToSettingsGroup(const char* id, const char* pageName, const char* cardName, const char* groupName, int order);
-```
-
-
-### E) IOManager: add IOs to Live/Runtime UI (for any IO)
-
-Remove hidden/ambiguous flags (e.g. alarmWhenActive). Alarms become a separate API.
-
-Common enums:
-```cpp
-enum class RuntimeControlType
+void loop()
 {
-  ValueField,
-  Slider,
-  Button,
-  StateButton,
-  Checkbox
-};
+    // other loop code...
+    alarmManager.update(); // internally checks if enough time has passed and only evaluates alarms if needed
+}
 ```
 
-Digital input to Live (draft signature):
+### check if the key is needed
+
+>The key parameter in the value() method is currently required but not actually used for anything. We should check if we can remove it to simplify the API.
+
+#### This Time
+
 ```cpp
-// label default: use IO's registered name; override optional
-auto addDigitalInputToLive(RuntimeControlType type,
-                             const char* id,
-                             int order,
-                             const char* livePage = "Live",
-                             const char* liveCard = "Live Values",
-                             const char* liveGroup = nullptr,
-                             const char* liveLabelOverride = nullptr,
-                             int colorOnTrue = rgb(0, 255, 0),        // default green
-                             int colorOnFalse = rgb(128, 128, 128));  // default gray
+
+tempCard.value("temp", []() { return roundf(mockedTemperatureC * 10.0f) / 10.0f; })
+        .label("Temperature [MOCKED DATA]")
+        .unit("°C")
+        .precision(1)
+        .order(10)
+        .addCSSClass("myCSSTemperatureClass");
 ```
 
-Digital output to Live:
+#### Proposed
+
 ```cpp
-auto addDigitalOutputToLive(RuntimeControlType type,
-                              const char* id,
-                              int order,
-                              const char* livePage = "Live",
-                              const char* liveCard = "Live Values",
-                              const char* liveGroup = nullptr,
-                              const char* liveLabelOverride = nullptr,
-                              const char* onLabel = "On",
-                              const char* offLabel = "Off"
-                              int colorOnTrue = rgb(0, 255, 0),        // default green
-                              int colorOnFalse = rgb(128, 128, 128));  // default gray
-                              );
+
+tempCard.value([]() { return roundf(mockedTemperatureC * 10.0f) / 10.0f; })
+        .label("Temperature [MOCKED DATA]")
+        .unit("°C")
+        .precision(1)
+        .order(10)
+        .addCSSClass("myCSSTemperatureClass");
 ```
 
-Analog input to Live:
-```cpp
-auto addAnalogInputToLive(RuntimeControlType type,
-                            const char* id,
-                            int order,
-                            const char* livePage = "Live",
-                            const char* liveCard = "Live Values",
-                            const char* liveGroup = nullptr,
-                            const char* liveLabelOverride = nullptr,
-                            const char* unit = nullptr);
-```
+### refactor Full-GUI-Demo
 
-Analog output to Live:
-```cpp
-auto addAnalogOutputToLive(RuntimeControlType type,
-                             const char* id,
-                             int order,
-                             float minValue,
-                             float maxValue,
-                             const char* livePage = "Live",
-                             const char* liveCard = "Live Values",
-                             const char* liveGroup = nullptr,
-                             const char* liveLabelOverride = nullptr,
-                             const char* unit = nullptr);
-```
+>refactor the Live-Page
 
-Notes:
-- All `add*ToLive(...)` should return a small handle/builder so callbacks can be attached without adding more overloads.
-
-- Checkbox and `StateButton` controls get explicit label/color overrides, while boolean `ValueField` renders as a single colored dot without `On/Off` captions. When a slider is requested for a boolean IO, the UI should fall back to the checkbox representation, since both inputs and outputs share the same rendering except that outputs can be toggled. Add a dedicated `PressButton`/momentary control type (an IO that is `true` while pressed and instantly reverts on release) and plan to allow overriding input definitions later (see Medium Priority for follow-up tasks).
-
-Handle API sketch (for documentation, not final names):
-```cpp
-struct LiveControlHandle
-{
-  // Digital
-  LiveControlHandle& onChange(std::function<void(bool)> cb);
-  LiveControlHandle& onClick(std::function<void()> cb);
-  LiveControlHandle& onPress(std::function<void()> cb);
-  LiveControlHandle& onRelease(std::function<void()> cb);
-  LiveControlHandle& onLongPress(std::function<void()> cb);
-  LiveControlHandle& onReleaseAfterLongPress(std::function<void()> cb);
-  LiveControlHandle& onRepeatWhilePressed(std::function<void(uint32_t)> cb);
-  LiveControlHandle& onLongPressAtStartup(std::function<void()> cb);
-  LiveControlHandle& onMultiClick(std::function<void(uint8_t)> cb);
-
-  // Analog
-  LiveControlHandle& onChange(std::function<void(float)> cb); // add overload with hysteresis?
-};
-```
-
-
-### F) Live callbacks/events: fluent builder (preferred)
-
-User preference: builder is more direct/understandable than overload soup.
-
-Example usage:
-```cpp
-ioManager.addDigitalOutputToLive(RuntimeControlType::Button, "heater", 2, "Manual", "Outputs")
-  .onClick([]() { /* ... */ })
-  .onPress([]() { /* ... */ })
-  .onRelease([]() { /* ... */ });
-```
-
-Unified multi-click:
-```cpp
-ioManager.addDigitalInputToLive(RuntimeControlType::StateButton, "door", 1)
-  .onMultiClick([](uint8_t clicks) {
-    if (clicks == 2) { /* double click */ }
-    if (clicks == 3) { /* triple click */ }
-  });
-```
-
-Event list (draft; verify completeness):
-- onChange(bool newState)
-- onClick()
-- onPress()
-- onRelease()
-- onLongPress()
-- onReleaseAfterLongPress()
-- onRepeatWhilePressed(uint32_t repeatCountOrMs)
-- onLongPressAtStartup()
-- onMultiClick(uint8_t clicks)
-
-Open questions:
-- Debounce and multi-click timing parameters: global defaults vs per-control configuration.
-- Should onClick be derived from press/release automatically?
-- Is it useful to surface the timing settings (long press, click intervals) in the system settings? If not, we should offer `.setLongPressTiming(...)` and `.setClickTiming(...)` overrides so the defaults are only overwritten when required.
-
-- Decision: IOManager keeps a global timing set, but builders can call `.setLongPressTiming(...)`/`.setClickTiming(...)` if needed (only use overrides when RAM/flash impact is acceptable). Defaults stay in constructors and can be overridden system-wide during setup.
-- Decision: `onClick()` is derived internally from `onPress()`/`onRelease()` and handler priority follows `onClick` → `onMultiClick` → `onReleaseAfterLongPress` → `onRepeatWhilePressed` when multiple callbacks exist.
-
-
-### G) Alarms: generic addAlarm() API (no hidden bools)
-
-Digital alarm example (trigger when active):
-```cpp
-// If we need a label override, it should default to IO/Setting name.
-void addAlarmDigitalActive(const char* idOrKey,
-                           const char* alarmId,
-                           int order,
-                           const char* pageName,
-                           const char* cardName,
-                           const char* groupName,
-                           const char* labelOverride = nullptr);
-```
-
-// Instead of mixing UI placement and callbacks, split the APIs: `.addAlarmDigital(...)` only registers the trigger and lets the caller attach callbacks like `onAlarmCome`, `onAlarmGone`, `onAlarmStay` (e.g. shipping periodic callbacks every 10s while active). `addAlarmToLive(...)` becomes the separate path for wiring the alarm into a live page/card/group.
-
-More generic approach (preferred):
-```cpp
-enum class AlarmKind { DigitalActive, DigitalInactive, AnalogBelow, AnalogAbove, AnalogOutsideWindow };
-
-struct AlarmConfig
-{
-  const char* sourceIdOrKey;
-  AlarmKind kind;
-  float thresholdMin;
-  float thresholdMax;
-  bool minActive;
-  bool maxActive;
-  const char* labelOverride;
-  const char* pageName;
-  const char* cardName;
-  const char* groupName;
-  int order;
-};
-
-void addAlarm(const AlarmConfig& cfg);
-```
-
-Analog alarm overload (threshold + callbacks):
-```cpp
-void addAlarmAnalog(const char* idOrKey,
-                    AlarmKind kind,
-                    float threshold,
-                    bool active,
-                    std::function<void(bool active)> onStateChanged /* optional */);
-```
-
-Open question:
-- Should alarms always appear in Live, or also as Settings toggles?
-- Plan: Alarms are presented through the Live UI only; Settings toggles for alarms are not part of the current scope.
-
-- Decision: UI toggles are off by default, but callers can add explicit Settings controls (`setMinAlarmActive`, etc.) when needed; analog alarms default to disabled unless explicitly activated, digital alarms default to enabled. Provide getters/setters for each alarm axis to control state programmatically.
-- Decision: Internally model alarm status as an enum/byte field (e.g. 0=ok, 1=alarm, 2=low, 3=high) so the UI exposes `State::Alarm` while keeping space-efficient bitflags internally.
-
-
-### H) MQTTManager: refactor plan (new section/branch)
-
-Goals:
-- Separate "topic definition" from "Settings UI placement" and "Live/Runtime placement".
-- Keep method names parallel to IOManager and ConfigManager.
-
-Definition (receive):
-```cpp
-// Define a topic subscription and how to extract value from JSON
-void addTopicReceiveInt(const char* id,
-                        const char* name,
-                        const char* topic,
-                        int* target,
-                        const char* unit,
-                        const char* jsonPath);
-
-void addTopicReceiveFloat(const char* id,
-                          const char* name,
-                          const char* topic,
-                          float* target,
-                          const char* unit,
-                          const char* jsonPath);
-```
-
-Placement in Settings:
-```cpp
-void addMqttTopicToSettingsGroup(const char* topicId, const char* pageName, const char* groupName, int order);
-void addMqttTopicToSettingsGroup(const char* topicId, const char* pageName, const char* cardName, const char* groupName, int order);
-```
-
-Placement in Live:
-```cpp
-void addMqttTopicToLiveGroup(const char* topicId, const char* pageName, const char* groupName, int order);
-void addMqttTopicToLiveGroup(const char* topicId, const char* pageName, const char* cardName, const char* groupName, int order);
-```
-
-Open questions:
-- MQTT settings (host/user/pass/base) belong to ConfigManager settings. Should MQTTManager own page/group creation or only use ConfigManager layout?
-- Currently an attach helper creates both the two MQTT buttons and the "MQTT-Topics" page while also injecting all settings. That attach should receive the button name as a parameter (defaulting to "MQTT") so callers can reuse it for secondary connections. The settings themselves must still be created explicitly via the dedicated method (e.g. `addMqttSetting(...)`) and then pushed into the desired group, providing the exact page/card/group target to place them (for example the default MQTT tab or an extra custom tab). Each setting should describe the topic and the value interpretation (none/raw or a JSON path like `E320.Power_in`).
-- Settings should not auto-appear; they only show up after the caller places them with the right parameters, which allows pushing MQTT content into either the standard MQTT tab or an extra tab if needed.
-
-
-## Realisierungsschritte (Live/Runtime Builder)
-
-1) Builder-API definieren: `ConfigManager.liveGroup(source)` mit `.page()`, `.card()`, `.group()` (group optional), plus `value()/bool()/divider()/control()` für Live-Items.
-2) Datenmodell erweitern: `RuntimeFieldMeta` bekommt `sourceGroup` (Datenquelle) und getrennte Layout-Ziele (page/card/group) oder einen neuen Placement-Block.
-3) Runtime-JSON anpassen: `runtime_meta.json` liefert `sourceGroup` + Layout-Info pro Feld.
-4) Backend-Placement refactor: Live-Layout nutzt Layout-Ziele, Values holen Daten weiterhin aus `sourceGroup`.
-5) WebUI anpassen: `fieldSourceGroup()` nutzt `sourceGroup` aus Meta; Layout bleibt über Live-Layout JSON.
-6) Examples migrieren: zuerst `BME280-Temp-Sensor`, dann `Full-GUI-Demo`, danach alle übrigen.
-7) Doku aktualisieren: `docs/GUI-Runtime.md`.
-8) Build/Smoke: `pio run -d examples/BME280-Temp-Sensor -e usb`, danach `pio run -d examples/Full-GUI-Demo -e usb`.
+- Consolidate the Temereture Data exactly how its in BME280 Demo
+- analog and Buttons should be in a separate Live-Page "IO Test" or similar
+- add other New and missing Runtime feautures to the demo, except the IO and MQTT, because there are already separate demos for these (we can link to them in the README and say "see MQTT demo for MQTT features" and "see IO demo for IO features")
 
 
 ## Medium Priority (Prio 5)

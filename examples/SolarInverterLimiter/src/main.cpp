@@ -104,8 +104,6 @@ static bool dewpointRiskActive = false; // tracks dewpoint alarm state
 static bool heaterLatchedState = false;  // hysteresis latch for heater
 static bool manualOverrideActive = false; // when enabled, buttons control relays and automation pauses
 
-static inline ConfigManagerRuntime &CRM() { return ConfigManager.getRuntime(); } // Shorthand helper for RuntimeManager access
-
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .rw[data-group="sensors"][data-key="temp"]{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
 .rw[data-group="sensors"][data-key="temp"] *{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
@@ -193,15 +191,6 @@ void setup()
     ConfigManager.addSettingsGroup("RS485", "RS485", "RS485 Settings", 120);
     ConfigManager.addSettingsPage("I/O", 130);
     ConfigManager.addSettingsGroup("I/O", "I/O", "I/O Settings", 130);
-
-    ConfigManager.addLivePage("sensors", 10);
-    ConfigManager.addLiveGroup("sensors", "Live Values", "Sensor Readings", 10);
-    ConfigManager.addLivePage("Limiter", 20);
-    ConfigManager.addLiveGroup("Limiter", "Live Values", "Limiter Status", 20);
-    ConfigManager.addLivePage("Outputs", 30);
-    ConfigManager.addLiveGroup("Outputs", "Live Values", "Relay Status", 30);
-    ConfigManager.addLivePage("controls", 40);
-    ConfigManager.addLiveGroup("controls", "Live Controls", "Manual Controls", 40);
 
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
@@ -377,7 +366,9 @@ void setupGUI()
 {
   // region sensor fields BME280
     auto sensors = ConfigManager.liveGroup("sensors")
-                      .card("Sensors");
+                      .page("sensors", 10)
+                      .card("Live Values", 10)
+                      .group("Sensor Readings", 10);
 
     sensors.value("temp", []() { return roundf(temperature * 10.0f) / 10.0f; })
         .label("Temperature")
@@ -407,7 +398,9 @@ void setupGUI()
 
   //region Limiter
     auto limiter = ConfigManager.liveGroup("Limiter")
-                      .card("Limiter");
+                      .page("Limiter", 20)
+                      .card("Live Values", 20)
+                      .group("Limiter Status", 20);
 
     limiter.value("enabled", []() { return limiterSettings.enableController->get(); })
         .label("Limiter Enabled")
@@ -435,7 +428,9 @@ void setupGUI()
 
   //region relay outputs
     auto outputs = ConfigManager.liveGroup("Outputs")
-                     .card("Outputs");
+                     .page("Outputs", 30)
+                     .card("Live Values", 30)
+                     .group("Relay Status", 30);
 
     outputs.checkbox(
         "manual_override",
