@@ -104,7 +104,7 @@ static void setupRuntimeUI()
     ConfigManager.addLivePage("Sensors", 10);
     ConfigManager.addLiveGroup("Sensors", "BME280 - Temperature Sensor", "Sensor Readings", 10);
 
-    CRM().addRuntimeProvider("sensors", [](JsonObject &data) {
+    CRM().addRuntimeProvider("Sensors", [](JsonObject &data) {
         data["temp"] = temperature;
         data["hum"] = humidity;
         data["dew"] = dewPoint;
@@ -112,7 +112,7 @@ static void setupRuntimeUI()
     });
 
     RuntimeFieldMeta tempMeta;
-    tempMeta.group = "sensors";
+    tempMeta.group = "Sensors";
     tempMeta.key = "temp";
     tempMeta.label = "Temperature";
     tempMeta.unit = "C";
@@ -121,7 +121,7 @@ static void setupRuntimeUI()
     CRM().addRuntimeMeta(tempMeta);
 
     RuntimeFieldMeta humMeta;
-    humMeta.group = "sensors";
+    humMeta.group = "Sensors";
     humMeta.key = "hum";
     humMeta.label = "Humidity";
     humMeta.unit = "%";
@@ -130,7 +130,7 @@ static void setupRuntimeUI()
     CRM().addRuntimeMeta(humMeta);
 
     RuntimeFieldMeta dewMeta;
-    dewMeta.group = "sensors";
+    dewMeta.group = "Sensors";
     dewMeta.key = "dew";
     dewMeta.label = "Dewpoint";
     dewMeta.unit = "C";
@@ -139,7 +139,7 @@ static void setupRuntimeUI()
     CRM().addRuntimeMeta(dewMeta);
 
     RuntimeFieldMeta pressureMeta;
-    pressureMeta.group = "sensors";
+    pressureMeta.group = "Sensors";
     pressureMeta.key = "pressure";
     pressureMeta.label = "Pressure";
     pressureMeta.unit = "hPa";
