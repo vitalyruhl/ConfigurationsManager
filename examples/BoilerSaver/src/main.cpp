@@ -653,7 +653,7 @@ static void registerIOBindings()
     ioManager.addDigitalInput(IO_SHOWER_ID, "Shower Request Button", 19, true, true, false, true);
 
     ioManager.addDigitalInputToSettingsGroup(IO_SHOWER_ID, "I/O", "Shower HW-Btn", "Shower HW-Btn", 100);
-    ioManager.addDigitalInputToLive(IO_SHOWER_ID, 100, "Boiler", "Live Values", "Boiler", "Shower HW-Btn", false);
+    ioManager.addDigitalInputToLive(IO_SHOWER_ID, 100, "Boiler", "Boiler", "Boiler", "Shower HW-Btn", false);
 
     cm::IOManager::DigitalInputEventOptions resetOptions;
     resetOptions.longClickMs = resetHoldDurationMs;

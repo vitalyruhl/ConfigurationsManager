@@ -366,8 +366,8 @@ void setupGUI()
 {
   // region sensor fields BME280
     auto sensors = ConfigManager.liveGroup("sensors")
-                      .page("sensors", 10)
-                      .card("Live Values", 10)
+                      .page("Sensors", 10)
+                      .card("Sensors", 10)
                       .group("Sensor Readings", 10);
 
     sensors.value("temp", []() { return roundf(temperature * 10.0f) / 10.0f; })
@@ -399,7 +399,7 @@ void setupGUI()
   //region Limiter
     auto limiter = ConfigManager.liveGroup("Limiter")
                       .page("Limiter", 20)
-                      .card("Live Values", 20)
+                      .card("Limiter", 20)
                       .group("Limiter Status", 20);
 
     limiter.value("enabled", []() { return limiterSettings.enableController->get(); })
@@ -429,7 +429,7 @@ void setupGUI()
   //region relay outputs
     auto outputs = ConfigManager.liveGroup("Outputs")
                      .page("Outputs", 30)
-                     .card("Live Values", 30)
+                     .card("Outputs", 30)
                      .group("Relay Status", 30);
 
     outputs.checkbox(

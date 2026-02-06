@@ -30,6 +30,13 @@
 extern ConfigManagerClass ConfigManager;
 static const char SETTINGS_PASSWORD[] = "";
 
+// Global theme override demo.
+// Served via /user_theme.css and auto-injected by the frontend if present.
+static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
+.card h3 { color: sandybrown !important; font-weight: 900 !important; font-size: 1.2rem !important; }
+.rw[data-group="mqtt"][data-key="tasmotaLastError"] * { color: #ef4444 !important; font-weight: 800 !important; }
+)CSS";
+
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings &systemSettings = coreSettings.system;
 static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
@@ -125,6 +132,7 @@ void setup()
     ConfigManager.setAppTitle(APP_NAME);
     ConfigManager.setVersion(VERSION);
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
     ConfigManager.enableBuiltinSystemProvider();
 
     coreSettings.attachWiFi(ConfigManager);
@@ -302,7 +310,7 @@ void setupMqtt()
 
     mqtt.subscribeWildcard("tasmota/+/main/error");
 
-    const char* livePage = "mqtt";
+    const char* livePage = "MQTT";
     const char* liveReceivedCard = "MQTT-Received";
     const char* liveReceivedGroup = "MQTT-Received";
     mqtt.addMqttTopicToLiveGroup(ConfigManager, "boiler_temp_c", livePage, liveReceivedCard, liveReceivedGroup, 1);
