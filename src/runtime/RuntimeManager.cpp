@@ -599,6 +599,7 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             auto &ota = configManager->getOTAManager();
             // obj["allowOTA"] = ota.isEnabled();
             obj["otaActive"] = ota.isActive();
+            obj["otaHasPassword"] = ota.hasPassword();
         }
     }, 0);
 

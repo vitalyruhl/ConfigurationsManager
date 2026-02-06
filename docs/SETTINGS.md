@@ -184,9 +184,14 @@ Stored key = `<category>_<key>` truncated to 15 chars to satisfy ESP32 NVS lengt
 
 ```cpp
 wifiSsid.set("NewName");
-wifiSsid.save();   // persist single value
+wifiSsid.save();          // persist single value (uses updateSetting)
+wifiSsid.save("NewName"); // set + persist in one call
 cfg.saveAll();     // or batch
 ```
+
+Notes:
+
+- `save()` / `save(value)` call `ConfigManager.updateSetting(...)` internally, so side-effects (e.g. OTA password enable) are applied.
 
 ## Callbacks
 

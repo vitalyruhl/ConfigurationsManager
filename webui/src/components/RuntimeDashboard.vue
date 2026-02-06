@@ -534,7 +534,7 @@ const passwordInput = ref(null);
 const pendingOtaFile = ref(null);
 const savedOtaPassword = ref('');
 
-const builtinSystemHiddenFields = new Set(["loopAvg", "otaActive"]);
+const builtinSystemHiddenFields = new Set(["loopAvg", "otaActive", "otaHasPassword"]);
 
 function formatUptime(uptimeMs) {
   const ms = Number(uptimeMs);
@@ -2171,6 +2171,18 @@ function fallbackPolling() {
   pollTimer = setInterval(fetchRuntime, 2000);
 }
 
+function otaPasswordRequired() {
+  try {
+    if (
+      runtime.value?.system &&
+      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaHasPassword")
+    ) {
+      return !!runtime.value.system.otaHasPassword;
+    }
+  } catch (e) {}
+  return true;
+}
+
 function startFlash() {
   if (!canFlash.value) {
     notifySafe("OTA is disabled", "error");
@@ -2179,6 +2191,15 @@ function startFlash() {
   // Ask for OTA password first (single prompt at button press)
   savedOtaPassword.value = '';
   otaPassword.value = '';
+  if (!otaPasswordRequired()) {
+    if (!otaFileInput.value) {
+      notifySafe("Browser file input not ready.", "error");
+      return;
+    }
+    otaFileInput.value.value = "";
+    otaFileInput.value.click();
+    return;
+  }
   showPasswordModal.value = true;
   nextTick(() => {
     if (passwordInput.value) passwordInput.value.focus();

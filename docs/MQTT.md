@@ -31,10 +31,10 @@ static cm::MQTTManager& mqtt = cm::MQTTManager::instance();
 ```cpp
 void setup()
 {
-    // Layout only (MQTT + MQTT-Topics pages/groups).
+    // Layout + MQTT settings registration (MQTT + MQTT-Topics pages/groups).
     mqtt.attach(ConfigManager);
 
-    // Baseline MQTT settings are explicit.
+    // Optional: place baseline MQTT settings into a custom card/group.
     mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 
     // Registers runtime provider only (live fields are explicit).
@@ -73,7 +73,7 @@ void setup()
     mqtt.addMqttTopicToSettingsGroup(ConfigManager, "energy_total", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 50);
 
     // Live placement
-    mqtt.addMqttTopicToLiveGroup(ConfigManager, "power_w", "mqtt", "MQTT-Received", "MQTT-Received", 1);
+    mqtt.addMqttTopicToLiveGroup(ConfigManager, "power_w", "mqtt", "MQTT-Received", 1); // card only (no group)
     mqtt.addMqttTopicToLiveGroup(ConfigManager, "energy_total", "mqtt", "MQTT-Received", "MQTT-Received", 2);
 }
 ```
@@ -163,6 +163,11 @@ void onMQTTConnected()
 - `publishAllNow(retained)` publishes System-Info and all receive items immediately.
 - `clearRetain(topic)` clears the retained message by publishing an empty retained payload.
 
+## Subscriptions
+
+- `subscribe(topic, qos)` / `unsubscribe(topic)` are available for direct topic filters.
+- `subscribeWildcard(topicFilter)` supports `+` / `#` wildcards.
+
 ## MQTT logging (LoggingManager)
 
 If you use the advanced logging module, you can publish logs via MQTT:
@@ -219,7 +224,7 @@ void onNewMQTTMessage(const char* topic, const char* payload, unsigned int lengt
 mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
 
 // Explicit live entries
-mqtt.addMqttTopicToLiveGroup(ConfigManager, "boiler_temp_c", "mqtt", "MQTT-Received", "MQTT-Received", 1);
+mqtt.addMqttTopicToLiveGroup(ConfigManager, "boiler_temp_c", "mqtt", "MQTT-Received", 1); // card only
 mqtt.addMqttTopicToLiveGroup(ConfigManager, "powermeter_power_in_w", "mqtt", "MQTT-Received", "MQTT-Received", 2);
 
 // Runtime provider for "other infos"
@@ -256,7 +261,7 @@ Receive helpers:
 GUI helpers:
 - `addMqttSettingsToSettingsGroup(...)` (2 overloads)
 - `addMqttTopicToSettingsGroup(...)` (2 overloads)
-- `addMqttTopicToLiveGroup(...)` (2 overloads)
+- `addMqttTopicToLiveGroup(...)` (2 overloads: card-only, or card+group)
 - `addMQTTRuntimeProviderToGUI(...)` (1 overload)
 - `addLastTopicToGUI(...)` (1 overload)
 - `addLastPayloadToGUI(...)` (1 overload)

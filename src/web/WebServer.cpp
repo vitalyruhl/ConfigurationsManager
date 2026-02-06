@@ -6,6 +6,7 @@
 
 // Logging support
 #define WEB_LOG(...) CM_LOG("[Web] " __VA_ARGS__)
+#define WEB_LOG_VERBOSE(...) CM_LOG_VERBOSE("[Web] " __VA_ARGS__)
 
 ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     : server(webServer)
@@ -555,6 +556,17 @@ void ConfigManagerWeb::setupAPIRoutes() {
             }
 
             if (success) {
+                if (configManager) {
+                    BaseSetting* setting = configManager->findSetting(category, key);
+                    if (setting) {
+                        WEB_LOG_VERBOSE("[D] Saved setting: %s.%s key=%s",
+                                        setting->getCategory(),
+                                        setting->getDisplayName(),
+                                        setting->getKey());
+                    } else {
+                        WEB_LOG_VERBOSE("[D] Saved setting: %s.%s", category.c_str(), key.c_str());
+                    }
+                }
                 const String payload = String("{\"status\":\"ok\",\"action\":\"save\",\"category\":\"") +
                     category + "\",\"key\":\"" + key + "\"}";
                 AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);

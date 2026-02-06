@@ -527,6 +527,8 @@ public:
     }
 
     void setCallback(std::function<void(T)> cb) { callback = cb; }
+    bool save();
+    bool save(const T &newValue);
 
     SettingType getType() const override { return TypeTraits<T>::type; }
 
@@ -3278,3 +3280,37 @@ public:
 };
 
 extern ConfigManagerClass ConfigManager;
+
+template <typename T>
+bool Config<T>::save()
+{
+    return save(value);
+}
+
+template <typename T>
+bool Config<T>::save(const T &newValue)
+{
+    String encoded;
+    if constexpr (std::is_same_v<T, String>)
+    {
+        encoded = newValue;
+    }
+    else if constexpr (std::is_same_v<T, bool>)
+    {
+        encoded = newValue ? "true" : "false";
+    }
+    else if constexpr (std::is_same_v<T, int>)
+    {
+        encoded = String(newValue);
+    }
+    else if constexpr (std::is_same_v<T, float>)
+    {
+        encoded = String(newValue, 6);
+    }
+    else
+    {
+        return false;
+    }
+
+    return ConfigManager.updateSetting(getCategory(), getKey(), encoded);
+}

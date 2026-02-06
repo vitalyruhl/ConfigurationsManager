@@ -201,7 +201,7 @@ public:
     void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
                                  const char* topicId,
                                  const char* pageName,
-                                 const char* groupName,
+                                 const char* cardName,
                                  int order);
     void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
                                  const char* topicId,
@@ -483,10 +483,12 @@ private:
 
     void registerReceiveItemSettings_(ReceiveItem& item);
     void registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
-                                        ReceiveItem& item,
-                                        const char* runtimeGroup,
-                                        int order,
-                                        const char* card);
+                                         ReceiveItem& item,
+                                         const char* runtimeGroup,
+                                         int order,
+                                         const char* page,
+                                         const char* card,
+                                         const char* group);
 
     struct PublishStamp {
         String key;
@@ -631,6 +633,7 @@ inline void MQTTManager::attach(ConfigManagerClass& configManager, const char* b
 {
     configManager_ = &configManager;
     registerDefaultLayout_(configManager, basePageName);
+    registerMqttSettings_(configManager);
     applySettingsCallbacks_();
     configureFromSettings_();
 }
@@ -854,10 +857,10 @@ inline void MQTTManager::addMqttTopicToSettingsGroup(ConfigManagerClass& configM
 inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
                                                  const char* topicId,
                                                  const char* pageName,
-                                                 const char* groupName,
+                                                 const char* cardName,
                                                  int order)
 {
-    addMqttTopicToLiveGroup(configManager, topicId, pageName, pageName, groupName, order);
+    addMqttTopicToLiveGroup(configManager, topicId, pageName, cardName, nullptr, order);
 }
 
 inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
@@ -889,12 +892,23 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
     const int resolvedOrder = (order >= 0) ? order : item->runtimeOrder;
     const char* effectivePage = (pageName && pageName[0]) ? pageName : ConfigManagerClass::DEFAULT_LAYOUT_NAME;
     const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
-    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+    const bool hasGroup = (groupName && groupName[0]);
+    const char* effectiveGroup = hasGroup ? groupName : nullptr;
     const char* runtimeGroup = runtimeGroupName_.length() ? runtimeGroupName_.c_str() : DEFAULT_RUNTIME_GROUP;
 
     const char* itemKey = item->idKeyC ? item->idKeyC.get() : item->id.c_str();
-    registerReceiveItemRuntimeMeta_(configManager, *item, runtimeGroup, resolvedOrder, effectiveCard);
-    configManager.addToLiveGroup(itemKey, effectivePage, effectiveCard, effectiveGroup, resolvedOrder);
+    registerReceiveItemRuntimeMeta_(configManager,
+                                    *item,
+                                    runtimeGroup,
+                                    resolvedOrder,
+                                    effectivePage,
+                                    effectiveCard,
+                                    effectiveGroup);
+    if (hasGroup) {
+        configManager.addToLiveGroup(itemKey, effectivePage, effectiveCard, effectiveGroup, resolvedOrder);
+    } else {
+        configManager.addToLiveCard(itemKey, effectivePage, effectiveCard, resolvedOrder);
+    }
 }
 
 inline const char* MQTTManager::mqttStateToString(ConnectionState state)
@@ -2382,7 +2396,9 @@ inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& con
                                                         ReceiveItem& item,
                                                         const char* runtimeGroup,
                                                         int order,
-                                                        const char* card)
+                                                        const char* page,
+                                                        const char* card,
+                                                        const char* group)
 {
     const char* key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
     RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, key);
@@ -2393,14 +2409,28 @@ inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& con
         existing->precision = item.precision;
         existing->isBool = (item.type == ValueType::Bool);
         existing->isString = (item.type == ValueType::String);
+        if (runtimeGroup && runtimeGroup[0]) {
+            existing->sourceGroup = runtimeGroup;
+        }
+        if (page && page[0]) {
+            existing->page = page;
+        }
         if (card && card[0]) {
             existing->card = card;
+        }
+        if (group && group[0]) {
+            existing->group = group;
+        } else {
+            existing->group = String();
         }
         return;
     }
 
     RuntimeFieldMeta meta;
-    meta.group = runtimeGroup;
+    meta.group = (group && group[0]) ? group : String();
+    if (runtimeGroup && runtimeGroup[0]) {
+        meta.sourceGroup = runtimeGroup;
+    }
     meta.key = key;
     meta.label = item.labelC ? item.labelC.get() : item.label.c_str();
     meta.order = order;
@@ -2411,6 +2441,9 @@ inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& con
     }
     if (item.type == ValueType::String) {
         meta.isString = true;
+    }
+    if (page && page[0]) {
+        meta.page = page;
     }
     if (card && card[0]) {
         meta.card = card;

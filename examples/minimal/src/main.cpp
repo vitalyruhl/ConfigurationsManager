@@ -19,7 +19,7 @@
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
-void checkWifiCredentials();
+void checkCredentials();
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
@@ -54,7 +54,7 @@ void setup()
     // coreSettings.attachNtp(ConfigManager); // you dont need it for this minimal example, but you can easily add it back if you want to use the NTP features
     ConfigManager.loadAll();
 
-    checkWifiCredentials(); // you dont need it for minimal functions, but it helpfull - look at wifiSecret.example.h for details
+    checkCredentials(); // you dont need it for minimal functions, but it helpfull - look at wifiSecret.example.h for details
 
     ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// you dont need it, bi ut it makes testing easier for me
 
@@ -88,8 +88,10 @@ void onWiFiAPMode()
     Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
 }
 
-void checkWifiCredentials()
+void checkCredentials()
 {
+     ConfigManager.loadAll(); // Ensure we have the latest settings loaded before checking credentials
+
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
@@ -125,4 +127,9 @@ void checkWifiCredentials()
         Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
 #endif
     }
+
+    if (systemSettings.otaPassword.get() != SETTINGS_PASSWORD) {
+        systemSettings.otaPassword.save(SETTINGS_PASSWORD);
+    }
+
 }
