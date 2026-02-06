@@ -488,6 +488,14 @@ const props = defineProps({
 
 const emit = defineEmits(["can-flash-change"]);
 
+const LOG_MAX_ENTRIES = 1000;
+
+// Keep log buffer across view switches in browser memory.
+const logStore = {
+  entries: ref([]),
+  enabled: ref(false),
+};
+
 const notify = inject("notify", () => {});
 const updateToast = inject("updateToast", () => {});
 const dismissToast = inject("dismissToast", () => {});
@@ -497,8 +505,8 @@ const runtimeMeta = ref([]);
 const runtimeGroups = ref([]);
 const liveLayout = ref(null);
 const activeLivePage = ref("");
-const logEntries = ref([]);
-const logEnabled = ref(false);
+const logEntries = logStore.entries;
+const logEnabled = logStore.enabled;
 const showBoolStateText = ref(false);
 const flashing = ref(false);
 const otaFileInput = ref(null);
@@ -1005,8 +1013,8 @@ function appendLogEntry(entry) {
     tag,
   });
   logEnabled.value = true;
-  if (logEntries.value.length > 200) {
-    logEntries.value.splice(0, logEntries.value.length - 200);
+  if (logEntries.value.length > LOG_MAX_ENTRIES) {
+    logEntries.value.splice(0, logEntries.value.length - LOG_MAX_ENTRIES);
   }
 }
 

@@ -21,11 +21,11 @@ static const char SETTINGS_PASSWORD[] = "";
 
 // Global theme override demo.
 // Served via /user_theme.css and auto-injected by the frontend if present.
-static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-.card h3 { color: sandybrown !important; font-weight: 900 !important; font-size: 1.2rem !important; }
-.log-line--warn { color: #f59e0b !important; }
-.log-line--error { color: #ef4444 !important; font-weight: 700 !important; }
-)CSS";
+// static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
+// .card h3 { color: sandybrown !important; font-weight: 900 !important; font-size: 1.2rem !important; }
+// .log-line--warn { color: #f59e0b !important; }
+// .log-line--error { color: #ef4444 !important; font-weight: 700 !important; }
+// )CSS";
 
 // Built-in core settings templates (WiFi/System/NTP).
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
@@ -54,7 +54,7 @@ void setup()
     ConfigManager.enableBuiltinSystemProvider();
     // coreSettings owns the layout for the built-in bundles now.
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
-    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
+    // ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
 
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
