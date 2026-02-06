@@ -22,6 +22,26 @@
 
 static const char SETTINGS_PASSWORD[] = ""; // NOTE: Empty string disables password protection for the Settings tab.
 
+// Global theme override demo.
+// Served via /user_theme.css and auto-injected by the frontend if present.
+static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
+.card h3 { color: sandybrown !important; font-weight: 900 !important; font-size: 1.2rem !important; }
+
+/* Emphasize DI event rows */
+.ioEvent * { color: #f2b705 !important; font-weight: 700 !important; }
+
+/* Quick action buttons */
+.ioAction * { color: #fde68a !important; font-weight: 800 !important; }
+
+/* Highlight key outputs */
+.rw[data-group="Digital Outputs"][data-key="heater"] * { color: #ff6b6b !important; font-weight: 800 !important; }
+.rw[data-group="Digital Outputs"][data-key="fan"] * { color: #4cc9f0 !important; font-weight: 800 !important; }
+
+/* Analog output readbacks */
+.rw[data-group="Analog Outputs"][data-key="ao_pct_value"] * { color: #7dd3fc !important; }
+.rw[data-group="Analog Outputs"][data-key="ao_v_value"] * { color: #a7f3d0 !important; }
+)CSS";
+
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();              // Core container for settings templates
@@ -58,6 +78,7 @@ void onWiFiAPMode();
 
 static void registerIO();
 static void registerGUIforIO();
+static void registerGuiTools();
 
 static void demoAnalogOutputApi();
 
@@ -82,6 +103,7 @@ void setup()
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
+    ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
 
     registerIO();
     registerGUIforIO();
@@ -134,59 +156,64 @@ void loop()
 
 static void registerGUIForDI(){
     ioManager.addDigitalInputToSettingsGroup("ap_mode", "Digital - I/O", "Digital Inputs", "AP Mode Button", 8);
-    ioManager.addDigitalInputToLive("ap_mode", 8, "DI", "Digital Inputs", "Digital Inputs", "AP Mode", false);
+    ioManager.addDigitalInputToLive("ap_mode", 8, "Digital Inputs", "Inputs", "Digital Inputs", "AP Mode", false);
 
     ioManager.addDigitalInputToSettingsGroup("reset", "Digital - I/O", "Digital Inputs", "Reset Button", 9);
-    ioManager.addDigitalInputToLive("reset", 9, "DI", "Digital Inputs", "Digital Inputs", "Reset", false);
+    ioManager.addDigitalInputToLive("reset", 9, "Digital Inputs", "Inputs", "Digital Inputs", "Reset", false);
 
     ioManager.addDigitalInputToSettingsGroup("testbutton", "Digital - I/O", "Digital Inputs", "Test Button", 10);
-    ioManager.addDigitalInputToLive("testbutton", 10, "DI", "Digital Inputs", "Digital Inputs", "Test Button", false);
+    ioManager.addDigitalInputToLive("testbutton", 10, "Digital Inputs", "Inputs", "Digital Inputs", "Test Button", false);
 
 
     auto diEvents = ConfigManager.liveGroup("Digital Inputs")
-                        .page("DI")
-                        .card("Digital Inputs")
-                        .group("Digital Inputs");
+                        .page("Digital Inputs")
+                        .card("Events")
+                        .group("Test Button Events");
 
     diEvents.divider("Test Button Events", 11);
 
     diEvents.value("test_press", []() { return isPulseActive(testPressPulseUntilMs); })
         .label("Press")
-        .order(12);
+        .order(12)
+        .addCSSClass("ioEvent");
 
     diEvents.value("test_release", []() { return isPulseActive(testReleasePulseUntilMs); })
         .label("Release")
-        .order(13);
+        .order(13)
+        .addCSSClass("ioEvent");
 
     diEvents.value("test_click", []() { return isPulseActive(testClickPulseUntilMs); })
         .label("Click")
-        .order(14);
+        .order(14)
+        .addCSSClass("ioEvent");
 
     diEvents.value("test_doubleclick_toggle", []() { return testDoubleClickToggle; })
         .label("DoubleClick (Toggle)")
-        .order(15);
+        .order(15)
+        .addCSSClass("ioEvent");
 
     diEvents.value("test_longpress_toggle", []() { return testLongPressToggle; })
         .label("LongPress (Toggle)")
-        .order(16);
+        .order(16)
+        .addCSSClass("ioEvent");
 
 }
 
 static void registerGUIForDO()
 {
     ioManager.addDigitalOutputToSettingsGroup("heater", "Digital - I/O", "Digital Outputs", "Heater Relay", 2);
-    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::Checkbox, "heater", 2, "DO", "Digital Outputs", "Digital Outputs", "Heater")
+    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::Checkbox, "heater", 2, "Digital Outputs", "Outputs", "Digital Outputs", "Heater")
         .onChangeCallback([](bool state) { setHeaterState(state); });
 
     ioManager.addDigitalOutputToSettingsGroup("fan", "Digital - I/O", "Digital Outputs", "Cooling Fan Relay", 3);
-    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::StateButton, "fan", 3, "DO", "Digital Outputs", "Digital Outputs", "Fan")
+    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::StateButton, "fan", 3, "Digital Outputs", "Outputs", "Digital Outputs", "Fan")
         .onChangeCallback([](bool state) {
             setFanState(state);
             Serial.printf("[FAN] State: %s\n", state ? "ON" : "OFF");
         });
 
     ioManager.addDigitalOutputToSettingsGroup("hbtn", "Digital - I/O", "Digital Outputs", "Hold Button", 4);
-    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::MomentaryButton, "hbtn", 4, "DO", "Digital Outputs", "Digital Outputs", "Hold")
+    ioManager.addDigitalOutputToLive(cm::IOManager::RuntimeControlType::MomentaryButton, "hbtn", 4, "Digital Outputs", "Outputs", "Digital Outputs", "Hold")
         .onChangeCallback([](bool state) {
             setHoldButtonState(state);
             Serial.printf("[HOLDBUTTON] State: %s\n", state ? "ON" : "OFF");
@@ -195,18 +222,18 @@ static void registerGUIForDO()
 
 static void registerGUIForAI(){
     ioManager.addAnalogInputToSettingsGroup("ldr_s", "Analog - I/O", "Analog Inputs", "LDR VN", 11);
-    ioManager.addAnalogInputToLive("ldr_s", 11, "AI", "Analog Inputs", "Analog Inputs", "LDR VN RAW", true);
+    ioManager.addAnalogInputToLive("ldr_s", 11, "Analog Inputs", "Inputs", "Analog Inputs", "LDR VN RAW", true);
 
     auto aiGroup = ConfigManager.liveGroup("Analog Inputs")
-                       .page("AI")
-                       .card("Analog Inputs")
+                       .page("Analog Inputs")
+                       .card("Inputs")
                        .group("Analog Inputs");
 
-    aiGroup.divider("s_divider", 20);
+    aiGroup.divider("Raw + Scaled", 20);
 
     ioManager.addAnalogInputToSettingsGroup("ldr_w", "Analog - I/O", "Analog Inputs", "LDR VP", 21);
-    ioManager.addAnalogInputToLive("ldr_w", 21, "AI", "Analog Inputs", "Analog Inputs", "LDR VP", false);
-    ioManager.addAnalogInputToLive("ldr_w", 22, "AI", "Analog Inputs", "Analog Inputs", "LDR VP RAW", true);
+    ioManager.addAnalogInputToLive("ldr_w", 21, "Analog Inputs", "Inputs", "Analog Inputs", "LDR VP", false);
+    ioManager.addAnalogInputToLive("ldr_w", 22, "Analog Inputs", "Inputs", "Analog Inputs", "LDR VP RAW", true);
 
     alarmManager.addAnalogAlarm(
         "ldr_w_alarm",
@@ -230,9 +257,9 @@ static void registerGUIForAI(){
     alarmManager.addAlarmToLive(
         "ldr_w_alarm",
         23,
-        "AI",
         "Analog Inputs",
-        "Min Max Alarms Extra Card",
+        "Alarms",
+        "Thresholds",
         "LDR VP"
     );
 
@@ -248,23 +275,23 @@ static void registerGUIForAO()
         0.0f,
         100.0f,
         0,
-        "AO",
         "Analog Outputs",
-        "analog-outputs",
+        "Outputs",
+        "Analog Outputs",
         "AO 0..100%",
         "%"
     );
 
-    ioManager.addAnalogOutputValueToGUI("ao_pct", "Analog Outputs", 43, "AO 0..100% (Value)", "analog-outputs", "%", 1);
-    ioManager.addAnalogOutputValueRawToGUI("ao_pct", "Analog Outputs", 44, "AO 0..100% (DAC 0..255)", "analog-outputs");
-    ioManager.addAnalogOutputValueVoltToGUI("ao_pct", "Analog Outputs", 45, "AO 0..100% (Volts)", "analog-outputs", 3);
+    ioManager.addAnalogOutputValueToGUI("ao_pct", "Analog Outputs", 43, "AO 0..100% (Value)", "Analog Outputs", "%", 1);
+    ioManager.addAnalogOutputValueRawToGUI("ao_pct", "Analog Outputs", 44, "AO 0..100% (DAC 0..255)", "Analog Outputs");
+    ioManager.addAnalogOutputValueVoltToGUI("ao_pct", "Analog Outputs", 45, "AO 0..100% (Volts)", "Analog Outputs", 3);
 
-    auto aoGroup = ConfigManager.liveGroup("analog-outputs")
-                       .page("AO")
-                       .card("Analog Outputs")
-                       .group("analog-outputs");
+    auto aoGroup = ConfigManager.liveGroup("Analog Outputs")
+                       .page("Analog Outputs")
+                       .card("Outputs")
+                       .group("Analog Outputs");
 
-    aoGroup.divider("Analog Output 2 divider", 50);
+    aoGroup.divider("AO 0..3.3V", 50);
 
     ioManager.addAnalogOutputToSettingsGroup("ao_v", "Analog - I/O", "Analog Outputs", "AO 0..3.3V", 52);
     ioManager.addAnalogOutputToLive(
@@ -273,17 +300,54 @@ static void registerGUIForAO()
         0.0f,
         3.3f,
         2,
-        "AO",
         "Analog Outputs",
-        "analog-outputs",
+        "Outputs",
+        "Analog Outputs",
         "AO 0..3.3V",
         "V"
     );
 
-    ioManager.addAnalogOutputValueToGUI("ao_v", "Analog Outputs", 53, "AO 0..3.3V (Value)", "analog-outputs", "V", 2);
-    ioManager.addAnalogOutputValueRawToGUI("ao_v", "Analog Outputs", 54, "AO 0..3.3V (DAC 0..255)", "analog-outputs");
-    ioManager.addAnalogOutputValueVoltToGUI("ao_v", "Analog Outputs", 55, "AO 0..3.3V (Volts)", "analog-outputs", 3);
+    ioManager.addAnalogOutputValueToGUI("ao_v", "Analog Outputs", 53, "AO 0..3.3V (Value)", "Analog Outputs", "V", 2);
+    ioManager.addAnalogOutputValueRawToGUI("ao_v", "Analog Outputs", 54, "AO 0..3.3V (DAC 0..255)", "Analog Outputs");
+    ioManager.addAnalogOutputValueVoltToGUI("ao_v", "Analog Outputs", 55, "AO 0..3.3V (Volts)", "Analog Outputs", 3);
 
+}
+
+static void registerGuiTools()
+{
+    auto tools = ConfigManager.liveGroup("io-tools")
+                     .page("IO Tools")
+                     .card("Quick Actions")
+                     .group("Outputs");
+
+    tools.button("all_off", "All Outputs OFF", []() {
+            ioManager.set("heater", false);
+            ioManager.set("fan", false);
+            ioManager.set("hbtn", false);
+            ioManager.setValue("ao_pct", 0.0f);
+            ioManager.setValue("ao_v", 0.0f);
+        })
+        .order(10)
+        .addCSSClass("ioAction");
+
+    tools.button("all_on", "All Outputs ON", []() {
+            ioManager.set("heater", true);
+            ioManager.set("fan", true);
+            ioManager.set("hbtn", true);
+            ioManager.setValue("ao_pct", 100.0f);
+            ioManager.setValue("ao_v", 3.3f);
+        })
+        .order(11)
+        .addCSSClass("ioAction");
+
+    tools.divider("Analog Presets", 20);
+
+    tools.button("analog_mid", "Analog 50% / 1.65V", []() {
+            ioManager.setValue("ao_pct", 50.0f);
+            ioManager.setValue("ao_v", 1.65f);
+        })
+        .order(21)
+        .addCSSClass("ioAction");
 }
 
 static void registerGUIforIO(){
@@ -291,6 +355,7 @@ static void registerGUIforIO(){
     registerGUIForDO();
     registerGUIForAI();
     registerGUIForAO();
+    registerGuiTools();
 
 }
 

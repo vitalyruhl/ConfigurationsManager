@@ -447,6 +447,41 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta)
                 resolvedCard = "System";
             }
         }
+        if (resolvedPage.isEmpty() && sourceGroup.length())
+        {
+            const String normalizedTarget = normalizeLayoutName(sourceGroup);
+            for (const auto &page : livePages)
+            {
+                if (!resolvedPage.isEmpty())
+                {
+                    break;
+                }
+                for (const auto &card : page.cards)
+                {
+                    if (!resolvedPage.isEmpty())
+                    {
+                        break;
+                    }
+                    if (normalizeLayoutName(card.name) == normalizedTarget)
+                    {
+                        resolvedPage = page.name;
+                        resolvedCard = card.name;
+                        resolvedGroup = String();
+                        break;
+                    }
+                    for (const auto &group : card.groups)
+                    {
+                        if (normalizeLayoutName(group.name) == normalizedTarget)
+                        {
+                            resolvedPage = page.name;
+                            resolvedCard = card.name;
+                            resolvedGroup = group.name;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     resolvedPage = resolvePlacementName(resolvedPage.c_str(), DEFAULT_LAYOUT_NAME);
