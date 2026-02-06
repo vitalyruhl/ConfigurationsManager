@@ -28,10 +28,10 @@
 #include "mqtt/MQTTLogOutput.h"
 
 #if __has_include("secret/wifiSecret.h")
-  #include "secret/wifiSecret.h"
-  #define CM_HAS_WIFI_SECRETS 1
+#include "secret/wifiSecret.h"
+#define CM_HAS_WIFI_SECRETS 1
 #else
-  #define CM_HAS_WIFI_SECRETS 0
+#define CM_HAS_WIFI_SECRETS 0
 #endif
 
 // predeclare the functions (prototypes)
@@ -40,7 +40,7 @@ static void setupGUI();
 static void setupMQTT();
 static void updateMqttTopics();
 static void setupMqttCallbacks();
-static void handleMqttMessage(const char* topic, const char* payload, unsigned int length);
+static void handleMqttMessage(const char *topic, const char *payload, unsigned int length);
 static void publishMqttState(bool retained);
 static void publishMqttStateIfNeeded();
 static void registerIOBindings();
@@ -57,26 +57,21 @@ static bool getBoilerState();
 static void cb_readTempSensor();
 static void setupTempSensor();
 static void handleShowerRequest(bool requested);
-
-// Global pulse helper: built-in LED
-static cm::helpers::PulseOutput buildinLED(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh);
-
-// WiFi Manager callback functions
-void onWiFiConnected();
-void onWiFiDisconnected();
-void onWiFiAPMode();
+static void checkCredentials();
 
 //--------------------------------------------------------------------------------------------------------------
 
 #pragma region configuration variables
 
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
-.rw[data-group="Boiler"][data-key="Bo_Temp"]  .lab{ color:rgba(150, 2, 10, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="Boiler"][data-key="Bo_Temp"] .val{ color:rgba(150, 2, 10, 1);font-weight:900;font-size: 1.2rem;}
-.rw[data-group="Boiler"][data-key="Bo_Temp"] .un{ color:rgba(150, 2, 10, 1);font-weight:900;font-size: 1.2rem;}
+.card h3 { color: sandybrown !important; font-weight: 900 !important; font-size: 1.3rem !important; }
+.myCSSTempClass { color:rgb(198, 16, 16) !important; font-weight:900!important; font-size: 1.2rem!important; }
 )CSS";
 
-static const char SETTINGS_PASSWORD[] = "";
+// static const char SETTINGS_PASSWORD[] = "";
+
+// Global pulse helper: built-in LED
+static cm::helpers::PulseOutput buildinLED(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh);
 
 static cm::LoggingManager &lmg = cm::LoggingManager::instance();
 using LL = cm::LoggingManager::Level;
@@ -126,21 +121,21 @@ bool boilerState = false;    // current state of the heater (on/off)
 
 static bool displayActive = true; // flag to indicate if the display is active
 
-static bool globalAlarmState = false;// Global alarm state for temperature monitoring
+static bool globalAlarmState = false; // Global alarm state for temperature monitoring
 static constexpr char TEMP_ALARM_ID[] = "AL_Status";
 static constexpr char SENSOR_FAULT_ALARM_ID[] = "SF_Status";
 static bool sensorFaultState = false; // Global alarm state for sensor fault monitoring
 
-static unsigned long lastDisplayUpdate = 0; // Non-blocking display update management
+static unsigned long lastDisplayUpdate = 0;             // Non-blocking display update management
 static const unsigned long displayUpdateInterval = 100; // Update display every 100ms
-static const unsigned long resetHoldDurationMs = 3000; // Require 3s hold to factory reset
+static const unsigned long resetHoldDurationMs = 3000;  // Require 3s hold to factory reset
 // DS18B20 globals
-static OneWire* oneWireBus = nullptr;
-static DallasTemperature* ds18 = nullptr;
-static bool youCanShowerNow = false; // derived status for MQTT/UI
-static bool willShowerRequested = false; // unified flag for UI+MQTT 'I will shower'
-static bool didStartupMQTTPropagate = false; // ensure one-time retained propagation
-static long lastYouCanShower1PeriodId = -1; // period id when we last published a '1'
+static OneWire *oneWireBus = nullptr;
+static DallasTemperature *ds18 = nullptr;
+static bool youCanShowerNow = false;           // derived status for MQTT/UI
+static bool willShowerRequested = false;       // unified flag for UI+MQTT 'I will shower'
+static bool didStartupMQTTPropagate = false;   // ensure one-time retained propagation
+static long lastYouCanShower1PeriodId = -1;    // period id when we last published a '1'
 static bool lastPublishedYouCanShower = false; // track last published state to allow publishing 0 transitions
 // MQTT status monitoring
 static unsigned long lastMqttStatusLog = 0;
@@ -166,17 +161,6 @@ void setup()
     ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.enableBuiltinSystemProvider();
 
-    // Layout hints keep the Settings tab organized; WiFi/System/NTP are handled by coreSettings.
-    ConfigManager.addSettingsPage("I2C", 40);
-    ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Bus", 40);
-    ConfigManager.addSettingsPage("Boiler", 50);
-    ConfigManager.addSettingsGroup("Boiler", "Boiler", "Boiler Control", 50);
-    ConfigManager.addSettingsPage("Display", 60);
-    ConfigManager.addSettingsGroup("Display", "Display", "Display Options", 60);
-    ConfigManager.addSettingsPage("Temp Sensor", 70);
-    ConfigManager.addSettingsGroup("Temp Sensor", "Temp Sensor", "Temperature Sensor", 70);
-    ConfigManager.addSettingsPage(cm::CoreCategories::IO, 80);
-
     coreSettings.attachWiFi(ConfigManager);
     coreSettings.attachSystem(ConfigManager);
     coreSettings.attachNtp(ConfigManager);
@@ -187,80 +171,24 @@ void setup()
     setupMQTT();
 
     ConfigManager.loadAll();
-    delay(100); // Small delay
 
-
-    //add my wifi credentials if not set
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
-#if CM_HAS_WIFI_SECRETS
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-        lmg.log(LL::Debug, "SETUP: *** SSID is empty, setting My values *** ");
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-        wifiSettings.useDhcp.set(MY_USE_DHCP);
-        wifiSettings.staticIp.set(MY_WIFI_IP);
-        wifiSettings.gateway.set(MY_GATEWAY_IP);
-        wifiSettings.subnet.set(MY_SUBNET_MASK);
-        wifiSettings.dnsPrimary.set(MY_DNS_IP);
-        ConfigManager.saveAll();
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-        lmg.log(LL::Debug, "Restarting ESP, after auto setting WiFi credentials");
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-        delay(500); // Small delay - get time to flush log
-        ESP.restart();
-#else
-        lmg.log(LL::Warn, "SETUP: SSID is empty but secret/wifiSecret.h is missing; configure WiFi via UI/AP mode");
-#endif
-    }
-
-    
-    // Re-attach to apply loaded values (attach() is idempotent)
+    checkCredentials();
     mqtt.attach(ConfigManager);
-
-    //add my mqtt credentials if not set
-    if (mqttSettings.server.get().isEmpty())
-    {
-#if CM_HAS_WIFI_SECRETS
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-        lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-        mqttSettings.server.set(MY_MQTT_BROKER_IP);
-        mqttSettings.port.set(MY_MQTT_BROKER_PORT);
-        mqttSettings.username.set(MY_MQTT_USERNAME);
-        mqttSettings.password.set(MY_MQTT_PASSWORD);
-        mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
-        ConfigManager.saveAll();
-        lmg.log(LL::Debug, "-------------------------------------------------------------");
-#else
-        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
-#endif
-    }
-
-
     ioManager.begin();
-    
+
     updateMqttTopics();
     setupMqttCallbacks();
     setBoilerState(false);
 
     setupGUI();
 
-
-    ConfigManager.enableSmartRoaming(true);
-    ConfigManager.setRoamingThreshold(-75);
-    ConfigManager.setRoamingCooldown(30);
-    ConfigManager.setRoamingImprovement(10);
-
-    // ConfigManager.setWifiAPMacPriority("e0-08-55-92-55-ac"); //boiler
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5"); //office
-
     SetupStartDisplay();
     ShowDisplay();
     setupTempSensor();
-
-    const bool startedInStationMode = SetupStartWebServer();
+    
+    // ConfigManager.setWifiAPMacPriority("e0-08-55-92-55-ac"); //boiler ap
+    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5"); // office ap
+    ConfigManager.startWebServer();
 
     lmg.log("System setup completed.");
 }
@@ -268,7 +196,7 @@ void setup()
 void loop()
 {
     lmg.scopedTag("loop");
-    
+
     ConfigManager.getWiFiManager().update();
     boilerState = getBoilerState();
     ioManager.update();
@@ -295,7 +223,7 @@ void loop()
     lmg.loop();
 
     publishMqttStateIfNeeded();
-   
+
     handeleBoilerState(false);
 
     updateStatusLED();
@@ -303,7 +231,6 @@ void loop()
     cm::helpers::PulseOutput::loopAll();
 
     delay(10);
-
 }
 
 //----------------------------------------
@@ -313,80 +240,98 @@ void loop()
 void setupGUI()
 {
     lmg.scopedTag("setupGUI");
+
+    // Layout hints keep the Settings tab organized; WiFi/System/NTP are handled by coreSettings.
+    ConfigManager.addSettingsPage("I2C", 40);
+    ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Bus", 40);
+    ConfigManager.addSettingsPage("Boiler", 50);
+    ConfigManager.addSettingsGroup("Boiler", "Boiler", "Boiler Control", 50);
+    ConfigManager.addSettingsPage("Display", 60);
+    ConfigManager.addSettingsGroup("Display", "Display", "Display Options", 60);
+    ConfigManager.addSettingsPage("Temp Sensor", 70);
+    ConfigManager.addSettingsGroup("Temp Sensor", "Temp Sensor", "Temperature Sensor", 70);
+    ConfigManager.addSettingsPage(cm::CoreCategories::IO, 80);
+
+    // add runtime values for the GUI
     ConfigManager.getRuntime().addRuntimeProvider("Boiler", [](JsonObject &o)
-        {
-            o["Bo_TimeLeft"] = boilerTimeRemaining;
-        });
+                                                  { o["Bo_TimeLeft"] = boilerTimeRemaining; });
 
     auto boilerCard = ConfigManager.liveGroup("Boiler")
-                         .page("Boiler", 10)
-                         .card("Boiler", 10);
+                          .page("Boiler", 10)
+                          .card("Boiler", 10);
 
-    boilerCard.value("Bo_EN_Set", []() { return boilerSettings.enabled->get(); })
+    boilerCard.value("Bo_EN_Set", []()
+                     { return boilerSettings.enabled->get(); })
         .label("Enabled")
         .order(1);
 
-    boilerCard.value("Bo_EN", []() { return getBoilerState(); })
+    boilerCard.value("Bo_EN", []()
+                     { return getBoilerState(); })
         .label("Relay On")
         .order(2);
 
-    boilerCard.value("Bo_CanShower", []() {
+    boilerCard.value("Bo_CanShower", []()
+                     {
             const bool canShower = (temperature >= boilerSettings.offThreshold->get()) && getBoilerState();
             youCanShowerNow = canShower;
-            return canShower;
-        })
+            return canShower; })
         .label("You can shower now")
         .order(5);
 
-    boilerCard.value("Bo_Temp", []() { return temperature; })
+    boilerCard.value("Bo_Temp", []()
+                     { return temperature; })
         .label("Temperature")
         .unit("°C")
         .precision(1)
         .order(10);
 
-    boilerCard.value("Bo_TimeLeftFmt", []() {
+    boilerCard.value("Bo_TimeLeftFmt", []()
+                     {
             int total = max(0, boilerTimeRemaining);
             int h = total / 3600;
             int m = (total % 3600) / 60;
             int s = total % 60;
             char buf[12];
             snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
-            return String(buf);
-        })
+            return String(buf); })
         .label("Time remaining")
         .order(21);
 
-    boilerCard.value("Bo_SettedTime", []() { return boilerSettings.boilerTimeMin->get(); })
+    boilerCard.value("Bo_SettedTime", []()
+                     { return boilerSettings.boilerTimeMin->get(); })
         .label("Time Set")
         .unit("min")
         .precision(0)
         .order(22);
 
     boilerCard.stateButton(
-        "sb_mode",
-        "Will Shower",
-        []() { return willShowerRequested; },
-        [](bool v) { handleShowerRequest(v); },
-        false,
-        "On",
-        "Off")
+                  "sb_mode",
+                  "Will Shower",
+                  []()
+                  { return willShowerRequested; },
+                  [](bool v)
+                  { handleShowerRequest(v); },
+                  false,
+                  "On",
+                  "Off")
         .order(90);
 
-    auto alarmsCard = ConfigManager.liveGroup("Alarms")
-                         .page("Alarms", 20)
-                         .card("Alarms", 10);
+    auto alarmsCard = ConfigManager.liveGroup("Boiler")
+                          .page("Boiler", 10)
+                          .card("Alarms", 10);
 
     alarmManager.addDigitalAlarm(
         TEMP_ALARM_ID,
         "Under Temperature Alarm (Boiler Error?)",
-        []() { return globalAlarmState; },
+        []()
+        { return globalAlarmState; },
         cm::AlarmKind::DigitalActive,
         true,
         cm::AlarmSeverity::Alarm);
     alarmManager.addAlarmToLive(
         TEMP_ALARM_ID,
         1,
-        "Alarms",
+        "Boiler",
         "Alarms",
         "Alarms",
         "Under Temperature Alarm (Boiler Error?)");
@@ -398,24 +343,27 @@ void setupGUI()
             .kind = cm::AlarmKind::DigitalActive,
             .severity = cm::AlarmSeverity::Warning,
             .enabled = true,
-            .getter = []() { return sensorFaultState; },
+            .getter = []()
+            { return sensorFaultState; },
         });
     alarmManager.addWarningToLive(
         SENSOR_FAULT_ALARM_ID,
         2,
-        "Alarms",
+        "Boiler",
         "Alarms",
         "Alarms",
         "Temperature Sensor Fault");
 
-    alarmsCard.value("On_Threshold", []() { return boilerSettings.onThreshold->get(); })
-        .label("Alarm Under Temperature")
+    alarmsCard.value("On_Threshold", []()
+                     { return boilerSettings.onThreshold->get(); })
+        .label("SP: Alarm Under Temperature")
         .unit("°C")
         .precision(1)
         .order(101);
 
-    alarmsCard.value("Off_Threshold", []() { return boilerSettings.offThreshold->get(); })
-        .label("You can shower now temperature")
+    alarmsCard.value("Off_Threshold", []()
+                     { return boilerSettings.offThreshold->get(); })
+        .label("SP: You can shower now temperature")
         .unit("°C")
         .precision(1)
         .order(102);
@@ -443,7 +391,7 @@ void UpdateBoilerAlarmState()
 
     if (globalAlarmState != previousState)
     {
-        //todo -a add a new LL:state:Alarm for alarms
+        // todo -a add a new LL:state:Alarm for alarms
         lmg.log(LL::Error, "Temperature %.1f°C -> %s",
                 temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF");
         handeleBoilerState(true); // Force boiler if the temperature is too low
@@ -467,7 +415,8 @@ void handeleBoilerState(bool forceON)
         if (forceON && boilerTimeRemaining <= 0)
         {
             int mins = boilerSettings.boilerTimeMin->get();
-            if (mins <= 0) {
+            if (mins <= 0)
+            {
                 mins = 1;
             }
             boilerTimeRemaining = mins * 60;
@@ -475,25 +424,32 @@ void handeleBoilerState(bool forceON)
         }
 
         // Temperature-based auto control: turn off when upper threshold reached, allow turn-on when below lower threshold
-        if (getBoilerState()) {
-            if (temperature >= boilerSettings.offThreshold->get()) {
+        if (getBoilerState())
+        {
+            if (temperature >= boilerSettings.offThreshold->get())
+            {
                 setBoilerState(false);
-                if (stopOnTarget) {
+                if (stopOnTarget)
+                {
                     boilerTimeRemaining = 0;
-                    if (willShowerRequested) {
+                    if (willShowerRequested)
+                    {
                         willShowerRequested = false;
-                        if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+                        if (mqtt.isConnected() && !topicWillShower.isEmpty())
+                        {
                             mqtt.publish(topicWillShower.c_str(), "0", true);
                         }
                     }
                 }
             }
-        } else {
-            if ((boilerSettings.enabled->get() || forceON) && (temperature <= boilerSettings.onThreshold->get()) && (boilerTimeRemaining > 0)) {
+        }
+        else
+        {
+            if ((boilerSettings.enabled->get() || forceON) && (temperature <= boilerSettings.onThreshold->get()) && (boilerTimeRemaining > 0))
+            {
                 setBoilerState(true);
             }
         }
-
 
         if (boilerSettings.enabled->get() || forceON)
         {
@@ -522,24 +478,29 @@ void handeleBoilerState(bool forceON)
         }
 
         // Detect timer end transition to 0 -> clear WillShower and publish retained OFF
-        if (prevTime > 0 && boilerTimeRemaining <= 0) {
-            if (willShowerRequested) {
+        if (prevTime > 0 && boilerTimeRemaining <= 0)
+        {
+            if (willShowerRequested)
+            {
                 willShowerRequested = false;
-                if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+                if (mqtt.isConnected() && !topicWillShower.isEmpty())
+                {
                     mqtt.publish(topicWillShower.c_str(), "0", true);
                 }
             }
-            if (getBoilerState()) {
+            if (getBoilerState())
+            {
                 setBoilerState(false);
             }
         }
     }
 }
 
-
-static void cb_readTempSensor() {
+static void cb_readTempSensor()
+{
     lmg.scopedTag("TEMP");
-    if (!ds18) {
+    if (!ds18)
+    {
         lmg.log(LL::Warn, "DS18B20 sensor not initialized");
         return;
     }
@@ -550,8 +511,10 @@ static void cb_readTempSensor() {
     // Check for sensor fault (-127°C indicates sensor error)
     bool sensorError = (t <= -127.0f || t >= 85.0f); // DS18B20 valid range is -55°C to +125°C, but -127°C is error code
 
-    if (sensorError) {
-        if (!sensorFaultState) {
+    if (sensorError)
+    {
+        if (!sensorFaultState)
+        {
             sensorFaultState = true;
             lmg.log(LL::Error, "SENSOR FAULT detected! Reading: %.2f°C", t);
         }
@@ -559,11 +522,14 @@ static void cb_readTempSensor() {
         // Try to check if sensor is still present
         uint8_t deviceCount = ds18->getDeviceCount();
         lmg.log(LL::Debug, "Devices still found: %d", deviceCount);
-    } else {
+    }
+    else
+    {
         // Clear sensor fault if it was set
-        if (sensorFaultState) {
+        if (sensorFaultState)
+        {
             sensorFaultState = false;
-            lmg.log(LL::Debug,"Sensor fault cleared! Reading: %.2f°C", t);
+            lmg.log(LL::Debug, "Sensor fault cleared! Reading: %.2f°C", t);
         }
 
         temperature = t + tempSensorSettings.corrOffset->get();
@@ -571,10 +537,12 @@ static void cb_readTempSensor() {
     }
 }
 
-static void setupTempSensor() {
+static void setupTempSensor()
+{
     lmg.scopedTag("SETUP/TEMP");
     int pin = tempSensorSettings.gpioPin->get();
-    if (pin <= 0) {
+    if (pin <= 0)
+    {
         lmg.log(LL::Error, "DS18B20 GPIO pin not set or invalid -> skipping init");
         return;
     }
@@ -590,7 +558,8 @@ static void setupTempSensor() {
     uint8_t deviceCount = ds18->getDeviceCount();
     lmg.log(LL::Debug, "OneWire devices found: %d", deviceCount);
 
-    if (deviceCount == 0) {
+    if (deviceCount == 0)
+    {
         lmg.log(LL::Debug, "No DS18B20 sensors found! Check:");
         lmg.log(LL::Debug, "1. Pull-up resistor (4.7kΩ) between VCC and GPIO");
         lmg.log(LL::Debug, "2. Wiring: VCC->3.3V, GND->GND, DATA->GPIO");
@@ -599,7 +568,9 @@ static void setupTempSensor() {
         // Set sensor fault alarm if no devices found
         sensorFaultState = true;
         lmg.log(LL::Warn, "Sensor fault alarm activated - no devices found");
-    } else {
+    }
+    else
+    {
         lmg.log(LL::Info, "Found %d DS18B20 sensor(s) on GPIO %d", deviceCount, pin);
 
         // Clear sensor fault alarm if devices are found
@@ -615,7 +586,8 @@ static void setupTempSensor() {
     }
 
     float intervalSec = (float)tempSensorSettings.readInterval->get();
-    if (intervalSec < 1.0f) intervalSec = 30.0f;
+    if (intervalSec < 1.0f)
+        intervalSec = 30.0f;
     TempReadTicker.attach(intervalSec, cb_readTempSensor);
     lmg.log(LL::Debug, "DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C",
             pin, intervalSec, tempSensorSettings.corrOffset->get());
@@ -636,6 +608,13 @@ static void setupLogging()
 
     lmg.setGlobalLevel(LL::Trace);
     lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+
+    //add GUI Log Output
+    auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 50); // default 30-message startup buffer
+    guiOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+    guiOut->setLevel(LL::Trace);
+    lmg.addOutput(std::move(guiOut));
+
 }
 
 static void registerIOBindings()
@@ -650,7 +629,7 @@ static void registerIOBindings()
 
     ioManager.addDigitalInput(IO_AP_ID, "AP Mode Button", 13, true, true, false, true);
 
-    ioManager.addDigitalInput(IO_SHOWER_ID, "Shower Request Button", 19, true, true, false, true);
+    ioManager.addDigitalInput(IO_SHOWER_ID, "Shower Request Button", 33, true, true, false, true);
 
     ioManager.addDigitalInputToSettingsGroup(IO_SHOWER_ID, "I/O", "Shower HW-Btn", "Shower HW-Btn", 100);
     ioManager.addDigitalInputToLive(IO_SHOWER_ID, 100, "Boiler", "Boiler", "Boiler", "Shower HW-Btn", false);
@@ -660,17 +639,17 @@ static void registerIOBindings()
     ioManager.configureDigitalInputEvents(
         IO_RESET_ID,
         cm::IOManager::DigitalInputEventCallbacks{
-            .onPress = []() {
+            .onPress = []()
+            {
                 lmg.logTag(LL::Debug,"IO", "Reset button pressed -> show display");
-                ShowDisplay();
-            },
-            .onLongPressOnStartup = []() {
+                ShowDisplay(); },
+            .onLongPressOnStartup = []()
+            {
                 lmg.logTag(LL::Trace,"IO", "Reset button pressed at startup -> restoring defaults");
                 ConfigManager.clearAllFromPrefs();
                 ConfigManager.saveAll();
                 delay(3000);
-                ESP.restart();
-            },
+                ESP.restart(); },
         },
         resetOptions);
 
@@ -679,21 +658,22 @@ static void registerIOBindings()
     ioManager.configureDigitalInputEvents(
         IO_AP_ID,
         cm::IOManager::DigitalInputEventCallbacks{
-            .onPress = []() {
+            .onPress = []()
+            {
                 lmg.logTag(LL::Debug,"IO", "AP button pressed -> show display");
-                ShowDisplay();
-            },
-            .onLongPressOnStartup = []() {
+                ShowDisplay(); },
+            .onLongPressOnStartup = []()
+            {
                 lmg.logTag(LL::Trace,"IO", "AP button pressed at startup -> starting AP mode");
-                ConfigManager.startAccessPoint("ESP32_Config", "");
-            },
+                ConfigManager.startAccessPoint("ESP32_Config", ""); },
         },
         apOptions);
 
     ioManager.configureDigitalInputEvents(
         IO_SHOWER_ID,
         cm::IOManager::DigitalInputEventCallbacks{
-            .onPress = []() {
+            .onPress = []()
+            {
                 const bool newState = !willShowerRequested;
                 lmg.log(LL::Debug, "[MAIN] Shower button pressed -> toggling shower request to %s",
                         newState ? "ON" : "OFF");
@@ -719,7 +699,8 @@ static void setupMQTT()
     mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 
     static bool mqttLogAdded = false;
-    if (!mqttLogAdded) {
+    if (!mqttLogAdded)
+    {
         auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
         mqttLog->setLevel(LL::Debug);
         mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
@@ -730,16 +711,19 @@ static void setupMQTT()
 
 static void updateMqttTopics()
 {
-     lmg.scopedTag("updateMqttTopics");
+    lmg.scopedTag("updateMqttTopics");
     String base = mqtt.settings().publishTopicBase.get();
-    if (base.isEmpty()) {
+    if (base.isEmpty())
+    {
         base = mqtt.getMqttBaseTopic();
     }
-    if (base.isEmpty()) {
-        base = String(APP_NAME);//Base-Fallback
+    if (base.isEmpty())
+    {
+        base = String(APP_NAME); // Base-Fallback
     }
 
-    if (base != mqttBaseTopic) {
+    if (base != mqttBaseTopic)
+    {
         mqttBaseTopic = base;
         didStartupMQTTPropagate = false;
     }
@@ -765,46 +749,46 @@ static void updateMqttTopics()
 static void setupMqttCallbacks()
 {
     lmg.scopedTag("setupMqttCallbacks");
-    boilerSettings.enabled->setCallback([](bool v) {
+    boilerSettings.enabled->setCallback([](bool v)
+                                        {
         if (mqtt.isConnected()) {
             mqtt.publish(topicBoilerEnabled.c_str(), v ? "1" : "0", true);
-        }
-    });
+        } });
 
-    boilerSettings.onThreshold->setCallback([](float v) {
+    boilerSettings.onThreshold->setCallback([](float v)
+                                            {
         if (mqtt.isConnected()) {
             mqtt.publish(topicOnThreshold.c_str(), String(v), true);
-        }
-    });
+        } });
 
-    boilerSettings.offThreshold->setCallback([](float v) {
+    boilerSettings.offThreshold->setCallback([](float v)
+                                             {
         if (mqtt.isConnected()) {
             mqtt.publish(topicOffThreshold.c_str(), String(v), true);
-        }
-    });
+        } });
 
-    boilerSettings.boilerTimeMin->setCallback([](int v) {
+    boilerSettings.boilerTimeMin->setCallback([](int v)
+                                              {
         if (mqtt.isConnected()) {
             mqtt.publish(topicBoilerTimeMin.c_str(), String(v), true);
             mqtt.publish(topicYouCanShowerPeriodMin.c_str(), String(v), true);
         }
         lastYouCanShower1PeriodId = -1;
-        lastPublishedYouCanShower = false;
-    });
+        lastPublishedYouCanShower = false; });
 
-    boilerSettings.stopTimerOnTarget->setCallback([](bool v) {
+    boilerSettings.stopTimerOnTarget->setCallback([](bool v)
+                                                  {
         if (mqtt.isConnected()) {
             mqtt.publish(topicStopTimerOnTarget.c_str(), v ? "1" : "0", true);
-        }
-    });
+        } });
 
-    boilerSettings.onlyOncePerPeriod->setCallback([](bool v) {
+    boilerSettings.onlyOncePerPeriod->setCallback([](bool v)
+                                                  {
         if (mqtt.isConnected()) {
             mqtt.publish(topicOncePerPeriod.c_str(), v ? "1" : "0", true);
         }
         lastYouCanShower1PeriodId = -1;
-        lastPublishedYouCanShower = false;
-    });
+        lastPublishedYouCanShower = false; });
 }
 
 // Compute current period ID for once-per-period gating
@@ -813,7 +797,8 @@ static long getCurrentPeriodId()
     const long periodMin = max(1, boilerSettings.boilerTimeMin->get());
     const long periodSec = periodMin * 60L;
     time_t now = time(nullptr);
-    if (now > 24 * 60 * 60) {
+    if (now > 24 * 60 * 60)
+    {
         return now / periodSec;
     }
     return (long)((millis() / 1000UL) / periodSec);
@@ -822,7 +807,8 @@ static long getCurrentPeriodId()
 static void publishMqttState(bool retained)
 {
     lmg.scopedTag("publishMqttState");
-    if (!mqtt.isConnected() || mqttBaseTopic.isEmpty()) {
+    if (!mqtt.isConnected() || mqttBaseTopic.isEmpty())
+    {
         return;
     }
 
@@ -840,26 +826,34 @@ static void publishMqttState(bool retained)
 
     const bool canShower = (temperature >= boilerSettings.offThreshold->get()) && getBoilerState();
     youCanShowerNow = canShower;
-    if (!boilerSettings.onlyOncePerPeriod->get()) {
+    if (!boilerSettings.onlyOncePerPeriod->get())
+    {
         mqtt.publish(topicYouCanShowerNow.c_str(), canShower ? "1" : "0", retained);
         lastPublishedYouCanShower = canShower;
-    } else {
+    }
+    else
+    {
         const long pid = getCurrentPeriodId();
-        if (canShower) {
-            if (pid != lastYouCanShower1PeriodId) {
+        if (canShower)
+        {
+            if (pid != lastYouCanShower1PeriodId)
+            {
                 mqtt.publish(topicYouCanShowerNow.c_str(), "1", true);
                 lastYouCanShower1PeriodId = pid;
                 lastPublishedYouCanShower = true;
             }
-        } else {
-            if (lastPublishedYouCanShower) {
+        }
+        else
+        {
+            if (lastPublishedYouCanShower)
+            {
                 mqtt.publish(topicYouCanShowerNow.c_str(), "0", true);
                 lastPublishedYouCanShower = false;
             }
         }
     }
 
-    //TODO: add into IO-Manager Blinker support
+    // TODO: add into IO-Manager Blinker support
     buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 100, /*gapMs*/ 1500);
 }
 
@@ -867,26 +861,30 @@ static void publishMqttStateIfNeeded()
 {
     lmg.scopedTag("publishMqttStateIfNeeded");
     const float intervalSec = mqtt.settings().publishIntervalSec.get();
-    if (intervalSec <= 0.0f) {
+    if (intervalSec <= 0.0f)
+    {
         return;
     }
 
     const unsigned long intervalMs = static_cast<unsigned long>(intervalSec * 1000.0f);
-    if (intervalMs == 0) {
+    if (intervalMs == 0)
+    {
         return;
     }
 
     const unsigned long now = millis();
-    if (lastMqttPublishMs == 0 || (now - lastMqttPublishMs >= intervalMs)) {
+    if (lastMqttPublishMs == 0 || (now - lastMqttPublishMs >= intervalMs))
+    {
         lastMqttPublishMs = now;
         publishMqttState(false);
     }
 }
 
-static void handleMqttMessage(const char* topic, const char* payload, unsigned int length)
+static void handleMqttMessage(const char *topic, const char *payload, unsigned int length)
 {
     lmg.scopedTag("MQTT");
-    if (!topic || !payload || length == 0) {
+    if (!topic || !payload || length == 0)
+    {
         lmg.log(LL::Warn, "Callback with invalid payload - ignored");
         return;
     }
@@ -896,54 +894,68 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
 
     lmg.log(LL::Debug, "Topic[%s] <-- [%s]", topic, messageTemp.c_str());
 
-    if (strcmp(topic, topicSetShowerTime.c_str()) == 0) {
+    if (strcmp(topic, topicSetShowerTime.c_str()) == 0)
+    {
         if (messageTemp.equalsIgnoreCase("null") ||
             messageTemp.equalsIgnoreCase("undefined") ||
             messageTemp.equalsIgnoreCase("NaN") ||
             messageTemp.equalsIgnoreCase("Infinity") ||
-            messageTemp.equalsIgnoreCase("-Infinity")) {
+            messageTemp.equalsIgnoreCase("-Infinity"))
+        {
             lmg.log(LL::Warn, "Received invalid value from MQTT: %s", messageTemp.c_str());
             messageTemp = "0";
         }
         const int mins = messageTemp.toInt();
-        if (mins > 0) {
+        if (mins > 0)
+        {
             boilerTimeRemaining = mins * 60;
             willShowerRequested = true;
-            if (!getBoilerState()) {
+            if (!getBoilerState())
+            {
                 setBoilerState(true);
             }
             ShowDisplay();
             lmg.log(LL::Debug, "MQTT set shower time: %d min (relay ON)", mins);
-            if (mqtt.isConnected()) {
+            if (mqtt.isConnected())
+            {
                 mqtt.publish(topicWillShower.c_str(), "1", true);
             }
         }
         return;
     }
 
-    if (strcmp(topic, topicWillShower.c_str()) == 0) {
+    if (strcmp(topic, topicWillShower.c_str()) == 0)
+    {
         const bool willShower = messageTemp.equalsIgnoreCase("1") ||
                                 messageTemp.equalsIgnoreCase("true") ||
                                 messageTemp.equalsIgnoreCase("on");
-        if (willShower == willShowerRequested) {
+        if (willShower == willShowerRequested)
+        {
             return;
         }
-        if (willShower) {
+        if (willShower)
+        {
             int mins = boilerSettings.boilerTimeMin->get();
-            if (mins <= 0) mins = 60;
-            if (boilerTimeRemaining <= 0) {
+            if (mins <= 0)
+                mins = 60;
+            if (boilerTimeRemaining <= 0)
+            {
                 boilerTimeRemaining = mins * 60;
             }
             willShowerRequested = true;
-            if (!getBoilerState()) {
+            if (!getBoilerState())
+            {
                 setBoilerState(true);
             }
             ShowDisplay();
             lmg.log(LL::Debug, "HA request: will shower -> set %d min (relay ON)", mins);
-        } else {
+        }
+        else
+        {
             willShowerRequested = false;
             boilerTimeRemaining = 0;
-            if (getBoilerState()) {
+            if (getBoilerState())
+            {
                 setBoilerState(false);
             }
             lmg.log(LL::Debug, "HA request: will shower = false -> timer cleared, relay OFF");
@@ -951,7 +963,8 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         return;
     }
 
-    if (strcmp(topic, topicBoilerEnabled.c_str()) == 0) {
+    if (strcmp(topic, topicBoilerEnabled.c_str()) == 0)
+    {
         const bool v = messageTemp.equalsIgnoreCase("1") ||
                        messageTemp.equalsIgnoreCase("true") ||
                        messageTemp.equalsIgnoreCase("on");
@@ -960,27 +973,33 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         return;
     }
 
-    if (strcmp(topic, topicOnThreshold.c_str()) == 0) {
+    if (strcmp(topic, topicOnThreshold.c_str()) == 0)
+    {
         const float v = messageTemp.toFloat();
-        if (v > 0) {
+        if (v > 0)
+        {
             boilerSettings.onThreshold->set(v);
             lmg.log(LL::Debug, "OnThreshold set to %.1f", v);
         }
         return;
     }
 
-    if (strcmp(topic, topicOffThreshold.c_str()) == 0) {
+    if (strcmp(topic, topicOffThreshold.c_str()) == 0)
+    {
         const float v = messageTemp.toFloat();
-        if (v > 0) {
+        if (v > 0)
+        {
             boilerSettings.offThreshold->set(v);
             lmg.log(LL::Debug, "OffThreshold set to %.1f", v);
         }
         return;
     }
 
-    if (strcmp(topic, topicBoilerTimeMin.c_str()) == 0) {
+    if (strcmp(topic, topicBoilerTimeMin.c_str()) == 0)
+    {
         const int v = messageTemp.toInt();
-        if (v >= 0) {
+        if (v >= 0)
+        {
             boilerSettings.boilerTimeMin->set(v);
             lmg.log(LL::Debug, "BoilerTimeMin set to %d", v);
             lastYouCanShower1PeriodId = -1;
@@ -989,7 +1008,8 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         return;
     }
 
-    if (strcmp(topic, topicStopTimerOnTarget.c_str()) == 0) {
+    if (strcmp(topic, topicStopTimerOnTarget.c_str()) == 0)
+    {
         const bool v = messageTemp.equalsIgnoreCase("1") ||
                        messageTemp.equalsIgnoreCase("true") ||
                        messageTemp.equalsIgnoreCase("on");
@@ -998,7 +1018,8 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         return;
     }
 
-    if (strcmp(topic, topicOncePerPeriod.c_str()) == 0) {
+    if (strcmp(topic, topicOncePerPeriod.c_str()) == 0)
+    {
         const bool v = messageTemp.equalsIgnoreCase("1") ||
                        messageTemp.equalsIgnoreCase("true") ||
                        messageTemp.equalsIgnoreCase("on");
@@ -1009,9 +1030,11 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         return;
     }
 
-    if (strcmp(topic, topicYouCanShowerPeriodMin.c_str()) == 0) {
+    if (strcmp(topic, topicYouCanShowerPeriodMin.c_str()) == 0)
+    {
         int v = messageTemp.toInt();
-        if (v <= 0) v = 45;
+        if (v <= 0)
+            v = 45;
         boilerSettings.boilerTimeMin->set(v);
         lmg.log(LL::Debug, "YouCanShowerPeriodMin mapped to BoilerTimeMin = %d", v);
         lastYouCanShower1PeriodId = -1;
@@ -1019,9 +1042,11 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
         return;
     }
 
-    if (strcmp(topic, topicSave.c_str()) == 0) {
+    if (strcmp(topic, topicSave.c_str()) == 0)
+    {
         ConfigManager.saveAll();
-        if (mqtt.isConnected()) {
+        if (mqtt.isConnected())
+        {
             mqtt.publish(topicSave.c_str(), "OK", false);
         }
         lmg.log(LL::Info, "[MAIN] Settings saved via MQTT");
@@ -1033,24 +1058,34 @@ static void handleMqttMessage(const char* topic, const char* payload, unsigned i
 
 namespace cm
 {
-    
+
     void onMQTTConnected()
     {
         lmg.scopedTag("MQTT");
         updateMqttTopics();
         lmg.log(LL::Info, "Connected");
 
-        if (!topicSetShowerTime.isEmpty()) mqtt.subscribe(topicSetShowerTime.c_str());
-        if (!topicWillShower.isEmpty()) mqtt.subscribe(topicWillShower.c_str());
-        if (!topicBoilerEnabled.isEmpty()) mqtt.subscribe(topicBoilerEnabled.c_str());
-        if (!topicOnThreshold.isEmpty()) mqtt.subscribe(topicOnThreshold.c_str());
-        if (!topicOffThreshold.isEmpty()) mqtt.subscribe(topicOffThreshold.c_str());
-        if (!topicStopTimerOnTarget.isEmpty()) mqtt.subscribe(topicStopTimerOnTarget.c_str());
-        if (!topicOncePerPeriod.isEmpty()) mqtt.subscribe(topicOncePerPeriod.c_str());
-        if (!topicYouCanShowerPeriodMin.isEmpty()) mqtt.subscribe(topicYouCanShowerPeriodMin.c_str());
-        if (!topicSave.isEmpty()) mqtt.subscribe(topicSave.c_str());
+        if (!topicSetShowerTime.isEmpty())
+            mqtt.subscribe(topicSetShowerTime.c_str());
+        if (!topicWillShower.isEmpty())
+            mqtt.subscribe(topicWillShower.c_str());
+        if (!topicBoilerEnabled.isEmpty())
+            mqtt.subscribe(topicBoilerEnabled.c_str());
+        if (!topicOnThreshold.isEmpty())
+            mqtt.subscribe(topicOnThreshold.c_str());
+        if (!topicOffThreshold.isEmpty())
+            mqtt.subscribe(topicOffThreshold.c_str());
+        if (!topicStopTimerOnTarget.isEmpty())
+            mqtt.subscribe(topicStopTimerOnTarget.c_str());
+        if (!topicOncePerPeriod.isEmpty())
+            mqtt.subscribe(topicOncePerPeriod.c_str());
+        if (!topicYouCanShowerPeriodMin.isEmpty())
+            mqtt.subscribe(topicYouCanShowerPeriodMin.c_str());
+        if (!topicSave.isEmpty())
+            mqtt.subscribe(topicSave.c_str());
 
-        if (!didStartupMQTTPropagate) {
+        if (!didStartupMQTTPropagate)
+        {
             publishMqttState(true);
             didStartupMQTTPropagate = true;
         }
@@ -1068,7 +1103,7 @@ namespace cm
         lmg.log(LL::Info, "State changed: %s", MQTTManager::mqttStateToString(mqttState));
     }
 
-    void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)
+    void onNewMQTTMessage(const char *topic, const char *payload, unsigned int length)
     {
         handleMqttMessage(topic, payload, length);
     }
@@ -1126,7 +1161,7 @@ void WriteToDisplay()
     display.setTextSize(1);
     display.setTextColor(WHITE);
 
-    display.cp437(true);// Use CP437 for extended glyphs (e.g., degree symbol 248)
+    display.cp437(true); // Use CP437 for extended glyphs (e.g., degree symbol 248)
 
     // Show boiler status and temperature
     display.setCursor(3, 3);
@@ -1175,8 +1210,8 @@ static void SetupStartDisplay()
 
 void ShowDisplay()
 {
-    displayTicker.detach();                                                // Stop the ticker to prevent multiple calls
-    display.ssd1306_command(SSD1306_DISPLAYON);                            // Turn on the display
+    displayTicker.detach();                                                 // Stop the ticker to prevent multiple calls
+    display.ssd1306_command(SSD1306_DISPLAYON);                             // Turn on the display
     displayTicker.attach(displaySettings.onTimeSec->get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
     displayActive = true;
 }
@@ -1193,7 +1228,9 @@ void ShowDisplayOff()
     }
 }
 
-void updateStatusLED(){
+
+void updateStatusLED()
+{
     // ------------------------------------------------------------------
     // Status LED using Blinker: select patterns based on WiFi state
     //  - AP mode: fast blink (100ms on / 100ms off)
@@ -1208,7 +1245,8 @@ void updateStatusLED(){
     const bool apMode = ConfigManager.getWiFiManager().isInAPMode();
 
     const int mode = apMode ? 1 : (connected ? 2 : 3);
-    if (mode == lastMode) return; // no change
+    if (mode == lastMode)
+        return; // no change
     lastMode = mode;
 
     switch (mode)
@@ -1217,8 +1255,8 @@ void updateStatusLED(){
         buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 200, /*gapMs*/ 0);
         break;
     case 2: // Connected: 60ms ON heartbeat every 2s -> 120ms pulse + 1880ms gap
-        //mooved into send mqtt function to have heartbeat with mqtt messages
-        // buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 120, /*gapMs*/ 1880);
+        // mooved into send mqtt function to have heartbeat with mqtt messages
+        //  buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 120, /*gapMs*/ 1880);
         break;
     case 3: // Connecting: double blink every ~1s -> two 200ms pulses + 600ms gap
         buildinLED.setPulseRepeat(/*count*/ 3, /*periodMs*/ 200, /*gapMs*/ 600);
@@ -1229,17 +1267,6 @@ void updateStatusLED(){
 //----------------------------------------
 // WIFI MANAGER CALLBACK FUNCTIONS
 //----------------------------------------
-
-bool SetupStartWebServer()
-{
-    lmg.scopedTag("MAIN/WIFI");
-    lmg.log(LL::Info, "Starting Webserver...");
-
-    ConfigManager.startWebServer();
-    // Auto reboot timeout is configured via WiFiRb (handled inside ConfigManager.startWebServer()).
-
-    return !ConfigManager.getWiFiManager().isInAPMode();
-}
 
 void onWiFiConnected()
 {
@@ -1275,23 +1302,94 @@ static void handleShowerRequest(bool v)
 {
     lmg.scopedTag("handleShowerRequest");
     willShowerRequested = v;
-    if (v) {
-        if (boilerTimeRemaining <= 0) {
+    if (v)
+    {
+        if (boilerTimeRemaining <= 0)
+        {
             int mins = boilerSettings.boilerTimeMin->get();
-            if (mins <= 0) mins = 60;
+            if (mins <= 0)
+                mins = 60;
             boilerTimeRemaining = mins * 60;
         }
         setBoilerState(true);
         ShowDisplay();
-        if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+        if (mqtt.isConnected() && !topicWillShower.isEmpty())
+        {
             mqtt.publish(topicWillShower.c_str(), "1", true);
         }
-    } else {
+    }
+    else
+    {
         // user canceled
         boilerTimeRemaining = 0;
         setBoilerState(false);
-        if (mqtt.isConnected() && !topicWillShower.isEmpty()) {
+        if (mqtt.isConnected() && !topicWillShower.isEmpty())
+        {
             mqtt.publish(topicWillShower.c_str(), "0", true);
         }
+    }
+}
+
+void checkCredentials()
+{
+    ConfigManager.loadAll(); // Ensure we have the latest settings loaded before checking credentials
+
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+#if CM_HAS_WIFI_SECRETS
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
+        Serial.println("-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+
+        // Optional secret fields (not present in every example).
+#ifdef MY_WIFI_IP
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+#endif
+#ifdef MY_USE_DHCP
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+#endif
+#ifdef MY_GATEWAY_IP
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+#endif
+#ifdef MY_SUBNET_MASK
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+#endif
+#ifdef MY_DNS_IP
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+#endif
+        ConfigManager.saveAll();
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("Restarting ESP, after auto setting WiFi credentials");
+        Serial.println("-------------------------------------------------------------");
+        delay(500);
+        ESP.restart();
+#else
+        Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+#endif
+    }
+
+    if (mqttSettings.server.get().isEmpty())
+    {
+#if CM_HAS_WIFI_SECRETS
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+        mqttSettings.server.set(MY_MQTT_BROKER_IP);
+        mqttSettings.port.set(MY_MQTT_BROKER_PORT);
+        mqttSettings.username.set(MY_MQTT_USERNAME);
+        mqttSettings.password.set(MY_MQTT_PASSWORD);
+        mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
+        ConfigManager.saveAll();
+        lmg.log(LL::Debug, "-------------------------------------------------------------");
+#else
+        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
+#endif
+    }
+
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD)
+    {
+        systemSettings.otaPassword.save(OTA_PASSWORD);
     }
 }
