@@ -390,6 +390,13 @@ function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
     }];
   }
 
+  const baseSettings = Object.fromEntries(
+    Object.entries(settingsObj).filter(
+      ([key]) => key !== 'categoryPretty' && key !== 'categoryOrder' && key !== 'cards'
+    )
+  );
+  const hasBaseSettings = Object.keys(baseSettings).length > 0;
+
   const cardsContainer = settingsObj.cards;
   if (!cardsContainer || typeof cardsContainer !== 'object') {
     return [{
@@ -408,6 +415,16 @@ function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
       const settings = (co && typeof co.settings === 'object' && co.settings) ? co.settings : {};
       return { category: categoryKey, title, order, settings, cardKey: String(cardKey) };
     });
+
+  if (hasBaseSettings) {
+    cards.push({
+      category: categoryKey,
+      title: resolveCategoryLabel(categoryKey, settingsObj),
+      order: typeof resolveCategoryOrder(settingsObj) === 'number' ? resolveCategoryOrder(settingsObj) : 0,
+      settings: baseSettings,
+      cardKey: "__default__",
+    });
+  }
 
   cards.sort((a, b) => {
     const ao = a.order;
