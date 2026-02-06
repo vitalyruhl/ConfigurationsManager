@@ -164,7 +164,7 @@ void setup()
     checkCredentials();
     setupGUI();
 
-    pinMode(BUTTON_PIN, INPUT_PULLDOWN);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
 
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
@@ -185,6 +185,7 @@ void loop()
     mqtt.loop();
     lmg.loop();
 
+    buttonState = (digitalRead(BUTTON_PIN) == LOW);
     publishImediatelyButtonState();
     publishNonImediateMQTTToppcs();
 
@@ -354,21 +355,27 @@ void onWiFiAPMode()
 
 void publishImediatelyButtonState()
 {
+    if (buttonState == buttonLastState)
+    {
+        return;
+    }
+
+    buttonLastState = buttonState;
     const char *payload = buttonState ? "1" : "0";
     const String base = mqtt.getMqttBaseTopic();
-    if (!base.isEmpty() && BUTTON_ID != nullptr && BUTTON_TOPIC != nullptr)
+    if (base.isEmpty())
     {
-        if (buttonState != buttonLastState)
-        {
-            buttonLastState = buttonState;
-            const String topic = base + "/" + BUTTON_TOPIC;
-            mqtt.publishExtraTopicImmediately(BUTTON_ID, topic.c_str(), payload, false);
-        }
-        else
-        {
-            lmg.logTag(LL::Warn, "LOOP", "Cannot publish button state: MQTT base topic is empty");
-        }
+        lmg.logTag(LL::Warn, "LOOP", "MQTT base topic empty");
+        return;
     }
+    if (!BUTTON_ID || !BUTTON_TOPIC)
+    {
+        lmg.logTag(LL::Warn, "LOOP", "MQTT button topic/id empty");
+        return;
+    }
+
+    const String topic = base + "/" + BUTTON_TOPIC;
+    mqtt.publishExtraTopicImmediately(BUTTON_ID, topic.c_str(), payload, false);
 }
 
 void publishNonImediateMQTTToppcs()
