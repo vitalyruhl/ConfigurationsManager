@@ -114,6 +114,10 @@ Optional global hook voids (define in your sketch if you want them):
 - `void onMQTTStateChanged(int state)`
 - `void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length)`
 
+Notes:
+- MQTT is an optional module. The hooks are discovered only in `namespace cm` so the core does not require global symbols when MQTT is not included.
+- This is why `onWiFiConnected()` can be global (core), while MQTT hooks must live in `namespace cm`.
+
 If you implement these hooks in the same translation unit (Arduino sketch), define this before including the header:
 
 ```cpp

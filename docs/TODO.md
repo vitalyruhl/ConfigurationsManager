@@ -15,7 +15,6 @@
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
 
-
 ## Medium Priority (Prio 5)
 
 - verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
