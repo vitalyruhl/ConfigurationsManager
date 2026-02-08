@@ -4,19 +4,28 @@
 #pragma once
 
 #include <Arduino.h>
-#include "settings_v3.h"
+#include "ConfigManager.h"
 
-// RS485 configuration (default Settings)
-// struct RS485_Settings
-// {
-//     bool useExtraSerial = true; // set to true to use Serial2 for RS485 communication
-//     int baudRate = 4800;
-//     int rxPin = 18;          // only for Serial2, not used for Serial
-//     int txPin = 19;          // only for Serial2, not used for Serial
-//     int dePin = 4;           // DE pin for RS485 communication (direction control)
-//     bool enableRS485 = true; // set to false to disable RS485 communication
-//     // todo: add settings for Inverter eg, headder, checksum, etc.
-// };
+struct RS485_Settings
+{
+    // Serial2 is used for RS485 communication
+    static constexpr bool useExtraSerial = true;
+
+    Config<bool> enableRS485{ConfigOptions<bool>{.key = "RS485En", .name = "Enable RS485", .category = "RS485", .defaultValue = true, .sortOrder = 1}};
+    Config<int> baudRate{ConfigOptions<int>{.key = "RS485Baud", .name = "Baud Rate", .category = "RS485", .defaultValue = 4800, .sortOrder = 2}};
+    Config<int> rxPin{ConfigOptions<int>{.key = "RS485Rx", .name = "RX Pin", .category = "RS485", .defaultValue = 18, .sortOrder = 3}};
+    Config<int> txPin{ConfigOptions<int>{.key = "RS485Tx", .name = "TX Pin", .category = "RS485", .defaultValue = 19, .sortOrder = 4}};
+    Config<int> dePin{ConfigOptions<int>{.key = "RS485DE", .name = "DE Pin", .category = "RS485", .defaultValue = 4, .sortOrder = 5}};
+
+    void attachTo(ConfigManagerClass &cfg)
+    {
+        cfg.addSetting(&enableRS485);
+        cfg.addSetting(&baudRate);
+        cfg.addSetting(&rxPin);
+        cfg.addSetting(&txPin);
+        cfg.addSetting(&dePin);
+    }
+};
 
 struct RS485Packet // 19.04.2025 viru - that will not working???
 {
@@ -41,6 +50,7 @@ extern byte byte7;
 extern byte serialpacket[8];
 extern HardwareSerial *RS485serial;
 extern RS485Packet packet;
+extern RS485_Settings rs485settings;
 
 void RS485begin();
 void sendToRS485(uint16_t demand);

@@ -32,8 +32,8 @@ Legend:
 
 ## P0 (critical) – ConfigManager refactor (functional, buildable)
 
-- [COMPLETED] ConfigManager refactor aligned to ConfigManager 2.7.6
-	- Settings migrated to ConfigOptions API
+- [COMPLETED] ConfigManager refactor aligned to ConfigManager 3.3.0
+	- Settings migrated to ConfigOptions API (no builder)
 	- Runtime/WiFi APIs aligned
 	- `pio run -e usb` builds successfully
 	- Note: No backward compatibility / migration by explicit decision

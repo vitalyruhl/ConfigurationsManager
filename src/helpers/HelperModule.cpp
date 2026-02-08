@@ -184,8 +184,19 @@ void PulseOutput::startSequence(uint16_t count, uint32_t onMs, uint32_t offMs, b
 
 void pulseWait(uint8_t pin, PulseOutput::ActiveLevel level, uint16_t count, uint32_t periodMs)
 {
-    PulseOutput temp(pin, level);
-    temp.setPulseWait(count, periodMs);
+    if (count == 0) count = 1;
+    if (periodMs < 2) periodMs = 2;
+    const uint32_t onMs = periodMs / 2;
+    const uint32_t offMs = periodMs - onMs;
+    const bool activeHigh = (level == PulseOutput::ActiveLevel::ActiveHigh);
+
+    pinMode(pin, OUTPUT);
+    for (uint16_t i = 0; i < count; ++i) {
+        digitalWrite(pin, activeHigh ? HIGH : LOW);
+        delay(onMs);
+        digitalWrite(pin, activeHigh ? LOW : HIGH);
+        delay(offMs);
+    }
 }
 
 } // namespace cm::helpers
