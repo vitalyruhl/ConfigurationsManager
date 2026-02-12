@@ -562,10 +562,11 @@ public:
             }
         };
 
-        auto persistValue = [&](const char* targetKey, const char* actionLabel) {
+        auto persistValue = [&](const char* targetKey, const char* actionLabel) -> bool {
+            size_t bytesWritten = 0;
             if constexpr (std::is_same_v<T, String>)
             {
-                prefs.putString(targetKey, value);
+                bytesWritten = prefs.putString(targetKey, value);
                 if (isPassword)
                 {
                     log("[PREFS] %s %s.%s = '***' (hidden)", actionLabel, getCategory(), getDisplayName());
@@ -577,26 +578,32 @@ public:
             }
             else if constexpr (std::is_same_v<T, bool>)
             {
-                prefs.putBool(targetKey, value);
+                bytesWritten = prefs.putBool(targetKey, value);
                 log("[PREFS] %s %s.%s = %s", actionLabel, getCategory(), getDisplayName(), value ? "true" : "false");
             }
             else if constexpr (std::is_same_v<T, int>)
             {
-                prefs.putInt(targetKey, value);
+                bytesWritten = prefs.putInt(targetKey, value);
                 log("[PREFS] %s %s.%s = %d", actionLabel, getCategory(), getDisplayName(), value);
             }
             else if constexpr (std::is_same_v<T, float>)
             {
-                prefs.putFloat(targetKey, value);
+                bytesWritten = prefs.putFloat(targetKey, value);
                 log("[PREFS] %s %s.%s = %.2f", actionLabel, getCategory(), getDisplayName(), value);
             }
+
+            if (bytesWritten == 0) {
+                log("[PREFS][E] %s %s.%s write failed", actionLabel, getCategory(), getDisplayName());
+                return false;
+            }
+            return true;
         };
 
         if (!keyExists)
         {
             value = defaultValue;
-            persistValue(storageKey, "Initialized (default)");
-            modified = false;
+            const bool writeOk = persistValue(storageKey, "Initialized (default)");
+            modified = !writeOk;
             return;
         }
 
@@ -634,9 +641,10 @@ public:
 
         if (!modified) return;
 
+        size_t bytesWritten = 0;
         if constexpr (std::is_same_v<T, String>)
         {
-            prefs.putString(getKey(), value);
+            bytesWritten = prefs.putString(getKey(), value);
             if (isPassword) {
                 logVerbose("[PREFS] Saved %s.%s = '***' (hidden)", getCategory(), getDisplayName());
             } else {
@@ -645,18 +653,23 @@ public:
         }
         else if constexpr (std::is_same_v<T, bool>)
         {
-            prefs.putBool(getKey(), value);
+            bytesWritten = prefs.putBool(getKey(), value);
             logVerbose("[PREFS] Saved %s.%s = %s", getCategory(), getDisplayName(), value ? "true" : "false");
         }
         else if constexpr (std::is_same_v<T, int>)
         {
-            prefs.putInt(getKey(), value);
+            bytesWritten = prefs.putInt(getKey(), value);
             logVerbose("[PREFS] Saved %s.%s = %d", getCategory(), getDisplayName(), value);
         }
         else if constexpr (std::is_same_v<T, float>)
         {
-            prefs.putFloat(getKey(), value);
+            bytesWritten = prefs.putFloat(getKey(), value);
             logVerbose("[PREFS] Saved %s.%s = %.2f", getCategory(), getDisplayName(), value);
+        }
+
+        if (bytesWritten == 0) {
+            log("[PREFS][E] Save %s.%s write failed", getCategory(), getDisplayName());
+            return;
         }
 
         modified = false;
