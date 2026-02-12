@@ -14,12 +14,22 @@
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
+- complete Phase-4 follow-up for undocumented WiFi API:
+  - document `ConfigManager.performStackReset()` in `docs/WIFI.md` (advanced troubleshooting)
+  - add a minimal diagnostic usage snippet in `examples/Full-Logging-Demo`
+- normalize docs method-overview quality:
+  - replace generic placeholder rows (only `ConfigManager.begin`) with topic-specific API entries where applicable
+  - keep one valid `## Method overview` section per file with meaningful content
+- convert `docs/MQTT.md` Method overview into the required table format:
+  - `| Method | Overloads / Variants | Description | Notes |`
+  - list overloads explicitly with `<br>` where needed
+- align documentation guidance with logging severity policy:
+  - use short severity tags (`[I]`, `[W]`, `[E]`, `[D]`, `[T]`) instead of long tags (`[INFO]`, `[WARNING]`, ...)
 
 ## Medium Priority (Prio 5)
 
 - verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
 - add addCSSClass helper for all Live controls (buttons, sliders, inputs) so user CSS selectors can override styles (Live only, not Settings)
-- document `ConfigManager.performStackReset()` in `docs/WIFI.md` (advanced troubleshooting section) and add a minimal diagnostic usage snippet in `examples/Full-Logging-Demo`
 
 
 

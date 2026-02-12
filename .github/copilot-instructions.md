@@ -65,7 +65,8 @@ GIT WORKFLOW GUIDELINES
   - Run a PlatformIO build in the repo root:
       pio run -e usb
     (must succeed without errors).
-  - Only if the build succeeds:
+    - Exception: If no `.cpp` or `.h` files were changed, skip this build step.
+  - Only if the build succeeds (or was skipped due to no `.cpp`/`.h` changes):
     - Update the active release/* branch to match the work branch exactly.
     - Prefer fast-forward updates.
     - If fast-forward is not possible, ask explicitly before force-pushing
@@ -234,6 +235,7 @@ TESTING & BUILD VALIDATION
 - Mock implementations for testing
   - mocked data must be clearly marked as [MOCKED!]
 - Always run at least one PlatformIO build after changes.
+  - Exception: If no `.cpp` or `.h` files were changed, do not run `pio run`.
 - If tests are affected, run pio test for at least one environment.
 
 ========================================

@@ -32,7 +32,7 @@ Recommended docs files:
 - All code comments **English only**
 - Clear, descriptive names (**English only**)
 - All log/error messages **English only**
-- **No emojis** in code/comments/log output. Use `[INFO]`, `[WARNING]`, `[ERROR]`, `[SUCCESS]`.
+- **No emojis** in code/comments/log output. Use short severity tags: `[I]` for Info, `[W]` for Warning, `[E]` for Error, `[D]` for Debug, `[T]` for Trace.
 - Prefer C++17 features where appropriate
 - Prefer RAII + smart pointers
 - Avoid `std::function` in hot paths / ISR contexts
