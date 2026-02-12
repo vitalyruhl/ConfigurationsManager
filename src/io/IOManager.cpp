@@ -2,6 +2,7 @@
 
 #define IO_LOG(...) CM_LOG("[IO] " __VA_ARGS__)
 #include "core/CoreSettings.h"
+#include "io/ioDefinitions.h"
 
 #include <cmath>
 
@@ -23,6 +24,69 @@ static void registerSettingPlacement(BaseSetting* setting, const String& pageNam
         return;
     }
     ConfigManager.addToSettingsGroup(setting->getKey(), pageName.c_str(), cardName.c_str(), groupName.c_str(), setting->getSortOrder());
+}
+
+enum class BindingPinType {
+    DigitalOutput,
+    DigitalInput,
+    AnalogInput,
+    AnalogOutput,
+};
+
+static bool isPinValidForBinding(const cm::io::IOPinRules& rules, int pin, BindingPinType type)
+{
+    switch (type) {
+        case BindingPinType::DigitalOutput:
+            return rules.isValidDigitalOutputPin(pin);
+        case BindingPinType::DigitalInput:
+            return rules.isValidDigitalInputPin(pin);
+        case BindingPinType::AnalogInput:
+            return rules.isValidAnalogInputPin(pin);
+        case BindingPinType::AnalogOutput:
+            return rules.isValidAnalogOutputPin(pin);
+        default:
+            return false;
+    }
+}
+
+static const char* bindingPinTypeLabel(BindingPinType type)
+{
+    switch (type) {
+        case BindingPinType::DigitalOutput:
+            return "digital output";
+        case BindingPinType::DigitalInput:
+            return "digital input";
+        case BindingPinType::AnalogInput:
+            return "analog input";
+        case BindingPinType::AnalogOutput:
+            return "analog output";
+        default:
+            return "io";
+    }
+}
+
+static bool validateDefaultBindingPin(int pin, BindingPinType type, const char* id, const char* caller)
+{
+    const cm::io::GUIMode mode = ConfigManager.getGUIMode();
+    std::unique_ptr<cm::io::IOPinRules> pinRules = cm::io::createPinRulesForMode(mode);
+    if (!pinRules) {
+        IO_LOG("[W] %s: skip pin validation for '%s' (pin rules unavailable)", caller, id ? id : "(null)");
+        return true;
+    }
+
+    if (isPinValidForBinding(*pinRules, pin, type)) {
+        return true;
+    }
+
+    const cm::io::PinInfo info = pinRules->getPinInfo(pin);
+    const String constraints = pinRules->describeConstraints(info.constraints);
+    if (!constraints.isEmpty()) {
+        IO_LOG("[E] %s: reject '%s' pin=%d (%s, %s)", caller, id ? id : "(null)", pin, bindingPinTypeLabel(type), constraints.c_str());
+    } else {
+        IO_LOG("[E] %s: reject '%s' pin=%d (%s)", caller, id ? id : "(null)", pin, bindingPinTypeLabel(type));
+    }
+    IO_LOG("[E] %s: mode=%s", caller, cm::io::toString(mode));
+    return false;
 }
 } // namespace
 
@@ -87,6 +151,10 @@ void IOManager::addDigitalOutput(const DigitalOutputBinding& binding)
         return;
     }
 
+    if (!validateDefaultBindingPin(binding.defaultPin, BindingPinType::DigitalOutput, binding.id, "addDigitalOutput")) {
+        return;
+    }
+
     DigitalOutputEntry entry;
     entry.id = binding.id;
     entry.name = binding.name ? binding.name : binding.id;
@@ -120,6 +188,10 @@ void IOManager::addDigitalInput(const DigitalInputBinding& binding)
 
     if (findInputIndex(binding.id) >= 0) {
         IO_LOG("[WARNING] addDigitalInput: input '%s' already exists", binding.id);
+        return;
+    }
+
+    if (!validateDefaultBindingPin(binding.defaultPin, BindingPinType::DigitalInput, binding.id, "addDigitalInput")) {
         return;
     }
 
@@ -160,6 +232,10 @@ void IOManager::addAnalogInput(const AnalogInputBinding& binding)
 
     if (findAnalogInputIndex(binding.id) >= 0) {
         IO_LOG("[WARNING] addAnalogInput: input '%s' already exists", binding.id);
+        return;
+    }
+
+    if (!validateDefaultBindingPin(binding.defaultPin, BindingPinType::AnalogInput, binding.id, "addAnalogInput")) {
         return;
     }
 
@@ -208,6 +284,10 @@ void IOManager::addAnalogOutput(const AnalogOutputBinding& binding)
 
     if (findAnalogOutputIndex(binding.id) >= 0) {
         IO_LOG("[WARNING] addAnalogOutput: output '%s' already exists", binding.id);
+        return;
+    }
+
+    if (!validateDefaultBindingPin(binding.defaultPin, BindingPinType::AnalogOutput, binding.id, "addAnalogOutput")) {
         return;
     }
 

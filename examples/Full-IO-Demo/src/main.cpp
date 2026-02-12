@@ -8,7 +8,6 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 #include "io/IOManager.h"
-#include "io/definitions/esp32-io-definition.h"
 #include "alarm/AlarmManager.h"
 
 #if __has_include("secret/wifiSecret.h")
@@ -21,7 +20,7 @@
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Full-IO-Demo"
 
-// Demo pin bindings and compile-time checks use centralized ESP32 PinRules helpers.
+// Demo pin bindings are validated centrally by IOManager against active PinRules.
 static constexpr int DEMO_PIN_AP_MODE_BUTTON = 13;
 static constexpr int DEMO_PIN_RESET_BUTTON = 14;
 static constexpr int DEMO_PIN_TEST_BUTTON = 33;
@@ -32,18 +31,6 @@ static constexpr int DEMO_PIN_LDR_VN = 39;
 static constexpr int DEMO_PIN_LDR_VP = 36;
 static constexpr int DEMO_PIN_AO_PERCENT = 25;
 static constexpr int DEMO_PIN_AO_VOLT = 26;
-
-static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_TEST_BUTTON), "Full-IO-Demo: DEMO_PIN_TEST_BUTTON invalid");
-static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_HOLD_BUTTON) && !cm::io::isEsp32InputOnlyPin(DEMO_PIN_HOLD_BUTTON),
-              "Full-IO-Demo: DEMO_PIN_HOLD_BUTTON invalid for digital output");
-static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_HEATER_RELAY) && !cm::io::isEsp32InputOnlyPin(DEMO_PIN_HEATER_RELAY),
-              "Full-IO-Demo: DEMO_PIN_HEATER_RELAY invalid for digital output");
-static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_FAN_RELAY) && !cm::io::isEsp32InputOnlyPin(DEMO_PIN_FAN_RELAY),
-              "Full-IO-Demo: DEMO_PIN_FAN_RELAY invalid for digital output");
-static_assert(cm::io::isEsp32AnalogInputPin(DEMO_PIN_LDR_VN), "Full-IO-Demo: DEMO_PIN_LDR_VN not ADC-capable");
-static_assert(cm::io::isEsp32AnalogInputPin(DEMO_PIN_LDR_VP), "Full-IO-Demo: DEMO_PIN_LDR_VP not ADC-capable");
-static_assert(cm::io::isEsp32DacPin(DEMO_PIN_AO_PERCENT), "Full-IO-Demo: DEMO_PIN_AO_PERCENT must be DAC pin 25/26");
-static_assert(cm::io::isEsp32DacPin(DEMO_PIN_AO_VOLT), "Full-IO-Demo: DEMO_PIN_AO_VOLT must be DAC pin 25/26");
 
 static const char SETTINGS_PASSWORD[] = ""; // NOTE: Empty string disables password protection for the Settings tab.
 
