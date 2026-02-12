@@ -29,6 +29,8 @@ ConfigManagerWeb::~ConfigManagerWeb() {
 namespace
 {
 constexpr size_t kMaxJsonBodyBytes = 8 * 1024;
+constexpr uintptr_t kRejectedBodyMarkerValue = 1;
+constexpr const char* kAllocFailedJson = "{\"status\":\"error\",\"reason\":\"alloc_failed\"}";
 
 void sendPayloadTooLarge(AsyncWebServerRequest* request)
 {
@@ -36,6 +38,97 @@ void sendPayloadTooLarge(AsyncWebServerRequest* request)
         return;
     }
     request->send(413, "application/json", "{\"status\":\"error\",\"reason\":\"payload_too_large\"}");
+}
+
+void* rejectedBodyMarker()
+{
+    return reinterpret_cast<void*>(kRejectedBodyMarkerValue);
+}
+
+bool isRejectedBodyMarker(const void* ptr)
+{
+    return ptr == rejectedBodyMarker();
+}
+
+void clearRequestBodyBuffer(AsyncWebServerRequest* request)
+{
+    if (!request) {
+        return;
+    }
+
+    if (request->_tempObject && !isRejectedBodyMarker(request->_tempObject)) {
+        delete static_cast<String*>(request->_tempObject);
+    }
+    request->_tempObject = nullptr;
+}
+
+bool initRequestBodyBuffer(AsyncWebServerRequest* request, size_t expectedSize)
+{
+    if (!request) {
+        return false;
+    }
+
+    if (expectedSize > kMaxJsonBodyBytes) {
+        clearRequestBodyBuffer(request);
+        request->_tempObject = rejectedBodyMarker();
+        sendPayloadTooLarge(request);
+        return false;
+    }
+
+    clearRequestBodyBuffer(request);
+    String* body = new String();
+    if (!body || !body->reserve(expectedSize)) {
+        delete body;
+        request->_tempObject = rejectedBodyMarker();
+        request->send(500, "application/json", kAllocFailedJson);
+        return false;
+    }
+
+    request->_tempObject = body;
+    return true;
+}
+
+String* appendRequestBodyChunk(AsyncWebServerRequest* request, const uint8_t* data, size_t len, size_t index, size_t total)
+{
+    if (!request || isRejectedBodyMarker(request->_tempObject)) {
+        return nullptr;
+    }
+
+    if (index == 0) {
+        if (!initRequestBodyBuffer(request, total)) {
+            return nullptr;
+        }
+    } else if (!request->_tempObject) {
+        // Ignore follow-up chunks after a rejected/failed first chunk.
+        return nullptr;
+    }
+
+    if (total > kMaxJsonBodyBytes) {
+        clearRequestBodyBuffer(request);
+        request->_tempObject = rejectedBodyMarker();
+        return nullptr;
+    }
+
+    String* body = static_cast<String*>(request->_tempObject);
+    if (!body) {
+        return nullptr;
+    }
+
+    if ((body->length() + len) > kMaxJsonBodyBytes) {
+        clearRequestBodyBuffer(request);
+        request->_tempObject = rejectedBodyMarker();
+        sendPayloadTooLarge(request);
+        return nullptr;
+    }
+
+    if (!body->concat(reinterpret_cast<const char*>(data), len)) {
+        clearRequestBodyBuffer(request);
+        request->_tempObject = rejectedBodyMarker();
+        request->send(500, "application/json", kAllocFailedJson);
+        return nullptr;
+    }
+
+    return body;
 }
 
 bool parseForceFlag(AsyncWebServerRequest *request)
@@ -254,41 +347,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
         },
         NULL,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            // Handle POST body for /config endpoint
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
-                return;
-            }
-
-            if (index == 0) {
-                request->_tempObject = new String();
-                String* newBody = static_cast<String*>(request->_tempObject);
-                if (!newBody || !newBody->reserve(total)) {
-                    delete newBody;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
-            }
-
-            if (!request->_tempObject) {
-                return;
-            }
-
-            String* body = static_cast<String*>(request->_tempObject);
-            if ((body->length() + len) > kMaxJsonBodyBytes) {
-                delete body;
-                request->_tempObject = nullptr;
-                sendPayloadTooLarge(request);
-                return;
-            }
-            // data is not null-terminated; append exactly len bytes to avoid out-of-bounds reads.
-            if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
 
@@ -352,8 +412,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"missing_url_params\"}");
                 }
 
-                delete body;
-                request->_tempObject = nullptr;
+                clearRequestBodyBuffer(request);
             }
         });
 
@@ -1086,42 +1145,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             }
 
             // Fallback to JSON body parsing
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1139,9 +1174,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 
@@ -1166,42 +1199,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             }
 
             // Fallback to JSON body parsing
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1220,9 +1229,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 
@@ -1252,42 +1259,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             }
 
             // Fallback to JSON body parsing
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1310,9 +1293,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 
@@ -1337,42 +1318,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             }
 
             // Fallback to JSON body parsing
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1391,9 +1348,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 
@@ -1421,42 +1376,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
             }
 
             // Fallback to JSON body parsing
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1475,9 +1406,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 
@@ -1500,42 +1429,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 return;
             }
 
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1554,9 +1459,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 
@@ -1580,42 +1483,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 return;
             }
 
-            if (request->contentLength() > kMaxJsonBodyBytes) {
-                sendPayloadTooLarge(request);
+            if (!initRequestBodyBuffer(request, request->contentLength())) {
                 return;
-            }
-            request->_tempObject = new String();
-            String* body = static_cast<String*>(request->_tempObject);
-            if (!body || !body->reserve(request->contentLength())) {
-                delete body;
-                request->_tempObject = nullptr;
-                request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
             }
         },
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (total > kMaxJsonBodyBytes) {
-                if (index == 0) {
-                    sendPayloadTooLarge(request);
-                }
+            String* body = appendRequestBodyChunk(request, data, len, index, total);
+            if (!body) {
                 return;
             }
-            if (request->_tempObject) {
-                String* body = static_cast<String*>(request->_tempObject);
-                if ((body->length() + len) > kMaxJsonBodyBytes) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    sendPayloadTooLarge(request);
-                    return;
-                }
-                if (!body->concat(reinterpret_cast<const char*>(data), len)) {
-                    delete body;
-                    request->_tempObject = nullptr;
-                    request->send(500, "application/json", "{\"status\":\"error\",\"reason\":\"alloc_failed\"}");
-                    return;
-                }
 
-                if (index + len == total) {
+            if (index + len == total) {
                     DynamicJsonDocument doc(256);
                     DeserializationError error = deserializeJson(doc, *body);
 
@@ -1634,9 +1513,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                         request->send(400, "application/json", "{\"status\":\"error\",\"reason\":\"invalid_json\"}");
                     }
 
-                    delete body;
-                    request->_tempObject = nullptr;
-                }
+                    clearRequestBodyBuffer(request);
             }
         });
 }
