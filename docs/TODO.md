@@ -19,6 +19,7 @@
 
 - verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
 - add addCSSClass helper for all Live controls (buttons, sliders, inputs) so user CSS selectors can override styles (Live only, not Settings)
+- document `ConfigManager.performStackReset()` in `docs/WIFI.md` (advanced troubleshooting section) and add a minimal diagnostic usage snippet in `examples/Full-Logging-Demo`
 
 
 
