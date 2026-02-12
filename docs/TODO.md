@@ -83,7 +83,8 @@
    - Status:
      - [DONE] `LoggingManager` queue front-erase strategy optimized (`std::deque` + `pop_front`)
      - [DONE] debug-heavy request-path logs trimmed in `WebServer` (hot-path logs moved to verbose/condensed)
-     - [NEXT] follow-up on runtime/web/wifi JSON+String hot paths
+     - [DONE] runtime JSON hot-path allocations reduced (`RuntimeManager` serialization temp-String reduction)
+     - [NEXT] web/wifi JSON+String hot-path follow-up
 
 Open questions (implementation detail follow-up):
 - Should the `8 KB` body limit be endpoint-specific (e.g. `config_raw` lower, larger JSON endpoints higher), or globally uniform for all POST body handlers?

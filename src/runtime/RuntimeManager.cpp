@@ -298,7 +298,19 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
     }
 
     String out;
-    out.reserve(2048);
+    size_t estimatedBytes = 512;
+    estimatedBytes += providersSnapshot.size() * 96;
+    estimatedBytes += checkboxesSnapshot.size() * 24;
+    estimatedBytes += stateButtonsSnapshot.size() * 24;
+    estimatedBytes += intSlidersSnapshot.size() * 28;
+    estimatedBytes += floatSlidersSnapshot.size() * 28;
+    estimatedBytes += intInputsSnapshot.size() * 28;
+    estimatedBytes += floatInputsSnapshot.size() * 28;
+    estimatedBytes += alarmsSnapshot.size() * 16;
+    if (estimatedBytes > 8192) {
+        estimatedBytes = 8192;
+    }
+    out.reserve(estimatedBytes);
     const size_t written = serializeJson(d, out);
     if (written == 0 || out.length() == 0 || out[0] != '{') {
         // Never return an empty/invalid frame; the WebUI expects a JSON object.
@@ -435,13 +447,11 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             }
         }
 
-        String entryJson;
-        serializeJson(entryDoc, entryJson);
         if (!first) {
             out += ",";
         }
         first = false;
-        out += entryJson;
+        serializeJson(entryDoc, out);
     }
 
     out += "]";
