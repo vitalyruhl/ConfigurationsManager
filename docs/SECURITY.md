@@ -37,3 +37,10 @@ If you need HTTPS/TLS, the recommended approach is to terminate TLS externally (
 - [Settings Configuration](SETTINGS.md)
 - [Feature Flags](FEATURE_FLAGS.md)
 - [Smart WiFi Roaming](SMART_ROAMING.md)
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

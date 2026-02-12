@@ -203,3 +203,10 @@ Provide `.callback` or call `myConfig.setCallback([](T v){ ... });` after constr
 Config<bool> enableAdv( WIFI_GROUP.opt<bool>("adv", false, "Enable Advanced") );
 Config<int> hiddenNum( WIFI_GROUP.opt<int>("hnum", 42, "Hidden Number", true, false, nullptr, showIfTrue(enableAdv) ) );
 ```
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

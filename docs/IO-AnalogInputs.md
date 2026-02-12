@@ -154,3 +154,10 @@ Typical sketch order:
 2. `ConfigManager.loadAll()` (loads persisted pins/mapping)
 3. `ioManager.begin()`
 4. In `loop()`: `ioManager.update()` continuously reads inputs, updates runtime values, and evaluates alarms
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

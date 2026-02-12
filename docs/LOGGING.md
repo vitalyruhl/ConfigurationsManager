@@ -222,3 +222,10 @@ lmg.addOutput(std::move(mqttLog));
 - `void setRetainedLevels(bool info, bool warn, bool error)` (1x) - Retained "last" topics.
 - `void setCustomTagPrefix(const char* prefix)` (1x) - Prefix for custom retained.
 - `void setCustomRetainedEnabled(bool enabled)` (1x) - Toggle custom retained topic.
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

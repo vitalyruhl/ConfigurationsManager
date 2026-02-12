@@ -186,8 +186,8 @@ void setup()
     ShowDisplay();
     setupTempSensor();
     
-    // ConfigManager.setWifiAPMacPriority("e0-08-55-92-55-ac"); //boiler ap
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5"); // office ap
+    // ConfigManager.setAccessPointMacPriority("e0-08-55-92-55-ac"); //boiler ap
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5"); // office ap
     ConfigManager.startWebServer();
 
     lmg.log("System setup completed.");

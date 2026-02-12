@@ -41,3 +41,10 @@ See also `docs/GUI-Runtime.md`.
 - ConfigurationsManager serves the UI/API over plain HTTP only.
 - If you need transport security, provide it externally (VPN, trusted WiFi only, or a TLS reverse proxy that terminates HTTPS).
 - See `docs/SECURITY.md` for details.
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

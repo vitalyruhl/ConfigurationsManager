@@ -126,8 +126,8 @@ public:
   bool isSmartRoamingEnabled() const;
 
   // MAC Address Filtering and Priority
-  void setWifiAPMacFilter(const String& macAddress);     // Only connect to this MAC
-  void setWifiAPMacPriority(const String& macAddress);   // Prefer this MAC, fallback to others
+  void setAccessPointMacFilter(const String& macAddress);     // Only connect to this MAC
+  void setAccessPointMacPriority(const String& macAddress);   // Prefer this MAC, fallback to others
   void clearMacFilter();                                  // Remove MAC filtering
   void clearMacPriority();                               // Remove MAC priority
   bool isMacFilterEnabled() const;
@@ -136,7 +136,7 @@ public:
   String getPriorityMac() const;
 
   // WiFi Stack Management
-  void performWiFiStackReset();                          // Complete WiFi stack reset for connectivity issues
+  void performStackReset();                          // Complete WiFi stack reset for connectivity issues
 
   // Compatibility methods for ConfigManager
   bool getStatus() const { return isConnected(); }

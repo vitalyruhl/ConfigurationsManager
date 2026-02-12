@@ -189,3 +189,10 @@ void loop()
 - OTA and Web UI flashing: see `docs/OTA.md`
 - GUI runtime (live, styling, theming): see `docs/GUI-Runtime.md`
 - Settings and OptionGroup patterns: see `docs/SETTINGS.md`
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

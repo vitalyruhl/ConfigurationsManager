@@ -178,3 +178,10 @@ Typical sketch order:
 2. `ConfigManager.loadAll()` (loads persisted pins/polarity)
 3. `ioManager.begin()` (applies `pinMode(...)` and initializes states)
 4. In `loop()`: `ioManager.update()` continuously reads inputs and emits events
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

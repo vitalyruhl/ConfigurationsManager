@@ -120,7 +120,7 @@ void setup()
 
     checkWifiCredentials();
 
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP is my dev-station
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP is my dev-station
     ConfigManager.startWebServer();
 
     demoAnalogOutputApi();

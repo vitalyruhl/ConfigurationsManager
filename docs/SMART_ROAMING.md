@@ -226,3 +226,10 @@ See the examples directory for complete implementations:
 - Default enabled with conservative settings
 - Configurable thresholds and timing
 - Support for static IP preservation during roaming
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

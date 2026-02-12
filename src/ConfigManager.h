@@ -2452,7 +2452,7 @@ public:
         {
             return false;
         }
-        auto callbacks = msgIt->second;
+        const auto& callbacks = msgIt->second;
         guiMessageCallbacks.erase(msgIt);
         auto cbIt = callbacks.find(actionId);
         if (cbIt != callbacks.end() && cbIt->second)
@@ -3264,8 +3264,8 @@ public:
     bool isSmartRoamingEnabled() const { return wifiManager.isSmartRoamingEnabled(); }
 
     // MAC Address Filtering and Priority - convenience methods
-    void setWifiAPMacFilter(const String& macAddress) { wifiManager.setWifiAPMacFilter(macAddress); }
-    void setWifiAPMacPriority(const String& macAddress) { wifiManager.setWifiAPMacPriority(macAddress); }
+    void setAccessPointMacFilter(const String& macAddress) { wifiManager.setAccessPointMacFilter(macAddress); }
+    void setAccessPointMacPriority(const String& macAddress) { wifiManager.setAccessPointMacPriority(macAddress); }
     void clearMacFilter() { wifiManager.clearMacFilter(); }
     void clearMacPriority() { wifiManager.clearMacPriority(); }
     bool isMacFilterEnabled() const { return wifiManager.isMacFilterEnabled(); }
