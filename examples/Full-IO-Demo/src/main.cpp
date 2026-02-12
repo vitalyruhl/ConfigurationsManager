@@ -8,6 +8,7 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 #include "io/IOManager.h"
+#include "io/definitions/esp32-io-definition.h"
 #include "alarm/AlarmManager.h"
 
 #if __has_include("secret/wifiSecret.h")
@@ -20,55 +21,29 @@
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Full-IO-Demo"
 
-// Demo pin bindings and compile-time checks for common ESP32 pin pitfalls.
-#define DEMO_PIN_AP_MODE_BUTTON 13
-#define DEMO_PIN_RESET_BUTTON 14
-#define DEMO_PIN_TEST_BUTTON 33
-#define DEMO_PIN_HEATER_RELAY 23
-#define DEMO_PIN_FAN_RELAY 27
-#define DEMO_PIN_HOLD_BUTTON 32
-#define DEMO_PIN_LDR_VN 39
-#define DEMO_PIN_LDR_VP 36
-#define DEMO_PIN_AO_PERCENT 25
-#define DEMO_PIN_AO_VOLT 26
+// Demo pin bindings and compile-time checks use centralized ESP32 PinRules helpers.
+static constexpr int DEMO_PIN_AP_MODE_BUTTON = 13;
+static constexpr int DEMO_PIN_RESET_BUTTON = 14;
+static constexpr int DEMO_PIN_TEST_BUTTON = 33;
+static constexpr int DEMO_PIN_HEATER_RELAY = 23;
+static constexpr int DEMO_PIN_FAN_RELAY = 27;
+static constexpr int DEMO_PIN_HOLD_BUTTON = 32;
+static constexpr int DEMO_PIN_LDR_VN = 39;
+static constexpr int DEMO_PIN_LDR_VP = 36;
+static constexpr int DEMO_PIN_AO_PERCENT = 25;
+static constexpr int DEMO_PIN_AO_VOLT = 26;
 
-#define DEMO_PIN_IS_RESERVED(p) (((p) >= 6 && (p) <= 11) || (p) == 20 || (p) == 24 || ((p) >= 28 && (p) <= 31))
-#define DEMO_PIN_IS_INPUT_ONLY(p) ((p) >= 34 && (p) <= 39)
-#define DEMO_PIN_IS_ADC1(p) ((p) >= 32 && (p) <= 39)
-#define DEMO_PIN_IS_ADC2(p) ((p) == 0 || (p) == 2 || (p) == 4 || ((p) >= 12 && (p) <= 15) || ((p) >= 25 && (p) <= 27))
-#define DEMO_PIN_IS_ADC(p) (DEMO_PIN_IS_ADC1(p) || DEMO_PIN_IS_ADC2(p))
-
-#if ((DEMO_PIN_TEST_BUTTON < 0) || (DEMO_PIN_TEST_BUTTON > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_TEST_BUTTON))
-#warning "[W] Full-IO-Demo: DEMO_PIN_TEST_BUTTON is invalid for ESP32"
-#endif
-
-#if ((DEMO_PIN_HOLD_BUTTON < 0) || (DEMO_PIN_HOLD_BUTTON > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_HOLD_BUTTON) || DEMO_PIN_IS_INPUT_ONLY(DEMO_PIN_HOLD_BUTTON))
-#warning "[W] Full-IO-Demo: DEMO_PIN_HOLD_BUTTON is invalid for digital output on ESP32"
-#endif
-
-#if ((DEMO_PIN_HEATER_RELAY < 0) || (DEMO_PIN_HEATER_RELAY > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_HEATER_RELAY) || DEMO_PIN_IS_INPUT_ONLY(DEMO_PIN_HEATER_RELAY))
-#warning "[W] Full-IO-Demo: DEMO_PIN_HEATER_RELAY is invalid for digital output on ESP32"
-#endif
-
-#if ((DEMO_PIN_FAN_RELAY < 0) || (DEMO_PIN_FAN_RELAY > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_FAN_RELAY) || DEMO_PIN_IS_INPUT_ONLY(DEMO_PIN_FAN_RELAY))
-#warning "[W] Full-IO-Demo: DEMO_PIN_FAN_RELAY is invalid for digital output on ESP32"
-#endif
-
-#if (!DEMO_PIN_IS_ADC(DEMO_PIN_LDR_VN))
-#warning "[W] Full-IO-Demo: DEMO_PIN_LDR_VN is not ADC-capable on ESP32"
-#endif
-
-#if (!DEMO_PIN_IS_ADC(DEMO_PIN_LDR_VP))
-#warning "[W] Full-IO-Demo: DEMO_PIN_LDR_VP is not ADC-capable on ESP32"
-#endif
-
-#if ((DEMO_PIN_AO_PERCENT != 25) && (DEMO_PIN_AO_PERCENT != 26))
-#warning "[W] Full-IO-Demo: DEMO_PIN_AO_PERCENT is not a DAC pin on ESP32 (expected 25 or 26)"
-#endif
-
-#if ((DEMO_PIN_AO_VOLT != 25) && (DEMO_PIN_AO_VOLT != 26))
-#warning "[W] Full-IO-Demo: DEMO_PIN_AO_VOLT is not a DAC pin on ESP32 (expected 25 or 26)"
-#endif
+static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_TEST_BUTTON), "Full-IO-Demo: DEMO_PIN_TEST_BUTTON invalid");
+static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_HOLD_BUTTON) && !cm::io::isEsp32InputOnlyPin(DEMO_PIN_HOLD_BUTTON),
+              "Full-IO-Demo: DEMO_PIN_HOLD_BUTTON invalid for digital output");
+static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_HEATER_RELAY) && !cm::io::isEsp32InputOnlyPin(DEMO_PIN_HEATER_RELAY),
+              "Full-IO-Demo: DEMO_PIN_HEATER_RELAY invalid for digital output");
+static_assert(cm::io::isEsp32RealGpioPin(DEMO_PIN_FAN_RELAY) && !cm::io::isEsp32InputOnlyPin(DEMO_PIN_FAN_RELAY),
+              "Full-IO-Demo: DEMO_PIN_FAN_RELAY invalid for digital output");
+static_assert(cm::io::isEsp32AnalogInputPin(DEMO_PIN_LDR_VN), "Full-IO-Demo: DEMO_PIN_LDR_VN not ADC-capable");
+static_assert(cm::io::isEsp32AnalogInputPin(DEMO_PIN_LDR_VP), "Full-IO-Demo: DEMO_PIN_LDR_VP not ADC-capable");
+static_assert(cm::io::isEsp32DacPin(DEMO_PIN_AO_PERCENT), "Full-IO-Demo: DEMO_PIN_AO_PERCENT must be DAC pin 25/26");
+static_assert(cm::io::isEsp32DacPin(DEMO_PIN_AO_VOLT), "Full-IO-Demo: DEMO_PIN_AO_VOLT must be DAC pin 25/26");
 
 static const char SETTINGS_PASSWORD[] = ""; // NOTE: Empty string disables password protection for the Settings tab.
 
