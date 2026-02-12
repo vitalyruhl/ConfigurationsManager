@@ -491,10 +491,10 @@ void AlarmManager::updateLiveMetaStyle(const AlarmEntry& entry)
         if (placement.severity != entry.severity) {
             continue;
         }
-        RuntimeFieldMeta* meta = ConfigManager.getRuntime().findRuntimeMeta(placement.group, placement.key);
-        if (meta) {
-            meta->style = entry.style;
-        }
+        ConfigManager.getRuntime().updateRuntimeMeta(
+            placement.group, placement.key, [&](RuntimeFieldMeta& meta) {
+                meta.style = entry.style;
+            });
     }
 }
 
@@ -632,15 +632,16 @@ void AlarmManager::registerPlacement(AlarmEntry& entry,
     meta.order = resolvedOrder;
     meta.style = (severity == entry.severity) ? entry.style : buildDefaultStyle(severity, severity == AlarmSeverity::Alarm);
 
-    RuntimeFieldMeta* existingMeta = ConfigManager.getRuntime().findRuntimeMeta(meta.group, meta.key);
-    if (existingMeta) {
-        existingMeta->label = meta.label;
-        existingMeta->order = meta.order;
-        existingMeta->style = meta.style;
-        existingMeta->boolAlarmValue = meta.boolAlarmValue;
-        existingMeta->hasAlarm = meta.hasAlarm;
-        existingMeta->alarmWhenTrue = meta.alarmWhenTrue;
-    } else {
+    const bool updated = ConfigManager.getRuntime().updateRuntimeMeta(
+        meta.group, meta.key, [&](RuntimeFieldMeta& existingMeta) {
+            existingMeta.label = meta.label;
+            existingMeta.order = meta.order;
+            existingMeta.style = meta.style;
+            existingMeta.boolAlarmValue = meta.boolAlarmValue;
+            existingMeta.hasAlarm = meta.hasAlarm;
+            existingMeta.alarmWhenTrue = meta.alarmWhenTrue;
+        });
+    if (!updated) {
         ConfigManager.getRuntime().addRuntimeMeta(meta);
     }
 

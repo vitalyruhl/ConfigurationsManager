@@ -27,7 +27,12 @@ void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
     configManager = cm;
     RUNTIME_LOG("Runtime manager initialized");
     if (configManager) {
-        for (const auto& meta : runtimeMeta) {
+        std::vector<RuntimeFieldMeta> metaSnapshot;
+        {
+            std::lock_guard<std::mutex> lock(runtimeDataMutex);
+            metaSnapshot = runtimeMeta;
+        }
+        for (const auto& meta : metaSnapshot) {
             configManager->registerLivePlacement(meta);
         }
     }
@@ -38,7 +43,10 @@ void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
 }
 
 void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider& provider) {
-    runtimeProviders.push_back(provider);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeProviders.push_back(provider);
+    }
     RUNTIME_LOG("Added provider: %s (order: %d)", provider.name.c_str(), provider.order);
 }
 
@@ -54,7 +62,10 @@ void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
             normalized.group = String();
         }
     }
-    runtimeMeta.push_back(normalized);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeMeta.push_back(normalized);
+    }
     const String& logGroup = normalized.sourceGroup.length() ? normalized.sourceGroup : normalized.group;
     RUNTIME_LOG("Added meta: %s.%s", logGroup.c_str(), normalized.key.c_str());
     if (configManager) {
@@ -62,7 +73,23 @@ void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
     }
 }
 
+bool ConfigManagerRuntime::updateRuntimeMeta(const String& group, const String& key, const std::function<void(RuntimeFieldMeta&)>& updater) {
+    if (!updater) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+    for (auto& meta : runtimeMeta) {
+        if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
+            updater(meta);
+            return true;
+        }
+    }
+    return false;
+}
+
 RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     for (auto& meta : runtimeMeta) {
         if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
             return &meta;
@@ -90,6 +117,7 @@ const RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) const {
 }
 
 void ConfigManagerRuntime::sortProviders() {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     std::sort(runtimeProviders.begin(), runtimeProviders.end(),
         [](const RuntimeValueProvider& a, const RuntimeValueProvider& b) {
             return a.order < b.order;
@@ -97,6 +125,7 @@ void ConfigManagerRuntime::sortProviders() {
 }
 
 void ConfigManagerRuntime::sortMeta() {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     std::sort(runtimeMeta.begin(), runtimeMeta.end(),
         [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
             if (a.group == b.group) {
@@ -113,11 +142,31 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
     JsonObject root = d.to<JsonObject>();
     root["uptime"] = millis();
 
+    std::vector<RuntimeValueProvider> providersSnapshot;
+    std::vector<RuntimeCheckbox> checkboxesSnapshot;
+    std::vector<RuntimeStateButton> stateButtonsSnapshot;
+    std::vector<RuntimeIntSlider> intSlidersSnapshot;
+    std::vector<RuntimeFloatSlider> floatSlidersSnapshot;
+    std::vector<RuntimeIntInput> intInputsSnapshot;
+    std::vector<RuntimeFloatInput> floatInputsSnapshot;
+    std::vector<RuntimeAlarm> alarmsSnapshot;
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        providersSnapshot = runtimeProviders;
+        checkboxesSnapshot = runtimeCheckboxes;
+        stateButtonsSnapshot = runtimeStateButtons;
+        intSlidersSnapshot = runtimeIntSliders;
+        floatSlidersSnapshot = runtimeFloatSliders;
+        intInputsSnapshot = runtimeIntInputs;
+        floatInputsSnapshot = runtimeFloatInputs;
+        alarmsSnapshot = runtimeAlarms;
+    }
+
     // Do not sort runtimeProviders in-place here: runtimeValuesToJSON() can be called from
     // multiple contexts (WS push + HTTP handlers). In-place std::sort would introduce data races.
     std::vector<const RuntimeValueProvider*> providers;
-    providers.reserve(runtimeProviders.size());
-    for (const auto& prov : runtimeProviders) {
+    providers.reserve(providersSnapshot.size());
+    for (const auto& prov : providersSnapshot) {
         providers.push_back(&prov);
     }
     std::sort(providers.begin(), providers.end(),
@@ -145,37 +194,37 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         }
 
         // Add interactive control states for this provider/group
-        for (auto& checkbox : runtimeCheckboxes) {
+        for (auto& checkbox : checkboxesSnapshot) {
             if (checkbox.group == prov.name && checkbox.getter) {
                 slot[checkbox.key] = checkbox.getter();
             }
         }
 
-        for (auto& button : runtimeStateButtons) {
+        for (auto& button : stateButtonsSnapshot) {
             if (button.group == prov.name && button.getter) {
                 slot[button.key] = button.getter();
             }
         }
 
-        for (auto& slider : runtimeIntSliders) {
+        for (auto& slider : intSlidersSnapshot) {
             if (slider.group == prov.name && slider.getter) {
                 slot[slider.key] = slider.getter();
             }
         }
 
-        for (auto& slider : runtimeFloatSliders) {
+        for (auto& slider : floatSlidersSnapshot) {
             if (slider.group == prov.name && slider.getter) {
                 slot[slider.key] = slider.getter();
             }
         }
 
-        for (auto& input : runtimeIntInputs) {
+        for (auto& input : intInputsSnapshot) {
             if (input.group == prov.name && input.getter) {
                 slot[input.key] = input.getter();
             }
         }
 
-        for (auto& input : runtimeFloatInputs) {
+        for (auto& input : floatInputsSnapshot) {
             if (input.group == prov.name && input.getter) {
                 slot[input.key] = input.getter();
             }
@@ -199,51 +248,51 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
         return slot;
     };
 
-    for (auto& checkbox : runtimeCheckboxes) {
+    for (auto& checkbox : checkboxesSnapshot) {
         if (checkbox.getter) {
             JsonObject slot = getOrCreateSlot(checkbox.group);
             slot[checkbox.key] = checkbox.getter();
         }
     }
 
-    for (auto& button : runtimeStateButtons) {
+    for (auto& button : stateButtonsSnapshot) {
         if (button.getter) {
             JsonObject slot = getOrCreateSlot(button.group);
             slot[button.key] = button.getter();
         }
     }
 
-    for (auto& slider : runtimeIntSliders) {
+    for (auto& slider : intSlidersSnapshot) {
         if (slider.getter) {
             JsonObject slot = getOrCreateSlot(slider.group);
             slot[slider.key] = slider.getter();
         }
     }
 
-    for (auto& slider : runtimeFloatSliders) {
+    for (auto& slider : floatSlidersSnapshot) {
         if (slider.getter) {
             JsonObject slot = getOrCreateSlot(slider.group);
             slot[slider.key] = slider.getter();
         }
     }
 
-    for (auto& input : runtimeIntInputs) {
+    for (auto& input : intInputsSnapshot) {
         if (input.getter) {
             JsonObject slot = getOrCreateSlot(input.group);
             slot[input.key] = input.getter();
         }
     }
 
-    for (auto& input : runtimeFloatInputs) {
+    for (auto& input : floatInputsSnapshot) {
         if (input.getter) {
             JsonObject slot = getOrCreateSlot(input.group);
             slot[input.key] = input.getter();
         }
     }
 
-    if (!runtimeAlarms.empty()) {
+    if (!alarmsSnapshot.empty()) {
         JsonObject alarms = root.createNestedObject("alarms");
-        for (auto& a : runtimeAlarms) {
+        for (auto& a : alarmsSnapshot) {
             alarms[a.name] = a.active;
         }
     }
@@ -262,13 +311,19 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     // Sort meta by group, then order, then label
     std::vector<RuntimeFieldMeta> metaSorted;
 #ifdef development
-    if (runtimeMetaOverrideActive) {
-        metaSorted = runtimeMetaOverride;
-    } else {
-        metaSorted = runtimeMeta;
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        if (runtimeMetaOverrideActive) {
+            metaSorted = runtimeMetaOverride;
+        } else {
+            metaSorted = runtimeMeta;
+        }
     }
 #else
-    metaSorted = runtimeMeta;
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        metaSorted = runtimeMeta;
+    }
 #endif
 
     std::sort(metaSorted.begin(), metaSorted.end(),
@@ -410,7 +465,10 @@ void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const Stri
     meta.card = card;
     addRuntimeMeta(meta);
 
-    runtimeIntInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeIntInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    }
     RUNTIME_LOG("Added int input: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
@@ -447,7 +505,10 @@ void ConfigManagerRuntime::defineRuntimeFloatValue(const String& group, const St
     meta.card = card;
     addRuntimeMeta(meta);
 
-    runtimeFloatInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeFloatInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
+    }
     RUNTIME_LOG("Added float input: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
@@ -466,24 +527,28 @@ void ConfigManagerRuntime::handleFloatInputChange(const String& group, const Str
 }
 
 void ConfigManagerRuntime::registerRuntimeButton(const String& group, const String& key, std::function<void()> onPress) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeButtons.emplace_back(group, key, onPress);
     RUNTIME_LOG("Added button: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::registerRuntimeCheckbox(const String& group, const String& key,
                                                    std::function<bool()> getter, std::function<void(bool)> setter) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeCheckboxes.emplace_back(group, key, getter, setter);
     RUNTIME_LOG("Added checkbox: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::registerRuntimeStateButton(const String& group, const String& key,
                                                       std::function<bool()> getter, std::function<void(bool)> setter) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeStateButtons.emplace_back(group, key, getter, setter);
     RUNTIME_LOG("Added state button: %s.%s", group.c_str(), key.c_str());
 }
 
 void ConfigManagerRuntime::registerRuntimeMomentaryButton(const String& group, const String& key,
                                                           std::function<bool()> getter, std::function<void(bool)> setter) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeStateButtons.emplace_back(group, key, getter, setter);
     RUNTIME_LOG("Added momentary button: %s.%s", group.c_str(), key.c_str());
 }
@@ -491,6 +556,7 @@ void ConfigManagerRuntime::registerRuntimeMomentaryButton(const String& group, c
 void ConfigManagerRuntime::registerRuntimeIntSlider(const String& group, const String& key,
                                                     std::function<int()> getter, std::function<void(int)> setter,
                                                     int minValue, int maxValue) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
     RUNTIME_LOG("Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
@@ -498,6 +564,7 @@ void ConfigManagerRuntime::registerRuntimeIntSlider(const String& group, const S
 void ConfigManagerRuntime::registerRuntimeFloatSlider(const String& group, const String& key,
                                                       std::function<float()> getter, std::function<void(float)> setter,
                                                       float minValue, float maxValue) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
     RUNTIME_LOG("Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
@@ -505,6 +572,7 @@ void ConfigManagerRuntime::registerRuntimeFloatSlider(const String& group, const
 void ConfigManagerRuntime::registerRuntimeIntInput(const String& group, const String& key,
                                                    std::function<int()> getter, std::function<void(int)> setter,
                                                    int minValue, int maxValue) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeIntInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
     RUNTIME_LOG("Added int input: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
@@ -512,6 +580,7 @@ void ConfigManagerRuntime::registerRuntimeIntInput(const String& group, const St
 void ConfigManagerRuntime::registerRuntimeFloatInput(const String& group, const String& key,
                                                      std::function<float()> getter, std::function<void(float)> setter,
                                                      float minValue, float maxValue) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeFloatInputs.emplace_back(group, key, getter, setter, minValue, maxValue);
     RUNTIME_LOG("Added float input: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
@@ -608,14 +677,15 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         // Helper to upsert meta with a specific order
         auto upsertMeta = [this](const String& key, const String& label, const String& unit, int order,
                                  bool isBool = false, bool isString = false, int precision = 0) {
-            RuntimeFieldMeta* existing = findRuntimeMeta("system", key);
-            if (existing) {
-                existing->order = order;
-                if (label.length()) existing->label = label;
-                if (unit.length() && existing->unit.length() == 0) existing->unit = unit;
-                if (isBool) existing->isBool = true;
-                if (isString) existing->isString = true;
-                if (precision >= 0) existing->precision = precision;
+            const bool updated = updateRuntimeMeta("system", key, [&](RuntimeFieldMeta& existing) {
+                existing.order = order;
+                if (label.length()) existing.label = label;
+                if (unit.length() && existing.unit.length() == 0) existing.unit = unit;
+                if (isBool) existing.isBool = true;
+                if (isString) existing.isString = true;
+                if (precision >= 0) existing.precision = precision;
+            });
+            if (updated) {
                 return;
             }
             RuntimeFieldMeta m;
@@ -704,7 +774,10 @@ void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<boo
     alarm.name = name;
     alarm.checkFunction = checkFunction;
     alarm.manual = false;
-    runtimeAlarms.push_back(std::move(alarm));
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeAlarms.push_back(std::move(alarm));
+    }
     RUNTIME_LOG("Added alarm: %s", name.c_str());
 }
 
@@ -716,105 +789,163 @@ void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<boo
     alarm.onTrigger = onTrigger;
     alarm.onClear = onClear;
     alarm.manual = false;
-    runtimeAlarms.push_back(std::move(alarm));
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeAlarms.push_back(std::move(alarm));
+    }
     RUNTIME_LOG("Added alarm with triggers: %s", name.c_str());
 }
 
 void ConfigManagerRuntime::registerRuntimeAlarm(const String& name, std::function<void()> onTrigger, std::function<void()> onClear) {
-    RuntimeAlarm* alarm = findAlarm(name);
-    if (alarm) {
-        alarm->manual = true;
-        alarm->checkFunction = nullptr;
-        if (onTrigger) alarm->onTrigger = onTrigger;
-        if (onClear) alarm->onClear = onClear;
-        RUNTIME_LOG("Updated manual alarm registration: %s", name.c_str());
-        return;
-    }
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        RuntimeAlarm* alarm = findAlarm(name);
+        if (alarm) {
+            alarm->manual = true;
+            alarm->checkFunction = nullptr;
+            if (onTrigger) alarm->onTrigger = onTrigger;
+            if (onClear) alarm->onClear = onClear;
+            RUNTIME_LOG("Updated manual alarm registration: %s", name.c_str());
+            return;
+        }
 
-    RuntimeAlarm newAlarm;
-    newAlarm.name = name;
-    newAlarm.manual = true;
-    newAlarm.onTrigger = onTrigger;
-    newAlarm.onClear = onClear;
-    runtimeAlarms.push_back(std::move(newAlarm));
+        RuntimeAlarm newAlarm;
+        newAlarm.name = name;
+        newAlarm.manual = true;
+        newAlarm.onTrigger = onTrigger;
+        newAlarm.onClear = onClear;
+        runtimeAlarms.push_back(std::move(newAlarm));
+    }
     RUNTIME_LOG("Registered manual alarm: %s", name.c_str());
 }
 
 void ConfigManagerRuntime::setRuntimeAlarmActive(const String& name, bool active, bool fireCallbacks) {
-    RuntimeAlarm* alarm = findAlarm(name);
-    if (!alarm) {
-        RuntimeAlarm newAlarm;
-        newAlarm.name = name;
-        newAlarm.manual = true;
-        newAlarm.active = active;
-        runtimeAlarms.push_back(std::move(newAlarm));
-        alarm = &runtimeAlarms.back();
+    std::function<void()> callbackToInvoke;
+    String callbackAlarmName;
+    bool callbackIsTrigger = false;
+    bool shouldLogStateChange = false;
+    bool wasCreated = false;
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        RuntimeAlarm* alarm = findAlarm(name);
+        if (!alarm) {
+            RuntimeAlarm newAlarm;
+            newAlarm.name = name;
+            newAlarm.manual = true;
+            newAlarm.active = active;
+            runtimeAlarms.push_back(std::move(newAlarm));
+            alarm = &runtimeAlarms.back();
+            wasCreated = true;
+        }
+
+        alarm->manual = true;
+
+        if (alarm->active == active && !wasCreated) {
+            return;
+        }
+
+        alarm->active = active;
+        shouldLogStateChange = !wasCreated;
+
+        if (fireCallbacks) {
+            if (active && alarm->onTrigger) {
+                callbackToInvoke = alarm->onTrigger;
+                callbackAlarmName = alarm->name;
+                callbackIsTrigger = true;
+            } else if (!active && alarm->onClear) {
+                callbackToInvoke = alarm->onClear;
+                callbackAlarmName = alarm->name;
+                callbackIsTrigger = false;
+            }
+        }
+    }
+
+    if (wasCreated) {
         RUNTIME_LOG("Lazily created manual alarm entry: %s", name.c_str());
-
-        if (fireCallbacks && alarm->active && alarm->onTrigger) {
-            RUNTIME_LOG("Manual trigger callback for alarm: %s", name.c_str());
-            alarm->onTrigger();
-        }
-        return;
     }
-
-    alarm->manual = true;
-
-    if (alarm->active == active) {
-        return;
+    if (shouldLogStateChange) {
+        RUNTIME_LOG("Alarm %s manually set to %s", name.c_str(), active ? "ACTIVE" : "cleared");
     }
-
-    alarm->active = active;
-    RUNTIME_LOG("Alarm %s manually set to %s", name.c_str(), active ? "ACTIVE" : "cleared");
-
-    if (!fireCallbacks) {
-        return;
-    }
-
-    if (active) {
-        if (alarm->onTrigger) {
-            RUNTIME_LOG("Manual trigger callback for alarm: %s", name.c_str());
-            alarm->onTrigger();
-        }
-    } else {
-        if (alarm->onClear) {
-            RUNTIME_LOG("Manual clear callback for alarm: %s", name.c_str());
-            alarm->onClear();
-        }
+    if (callbackToInvoke) {
+        RUNTIME_LOG("Manual %s callback for alarm: %s",
+                    callbackIsTrigger ? "trigger" : "clear",
+                    callbackAlarmName.c_str());
+        callbackToInvoke();
     }
 }
 
 bool ConfigManagerRuntime::isRuntimeAlarmActive(const String& name) const {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     const RuntimeAlarm* alarm = findAlarm(name);
     return alarm ? alarm->active : false;
 }
 
 void ConfigManagerRuntime::updateAlarms() {
-    for (auto& alarm : runtimeAlarms) {
-        if (alarm.manual) {
+    struct PendingAlarmCallback {
+        String name;
+        bool newState = false;
+        bool hasCallback = false;
+        std::function<void()> callback;
+    };
+
+    std::vector<RuntimeAlarm> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        snapshot = runtimeAlarms;
+    }
+
+    std::vector<PendingAlarmCallback> pending;
+    pending.reserve(snapshot.size());
+    for (const auto& alarm : snapshot) {
+        if (alarm.manual || !alarm.checkFunction) {
             continue;
         }
 
-        if (alarm.checkFunction) {
-            bool newState = alarm.checkFunction();
-            if (newState != alarm.active) {
-                alarm.active = newState;
-                RUNTIME_LOG("Alarm %s: %s", alarm.name.c_str(), newState ? "ACTIVE" : "cleared");
+        const bool newState = alarm.checkFunction();
+        if (newState == alarm.active) {
+            continue;
+        }
 
-                // Call trigger callbacks
-                if (newState && alarm.onTrigger) {
-                    RUNTIME_LOG("Calling onTrigger for alarm: %s", alarm.name.c_str());
-                    alarm.onTrigger();
-                } else if (!newState && alarm.onClear) {
-                    RUNTIME_LOG("Calling onClear for alarm: %s", alarm.name.c_str());
-                    alarm.onClear();
-                }
+        PendingAlarmCallback entry;
+        entry.name = alarm.name;
+        entry.newState = newState;
+        if (newState && alarm.onTrigger) {
+            entry.hasCallback = true;
+            entry.callback = alarm.onTrigger;
+        } else if (!newState && alarm.onClear) {
+            entry.hasCallback = true;
+            entry.callback = alarm.onClear;
+        }
+        pending.push_back(std::move(entry));
+    }
+
+    if (pending.empty()) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        for (const auto& change : pending) {
+            RuntimeAlarm* liveAlarm = findAlarm(change.name);
+            if (liveAlarm) {
+                liveAlarm->active = change.newState;
             }
+        }
+    }
+
+    for (const auto& change : pending) {
+        RUNTIME_LOG("Alarm %s: %s", change.name.c_str(), change.newState ? "ACTIVE" : "cleared");
+        if (change.hasCallback && change.callback) {
+            RUNTIME_LOG("Calling %s for alarm: %s",
+                        change.newState ? "onTrigger" : "onClear",
+                        change.name.c_str());
+            change.callback();
         }
     }
 }
 
 bool ConfigManagerRuntime::hasActiveAlarms() const {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     for (const auto& alarm : runtimeAlarms) {
         if (alarm.active) return true;
     }
@@ -823,6 +954,7 @@ bool ConfigManagerRuntime::hasActiveAlarms() const {
 
 std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
     std::vector<String> active;
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     for (const auto& alarm : runtimeAlarms) {
         if (alarm.active) {
             active.push_back(alarm.name);
@@ -834,12 +966,14 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
 #ifdef development
 
 void ConfigManagerRuntime::setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override) {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeMetaOverride = override;
     runtimeMetaOverrideActive = true;
     RUNTIME_LOG("Meta override set (%d entries)", override.size());
 }
 
 void ConfigManagerRuntime::clearRuntimeMetaOverride() {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
     runtimeMetaOverride.clear();
     runtimeMetaOverrideActive = false;
     RUNTIME_LOG("Meta override cleared");
@@ -873,7 +1007,10 @@ void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String
     meta.card = card;
     addRuntimeMeta(meta);
 
-    runtimeButtons.emplace_back(group, key, onPress);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeButtons.emplace_back(group, key, onPress);
+    }
     RUNTIME_LOG("Added button: %s.%s", group.c_str(), key.c_str());
 }
 
@@ -902,7 +1039,10 @@ void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const Stri
     meta.card = card;
     addRuntimeMeta(meta);
 
-    runtimeCheckboxes.emplace_back(group, key, getter, setter);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeCheckboxes.emplace_back(group, key, getter, setter);
+    }
     RUNTIME_LOG("Added checkbox: %s.%s", group.c_str(), key.c_str());
 }
 
@@ -935,7 +1075,10 @@ void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const S
     meta.offLabel = offLabel;
     addRuntimeMeta(meta);
 
-    runtimeStateButtons.emplace_back(group, key, getter, setter);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeStateButtons.emplace_back(group, key, getter, setter);
+    }
     RUNTIME_LOG("Added state button: %s.%s", group.c_str(), key.c_str());
 }
 
@@ -954,7 +1097,10 @@ void ConfigManagerRuntime::defineRuntimeMomentaryButton(const String& group, con
     meta.offLabel = offLabel;
     addRuntimeMeta(meta);
 
-    runtimeStateButtons.emplace_back(group, key, getter, setter);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeStateButtons.emplace_back(group, key, getter, setter);
+    }
     RUNTIME_LOG("Added momentary button: %s.%s", group.c_str(), key.c_str());
 }
 
@@ -1003,7 +1149,10 @@ void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const Str
     meta.card = card;
     addRuntimeMeta(meta);
 
-    runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeIntSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    }
     RUNTIME_LOG("Added int slider: %s.%s [%d-%d]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 
@@ -1041,7 +1190,10 @@ void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const S
     meta.card = card;
     addRuntimeMeta(meta);
 
-    runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    {
+        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        runtimeFloatSliders.emplace_back(group, key, getter, setter, minValue, maxValue);
+    }
     RUNTIME_LOG("Added float slider: %s.%s [%.2f-%.2f]", group.c_str(), key.c_str(), minValue, maxValue);
 }
 

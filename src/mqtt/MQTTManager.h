@@ -742,14 +742,16 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
                                                  int order,
                                                  bool isBool,
                                                  int precision = 0) {
-            RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta("system", key);
-            if (existing) {
-                existing->label = label;
-                existing->order = order;
-                if (isBool) {
-                    existing->isBool = true;
-                }
-                existing->precision = precision;
+            const bool updated = configManager.getRuntime().updateRuntimeMeta(
+                "system", key, [&](RuntimeFieldMeta& existing) {
+                    existing.label = label;
+                    existing.order = order;
+                    if (isBool) {
+                        existing.isBool = true;
+                    }
+                    existing.precision = precision;
+                });
+            if (updated) {
                 return;
             }
             RuntimeFieldMeta meta;
@@ -947,13 +949,15 @@ inline void MQTTManager::addLastTopicToGUI(ConfigManagerClass& configManager,
                                            const char* label,
                                            const char* card)
 {
-    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, "lastTopic");
-    if (existing) {
-        existing->label = label;
-        existing->order = order;
-        if (card && card[0]) {
-            existing->card = card;
-        }
+    const bool updated = configManager.getRuntime().updateRuntimeMeta(
+        runtimeGroup, "lastTopic", [&](RuntimeFieldMeta& existing) {
+            existing.label = label;
+            existing.order = order;
+            if (card && card[0]) {
+                existing.card = card;
+            }
+        });
+    if (updated) {
         return;
     }
 
@@ -974,14 +978,16 @@ inline void MQTTManager::addLastPayloadToGUI(ConfigManagerClass& configManager,
                                              const char* label,
                                              const char* card)
 {
-    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, "lastPayload");
-    if (existing) {
-        existing->label = label;
-        existing->order = order;
-        existing->isString = true;
-        if (card && card[0]) {
-            existing->card = card;
-        }
+    const bool updated = configManager.getRuntime().updateRuntimeMeta(
+        runtimeGroup, "lastPayload", [&](RuntimeFieldMeta& existing) {
+            existing.label = label;
+            existing.order = order;
+            existing.isString = true;
+            if (card && card[0]) {
+                existing.card = card;
+            }
+        });
+    if (updated) {
         return;
     }
 
@@ -1004,17 +1010,19 @@ inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManage
                                                 const char* unit,
                                                 const char* card)
 {
-    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, "lastMsgAgeMs");
-    if (existing) {
-        existing->label = label;
-        existing->order = order;
-        if (unit && unit[0]) {
-            existing->unit = unit;
-        }
-        existing->precision = 0;
-        if (card && card[0]) {
-            existing->card = card;
-        }
+    const bool updated = configManager.getRuntime().updateRuntimeMeta(
+        runtimeGroup, "lastMsgAgeMs", [&](RuntimeFieldMeta& existing) {
+            existing.label = label;
+            existing.order = order;
+            if (unit && unit[0]) {
+                existing.unit = unit;
+            }
+            existing.precision = 0;
+            if (card && card[0]) {
+                existing.card = card;
+            }
+        });
+    if (updated) {
         return;
     }
 
@@ -2401,28 +2409,30 @@ inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& con
                                                         const char* group)
 {
     const char* key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
-    RuntimeFieldMeta* existing = configManager.getRuntime().findRuntimeMeta(runtimeGroup, key);
-    if (existing) {
-        existing->label = item.labelC ? item.labelC.get() : item.label.c_str();
-        existing->order = order;
-        existing->unit = item.unit ? item.unit : "";
-        existing->precision = item.precision;
-        existing->isBool = (item.type == ValueType::Bool);
-        existing->isString = (item.type == ValueType::String);
-        if (runtimeGroup && runtimeGroup[0]) {
-            existing->sourceGroup = runtimeGroup;
-        }
-        if (page && page[0]) {
-            existing->page = page;
-        }
-        if (card && card[0]) {
-            existing->card = card;
-        }
-        if (group && group[0]) {
-            existing->group = group;
-        } else {
-            existing->group = String();
-        }
+    const bool updated = configManager.getRuntime().updateRuntimeMeta(
+        runtimeGroup, key, [&](RuntimeFieldMeta& existing) {
+            existing.label = item.labelC ? item.labelC.get() : item.label.c_str();
+            existing.order = order;
+            existing.unit = item.unit ? item.unit : "";
+            existing.precision = item.precision;
+            existing.isBool = (item.type == ValueType::Bool);
+            existing.isString = (item.type == ValueType::String);
+            if (runtimeGroup && runtimeGroup[0]) {
+                existing.sourceGroup = runtimeGroup;
+            }
+            if (page && page[0]) {
+                existing.page = page;
+            }
+            if (card && card[0]) {
+                existing.card = card;
+            }
+            if (group && group[0]) {
+                existing.group = group;
+            } else {
+                existing.group = String();
+            }
+        });
+    if (updated) {
         return;
     }
 

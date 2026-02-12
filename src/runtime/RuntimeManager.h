@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <functional>
+#include <mutex>
 #include <vector>
 #include "../ConfigManagerConfig.h"
 
@@ -221,6 +222,10 @@ public:
 private:
     ConfigManagerClass* configManager;
     LogCallback logCallback;
+    // runtime-safe contract:
+    // - registration/mutation methods lock this mutex
+    // - JSON serializers copy snapshots under lock, then serialize unlocked
+    mutable std::mutex runtimeDataMutex;
 
     // Runtime data
     std::vector<RuntimeValueProvider> runtimeProviders;
@@ -267,11 +272,15 @@ public:
     void setLogCallback(LogCallback logger);
 
     // Runtime value providers
+    // Thread-safe registration: may be called while runtime JSON is generated.
     void addRuntimeProvider(const RuntimeValueProvider& provider);
     void addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order = 100);
 
     // Runtime metadata
+    // Thread-safe registration: may be called while runtime JSON is generated.
     void addRuntimeMeta(const RuntimeFieldMeta& meta);
+    bool updateRuntimeMeta(const String& group, const String& key, const std::function<void(RuntimeFieldMeta&)>& updater);
+    // Note: returned pointer is only stable until the next runtime meta mutation.
     RuntimeFieldMeta* findRuntimeMeta(const String& group, const String& key);
 
     // JSON generation
