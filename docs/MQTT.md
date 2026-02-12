@@ -241,35 +241,14 @@ ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject& data) {
 
 ## Method overview
 
-Settings + connection:
-- `attach(...)`, `begin()`, `loop()`, `disconnect()`
-- `setServer(...)`, `setCredentials(...)`, `setClientId(...)`, `setLastWill(...)`
-- `setKeepAlive(...)`, `setMaxRetries(...)`, `setRetryInterval(...)`, `setBufferSize(...)`
-
-Publish / subscribe:
-- `publish(...)` (2 overloads), `subscribe(...)` (2 overloads), `unsubscribe(...)` (1 overload)
-- `subscribeWildcard(...)` (1 overload)
-- `clearRetain(topic)` (1 overload)
-- `publishSystemInfo(...)` (1 overload), `publishSystemInfoNow(...)` (1 overload)
-- `publishAllNow(...)` (1 overload)
-- `publishTopic(...)` (6 overloads), `publishTopicImmediately(...)` (6 overloads)
-- `publishExtraTopic(...)` (6 overloads), `publishExtraTopicImmediately(...)` (6 overloads)
-  - Overloads cover `(retained, qos)` and `ConfigManager` variants where applicable.
-
-Receive helpers:
-- `addTopicReceiveFloat(...)` (1 overload)
-- `addTopicReceiveInt(...)` (1 overload)
-- `addTopicReceiveBool(...)` (1 overload)
-- `addTopicReceiveString(...)` (1 overload)
-
-GUI helpers:
-- `addMqttSettingsToSettingsGroup(...)` (2 overloads)
-- `addMqttTopicToSettingsGroup(...)` (2 overloads)
-- `addMqttTopicToLiveGroup(...)` (2 overloads: card-only, or card+group)
-- `addMQTTRuntimeProviderToGUI(...)` (1 overload)
-- `addLastTopicToGUI(...)` (1 overload)
-- `addLastPayloadToGUI(...)` (1 overload)
-- `addLastMessageAgeToGUI(...)` (1 overload)
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `cm::MQTTManager::attach` | `attach(ConfigManagerClass& configManager, const char* basePageName = "MQTT")` | Attaches MQTT manager to ConfigManager and registers settings/runtime integration. | Recommended init path. |
+| `cm::MQTTManager::begin` / `loop` / `disconnect` | `begin()`<br>`loop()`<br>`disconnect()` | Starts and maintains MQTT state machine connection lifecycle. | `loop()` or `update()` must run continuously. |
+| `cm::MQTTManager::publishTopic` / `publishTopicImmediately` | `publishTopic(...)` (6 overloads)<br>`publishTopicImmediately(...)` (6 overloads) | Publishes registered receive-item values to MQTT topics. | Overloads cover retained/qos and `ConfigManager` variants. |
+| `cm::MQTTManager::publishExtraTopic` / `publishExtraTopicImmediately` | `publishExtraTopic(...)` (6 overloads)<br>`publishExtraTopicImmediately(...)` (6 overloads) | Publishes custom values to explicit topics. | Useful for ad-hoc telemetry. |
+| `cm::MQTTManager::addTopicReceive*` | `addTopicReceiveFloat(...)`<br>`addTopicReceiveInt(...)`<br>`addTopicReceiveBool(...)`<br>`addTopicReceiveString(...)` | Registers inbound MQTT topics and parsing targets. | Pair with settings/live placement helpers. |
+| `cm::MQTTManager` UI helpers | `addMqttSettingsToSettingsGroup(...)` (2 overloads)<br>`addMqttTopicToSettingsGroup(...)` (2 overloads)<br>`addMqttTopicToLiveGroup(...)` (2 overloads)<br>`addMQTTRuntimeProviderToGUI(...)`<br>`addLastTopicToGUI(...)`<br>`addLastPayloadToGUI(...)`<br>`addLastMessageAgeToGUI(...)` | Places MQTT data/settings into Settings and Live UI. | Explicit placement model; nothing is auto-shown in Live without helper calls. |
 
 ## Notes
 

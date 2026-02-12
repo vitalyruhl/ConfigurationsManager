@@ -227,5 +227,8 @@ lmg.addOutput(std::move(mqttLog));
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `cm::LoggingManager::instance` | `instance()` | Returns singleton logging manager instance. | Entry point for advanced logging. |
+| `cm::LoggingManager::addOutput` | `addOutput(std::unique_ptr<Output> output)` | Adds a logging output target (Serial, GUI, MQTT). | Each output can define its own level/format/filter. |
+| `cm::LoggingManager::attachToConfigManager` | `attachToConfigManager(Level level, Level verboseLevel, const char* tag)`<br>`attachToConfigManager(Level level, const char* tag)` | Bridges `CM_LOG` / `CM_LOG_VERBOSE` macros to LoggingManager outputs. | Use once after outputs are configured. |
+| `cm::LoggingManager::loop` | `loop()` | Flushes queued output work (notably GUI output queue). | Call in `loop()`. |
 

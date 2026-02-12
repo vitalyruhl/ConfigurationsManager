@@ -208,5 +208,8 @@ Config<int> hiddenNum( WIFI_GROUP.opt<int>("hnum", 42, "Hidden Number", true, fa
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.addSetting` | `addSetting(std::unique_ptr<BaseSetting> setting)`<br>`addSetting(BaseSetting* setting)` | Registers settings in ConfigManager storage/UI pipeline. | Supports ownership transfer or external lifetime. |
+| `ConfigManager.loadAll` / `saveAll` | `loadAll()`<br>`saveAll()` | Loads/saves all registered settings from/to Preferences storage. | Typical startup/persist workflow. |
+| `ConfigManager.addSettingsPage` / `addSettingsCard` / `addSettingsGroup` | `addSettingsPage(const char* pageName, int order)`<br>`addSettingsCard(const char* pageName, const char* cardName, int order)`<br>`addSettingsGroup(const char* pageName, const char* cardName, const char* groupName, int order)` | Defines explicit Settings UI layout structure. | Use before placement overrides. |
+| `ConfigManager.addToSettingsGroup` | `addToSettingsGroup(const char* itemId, const char* pageName, const char* groupName, int order)`<br>`addToSettingsGroup(const char* itemId, const char* pageName, const char* cardName, const char* groupName, int order)` | Overrides automatic layout placement for a setting item. | Helps when composing custom settings pages. |
 

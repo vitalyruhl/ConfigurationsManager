@@ -74,5 +74,5 @@ OTA is convenient but has security implications:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| _none_ | - | Build-flag reference; no callable API methods in this document. | Compile-time options only. |
 

@@ -42,5 +42,6 @@ If you need HTTPS/TLS, the recommended approach is to terminate TLS externally (
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.setSettingsPassword` | `setSettingsPassword(const String& password)` | Sets password protection for Settings UI actions. | Use strong unique credentials. |
+| `ConfigManager.setupOTA` | `setupOTA(const String& hostname, const String& password = "")` | Configures OTA credentials and host identity. | Keep OTA restricted to trusted networks. |
 

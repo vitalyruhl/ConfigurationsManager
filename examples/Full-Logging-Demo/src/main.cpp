@@ -102,6 +102,9 @@ void onWiFiDisconnected()
 {
     wifiServices.onDisconnected();
     lmg.log(LL::Error, "WiFi disconnected");
+
+    // Diagnostic snippet: use only while troubleshooting unstable reconnect behavior.
+    // ConfigManager.performStackReset();
 }
 
 void onWiFiAPMode()

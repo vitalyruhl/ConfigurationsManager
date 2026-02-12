@@ -105,4 +105,4 @@ These files help decide what to keep, document, demonstrate in examples, or remo
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| _none_ | - | Contribution guide only; no runtime API methods are defined here. | Policy/reference document. |

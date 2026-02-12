@@ -126,5 +126,7 @@ Typical sketch order:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `cm::IOManager::addDigitalOutput` | `addDigitalOutput(const DigitalOutputBinding& binding)`<br>`addDigitalOutput(const char* id, int pin = -1, bool activeLow = false, bool registerSettings = true, int order = 100)` | Registers digital output channels and metadata. | Supports struct-based and inline registration. |
+| `cm::IOManager::addDigitalOutputToSettingsGroup` | `addDigitalOutputToSettingsGroup(...)` (2 overloads) | Places digital output settings into Settings UI. | Overloads support page/card/group variants. |
+| `cm::IOManager::addDigitalOutputToLive` | `addDigitalOutputToLive(RuntimeControlType type, const char* id, int order, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, const char* onLabel = nullptr, const char* offLabel = nullptr)` | Adds runtime controls for digital outputs (checkbox/state/momentary/button). | Returns `LiveControlHandleBool`. |
 

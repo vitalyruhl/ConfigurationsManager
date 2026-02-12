@@ -250,6 +250,21 @@ ConfigManager.setAccessPointMacFilter("60:B5:8D:4C:E1:D5");
 ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");
 ```
 
+## Advanced troubleshooting: full stack reset
+
+For unstable environments (driver state issues, repeated reconnect failures), you can trigger a full WiFi stack reset:
+
+```cpp
+// Diagnostic fallback (example only)
+ConfigManager.performStackReset();
+```
+
+Recommended use:
+
+- keep normal reconnect logic as default
+- trigger `performStackReset()` only after repeated failures
+- keep logs enabled while testing this path
+
 ## ADC2 warning (ESP32)
 
 On classic ESP32 (Arduino), ADC2 pins are typically not usable for `analogRead()` while WiFi is active.
@@ -263,5 +278,10 @@ If you use analog inputs in parallel with WiFi:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.startWebServer` | `startWebServer()`<br>`startWebServer(const String& ssid, const String& password)`<br>`startWebServer(const IPAddress& staticIP, const IPAddress& gateway, const IPAddress& subnet, const String& ssid, const String& password, const IPAddress& dns1 = IPAddress(), const IPAddress& dns2 = IPAddress())` | Starts WiFi + web server with settings, DHCP, or static IP. | Preferred entry point for most sketches. |
+| `ConfigManager.startAccessPoint` | `startAccessPoint(const String& apSSID = "", const String& apPassword = "")` | Starts AP mode fallback. | Used when no STA credentials are available. |
+| `ConfigManager.reconnectWifi` | `reconnectWifi()` | Triggers a reconnect attempt for STA mode. | Keep loop non-blocking and combine with `update()`. |
+| `ConfigManager.performStackReset` | `performStackReset()` | Performs full WiFi stack re-initialization. | Advanced troubleshooting only. |
+| `ConfigManager.setAccessPointMacFilter` | `setAccessPointMacFilter(const String& macAddress)` | Restricts connection to one AP MAC. | Multi-AP tuning helper. |
+| `ConfigManager.setAccessPointMacPriority` | `setAccessPointMacPriority(const String& macAddress)` | Prefers one AP MAC but allows fallback APs. | Multi-AP tuning helper. |
 

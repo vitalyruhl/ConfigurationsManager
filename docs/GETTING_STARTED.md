@@ -194,5 +194,7 @@ void loop()
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.startWebServer` | `startWebServer()`<br>`startWebServer(const String& ssid, const String& password)`<br>`startWebServer(const IPAddress& staticIP, const IPAddress& gateway, const IPAddress& subnet, const String& ssid, const String& password, const IPAddress& dns1 = IPAddress(), const IPAddress& dns2 = IPAddress())` | Starts WiFi + web server using settings, DHCP, or static IP. | Core startup method family. |
+| `ConfigManager.handleClient` | `handleClient()` | Processes HTTP/WebSocket/runtime events. | Call in `loop()`. |
+| `ConfigManager.setupOTA` | `setupOTA(const String& hostname, const String& password = "")` | Enables OTA update handling after WiFi connect. | Optional for development and field updates. |
 

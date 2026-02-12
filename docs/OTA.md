@@ -46,5 +46,7 @@ See also `docs/GUI-Runtime.md`.
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.setupOTA` | `setupOTA(const String& hostname, const String& password = "")` | Initializes ArduinoOTA endpoint and callbacks. | Usually called after WiFi connect. |
+| `ConfigManager.handleOTA` | `handleOTA()` | Processes OTA runtime events. | Must run regularly in `loop()`. |
+| `ConfigManager.enableOTA` | `enableOTA(bool enabled = true)` | Enables/disables OTA handling at runtime. | Runtime control for OTA availability. |
 

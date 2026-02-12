@@ -122,5 +122,8 @@ Typical sketch order:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `cm::IOManager::addAnalogOutputToSettingsGroup` | `addAnalogOutputToSettingsGroup(..., const char* pageName, ..., const char* groupName, int order)` | Places analog output settings into Settings UI layout. | Supports page/card/group variants. |
+| `cm::IOManager::addAnalogOutputToLive` | `addAnalogOutputToLive(const char* id, int order, float sliderMin, float sliderMax, int sliderPrecision, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, const char* unit = nullptr)` | Adds analog output slider control in Live UI. | Uses scaled engineering value range. |
+| `cm::IOManager::addAnalogOutputValueToGUI` | `addAnalogOutputValueToGUI(const char* id, const char* cardName, int order, const char* runtimeLabel = nullptr, const char* runtimeGroup = nullptr, const char* unit = nullptr, int precision = 1)` | Adds scaled read-only value field to Live UI. | Display helper for operator feedback. |
+| `cm::IOManager::addAnalogOutputValueVoltToGUI` / `addAnalogOutputValueRawToGUI` | `addAnalogOutputValueVoltToGUI(...)`<br>`addAnalogOutputValueRawToGUI(...)` | Adds read-only voltage or raw DAC value fields. | Useful for diagnostics/calibration. |
 

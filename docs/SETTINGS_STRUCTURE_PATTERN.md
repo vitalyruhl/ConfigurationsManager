@@ -309,5 +309,8 @@ void init() {
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.addSetting` | `addSetting(std::unique_ptr<BaseSetting> setting)`<br>`addSetting(BaseSetting* setting)` | Registers settings after setup-time initialization. | Core step in delayed-init pattern. |
+| `ConfigManager.loadAll` | `loadAll()` | Loads persisted values once all settings are registered. | Call after all `init()` registrations. |
+| `ConfigManager.addSettingsPage` / `addSettingsCard` / `addSettingsGroup` | `addSettingsPage(...)`<br>`addSettingsCard(...)`<br>`addSettingsGroup(...)` | Defines explicit layout structure for settings UI. | Optional but useful for large setups. |
+| `ConfigManager.addToSettingsGroup` | `addToSettingsGroup(...)` (2 overloads) | Places registered settings into explicit groups/cards/pages. | Use when defaults are insufficient. |
 

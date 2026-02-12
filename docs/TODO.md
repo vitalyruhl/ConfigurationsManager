@@ -14,17 +14,7 @@
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
-- complete Phase-4 follow-up for undocumented WiFi API:
-  - document `ConfigManager.performStackReset()` in `docs/WIFI.md` (advanced troubleshooting)
-  - add a minimal diagnostic usage snippet in `examples/Full-Logging-Demo`
-- normalize docs method-overview quality:
-  - replace generic placeholder rows (only `ConfigManager.begin`) with topic-specific API entries where applicable
-  - keep one valid `## Method overview` section per file with meaningful content
-- convert `docs/MQTT.md` Method overview into the required table format:
-  - `| Method | Overloads / Variants | Description | Notes |`
-  - list overloads explicitly with `<br>` where needed
-- align documentation guidance with logging severity policy:
-  - use short severity tags (`[I]`, `[W]`, `[E]`, `[D]`, `[T]`) instead of long tags (`[INFO]`, `[WARNING]`, ...)
+- none (all former Prio-1 doc normalization tasks completed in `chore/prio1-doc-normalization`)
 
 ## Medium Priority (Prio 5)
 
@@ -43,11 +33,17 @@
 
 ## Done / Resolved
 
+- Prio 1: documented `ConfigManager.performStackReset()` in `docs/WIFI.md`
+- Prio 1: added minimal diagnostic `performStackReset()` snippet in `examples/Full-Logging-Demo`
+- Prio 1: converted `docs/MQTT.md` Method overview to required table format
+- Prio 1: replaced generic Method overview placeholders with topic-specific entries (or `_none_` in non-API docs)
+- Prio 1: aligned severity-tag guidance to short tags (`[I]`, `[W]`, `[E]`, `[D]`, `[T]`) in contributor guidance
+
 ## Status Notes
 
 ## Method overview
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| _none_ | - | Planning document; no callable API methods in this document. | Track tasks and status only. |
 

@@ -60,5 +60,8 @@ Notes:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `cm::IOManager::addDigitalOutputToLive` | `addDigitalOutputToLive(RuntimeControlType type, const char* id, int order, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, const char* onLabel = nullptr, const char* offLabel = nullptr)` | Adds a runtime control for a digital output. | Returns `LiveControlHandleBool`. |
+| `cm::IOManager::addDigitalInputToLive` | `addDigitalInputToLive(const char* id, int order, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, bool alarmWhenActive = false)` | Adds a runtime indicator for a digital input. | Returns `LiveControlHandleBool`. |
+| `cm::IOManager::addAnalogInputToLiveWithAlarm` | `addAnalogInputToLiveWithAlarm(..., const AnalogAlarmThreshold* alarmMin, const AnalogAlarmThreshold* alarmMax, ...)` | Adds analog live value with min/max alarm handling. | Optional alarm callbacks. |
+| `cm::IOManager::addAnalogOutputToLive` | `addAnalogOutputToLive(const char* id, int order, float sliderMin, float sliderMax, int sliderPrecision, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, const char* unit = nullptr)` | Adds slider control for analog output. | Returns `LiveControlHandleFloat`. |
 

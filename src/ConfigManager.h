@@ -3266,6 +3266,7 @@ public:
     // MAC Address Filtering and Priority - convenience methods
     void setAccessPointMacFilter(const String& macAddress) { wifiManager.setAccessPointMacFilter(macAddress); }
     void setAccessPointMacPriority(const String& macAddress) { wifiManager.setAccessPointMacPriority(macAddress); }
+    void performStackReset() { wifiManager.performStackReset(); }
     void clearMacFilter() { wifiManager.clearMacFilter(); }
     void clearMacPriority() { wifiManager.clearMacPriority(); }
     bool isMacFilterEnabled() const { return wifiManager.isMacFilterEnabled(); }

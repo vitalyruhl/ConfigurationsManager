@@ -51,5 +51,7 @@ WARNING: `erase` deletes all flash data on the device.
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.handleClient` | `handleClient()` | Processes core web/runtime servicing in the main loop. | Missing calls can look like connectivity failures. |
+| `ConfigManager.reconnectWifi` | `reconnectWifi()` | Triggers STA reconnect attempt after link loss. | Use with backoff, not tight retry loops. |
+| `ConfigManager.getWiFiManager().update` | `getWiFiManager().update()` | Updates WiFi manager internal state machine. | Run continuously in `loop()`. |
 

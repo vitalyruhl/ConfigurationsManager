@@ -159,5 +159,8 @@ Typical sketch order:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `cm::IOManager::addAnalogInputToSettingsGroup` | `addAnalogInputToSettingsGroup(..., const char* pageName, ..., const char* groupName, int order)` | Places analog input settings into Settings UI layout. | Supports page/card/group variants. |
+| `cm::IOManager::addAnalogInputToLive` | `addAnalogInputToLive(const char* id, int order, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, bool showRaw = false)` | Adds analog input value to Live UI. | `showRaw=true` exposes raw ADC values. |
+| `cm::IOManager::addAnalogInputToLiveWithAlarm` | `addAnalogInputToLiveWithAlarm(..., const AnalogAlarmThreshold* alarmMin, const AnalogAlarmThreshold* alarmMax, ...)` | Adds analog input value with runtime alarm indicators. | Emits `<id>_alarm_min` / `<id>_alarm_max` fields. |
+| `cm::IOManager::configureAnalogInputAlarm` | `configureAnalogInputAlarm(const char* id, const AnalogAlarmThreshold* alarmMin, const AnalogAlarmThreshold* alarmMax, const AnalogAlarmCallbacks& callbacks)` | Configures analog alarm thresholds/callbacks independently of layout. | Use to update alarm behavior post-registration. |
 

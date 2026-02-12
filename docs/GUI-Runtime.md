@@ -351,5 +351,8 @@ ConfigManager.sendWarnMessage(
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.addRuntimeProvider` | `addRuntimeProvider(const RuntimeValueProvider& provider)`<br>`addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order = 100)` | Registers runtime data providers for the Live UI. | Provider callbacks should stay non-blocking. |
+| `ConfigManager.enableWebSocketPush` | `enableWebSocketPush(uint32_t intervalMs = 2000)` | Enables push updates for runtime/live data. | UI falls back to polling when push is disabled. |
+| `ConfigManager.setCustomLivePayloadBuilder` | `setCustomLivePayloadBuilder(std::function<String()> fn)` | Replaces default runtime payload generation with custom JSON. | Advanced customization hook. |
+| `ConfigManager.sendWarnMessage` | `sendWarnMessage(...)` | Shows runtime warning dialog with optional callbacks/context. | Use for operator-visible runtime events. |
 

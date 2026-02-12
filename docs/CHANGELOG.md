@@ -66,5 +66,5 @@ This changelog is a curated overview.
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| _none_ | - | Changelog only; no dedicated public API in this document. | See topic docs for API details. |
 

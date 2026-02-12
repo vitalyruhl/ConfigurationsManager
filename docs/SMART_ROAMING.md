@@ -231,5 +231,8 @@ See the examples directory for complete implementations:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `ConfigManager.enableSmartRoaming` | `enableSmartRoaming(bool enable = true)` | Enables/disables smart roaming behavior. | Enabled by default in typical v2.7+ style setups. |
+| `ConfigManager.setRoamingThreshold` | `setRoamingThreshold(int thresholdDbm = -75)` | Sets RSSI threshold that triggers roaming checks. | Lower value means less aggressive roaming. |
+| `ConfigManager.setRoamingCooldown` | `setRoamingCooldown(unsigned long cooldownSeconds = 120)` | Sets minimum delay between roaming attempts. | Prevents AP ping-pong. |
+| `ConfigManager.setRoamingImprovement` | `setRoamingImprovement(int improvementDbm = 10)` | Sets required RSSI gain before switching AP. | Higher value makes roaming more conservative. |
 

@@ -183,5 +183,8 @@ Typical sketch order:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+| `cm::IOManager::addDigitalInput` | `addDigitalInput(const DigitalInputBinding& binding)`<br>`addDigitalInput(const char* id, int pin = -1, bool activeLow = true, bool usePullup = true, bool usePulldown = false, bool registerSettings = true, int order = 100)` | Registers digital input channels and metadata. | Supports struct-based and inline registration. |
+| `cm::IOManager::addDigitalInputToSettingsGroup` | `addDigitalInputToSettingsGroup(...)` (2 overloads) | Places digital input settings into Settings UI. | Overloads support page/card/group variants. |
+| `cm::IOManager::addDigitalInputToLive` | `addDigitalInputToLive(const char* id, int order, const char* pageName, const char* cardName, const char* groupName, const char* labelOverride = nullptr, bool alarmWhenActive = false)` | Adds digital input indicator to Live UI. | Returns `LiveControlHandleBool` for callback wiring. |
+| `cm::IOManager::configureDigitalInputEvents` | `configureDigitalInputEvents(const char* id, DigitalInputEventCallbacks callbacks)`<br>`configureDigitalInputEvents(const char* id, DigitalInputEventCallbacks callbacks, const DigitalInputEventOptions& options)` | Configures debounce/click/long-press event handling. | Includes startup long-press support. |
 
