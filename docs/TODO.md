@@ -17,7 +17,7 @@
 - Review-driven hardening execution list (source: `review/review.md`)
 - Scope note: SSL/TLS transport warnings are intentionally excluded for now (core limitation accepted).
 
-1. [NEXT] Add strict HTTP body size limits + early `413` reject on JSON/body endpoints
+1. [DONE] Add strict HTTP body size limits + early `413` reject on JSON/body endpoints
    - Files: `src/web/WebServer.cpp` (`/config_raw` and all handlers using `request->_tempObject`)
    - Goal: prevent heap exhaustion/fragmentation from unbounded `String.reserve(total)` + `concat(...)`
    - Baseline measurement (`curl`, SolarInverterLimiter): `GET /config.json` currently ~`14.2 KB` response size on target device
@@ -27,21 +27,21 @@
      - clear `413` response for oversized payloads
      - no behavior regressions for normal payload sizes
 
-2. [NEXT] Remove extra memory peak in `config.json` chunked response path
+2. [DONE] Remove extra memory peak in `config.json` chunked response path
    - Files: `src/web/WebServer.cpp` (`beginChunkedResponse` currently captures `String json` by value)
    - Goal: avoid duplicate large `String` copy in lambda capture
    - Acceptance:
      - chunked response uses shared/move-backed state without unnecessary extra copy
      - large config payload remains stable under low-heap conditions
 
-3. [NEXT] Replace manual request temp object lifecycle with safer centralized cleanup
+3. [DONE] Replace manual request temp object lifecycle with safer centralized cleanup
    - Files: `src/web/WebServer.cpp` (all `new String()` / `delete body` request body handlers)
    - Goal: avoid leaks on abort/disconnect/error paths
    - Acceptance:
      - one consistent allocation/cleanup pattern
      - no dangling `_tempObject` on early exit paths
 
-4. [NEXT] Check and act on Preferences write return values
+4. [DONE] Check and act on Preferences write return values
    - Files: `src/ConfigManager.h` (`prefs.putString/putBool/putInt/putFloat` in load/save paths)
    - Goal: avoid silent persistence failure (NVS full/corrupt)
    - Acceptance:
@@ -49,7 +49,7 @@
      - clear short error logs on write failure
      - behavior defined when write fails (retry/skip/fallback)
 
-5. [NEXT] Define runtime threading contract explicitly
+5. [DONE] Define runtime threading contract explicitly
    - Files: `src/runtime/RuntimeManager.cpp`, `src/runtime/RuntimeManager.h`
    - Goal: eliminate ambiguity around mutation (`addRuntimeProvider/addRuntimeMeta`) vs serialization (`runtimeValuesToJSON`)
    - Decision: use `runtime-safe` registration with lightweight locking
@@ -57,7 +57,7 @@
      - chosen model documented in headers
      - implementation aligned and race-prone usage removed
 
-6. [NEXT] MQTT callback API safety cleanup
+6. [DONE] MQTT callback API safety cleanup
    - Files: `src/mqtt/MQTTManager.h`
    - Goal:
      - remove ineffective weak-hook checks (`if (&onXYZ != nullptr)`)
@@ -67,7 +67,7 @@
      - weak-hook dispatch simplified and explicit
      - payload callback moved to safe byte-view style contract (no implicit C-string expectation)
 
-7. [NEXT] Reduce blocking `delay(...)` in WiFi roaming/reset flows
+7. [DONE] Reduce blocking `delay(...)` in WiFi roaming/reset flows
    - Files: `src/wifi/WiFiManager.cpp` (`roaming`, `performStackReset`)
    - Goal: reduce main-loop stalls/WDT risk
    - Acceptance:
