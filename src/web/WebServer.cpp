@@ -376,14 +376,19 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
                 if (jsonSize > 16384) { // 16KB limit - use chunked response for large JSON
                     WEB_LOG("Using chunked response for large JSON (%u bytes)", (unsigned)jsonSize);
+                    auto jsonShared = std::make_shared<String>(std::move(json));
 
                     AsyncWebServerResponse* response = request->beginChunkedResponse("application/json",
-                        [json](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-                            size_t remaining = json.length() - index;
+                        [jsonShared](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+                            if (!jsonShared || index >= jsonShared->length()) {
+                                return 0;
+                            }
+
+                            size_t remaining = jsonShared->length() - index;
                             if (remaining == 0) return 0; // End of data
 
                             size_t chunkSize = min(maxLen, remaining);
-                            memcpy(buffer, json.c_str() + index, chunkSize);
+                            memcpy(buffer, jsonShared->c_str() + index, chunkSize);
                             return chunkSize;
                         });
                     enableCORS(response);
