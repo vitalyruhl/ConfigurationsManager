@@ -132,7 +132,7 @@ void LoggingManager::GuiOutput::tick(unsigned long nowMs)
     size_t sent = 0;
     while (!pending_.empty() && sent < maxPerTick_) {
         configManager_.sendWebSocketText(pending_.front());
-        pending_.erase(pending_.begin());
+        pending_.pop_front();
         sent++;
     }
 #endif
@@ -144,7 +144,7 @@ void LoggingManager::GuiOutput::enqueue_(const String& payload)
         return;
     }
     if (buffer_.size() >= bufferLimit_) {
-        buffer_.erase(buffer_.begin());
+        buffer_.pop_front();
     }
     buffer_.push_back(payload);
 }
@@ -155,7 +155,7 @@ void LoggingManager::GuiOutput::enqueuePending_(const String& payload)
         return;
     }
     if (pending_.size() >= pendingLimit_) {
-        pending_.erase(pending_.begin());
+        pending_.pop_front();
     }
     pending_.push_back(payload);
 }

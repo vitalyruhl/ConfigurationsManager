@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <cstdarg>
+#include <deque>
 #include <memory>
 #include <functional>
 #include <vector>
@@ -117,8 +118,8 @@ public:
         ConfigManagerClass& configManager_;
         size_t bufferLimit_ = 30;
         bool bufferEnabled_ = true;
-        std::vector<String> buffer_;
-        std::vector<String> pending_;
+        std::deque<String> buffer_;
+        std::deque<String> pending_;
         size_t pendingLimit_ = 200;
         size_t maxPerTick_ = 8;
         String makeReadyPayload_() const;

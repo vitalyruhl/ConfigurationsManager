@@ -74,12 +74,16 @@
      - convert delay-heavy flow to non-blocking state/timestamp steps where feasible
      - reconnect/reset behavior remains stable in practice
 
-8. [LATER AFTER 1-7] Performance and consistency follow-up from review
+8. [IN PROGRESS] Performance and consistency follow-up from review
    - Files:
      - `src/logging/LoggingManager.cpp` (queue front-erase strategy)
      - `src/web/WebServer.cpp` (debug-heavy request path logging)
      - runtime/web/wifi JSON+String hot paths
    - Goal: reduce CPU jitter, heap churn, and log footprint
+   - Status:
+     - [DONE] `LoggingManager` queue front-erase strategy optimized (`std::deque` + `pop_front`)
+     - [NEXT] trim debug-heavy request-path logs in `WebServer`
+     - [NEXT] follow-up on runtime/web/wifi JSON+String hot paths
 
 Open questions (implementation detail follow-up):
 - Should the `8 KB` body limit be endpoint-specific (e.g. `config_raw` lower, larger JSON endpoints higher), or globally uniform for all POST body handlers?
