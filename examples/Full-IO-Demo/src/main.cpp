@@ -20,6 +20,56 @@
 #define VERSION CONFIGMANAGER_VERSION
 #define APP_NAME "CM-Full-IO-Demo"
 
+// Demo pin bindings and compile-time checks for common ESP32 pin pitfalls.
+#define DEMO_PIN_AP_MODE_BUTTON 13
+#define DEMO_PIN_RESET_BUTTON 14
+#define DEMO_PIN_TEST_BUTTON 33
+#define DEMO_PIN_HEATER_RELAY 23
+#define DEMO_PIN_FAN_RELAY 27
+#define DEMO_PIN_HOLD_BUTTON 32
+#define DEMO_PIN_LDR_VN 39
+#define DEMO_PIN_LDR_VP 36
+#define DEMO_PIN_AO_PERCENT 25
+#define DEMO_PIN_AO_VOLT 26
+
+#define DEMO_PIN_IS_RESERVED(p) (((p) >= 6 && (p) <= 11) || (p) == 20 || (p) == 24 || ((p) >= 28 && (p) <= 31))
+#define DEMO_PIN_IS_INPUT_ONLY(p) ((p) >= 34 && (p) <= 39)
+#define DEMO_PIN_IS_ADC1(p) ((p) >= 32 && (p) <= 39)
+#define DEMO_PIN_IS_ADC2(p) ((p) == 0 || (p) == 2 || (p) == 4 || ((p) >= 12 && (p) <= 15) || ((p) >= 25 && (p) <= 27))
+#define DEMO_PIN_IS_ADC(p) (DEMO_PIN_IS_ADC1(p) || DEMO_PIN_IS_ADC2(p))
+
+#if ((DEMO_PIN_TEST_BUTTON < 0) || (DEMO_PIN_TEST_BUTTON > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_TEST_BUTTON))
+#warning "[W] Full-IO-Demo: DEMO_PIN_TEST_BUTTON is invalid for ESP32"
+#endif
+
+#if ((DEMO_PIN_HOLD_BUTTON < 0) || (DEMO_PIN_HOLD_BUTTON > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_HOLD_BUTTON) || DEMO_PIN_IS_INPUT_ONLY(DEMO_PIN_HOLD_BUTTON))
+#warning "[W] Full-IO-Demo: DEMO_PIN_HOLD_BUTTON is invalid for digital output on ESP32"
+#endif
+
+#if ((DEMO_PIN_HEATER_RELAY < 0) || (DEMO_PIN_HEATER_RELAY > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_HEATER_RELAY) || DEMO_PIN_IS_INPUT_ONLY(DEMO_PIN_HEATER_RELAY))
+#warning "[W] Full-IO-Demo: DEMO_PIN_HEATER_RELAY is invalid for digital output on ESP32"
+#endif
+
+#if ((DEMO_PIN_FAN_RELAY < 0) || (DEMO_PIN_FAN_RELAY > 39) || DEMO_PIN_IS_RESERVED(DEMO_PIN_FAN_RELAY) || DEMO_PIN_IS_INPUT_ONLY(DEMO_PIN_FAN_RELAY))
+#warning "[W] Full-IO-Demo: DEMO_PIN_FAN_RELAY is invalid for digital output on ESP32"
+#endif
+
+#if (!DEMO_PIN_IS_ADC(DEMO_PIN_LDR_VN))
+#warning "[W] Full-IO-Demo: DEMO_PIN_LDR_VN is not ADC-capable on ESP32"
+#endif
+
+#if (!DEMO_PIN_IS_ADC(DEMO_PIN_LDR_VP))
+#warning "[W] Full-IO-Demo: DEMO_PIN_LDR_VP is not ADC-capable on ESP32"
+#endif
+
+#if ((DEMO_PIN_AO_PERCENT != 25) && (DEMO_PIN_AO_PERCENT != 26))
+#warning "[W] Full-IO-Demo: DEMO_PIN_AO_PERCENT is not a DAC pin on ESP32 (expected 25 or 26)"
+#endif
+
+#if ((DEMO_PIN_AO_VOLT != 25) && (DEMO_PIN_AO_VOLT != 26))
+#warning "[W] Full-IO-Demo: DEMO_PIN_AO_VOLT is not a DAC pin on ESP32 (expected 25 or 26)"
+#endif
+
 static const char SETTINGS_PASSWORD[] = ""; // NOTE: Empty string disables password protection for the Settings tab.
 
 // Global theme override demo.
@@ -367,9 +417,9 @@ static void createDigitalInputs()
 {
     // Boot/action buttons (wired to 3.3V => active-high).
     // Use internal pulldown so idle is stable LOW.
-    ioManager.addDigitalInput("ap_mode", "AP Mode Button", 13, true, true, false, true);
+    ioManager.addDigitalInput("ap_mode", "AP Mode Button", DEMO_PIN_AP_MODE_BUTTON, true, true, false, true);
 
-    ioManager.addDigitalInput("reset", "Reset Button", 14, true, true, false, true);
+    ioManager.addDigitalInput("reset", "Reset Button", DEMO_PIN_RESET_BUTTON, true, true, false, true);
 
     cm::IOManager::DigitalInputEventOptions apOptions;
     apOptions.longClickMs = 1200;
@@ -399,7 +449,7 @@ static void createDigitalInputs()
         resetOptions
     );
 
-    ioManager.addDigitalInput("testbutton", "Test Button", 33, true, true, false, true);
+    ioManager.addDigitalInput("testbutton", "Test Button", DEMO_PIN_TEST_BUTTON, true, true, false, true);
 
     ioManager.configureDigitalInputEvents(
         "testbutton",
@@ -432,27 +482,27 @@ static void createDigitalInputs()
 static void createDigitalOutputs()
 {
     // Digital outputs are settings-driven and owned by IOManager.
-    ioManager.addDigitalOutput("heater", "Heater Relay", 23, true, true);
+    ioManager.addDigitalOutput("heater", "Heater Relay", DEMO_PIN_HEATER_RELAY, true, true);
 
-    ioManager.addDigitalOutput("fan", "Cooling Fan Relay", 27, true, true);
+    ioManager.addDigitalOutput("fan", "Cooling Fan Relay", DEMO_PIN_FAN_RELAY, true, true);
 
-    ioManager.addDigitalOutput("hbtn", "Hold Button", 32, true, true);
+    ioManager.addDigitalOutput("hbtn", "Hold Button", DEMO_PIN_HOLD_BUTTON, true, true);
 }
 
 static void createAnalogInputs()
 {
-    ioManager.addAnalogInput("ldr_s", "LDR VN", 39, true, 0, 4095, 0.0f, 100.0f, "%", 1);
-    ioManager.addAnalogInput("ldr_w", "LDR VP", 36, true, 0, 4095, 0.0f, 100.0f, "%", 1);
+    ioManager.addAnalogInput("ldr_s", "LDR VN", DEMO_PIN_LDR_VN, true, 0, 4095, 0.0f, 100.0f, "%", 1);
+    ioManager.addAnalogInput("ldr_w", "LDR VP", DEMO_PIN_LDR_VP, true, 0, 4095, 0.0f, 100.0f, "%", 1);
 }
 
 static void createAnalogOutputs()
 {
     // 0..100 % -> 0..3.3V
-    ioManager.addAnalogOutput("ao_pct", "AO 0..100%", 25, true, 0.0f, 100.0f, false);
+    ioManager.addAnalogOutput("ao_pct", "AO 0..100%", DEMO_PIN_AO_PERCENT, true, 0.0f, 100.0f, false);
 
 
     // 0..3.3V direct
-    ioManager.addAnalogOutput("ao_v", "AO 0..3.3V", 26, true, 0.0f, 3.3f, false);
+    ioManager.addAnalogOutput("ao_v", "AO 0..3.3V", DEMO_PIN_AO_VOLT, true, 0.0f, 3.3f, false);
 
 }
 

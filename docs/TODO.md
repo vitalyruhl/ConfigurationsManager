@@ -91,8 +91,9 @@ Open questions (implementation detail follow-up):
 
 ## Medium Priority (Prio 5)
 
-- verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
-- add addCSSClass helper for all Live controls (buttons, sliders, inputs) so user CSS selectors can override styles (Live only, not Settings)
+- [DONE] verify/implement compile-time warnings for invalid IO pin bindings (e.g., hold button test pin)
+  - Implemented in `examples/Full-IO-Demo/src/main.cpp` via compile-time pin-check warnings for common ESP32 invalid/unsafe pin classes.
+- [NEXT] add addCSSClass helper for all Live controls (buttons, sliders, inputs) so user CSS selectors can override styles (Live only, not Settings)
 
 
 
