@@ -82,7 +82,7 @@
    - Goal: reduce CPU jitter, heap churn, and log footprint
    - Status:
      - [DONE] `LoggingManager` queue front-erase strategy optimized (`std::deque` + `pop_front`)
-     - [NEXT] trim debug-heavy request-path logs in `WebServer`
+     - [DONE] debug-heavy request-path logs trimmed in `WebServer` (hot-path logs moved to verbose/condensed)
      - [NEXT] follow-up on runtime/web/wifi JSON+String hot paths
 
 Open questions (implementation detail follow-up):
