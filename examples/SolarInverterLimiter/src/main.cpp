@@ -851,7 +851,7 @@ void cb_RS485Listener()
         // legacy comment: powerSmoother.setCorrectionOffset(generalSettings.inputCorrectionOffset.get());
         powerSmoother->setCorrectionOffset(limiterSettings.inputCorrectionOffset.get()); // apply the correction offset to the smoother, if needed
         sendToRS485(static_cast<uint16_t>(inverterSetValue));
-        lmg.logTag(LL::Debug, "RS485", "Controller enabled -> set inverter to %d W", inverterSetValue);
+        lmg.logTag(LL::Trace, "RS485", "Controller enabled -> set inverter to %d W", inverterSetValue);
     }
     else
     {
