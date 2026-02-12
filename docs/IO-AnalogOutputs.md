@@ -117,3 +117,10 @@ Typical sketch order:
 - If you need more than 2 analog outputs:
   - Use PWM/LEDC + filtering (RC) (planned follow-up)
   - Use an external DAC via I2C/SPI (planned follow-up)
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

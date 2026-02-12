@@ -244,10 +244,10 @@ You can influence which AP is preferred/allowed (useful for multi-AP setups):
 
 ```cpp
 // Only connect to this specific AP MAC
-ConfigManager.setWifiAPMacFilter("60:B5:8D:4C:E1:D5");
+ConfigManager.setAccessPointMacFilter("60:B5:8D:4C:E1:D5");
 
 // Prefer this AP MAC (fallback to others)
-ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
+ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");
 ```
 
 ## ADC2 warning (ESP32)
@@ -258,3 +258,10 @@ If you use analog inputs in parallel with WiFi:
 
 - prefer ADC1 pins (GPIO32–39)
 - see also `docs/esp.md` and `docs/IO-AnalogInputs.md`
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

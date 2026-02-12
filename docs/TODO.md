@@ -34,3 +34,9 @@
 
 ## Status Notes
 
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

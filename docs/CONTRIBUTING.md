@@ -100,3 +100,9 @@ These files help decide what to keep, document, demonstrate in examples, or remo
 - All configured CI checks must pass before merging to `main`
 - No exceptions for failed CI
 - Keep `README.md` and `docs/TODO.md` current when usage/behavior changes
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |

@@ -46,3 +46,10 @@ pio run -e usb -t upload
 ```
 
 WARNING: `erase` deletes all flash data on the device.
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

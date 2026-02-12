@@ -500,7 +500,7 @@ void ConfigManagerWiFi::attemptConnect() {
     }
   } else if (phase == 1) {
     WIFI_LOG("Attempt 2: performing WiFi stack reset, then reconnect");
-    performWiFiStackReset();
+    performStackReset();
     if (!useDHCP) {
       applyStaticConfig();
     }
@@ -530,7 +530,7 @@ void ConfigManagerWiFi::attemptConnect() {
     if (periodicReset) {
       WIFI_LOG("Retry attempt %u: performing WiFi stack reset (no reboot)",
                static_cast<unsigned int>(phase) + 1U);
-      performWiFiStackReset();
+      performStackReset();
       if (!useDHCP) {
         applyStaticConfig();
       }
@@ -708,14 +708,14 @@ void ConfigManagerWiFi::checkSmartRoaming() {
 }
 
 // MAC Address Filtering and Priority implementation
-void ConfigManagerWiFi::setWifiAPMacFilter(const String& macAddress) {
+void ConfigManagerWiFi::setAccessPointMacFilter(const String& macAddress) {
   filterMac = macAddress;
   macFilterEnabled = true;
   macPriorityEnabled = false; // Filter mode disables priority mode
   WIFI_LOG("MAC Filter enabled for: %s", macAddress.c_str());
 }
 
-void ConfigManagerWiFi::setWifiAPMacPriority(const String& macAddress) {
+void ConfigManagerWiFi::setAccessPointMacPriority(const String& macAddress) {
   priorityMac = macAddress;
   macPriorityEnabled = true;
   macFilterEnabled = false; // Priority mode disables filter mode
@@ -884,7 +884,7 @@ String ConfigManagerWiFi::getWiFiStatusString(int status) const {
   }
 }
 
-void ConfigManagerWiFi::performWiFiStackReset() {
+void ConfigManagerWiFi::performStackReset() {
   WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
   
   // 1. Complete WiFi shutdown

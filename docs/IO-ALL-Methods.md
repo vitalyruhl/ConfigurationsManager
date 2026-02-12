@@ -55,3 +55,10 @@ Notes:
 
 ### addAnalogOutputValueVoltToGUI(id, cardName, order, runtimeLabel, runtimeGroup, precision)
 - Adds a read-only runtime field showing output voltage (0..3.3V).
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

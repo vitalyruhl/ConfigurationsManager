@@ -61,7 +61,7 @@ void setup()
     coreSettings.attachNtp(ConfigManager);
     ConfigManager.loadAll();
 
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");// dev-Station
     ConfigManager.startWebServer();
 
     delay(1000);

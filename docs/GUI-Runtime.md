@@ -346,3 +346,10 @@ ConfigManager.sendWarnMessage(
 3. Open `/live_layout.json` and verify pages/cards/groups.
 4. Open `/user_theme.css` and verify CSS output.
 5. Inspect a `.rw` element in dev tools for data attributes.
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

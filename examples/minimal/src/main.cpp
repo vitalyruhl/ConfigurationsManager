@@ -56,7 +56,7 @@ void setup()
 
     checkCredentials(); // you dont need it for minimal functions, but it helpfull - look at wifiSecret.example.h for details
 
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// you dont need it, bi ut it makes testing easier for me
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");// you dont need it, bi ut it makes testing easier for me
 
     ConfigManager.startWebServer();
 }

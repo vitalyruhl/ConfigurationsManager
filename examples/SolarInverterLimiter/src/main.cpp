@@ -292,8 +292,8 @@ void setup()
     ConfigManager.setRoamingImprovement(10);
 
     // Prefer this AP, fallback to others
-    // ConfigManager.setWifiAPMacPriority("3C:A6:2F:B8:54:B1");//shest
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5"); // dev-Station
+    // ConfigManager.setAccessPointMacPriority("3C:A6:2F:B8:54:B1");//shest
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5"); // dev-Station
 
     updateMqttTopics();
     setupGUI();

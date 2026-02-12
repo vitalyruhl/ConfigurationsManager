@@ -180,7 +180,7 @@ void setup()
     
     setupGUI();
 
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");
     ConfigManager.startWebServer();
 
     Serial.println("[MOCKED DATA] Sensor values are randomized every 3 seconds");

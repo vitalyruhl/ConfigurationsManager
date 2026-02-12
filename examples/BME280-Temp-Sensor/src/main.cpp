@@ -230,7 +230,7 @@ void setup()
 
     setupTemperatureMeasuring();
 
-    ConfigManager.setWifiAPMacPriority("60:B5:8D:4C:E1:D5");// my dev-Station AP
+    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");// my dev-Station AP
     ConfigManager.startWebServer();
 
     Serial.println("[MAIN] Setup completed successfully. Starting main loop...");

@@ -304,3 +304,10 @@ void init() {
 ---
 
 **Fazit**: Das Delayed Initialization Pattern löst das Static Initialization Order Problem elegant und macht den Code robuster und wartbarer. Verwende immer dieses Pattern für Settings-Strukturen!
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

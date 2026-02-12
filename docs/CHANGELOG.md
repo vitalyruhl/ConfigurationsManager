@@ -61,3 +61,10 @@ This changelog is a curated overview.
 ## 1.x
 
 - Initial release
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+

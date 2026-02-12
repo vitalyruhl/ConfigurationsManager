@@ -69,3 +69,10 @@ OTA is convenient but has security implications:
 - Prefer OTA only on trusted LAN/VPN. Avoid open WiFi.
 - If you do not need OTA in production, disable it (`CM_ENABLE_OTA=0`).
 - Settings UI password and OTA password are separate; set both if you expose OTA.
+
+## Method overview
+
+| Method | Overloads / Variants | Description | Notes |
+|---|---|---|---|
+| `ConfigManager.begin` | `begin()` | Starts ConfigManager services and web routes. | Used in examples: yes. |
+
