@@ -40,7 +40,7 @@ static void setupGUI();
 static void setupMQTT();
 static void updateMqttTopics();
 static void setupMqttCallbacks();
-static void handleMqttMessage(const char *topic, const char *payload, unsigned int length);
+static void handleMqttMessage(const char *topic, const uint8_t *payload, unsigned int length);
 static void publishMqttState(bool retained);
 static void publishMqttStateIfNeeded();
 static void registerIOBindings();
@@ -880,7 +880,7 @@ static void publishMqttStateIfNeeded()
     }
 }
 
-static void handleMqttMessage(const char *topic, const char *payload, unsigned int length)
+static void handleMqttMessage(const char *topic, const uint8_t *payload, unsigned int length)
 {
     lmg.scopedTag("MQTT");
     if (!topic || !payload || length == 0)
@@ -889,7 +889,7 @@ static void handleMqttMessage(const char *topic, const char *payload, unsigned i
         return;
     }
 
-    String messageTemp(payload, length);
+    String messageTemp(reinterpret_cast<const char *>(payload), length);
     messageTemp.trim();
 
     lmg.log(LL::Debug, "Topic[%s] <-- [%s]", topic, messageTemp.c_str());
@@ -1103,7 +1103,7 @@ namespace cm
         lmg.log(LL::Info, "State changed: %s", MQTTManager::mqttStateToString(mqttState));
     }
 
-    void onNewMQTTMessage(const char *topic, const char *payload, unsigned int length)
+    void onNewMQTTMessage(const char *topic, const uint8_t *payload, unsigned int length)
     {
         handleMqttMessage(topic, payload, length);
     }

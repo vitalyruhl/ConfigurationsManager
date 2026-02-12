@@ -24,41 +24,57 @@ namespace cm {
 void onMQTTConnected() __attribute__((weak));
 void onMQTTDisconnected() __attribute__((weak));
 void onMQTTStateChanged(int state) __attribute__((weak));
-void onNewMQTTMessage(const char* topic, const char* payload, unsigned int length) __attribute__((weak));
+void onNewMQTTMessage(const char* topic, const uint8_t* payload, unsigned int length) __attribute__((weak));
 
 #ifndef CM_MQTT_NO_DEFAULT_HOOKS
 inline void onMQTTConnected() {}
 inline void onMQTTDisconnected() {}
 inline void onMQTTStateChanged(int) {}
-inline void onNewMQTTMessage(const char*, const char*, unsigned int) {}
+inline void onNewMQTTMessage(const char*, const uint8_t*, unsigned int) {}
 #endif
 
 inline void callOnMQTTConnectedSafe_()
 {
-    if (&onMQTTConnected != nullptr) {
+#ifdef CM_MQTT_NO_DEFAULT_HOOKS
+    if (onMQTTConnected != nullptr) {
         onMQTTConnected();
     }
+#else
+    onMQTTConnected();
+#endif
 }
 
 inline void callOnMQTTDisconnectedSafe_()
 {
-    if (&onMQTTDisconnected != nullptr) {
+#ifdef CM_MQTT_NO_DEFAULT_HOOKS
+    if (onMQTTDisconnected != nullptr) {
         onMQTTDisconnected();
     }
+#else
+    onMQTTDisconnected();
+#endif
 }
 
 inline void callOnMQTTStateChangedSafe_(int state)
 {
-    if (&onMQTTStateChanged != nullptr) {
+#ifdef CM_MQTT_NO_DEFAULT_HOOKS
+    if (onMQTTStateChanged != nullptr) {
         onMQTTStateChanged(state);
     }
+#else
+    onMQTTStateChanged(state);
+#endif
 }
 
-inline void callOnNewMQTTMessageSafe_(const char* topic, const char* payload, unsigned int length)
+inline void callOnNewMQTTMessageSafe_(const char* topic, const uint8_t* payload, unsigned int length)
 {
-    if (&onNewMQTTMessage != nullptr) {
+#ifdef CM_MQTT_NO_DEFAULT_HOOKS
+    if (onNewMQTTMessage != nullptr) {
         onNewMQTTMessage(topic, payload, length);
     }
+#else
+    onNewMQTTMessage(topic, payload, length);
+#endif
 }
 
 class MQTTManager {
@@ -78,7 +94,7 @@ public:
 
     using ConnectedCallback = std::function<void()>;
     using DisconnectedCallback = std::function<void()>;
-    using MessageCallback = std::function<void(char* topic, byte* payload, unsigned int length)>;
+    using MessageCallback = std::function<void(const char* topic, const byte* payload, unsigned int length)>;
     using NewMessageCallback = std::function<void(const MqttMessageView&)>;
     using StateChangedCallback = std::function<void(ConnectionState)>;
 
@@ -1990,12 +2006,11 @@ inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* p
         onNewMqttMessage_(view);
     }
     if (topic && payload && length > 0) {
-        callOnNewMQTTMessageSafe_(topic, reinterpret_cast<const char*>(payload), length);
+        callOnNewMQTTMessageSafe_(topic, payload, length);
     }
 
     if (onMessage_) {
-        // PubSubClient API uses non-const byte*
-        onMessage_(const_cast<char*>(topic), const_cast<byte*>(payload), length);
+        onMessage_(topic, payload, length);
     }
 }
 

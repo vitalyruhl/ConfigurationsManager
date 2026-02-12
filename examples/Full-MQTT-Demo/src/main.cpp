@@ -123,13 +123,13 @@ namespace cm
         lmg.logTag(LL::Info, "MQTT", "State changed: %s", MQTTManager::mqttStateToString(mqttState));
     }
 
-    void onNewMQTTMessage(const char *topic, const char *payload, unsigned int length)
+    void onNewMQTTMessage(const char *topic, const uint8_t *payload, unsigned int length)
     {
         if (!topic || !payload || length == 0)
         {
             return;
         }
-        String payloadString(payload, length);
+        String payloadString(reinterpret_cast<const char *>(payload), length);
         payloadString.trim();
         lmg.logTag(LL::Info, "MQTT", "RX: %s => %s", topic, payloadString.c_str());
 
@@ -203,7 +203,7 @@ void setupMqtt()
     // Classic callbacks (mirror PubSubClient signatures)
     // mqtt.onConnected([]() { CM_LOG("[Full-MQTT-Demo][INFO] MQTT connected (classic)"); });
     // mqtt.onDisconnected([]() { CM_LOG("[Full-MQTT-Demo][INFO] MQTT disconnected (classic)"); });
-    // mqtt.onMessage([](char* topic, byte* payload, unsigned int length) { /* ... */ });
+    // mqtt.onMessage([](const char* topic, const byte* payload, unsigned int length) { /* ... */ });
 
     // Receive test topics
     mqtt.addTopicReceiveFloat("boiler_temp_c", "Boiler Temperature", "BoilerSaver/TemperatureBoiler", &boilerTemperatureC, "C", 1, "none");  // no settings UI
