@@ -67,6 +67,16 @@ private:
   unsigned long lastNoSsidScanMillis;
   unsigned long noSsidScanStartMillis;
 
+  // Deferred roaming reconnect (non-blocking replacement for fixed delay).
+  bool roamingReconnectPending;
+  unsigned long roamingReconnectAtMs;
+
+  // Non-blocking WiFi stack reset state machine.
+  bool stackResetInProgress;
+  bool connectAfterStackReset;
+  uint8_t stackResetStep;
+  unsigned long stackResetStepAtMs;
+
   // Private methods
   void transitionToState(WiFiManagerState newState);
   void handleReconnection();
@@ -76,6 +86,10 @@ private:
   void checkSmartRoaming();  // Smart roaming check method
   String findBestBSSID();    // Find best BSSID considering MAC filter/priority
   void attemptConnect();     // Apply phased connection strategy
+  void beginWiFiConnection_();
+  void startStackReset_();
+  bool advanceStackReset_();
+  void processPendingRoamingReconnect_();
   void logNoSsidAvailScan_();
 
 public:

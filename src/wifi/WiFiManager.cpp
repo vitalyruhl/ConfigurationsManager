@@ -94,6 +94,12 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , connectAttempts(0)
   , lastNoSsidScanMillis(0)
   , noSsidScanStartMillis(0)
+  , roamingReconnectPending(false)
+  , roamingReconnectAtMs(0)
+  , stackResetInProgress(false)
+  , connectAfterStackReset(false)
+  , stackResetStep(0)
+  , stackResetStepAtMs(0)
 {
 }
 
@@ -147,6 +153,8 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   WIFI_LOG_VERBOSE("Starting DHCP connection to %s", ssid.c_str());
 
   // Start phased connection attempts
+  roamingReconnectPending = false;
+  connectAfterStackReset = false;
   connectAttempts = 0;
   attemptConnect();
 }
@@ -168,6 +176,8 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
            (dns2 == IPAddress()) ? "0.0.0.0" : dns2.toString().c_str());
 
   // Start phased connection attempts
+  roamingReconnectPending = false;
+  connectAfterStackReset = false;
   connectAttempts = 0;
   attemptConnect();
 }
@@ -199,10 +209,133 @@ void ConfigManagerWiFi::startAccessPoint(const String& apSSID, const String& apP
   transitionToState(WIFI_STATE_AP_MODE);
 }
 
+void ConfigManagerWiFi::beginWiFiConnection_() {
+  if (!useDHCP) {
+    applyStaticConfig();
+  }
+
+  // BSSID selection if configured
+  String targetBSSID = findBestBSSID();
+  if (!targetBSSID.isEmpty()) {
+    WIFI_LOG("Using specific BSSID: %s", targetBSSID.c_str());
+    uint8_t bssid[6];
+    unsigned int tmp[6];
+    int matched = sscanf(targetBSSID.c_str(), "%2x:%2x:%2x:%2x:%2x:%2x",
+                         &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]);
+    if (matched == 6) {
+      for (int i = 0; i < 6; ++i) bssid[i] = static_cast<uint8_t>(tmp[i] & 0xFF);
+      WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
+    } else {
+      WIFI_LOG("Invalid BSSID format '%s', falling back to auto BSSID", targetBSSID.c_str());
+      WiFi.begin(ssid.c_str(), password.c_str());
+    }
+  } else {
+    WiFi.begin(ssid.c_str(), password.c_str());
+  }
+
+  // Advance state and counters
+  transitionToState(WIFI_STATE_CONNECTING);
+  lastReconnectAttempt = millis();
+  if (connectAttempts < 250) {
+    connectAttempts++;
+  }
+}
+
+void ConfigManagerWiFi::startStackReset_() {
+  if (stackResetInProgress) {
+    return;
+  }
+
+  WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  stackResetInProgress = true;
+  stackResetStep = 1;
+  stackResetStepAtMs = millis() + 500UL;
+}
+
+bool ConfigManagerWiFi::advanceStackReset_() {
+  if (!stackResetInProgress) {
+    return false;
+  }
+
+  const unsigned long now = millis();
+  if (static_cast<long>(now - stackResetStepAtMs) < 0) {
+    return false;
+  }
+
+  switch (stackResetStep) {
+    case 1:
+      esp_wifi_stop();
+      esp_wifi_deinit();
+      stackResetStep = 2;
+      stackResetStepAtMs = now + 200UL;
+      return false;
+    case 2: {
+      wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+      esp_wifi_init(&cfg);
+      stackResetStep = 3;
+      stackResetStepAtMs = now + 200UL;
+      return false;
+    }
+    case 3:
+      WiFi.mode(WIFI_STA);
+      stackResetStep = 4;
+      stackResetStepAtMs = now + 100UL;
+      return false;
+    case 4:
+      // Set additional WiFi parameters for stability
+      WiFi.setSleep(false);       // Disable WiFi sleep
+      WiFi.setAutoReconnect(true);  // Enable auto-reconnect
+      WiFi.persistent(true);      // Store WiFi configuration in flash
+      WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Set specific power level
+      stackResetInProgress = false;
+      stackResetStep = 0;
+      stackResetStepAtMs = 0;
+      WIFI_LOG("WiFi stack reset complete - WiFi.mode() = %d, WiFi.status() = %d",
+               WiFi.getMode(), WiFi.status());
+      return true;
+    default:
+      stackResetInProgress = false;
+      stackResetStep = 0;
+      stackResetStepAtMs = 0;
+      return false;
+  }
+}
+
+void ConfigManagerWiFi::processPendingRoamingReconnect_() {
+  if (!roamingReconnectPending) {
+    return;
+  }
+  if (stackResetInProgress) {
+    return;
+  }
+
+  const unsigned long now = millis();
+  if (static_cast<long>(now - roamingReconnectAtMs) < 0) {
+    return;
+  }
+
+  roamingReconnectPending = false;
+  if (!useDHCP) {
+    applyStaticConfig();
+  }
+  WiFi.begin(ssid.c_str(), password.c_str());
+  transitionToState(WIFI_STATE_CONNECTING);
+  lastReconnectAttempt = now;
+  WIFI_LOG_VERBOSE("Deferred roaming reconnect started");
+}
+
 void ConfigManagerWiFi::update() {
   if (!initialized) return;
 
-  WiFiManagerState previousState = currentState;
+  const bool resetCompleted = advanceStackReset_();
+  if (resetCompleted && connectAfterStackReset) {
+    connectAfterStackReset = false;
+    beginWiFiConnection_();
+  }
+
+  processPendingRoamingReconnect_();
 
   // Debug: Log current status every few calls
   // static int debugCounter = 0;
@@ -346,6 +479,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
 
 void ConfigManagerWiFi::handleReconnection() {
   if (WiFi.getMode() == WIFI_AP) return; // Don't reconnect in AP mode
+  if (stackResetInProgress || roamingReconnectPending) return;
 
   // Avoid reconnect storms while the WiFi stack is already busy.
   // Some ESP32 Arduino stacks report WL_IDLE_STATUS during an ongoing connect and
@@ -435,6 +569,8 @@ void ConfigManagerWiFi::reconnect() {
 
 void ConfigManagerWiFi::disconnect() {
   WIFI_LOG("Manual disconnect requested");
+  roamingReconnectPending = false;
+  connectAfterStackReset = false;
   WiFi.disconnect();
   transitionToState(WIFI_STATE_DISCONNECTED);
 }
@@ -443,6 +579,8 @@ void ConfigManagerWiFi::reset() {
   currentState = WIFI_STATE_DISCONNECTED;
   lastGoodConnectionMillis = millis();
   lastReconnectAttempt = 0;
+  roamingReconnectPending = false;
+  connectAfterStackReset = false;
 }
 
 // Status information
@@ -484,6 +622,12 @@ int ConfigManagerWiFi::getRSSI() const {
 //  - Attempt 3+ (phase >=2): keep retrying and periodically reset the WiFi stack
 //    (restart only via auto-reboot timeout to avoid reboot loops on weak networks)
 void ConfigManagerWiFi::attemptConnect() {
+  if (stackResetInProgress) {
+    WIFI_LOG_VERBOSE("Stack reset in progress, deferring connect attempt");
+    return;
+  }
+
+  roamingReconnectPending = false;
   const uint8_t phase = connectAttempts;
   const unsigned long now = millis();
   const unsigned long timeSinceLastGood = now - lastGoodConnectionMillis;
@@ -495,15 +639,11 @@ void ConfigManagerWiFi::attemptConnect() {
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
     WiFi.persistent(true);
-    if (!useDHCP) {
-      applyStaticConfig();
-    }
   } else if (phase == 1) {
     WIFI_LOG("Attempt 2: performing WiFi stack reset, then reconnect");
-    performStackReset();
-    if (!useDHCP) {
-      applyStaticConfig();
-    }
+    connectAfterStackReset = true;
+    startStackReset_();
+    return;
   } else {
     // Do not restart immediately; gate restarts by the configured auto-reboot timeout.
     // This prevents short reboot loops when an SSID is temporarily unavailable or signal is weak.
@@ -530,47 +670,18 @@ void ConfigManagerWiFi::attemptConnect() {
     if (periodicReset) {
       WIFI_LOG("Retry attempt %u: performing WiFi stack reset (no reboot)",
                static_cast<unsigned int>(phase) + 1U);
-      performStackReset();
-      if (!useDHCP) {
-        applyStaticConfig();
-      }
+      connectAfterStackReset = true;
+      startStackReset_();
+      return;
     } else {
       // Ensure WiFi is in a sane STA config before calling begin() again.
       WiFi.mode(WIFI_STA);
       WiFi.setSleep(false);
       WiFi.setAutoReconnect(true);
       WiFi.persistent(true);
-      if (!useDHCP) {
-        applyStaticConfig();
-      }
     }
   }
-
-  // BSSID selection if configured
-  String targetBSSID = findBestBSSID();
-  if (!targetBSSID.isEmpty()) {
-    WIFI_LOG("Using specific BSSID: %s", targetBSSID.c_str());
-    uint8_t bssid[6];
-    unsigned int tmp[6];
-    int matched = sscanf(targetBSSID.c_str(), "%2x:%2x:%2x:%2x:%2x:%2x",
-                         &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]);
-    if (matched == 6) {
-      for (int i = 0; i < 6; ++i) bssid[i] = static_cast<uint8_t>(tmp[i] & 0xFF);
-      WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
-    } else {
-      WIFI_LOG("Invalid BSSID format '%s', falling back to auto BSSID", targetBSSID.c_str());
-      WiFi.begin(ssid.c_str(), password.c_str());
-    }
-  } else {
-    WiFi.begin(ssid.c_str(), password.c_str());
-  }
-
-  // Advance state and counters
-  transitionToState(WIFI_STATE_CONNECTING);
-  lastReconnectAttempt = millis();
-  if (connectAttempts < 250) {
-    connectAttempts++;
-  }
+  beginWiFiConnection_();
 }
 
 // Smart WiFi Roaming implementation
@@ -600,6 +711,9 @@ bool ConfigManagerWiFi::isSmartRoamingEnabled() const {
 
 void ConfigManagerWiFi::checkSmartRoaming() {
   if (!smartRoamingEnabled || ssid.isEmpty()) {
+    return;
+  }
+  if (roamingReconnectPending) {
     return;
   }
 
@@ -685,19 +799,12 @@ void ConfigManagerWiFi::checkSmartRoaming() {
       WIFI_LOG_VERBOSE("Found better AP: %s (RSSI: %d dBm, improvement: %d dBm)", 
                bestBSSID.c_str(), bestRSSI, bestRSSI - currentRSSI);
       
-      // Disconnect and reconnect to trigger roaming
+      // Disconnect now and reconnect after a short delay without blocking loop().
       WiFi.disconnect();
-      delay(500);
-      
-      if (useDHCP) {
-        WiFi.begin(ssid.c_str(), password.c_str());
-      } else {
-        WiFi.config(staticIP, gateway, subnet, dns1, dns2);
-        WiFi.begin(ssid.c_str(), password.c_str());
-      }
-      
+      roamingReconnectPending = true;
+      roamingReconnectAtMs = currentTime + 500UL;
       lastRoamingAttempt = currentTime;
-      WIFI_LOG_VERBOSE("Initiated roaming to better access point");
+      WIFI_LOG_VERBOSE("Scheduled roaming reconnect in 500 ms");
     }
   } else {
     WIFI_LOG_VERBOSE("No better AP found (current: %d dBm)", currentRSSI);
@@ -885,35 +992,24 @@ String ConfigManagerWiFi::getWiFiStatusString(int status) const {
 }
 
 void ConfigManagerWiFi::performStackReset() {
-  WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
-  
-  // 1. Complete WiFi shutdown
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-  delay(500);  // Longer delay for complete shutdown
-  
-  // 2. Reset WiFi stack (ESP32 specific)
-  esp_wifi_stop();
-  esp_wifi_deinit();
-  delay(200);
-  
-  // 3. Reinitialize WiFi stack
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  esp_wifi_init(&cfg);
-  delay(200);
-  
-  // 4. Set WiFi mode and configuration
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  
-  // Set additional WiFi parameters for stability
-  WiFi.setSleep(false);       // Disable WiFi sleep
-  WiFi.setAutoReconnect(true);  // Enable auto-reconnect
-  WiFi.persistent(true);      // Store WiFi configuration in flash
-  WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Set specific power level
-  
-  WIFI_LOG("WiFi stack reset complete - WiFi.mode() = %d, WiFi.status() = %d", 
-         WiFi.getMode(), WiFi.status());
+  if (!stackResetInProgress) {
+    startStackReset_();
+  }
+
+  // Compatibility path: keep method synchronous for direct/manual callers.
+  const unsigned long timeoutMs = 3000UL;
+  const unsigned long startedAt = millis();
+  while (stackResetInProgress) {
+    advanceStackReset_();
+    if (millis() - startedAt > timeoutMs) {
+      WIFI_LOG("[WARNING] WiFi stack reset timeout after %lu ms", timeoutMs);
+      stackResetInProgress = false;
+      stackResetStep = 0;
+      stackResetStepAtMs = 0;
+      break;
+    }
+    delay(1);
+  }
 }
 
 void ConfigManagerWiFi::logNoSsidAvailScan_() {
