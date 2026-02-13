@@ -1929,7 +1929,9 @@ public:
         const unsigned long now = millis();
         if (now - wsLastHeartbeat >= wsHeartbeatInterval) {
             wsLastHeartbeat = now;
-            ws->textAll("__ping"); // application-level ping
+            if (ws->availableForWriteAll()) {
+                ws->textAll("__ping"); // application-level ping
+            }
         }
         // Drop stale clients
         for (const auto &c : wsClients) {
@@ -2506,6 +2508,27 @@ public:
         webManager.setSettingsPassword(password);
         CM_CORE_LOG("[I] Settings password configured");
     }
+
+    bool hasValidStationCredentials(const String &ssid, const String &password, const char *context = nullptr)
+    {
+        const char *ctx = (context && context[0]) ? context : "startWebServer";
+        if (ssid.isEmpty())
+        {
+            CM_CORE_LOG("[W] %s: WiFi SSID is empty", ctx);
+            return false;
+        }
+        if (ssid.length() > 32)
+        {
+            CM_CORE_LOG("[W] %s: WiFi SSID length %u is invalid (max 32)", ctx, static_cast<unsigned>(ssid.length()));
+            return false;
+        }
+        if (password.length() > 63)
+        {
+            CM_CORE_LOG("[W] %s: WiFi password length %u is invalid (max 63)", ctx, static_cast<unsigned>(password.length()));
+            return false;
+        }
+        return true;
+    }
     
     // WiFi management - NON-BLOCKING!
     // Convenience overload: start WiFi using persisted/registered Core WiFi settings.
@@ -2515,7 +2538,7 @@ public:
     // - WiFiUseDHCP
     // - WiFiStaticIP, WiFiGateway, WiFiSubnet, WiFiDNS1, WiFiDNS2
     //
-    // If these settings are not registered (or SSID is empty), this will fall back to AP mode.
+    // If these settings are not registered (or SSID is invalid), this will fall back to AP mode.
     void startWebServer()
     {
         auto getString = [this](const char *category, const char *key, const String &fallback) -> String
@@ -2553,6 +2576,12 @@ public:
         if (ssid.length() == 0)
         {
             CM_CORE_LOG("[W] startWebServer(): WiFi SSID is empty or not registered -> starting AP mode");
+            startAccessPoint();
+            return;
+        }
+        if (!hasValidStationCredentials(ssid, password, "startWebServer()"))
+        {
+            CM_CORE_LOG("[W] startWebServer(): invalid WiFi credentials -> starting AP mode");
             startAccessPoint();
             return;
         }
@@ -2608,6 +2637,13 @@ public:
 
     void startWebServer(const String &ssid, const String &password)
     {
+        if (!hasValidStationCredentials(ssid, password, "startWebServer(ssid,password)"))
+        {
+            CM_CORE_LOG("[W] startWebServer(ssid,password): invalid WiFi credentials -> starting AP mode");
+            startAccessPoint();
+            return;
+        }
+
         CM_CORE_LOG("[I] Starting web server with DHCP connection to %s", ssid.c_str());
 
         auto getInt = [this](const char *category, const char *key, int fallback) -> int
@@ -2672,6 +2708,13 @@ public:
 
     void startWebServer(const IPAddress &staticIP, const IPAddress &gateway, const IPAddress &subnet, const String &ssid, const String &password, const IPAddress &dns1 = IPAddress(), const IPAddress &dns2 = IPAddress())
     {
+        if (!hasValidStationCredentials(ssid, password, "startWebServer(staticIP,...)"))
+        {
+            CM_CORE_LOG("[W] startWebServer(staticIP,...): invalid WiFi credentials -> starting AP mode");
+            startAccessPoint();
+            return;
+        }
+
         CM_CORE_LOG("Starting web server with static IP %s", staticIP.toString().c_str());
 
         auto getInt = [this](const char *category, const char *key, int fallback) -> int
@@ -3120,12 +3163,19 @@ public:
         if (!wsEnabled || !ws) {
             return false;
         }
+        if (!ws->availableForWriteAll()) {
+            ws->cleanupClients();
+            return false;
+        }
         ws->textAll(payload);
         return true;
     }
     bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload)
     {
         if (!client) {
+            return false;
+        }
+        if (client->queueIsFull()) {
             return false;
         }
         client->text(payload);
@@ -3152,10 +3202,7 @@ public:
             payload = runtimeManager.runtimeValuesToJSON();
         }
 
-        if (ws)
-        {
-            ws->textAll(payload);
-        }
+        sendWebSocketText(payload);
         // Run manual heartbeat maintenance
         wsHeartbeatMaintenance();
     }

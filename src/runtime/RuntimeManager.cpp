@@ -451,7 +451,9 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             out += ",";
         }
         first = false;
-        serializeJson(entryDoc, out);
+        String entry;
+        serializeJson(entryDoc, entry);
+        out += entry;
     }
 
     out += "]";

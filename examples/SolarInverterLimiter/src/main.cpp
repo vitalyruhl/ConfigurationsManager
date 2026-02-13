@@ -647,14 +647,44 @@ static void registerProjectSettings()
     rs485settings.attachTo(ConfigManager);
 }
 
+static bool hasValidStationCredentials(const String &ssid, const String &password)
+{
+    if (ssid.isEmpty())
+    {
+        return false;
+    }
+    if (ssid.length() > 32)
+    {
+        return false;
+    }
+    if (password.length() > 63)
+    {
+        return false;
+    }
+    return true;
+}
+
 static void setupNetworkDefaults()
 {
+    const String currentSsid = wifiSettings.wifiSsid.get();
+    const String currentPassword = wifiSettings.wifiPassword.get();
+    const bool hasValidStoredWiFi = hasValidStationCredentials(currentSsid, currentPassword);
+
+    if (!currentSsid.isEmpty() && currentSsid.length() > 32)
+    {
+        lmg.logTag(LL::Warn, "SETUP", "Stored WiFi SSID length invalid (%u > 32)", static_cast<unsigned>(currentSsid.length()));
+    }
+    if (currentPassword.length() > 63)
+    {
+        lmg.logTag(LL::Warn, "SETUP", "Stored WiFi password length invalid (%u > 63)", static_cast<unsigned>(currentPassword.length()));
+    }
+
     // Apply secret defaults only if nothing is configured yet (after loading persisted settings).
-    if (wifiSettings.wifiSsid.get().isEmpty())
+    if (!hasValidStoredWiFi)
     {
 #if CM_HAS_WIFI_SECRETS
         lmg.log(LL::Debug, "-------------------------------------------------------------");
-        lmg.log(LL::Debug, "SETUP: *** SSID is empty, setting My values *** ");
+        lmg.log(LL::Debug, "SETUP: *** WiFi credentials missing/invalid, setting My values *** ");
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         wifiSettings.wifiSsid.set(MY_WIFI_SSID);
         wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
@@ -682,7 +712,7 @@ static void setupNetworkDefaults()
         delay(500);
         ESP.restart();
 #else
-        lmg.log(LL::Warn, "SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+        lmg.log(LL::Warn, "SETUP: WiFi credentials missing/invalid but secret/wifiSecret.h is missing; using UI/AP mode");
 #endif
     }
 
@@ -933,7 +963,7 @@ void onWiFiConnected()
 {
     wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
     logNetworkIpInfo("onWiFiConnected");
-    lmg.logTag(LL::Info, "WiFi", "Station Mode: http://%s", WiFi.localIP().toString().c_str());
+    lmg.logTag(LL::Debug, "WiFi", "Station Mode: http://%s", WiFi.localIP().toString().c_str());
 }
 
 void onWiFiDisconnected()
@@ -946,7 +976,7 @@ void onWiFiAPMode()
 {
     wifiServices.onAPMode();
     logNetworkIpInfo("onWiFiAPMode");
-    lmg.logTag(LL::Info, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
+    lmg.logTag(LL::Debug, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
 void readBme280()

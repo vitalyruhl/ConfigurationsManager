@@ -47,11 +47,11 @@ pio run -e usb -t upload
 
 WARNING: `erase` deletes all flash data on the device.
 
-## Method overview
+## check the meta data
 
-| Method | Overloads / Variants | Description | Notes |
-|---|---|---|---|
-| `ConfigManager.handleClient` | `handleClient()` | Processes core web/runtime servicing in the main loop. | Missing calls can look like connectivity failures. |
-| `ConfigManager.reconnectWifi` | `reconnectWifi()` | Triggers STA reconnect attempt after link loss. | Use with backoff, not tight retry loops. |
-| `ConfigManager.getWiFiManager().update` | `getWiFiManager().update()` | Updates WiFi manager internal state machine. | Run continuously in `loop()`. |
+
+```bash
+curl.exe -sS http://<deine-ip>/runtime_meta.json
+curl.exe -sS http://192.168.2.126/runtime_meta.json
+```
 

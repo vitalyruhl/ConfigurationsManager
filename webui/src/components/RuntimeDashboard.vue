@@ -987,6 +987,9 @@ let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
 let wsConnecting = false;
+let runtimeMetaLastAttemptMs = 0;
+let runtimeMetaRequestInFlight = false;
+let runtimeMetaRetryTimer = null;
 
 let checkboxDebounceTimer = null;
 
@@ -1496,6 +1499,9 @@ async function fetchRuntime() {
     const r = await fetchWithTimeout("/runtime.json?ts=" + Date.now(), {}, 4000);
     if (!r.ok) return;
     runtime.value = await r.json();
+    if (!runtimeMeta.value.length) {
+      fetchRuntimeMeta();
+    }
     buildRuntimeGroups();
   } catch (e) {
     // ignore network/abort; polling will retry
@@ -1503,13 +1509,31 @@ async function fetchRuntime() {
 }
 
 async function fetchRuntimeMeta() {
+  if (runtimeMetaRequestInFlight) return;
+  const now = Date.now();
+  if (now - runtimeMetaLastAttemptMs < 5000) return;
+  runtimeMetaLastAttemptMs = now;
+  runtimeMetaRequestInFlight = true;
+  if (runtimeMetaRetryTimer) {
+    clearTimeout(runtimeMetaRetryTimer);
+    runtimeMetaRetryTimer = null;
+  }
   try {
     const r = await fetchWithTimeout("/runtime_meta.json?ts=" + Date.now(), {}, 5000);
     if (!r.ok) return;
-    runtimeMeta.value = await r.json();
+    const meta = await r.json();
+    runtimeMeta.value = Array.isArray(meta) ? meta : [];
     buildRuntimeGroups();
   } catch (e) {
     // ignore network/abort; polling will retry
+  } finally {
+    runtimeMetaRequestInFlight = false;
+    if (!runtimeMeta.value.length && !runtimeMetaRetryTimer) {
+      runtimeMetaRetryTimer = setTimeout(() => {
+        runtimeMetaRetryTimer = null;
+        fetchRuntimeMeta();
+      }, 3000);
+    }
   }
 }
 
@@ -1600,6 +1624,17 @@ function buildRuntimeGroups() {
   }
 
   const fallback = [];
+  const fallbackUnitFor = (group, key) => {
+    const g = String(group || "").toLowerCase();
+    const k = String(key || "").toLowerCase();
+    if (g === "sensors") {
+      if (k.includes("temp") || k.includes("dew")) return "°C";
+      if (k.includes("hum")) return "%";
+      if (k.includes("press")) return "hPa";
+    }
+    if (k.includes("watt") || k.endsWith("_w") || k === "w") return "W";
+    return "";
+  };
 
   if (runtime.value.sensors) {
     fallback.push({
@@ -1609,7 +1644,7 @@ function buildRuntimeGroups() {
       fields: Object.keys(runtime.value.sensors).map((k) => ({
         key: k,
         label: capitalize(k),
-        unit: "",
+        unit: fallbackUnitFor("sensors", k),
         precision:
           k.toLowerCase().includes("temp") || k.toLowerCase().includes("dew")
             ? 1
@@ -1629,7 +1664,7 @@ function buildRuntimeGroups() {
         .map((k) => ({
           key: k,
           label: capitalize(k),
-          unit: "",
+          unit: fallbackUnitFor("system", k),
           precision: 0,
           group: "system",
           sourceGroup: "system",
@@ -2370,6 +2405,10 @@ onBeforeUnmount(() => {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (runtimeMetaRetryTimer) {
+    clearTimeout(runtimeMetaRetryTimer);
+    runtimeMetaRetryTimer = null;
   }
   if (otaProbeTimer) {
     clearInterval(otaProbeTimer);

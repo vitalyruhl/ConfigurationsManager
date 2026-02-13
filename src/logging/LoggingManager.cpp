@@ -131,7 +131,9 @@ void LoggingManager::GuiOutput::tick(unsigned long nowMs)
     }
     size_t sent = 0;
     while (!pending_.empty() && sent < maxPerTick_) {
-        configManager_.sendWebSocketText(pending_.front());
+        if (!configManager_.sendWebSocketText(pending_.front())) {
+            break;
+        }
         pending_.pop_front();
         sent++;
     }
