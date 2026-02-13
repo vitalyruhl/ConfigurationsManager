@@ -17,7 +17,30 @@
 
 ## Medium Priority (Prio 5)
 
-- not present
+- Flash optimization refactor: split large `.cpp` files into smaller modules so the linker can strip more unused code.
+
+### Plan: Split large `.cpp` files for better dead-code elimination
+
+1. Baseline + hotspot identification
+   - Record size baseline (`firmware.elf`, `firmware.bin`, map file) for `examples/BoilerSaver`.
+   - List largest translation units and symbols (`pio run -e usb -v`, map analysis).
+2. Define module boundaries (no behavior change)
+   - Split by feature/domain, not by random line ranges.
+   - Keep stable public interfaces in headers; move internals to feature-local files.
+3. Incremental extraction
+   - Move one feature block at a time from monolithic files into dedicated `.cpp/.h` pairs.
+   - Build and run after each extraction step.
+4. Maximize linker strip opportunities
+   - Keep helper functions and static data private to their module where possible.
+   - Avoid central mega-files that reference all features at once.
+5. Verification gates per step
+   - Compile + upload check.
+   - Runtime smoke test (web/routes/critical feature path still working).
+   - Compare flash size delta against baseline and document result.
+6. Completion criteria
+   - No functional regressions.
+   - Same external API behavior.
+   - Measurable flash reduction or, if unchanged, clear report of limiting factors.
 
 ## Low Priority (Prio 10)
 
