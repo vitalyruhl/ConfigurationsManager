@@ -140,7 +140,7 @@ public:
     void addOutput(std::unique_ptr<Output> output);
     void clearOutputs();
 
-    void setGlobalLevel(Level level) { globalLevel_ = level; }
+    void setGlobalLevel(Level level) { globalLevel_ = clampToBuildLevel_(level); }
     Level getGlobalLevel() const { return globalLevel_; }
     void setTag(const char* tag);
     void clearTag();
@@ -180,11 +180,11 @@ public:
     void loop();
 
     void attachToConfigManager(Level level = levelFromMacro_(CM_LOGGING_LEVEL),
-                               Level verboseLevel = Level::Trace,
+                               Level verboseLevel = levelFromMacro_(CM_LOGGING_LEVEL),
                                const char* tag = "ConfigManager");
     void attachToConfigManager(Level level, const char* tag)
     {
-        attachToConfigManager(level, Level::Trace, tag);
+        attachToConfigManager(level, level, tag);
     }
 
     static constexpr Level levelFromMacro_(int value)
@@ -208,7 +208,22 @@ public:
     }
 
 private:
-    LoggingManager() = default;
+    static constexpr Level buildLevel_()
+    {
+        return levelFromMacro_(CM_LOGGING_LEVEL);
+    }
+    static constexpr Level clampToBuildLevel_(Level requested)
+    {
+        const Level buildLevel = buildLevel_();
+        return (static_cast<uint8_t>(requested) > static_cast<uint8_t>(buildLevel)) ? buildLevel : requested;
+    }
+
+    LoggingManager()
+        : globalLevel_(buildLevel_())
+        , defaultLevel_(buildLevel_())
+        , verboseLevel_(buildLevel_())
+    {
+    }
 
     bool shouldLog_(Level level) const;
 

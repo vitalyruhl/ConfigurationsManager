@@ -9,9 +9,10 @@ Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*`
   - `CM_EMBED_WEBUI` (default: `1`)
     - `1`: embed the WebUI HTML into the firmware image (serves on `/`)
     - `0`: do not embed the WebUI HTML (saves flash); API routes stay available
-  - `CM_ENABLE_LOGGING` (default: `1`)
+  - `CM_ENABLE_LOGGING` (default: `0`, core/library logs only)
   - `CM_ENABLE_VERBOSE_LOGGING` (default: `0`)
   - `CM_DISABLE_GUI_LOGGING` (default: `0`)
+  - `CM_LOGGING_LEVEL` (default: `CM_LOG_LEVEL_TRACE`, runtime/project logging cap)
   - `CM_ENABLE_OTA` (default: `1`)
   - `CM_ENABLE_SYSTEM_PROVIDER` (default: `1`)
   - `CM_ENABLE_SYSTEM_TIME` (default: `1`)
@@ -40,12 +41,16 @@ For real numbers, build your target with and without each flag and compare the f
   - Behavior: Log tab disappears; only Serial logging remains.
 
 - `CM_ENABLE_LOGGING=0`
-  - Flash/RAM: small savings (removes log formatting and calls).
-  - Behavior: no CM_LOG output.
+  - Flash/RAM: small savings (removes library/core log formatting and calls).
+  - Behavior: core/library `CM_LOG` callsites are compiled out.
 
 - `CM_ENABLE_VERBOSE_LOGGING=0`
-  - Flash/RAM: small savings (removes verbose log sites).
-  - Behavior: no CM_LOG_VERBOSE output.
+  - Flash/RAM: small savings (removes core/library verbose log sites).
+  - Behavior: core/library `CM_LOG_VERBOSE` callsites are compiled out.
+
+- `CM_LOGGING_LEVEL=CM_LOG_LEVEL_*`
+  - Flash/RAM: negligible impact.
+  - Behavior: caps LoggingManager runtime output level (project logging behavior).
 
 - `CM_ENABLE_STYLE_RULES=0`
   - Flash: small savings (style metadata processing disabled).

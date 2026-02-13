@@ -49,7 +49,9 @@
 #define CM_ENABLE_OTA 1
 #endif
 
-// --- Logging flags (still configurable) ---
+// --- Core/library logging flags (still configurable) ---
+// These flags only affect CM_LOG/CM_LOG_VERBOSE usage inside the library core.
+// The advanced LoggingManager module remains available and is controlled via CM_LOGGING_LEVEL.
 #ifndef CM_ENABLE_LOGGING
 #define CM_ENABLE_LOGGING 0
 #endif
@@ -64,7 +66,9 @@
 #define CM_DISABLE_GUI_LOGGING 0
 #endif
 
-// --- Logging level defaults (override with -DCM_LOGGING_LEVEL=CM_LOG_LEVEL_*) ---
+// --- LoggingManager level override (project/module level) ---
+// Use -DCM_LOGGING_LEVEL=CM_LOG_LEVEL_* to cap runtime logging output.
+// Default TRACE keeps full runtime control in sketch code unless explicitly overridden.
 #define CM_LOG_LEVEL_OFF   0
 #define CM_LOG_LEVEL_FATAL 1
 #define CM_LOG_LEVEL_ERROR 2
@@ -74,11 +78,7 @@
 #define CM_LOG_LEVEL_TRACE 6
 
 #ifndef CM_LOGGING_LEVEL
-#if CM_ENABLE_VERBOSE_LOGGING
 #define CM_LOGGING_LEVEL CM_LOG_LEVEL_TRACE
-#else
-#define CM_LOGGING_LEVEL CM_LOG_LEVEL_INFO
-#endif
 #endif
 // ---------------------------------------------------------------------------------------------------------------------
 // Dynamic visibility is always enabled - legacy code removal completed

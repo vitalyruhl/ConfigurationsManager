@@ -271,6 +271,7 @@ void LoggingManager::addOutput(std::unique_ptr<Output> output)
     if (!output) {
         return;
     }
+    output->setLevel(clampToBuildLevel_(output->getLevel()));
     outputs_.push_back(std::move(output));
 }
 
@@ -405,7 +406,7 @@ void LoggingManager::loop()
 
 void LoggingManager::attachToConfigManager(Level level, Level verboseLevel, const char* tag)
 {
-    defaultLevel_ = level;
+    defaultLevel_ = clampToBuildLevel_(level);
     if (tag == nullptr) {
         defaultTag_ = "ConfigManager";
     } else if (tag[0] == '\0') {
@@ -413,7 +414,7 @@ void LoggingManager::attachToConfigManager(Level level, Level verboseLevel, cons
     } else {
         defaultTag_ = tag;
     }
-    verboseLevel_ = verboseLevel;
+    verboseLevel_ = clampToBuildLevel_(verboseLevel);
     verboseTag_ = defaultTag_;
 
     ConfigManagerClass::setLogger([this](const char* msg) {

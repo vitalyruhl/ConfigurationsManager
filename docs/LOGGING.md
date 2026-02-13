@@ -25,10 +25,10 @@ You can also define module-level shortcuts to keep tags consistent:
 
 Logging is controlled via build flags:
 
-- `CM_ENABLE_LOGGING` (default: `1`)
-- `CM_ENABLE_VERBOSE_LOGGING` (default: `0`)
+- `CM_ENABLE_LOGGING` (default: `0`, core/library `CM_LOG` callsites only)
+- `CM_ENABLE_VERBOSE_LOGGING` (default: `0`, core/library verbose callsites only)
 - `CM_DISABLE_GUI_LOGGING` (default: `0`, set to `1` to remove `GuiOutput`)
-- `CM_LOGGING_LEVEL` (default: `CM_LOG_LEVEL_INFO` in release, `CM_LOG_LEVEL_TRACE` in debug)
+- `CM_LOGGING_LEVEL` (default: `CM_LOG_LEVEL_TRACE`, hard cap for LoggingManager runtime level)
 
 Available levels:
 
@@ -44,10 +44,16 @@ Example (PlatformIO):
 
 ```ini
 build_flags =
-  -DCM_ENABLE_LOGGING=1
+  -DCM_ENABLE_LOGGING=0
   -DCM_ENABLE_VERBOSE_LOGGING=0
-  -DCM_LOGGING_LEVEL=CM_LOG_LEVEL_INFO
+  -DCM_LOGGING_LEVEL=CM_LOG_LEVEL_WARN
 ```
+
+Notes:
+
+- `CM_ENABLE_LOGGING` and `CM_ENABLE_VERBOSE_LOGGING` are intended for library/core log compilation.
+- `CM_LOGGING_LEVEL` controls project/runtime logging behavior in `LoggingManager`.
+- Runtime requests above `CM_LOGGING_LEVEL` are capped to the configured level.
 
 ## Advanced logging (LoggingManager)
 
@@ -65,13 +71,15 @@ void setup() {
   Serial.begin(115200);
 
   auto& logManager = cm::LoggingManager::instance();
+  const auto projectLevel = cm::LoggingManager::levelFromMacro_(CM_LOGGING_LEVEL);
 
   auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
-  serialOut->setLevel(LL::Trace);
+  serialOut->setLevel(projectLevel);
   serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis); //delete this line to disable timestamp completely
   logManager.addOutput(std::move(serialOut));
 
-  logManager.attachToConfigManager(LL::Info, LL::Trace, "CM");
+  logManager.setGlobalLevel(projectLevel);
+  logManager.attachToConfigManager(projectLevel, projectLevel, "CM");
 }
 
 void loop() {
@@ -156,7 +164,7 @@ Minimal example:
 #include "mqtt/MQTTLogOutput.h"
 
 auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
-mqttLog->setLevel(LL::Trace);
+mqttLog->setLevel(cm::LoggingManager::levelFromMacro_(CM_LOGGING_LEVEL));
 mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
 lmg.addOutput(std::move(mqttLog));
 ```
