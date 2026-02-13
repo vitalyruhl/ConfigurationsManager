@@ -531,7 +531,7 @@ static void setupLogging()
 
     auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
     serialOut->setLevel(LL::Debug);
-    serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis);
+    serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
     serialOut->setRateLimitMs(2);
     lmg.addOutput(std::move(serialOut));
 
@@ -599,6 +599,10 @@ static void registerIOBindings()
 
 static void setupMqtt()
 {
+    // Tasmota SENSOR payloads can exceed PubSubClient default packet size (~256B).
+    // Increase buffer to avoid silently dropped inbound messages.
+    mqtt.setBufferSize(1024);
+
     mqtt.attach(ConfigManager);
     mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 

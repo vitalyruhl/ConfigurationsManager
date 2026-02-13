@@ -172,6 +172,27 @@ void onMQTTConnected()
 - `subscribe(topic, qos)` / `unsubscribe(topic)` are available for direct topic filters.
 - `subscribeWildcard(topicFilter)` supports `+` / `#` wildcards.
 
+## Buffer size (important for Tasmota JSON payloads)
+
+`PubSubClient` uses a fixed packet buffer for RX/TX. Larger JSON payloads (for example
+`tele/<device>/SENSOR` from Tasmota) may exceed small defaults and will then not be processed.
+
+Defaults in this module:
+- `CM_MQTT_DEFAULT_BUFFER_SIZE = 1024` bytes
+- The default is applied automatically in `MQTTManager` constructor.
+- You can still override at runtime with `mqtt.setBufferSize(...)`.
+
+Build-time override (example in `platformio.ini`):
+
+```ini
+build_flags =
+  -DCM_MQTT_DEFAULT_BUFFER_SIZE=1536
+```
+
+Notes:
+- Runtime system-info publishing may grow the buffer if needed.
+- The module keeps the grown size and does not shrink it again during operation.
+
 ## MQTT logging (LoggingManager)
 
 If you use the advanced logging module, you can publish logs via MQTT:

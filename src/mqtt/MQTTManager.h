@@ -20,6 +20,10 @@
 
 namespace cm {
 
+#ifndef CM_MQTT_DEFAULT_BUFFER_SIZE
+#define CM_MQTT_DEFAULT_BUFFER_SIZE 1024
+#endif
+
 // Optional global hooks (similar to WiFi hooks). Define them in your sketch if needed.
 void onMQTTConnected() __attribute__((weak));
 void onMQTTDisconnected() __attribute__((weak));
@@ -634,6 +638,14 @@ inline MQTTManager::MQTTManager()
         MQTT_LOG("[WARNING] Multiple instances detected; callbacks will target the last created instance");
     }
     instanceForCallback_ = this;
+    const bool bufferOk = mqttClient_.setBufferSize(static_cast<uint16_t>(CM_MQTT_DEFAULT_BUFFER_SIZE));
+    if (!bufferOk) {
+        MQTT_LOG("[W] Failed to set default buffer size to %u",
+                 static_cast<unsigned>(CM_MQTT_DEFAULT_BUFFER_SIZE));
+    } else {
+        CM_LOG_VERBOSE("[MQTT] Default buffer size: %u",
+                       static_cast<unsigned>(mqttClient_.getBufferSize()));
+    }
     mqttClient_.setCallback(&MQTTManager::mqttCallbackTrampoline_);
 }
 
@@ -1361,7 +1373,17 @@ inline void MQTTManager::setRetryInterval(unsigned long retryIntervalMs)
 
 inline void MQTTManager::setBufferSize(uint16_t size)
 {
-    mqttClient_.setBufferSize(size);
+    const bool ok = mqttClient_.setBufferSize(size);
+    const uint16_t actual = mqttClient_.getBufferSize();
+    if (ok) {
+        CM_LOG_VERBOSE("[MQTT] Buffer size set to %u (actual=%u)",
+                       static_cast<unsigned>(size),
+                       static_cast<unsigned>(actual));
+    } else {
+        MQTT_LOG("[W] Failed to set buffer size to %u (actual=%u)",
+                 static_cast<unsigned>(size),
+                 static_cast<unsigned>(actual));
+    }
 }
 
 inline bool MQTTManager::begin()
@@ -1545,12 +1567,16 @@ inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained
 
     auto publishPayload = [this, retained](const String& topic, const String& payload) -> bool {
         // PubSubClient has a fixed internal buffer (default ~256 bytes). System-Info JSON can be bigger.
-        // Grow the buffer on demand to avoid publish failures.
+        // Grow the buffer on demand to avoid publish failures, but never shrink
+        // it here because RX payload handling depends on the active size too.
         const size_t required = payload.length() + 1; // include null terminator
         if (required > 0) {
             const size_t desired = required + 64; // headroom for topic + overhead
             const size_t capped = desired > 2048 ? 2048 : desired;
-            mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
+            const uint16_t current = mqttClient_.getBufferSize();
+            if (capped > static_cast<size_t>(current)) {
+                mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
+            }
         }
         return publishWithQos_(topic.c_str(), payload.c_str(), retained, 0);
     };
@@ -1939,9 +1965,13 @@ inline void MQTTManager::handleConnection_()
     for (auto& item : receiveItems_) {
         const String topic = getReceiveTopic_(item);
         if (topic.length() > 0) {
-            mqttClient_.subscribe(topic.c_str());
+            const bool ok = mqttClient_.subscribe(topic.c_str());
+            CM_LOG_VERBOSE("[MQTT] Subscribe %s -> %s",
+                           topic.c_str(),
+                           ok ? "ok" : "fail");
             item.lastSubscribedTopic = topic;
         } else {
+            CM_LOG_VERBOSE("[MQTT] Skip subscribe for '%s': empty topic", item.id.c_str());
             item.lastSubscribedTopic = String();
         }
     }
@@ -2108,10 +2138,16 @@ inline void MQTTManager::updateReceiveSubscription_(ReceiveItem& item, bool forc
 
     if (isConnected()) {
         if (item.lastSubscribedTopic.length() > 0 && item.lastSubscribedTopic != nextTopic) {
-            mqttClient_.unsubscribe(item.lastSubscribedTopic.c_str());
+            const bool unsubOk = mqttClient_.unsubscribe(item.lastSubscribedTopic.c_str());
+            CM_LOG_VERBOSE("[MQTT] Unsubscribe %s -> %s",
+                           item.lastSubscribedTopic.c_str(),
+                           unsubOk ? "ok" : "fail");
         }
         if (nextTopic.length() > 0) {
-            mqttClient_.subscribe(nextTopic.c_str());
+            const bool subOk = mqttClient_.subscribe(nextTopic.c_str());
+            CM_LOG_VERBOSE("[MQTT] Subscribe %s -> %s",
+                           nextTopic.c_str(),
+                           subOk ? "ok" : "fail");
         }
     }
 
@@ -2133,18 +2169,26 @@ inline MQTTManager::ReceiveItem* MQTTManager::findReceiveItemById_(const char* i
 
 inline String MQTTManager::getReceiveTopic_(const ReceiveItem& item) const
 {
+    String topic;
     if (item.topic) {
-        return item.topic->get();
+        topic = item.topic->get();
+    } else {
+        topic = item.topicValue;
     }
-    return item.topicValue;
+    topic.trim();
+    return topic;
 }
 
 inline String MQTTManager::getReceiveJsonKeyPath_(const ReceiveItem& item) const
 {
+    String keyPath;
     if (item.jsonKeyPath) {
-        return item.jsonKeyPath->get();
+        keyPath = item.jsonKeyPath->get();
+    } else {
+        keyPath = item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none");
     }
-    return item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none");
+    keyPath.trim();
+    return keyPath.length() ? keyPath : String("none");
 }
 
 inline bool MQTTManager::buildReceivePayload_(const ReceiveItem& item, String& outPayload) const

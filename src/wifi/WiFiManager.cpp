@@ -96,6 +96,7 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , noSsidScanStartMillis(0)
   , roamingReconnectPending(false)
   , roamingReconnectAtMs(0)
+  , roamingTargetBSSID("")
   , stackResetInProgress(false)
   , connectAfterStackReset(false)
   , stackResetStep(0)
@@ -154,6 +155,7 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
 
   // Start phased connection attempts
   roamingReconnectPending = false;
+  roamingTargetBSSID = "";
   connectAfterStackReset = false;
   connectAttempts = 0;
   attemptConnect();
@@ -177,6 +179,7 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
 
   // Start phased connection attempts
   roamingReconnectPending = false;
+  roamingTargetBSSID = "";
   connectAfterStackReset = false;
   connectAttempts = 0;
   attemptConnect();
@@ -320,10 +323,30 @@ void ConfigManagerWiFi::processPendingRoamingReconnect_() {
   if (!useDHCP) {
     applyStaticConfig();
   }
-  WiFi.begin(ssid.c_str(), password.c_str());
+
+  if (!roamingTargetBSSID.isEmpty()) {
+    uint8_t bssid[6];
+    unsigned int tmp[6];
+    int matched = sscanf(roamingTargetBSSID.c_str(), "%2x:%2x:%2x:%2x:%2x:%2x",
+                         &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]);
+    if (matched == 6) {
+      for (int i = 0; i < 6; ++i) {
+        bssid[i] = static_cast<uint8_t>(tmp[i] & 0xFF);
+      }
+      WiFi.begin(ssid.c_str(), password.c_str(), 0, bssid);
+      WIFI_LOG_VERBOSE("Deferred roaming reconnect to BSSID %s", roamingTargetBSSID.c_str());
+    } else {
+      WIFI_LOG("Deferred roaming reconnect: invalid BSSID '%s', using auto BSSID", roamingTargetBSSID.c_str());
+      WiFi.begin(ssid.c_str(), password.c_str());
+    }
+  } else {
+    WiFi.begin(ssid.c_str(), password.c_str());
+    WIFI_LOG_VERBOSE("Deferred roaming reconnect started (auto BSSID)");
+  }
+
+  roamingTargetBSSID = "";
   transitionToState(WIFI_STATE_CONNECTING);
   lastReconnectAttempt = now;
-  WIFI_LOG_VERBOSE("Deferred roaming reconnect started");
 }
 
 void ConfigManagerWiFi::update() {
@@ -570,6 +593,7 @@ void ConfigManagerWiFi::reconnect() {
 void ConfigManagerWiFi::disconnect() {
   WIFI_LOG("Manual disconnect requested");
   roamingReconnectPending = false;
+  roamingTargetBSSID = "";
   connectAfterStackReset = false;
   WiFi.disconnect();
   transitionToState(WIFI_STATE_DISCONNECTED);
@@ -580,6 +604,7 @@ void ConfigManagerWiFi::reset() {
   lastGoodConnectionMillis = millis();
   lastReconnectAttempt = 0;
   roamingReconnectPending = false;
+  roamingTargetBSSID = "";
   connectAfterStackReset = false;
 }
 
@@ -628,6 +653,7 @@ void ConfigManagerWiFi::attemptConnect() {
   }
 
   roamingReconnectPending = false;
+  roamingTargetBSSID = "";
   const uint8_t phase = connectAttempts;
   const unsigned long now = millis();
   const unsigned long timeSinceLastGood = now - lastGoodConnectionMillis;
@@ -800,13 +826,18 @@ void ConfigManagerWiFi::checkSmartRoaming() {
                bestBSSID.c_str(), bestRSSI, bestRSSI - currentRSSI);
       
       // Disconnect now and reconnect after a short delay without blocking loop().
+      roamingTargetBSSID = bestBSSID;
       WiFi.disconnect();
       roamingReconnectPending = true;
       roamingReconnectAtMs = currentTime + 500UL;
       lastRoamingAttempt = currentTime;
       WIFI_LOG_VERBOSE("Scheduled roaming reconnect in 500 ms");
     }
+    else {
+      roamingTargetBSSID = "";
+    }
   } else {
+    roamingTargetBSSID = "";
     WIFI_LOG_VERBOSE("No better AP found (current: %d dBm)", currentRSSI);
   }
 

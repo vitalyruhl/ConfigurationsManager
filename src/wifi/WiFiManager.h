@@ -70,6 +70,7 @@ private:
   // Deferred roaming reconnect (non-blocking replacement for fixed delay).
   bool roamingReconnectPending;
   unsigned long roamingReconnectAtMs;
+  String roamingTargetBSSID;
 
   // Non-blocking WiFi stack reset state machine.
   bool stackResetInProgress;
