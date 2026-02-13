@@ -5,8 +5,8 @@
 #include "core/CoreSettings.h"
 #include "core/CoreWiFiServices.h"
 
-#if __has_include("secret/wifiSecret.h")
-#include "secret/wifiSecret.h"
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
 #define CM_HAS_WIFI_SECRETS 1
 #else
 #define CM_HAS_WIFI_SECRETS 0
@@ -14,17 +14,24 @@
 
 
 #define VERSION CONFIGMANAGER_VERSION
+#ifndef APP_NAME
 #define APP_NAME "CM-Minimal-Demo"
+#endif
 
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
-void checkCredentials();
+static void setupNetworkDefaults();
 
 extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
 
-// Leave SSID empty to start in AP mode and configure via Web UI.
-static const char SETTINGS_PASSWORD[] = "";
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
+#endif
 
 // Built-in core settings templates (WiFi/System/NTP).
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
@@ -54,9 +61,11 @@ void setup()
     // coreSettings.attachNtp(ConfigManager); // you dont need it for this minimal example, but you can easily add it back if you want to use the NTP features
     ConfigManager.loadAll();
 
-    checkCredentials(); // you dont need it for minimal functions, but it helpfull - look at wifiSecret.example.h for details
+    setupNetworkDefaults(); // you dont need it for minimal functions, but it helpfull - look at secrets.example.h for details
 
-    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");// you dont need it, bi ut it makes testing easier for me
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
 
     ConfigManager.startWebServer();
 }
@@ -88,10 +97,8 @@ void onWiFiAPMode()
     Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
 }
 
-void checkCredentials()
+static void setupNetworkDefaults()
 {
-     ConfigManager.loadAll(); // Ensure we have the latest settings loaded before checking credentials
-
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
@@ -124,12 +131,12 @@ void checkCredentials()
         delay(500);
         ESP.restart();
 #else
-        Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
 #endif
     }
 
-    if (systemSettings.otaPassword.get() != SETTINGS_PASSWORD) {
-        systemSettings.otaPassword.save(SETTINGS_PASSWORD);
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD) {
+        systemSettings.otaPassword.save(OTA_PASSWORD);
     }
 
 }

@@ -11,15 +11,29 @@
 #include "core/CoreWiFiServices.h"
 #include "helpers/HelperModule.h"
 
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
+#define CM_HAS_WIFI_SECRETS 1
+#else
+#define CM_HAS_WIFI_SECRETS 0
+#endif
+
 #ifndef BME280_ADDRESS
 #define BME280_ADDRESS 0x76
 #endif
 
 #define VERSION CONFIGMANAGER_VERSION
+#ifndef APP_NAME
 #define APP_NAME "CM-BME280-Temp-Sensor"
+#endif
 
-// Leave SSID empty to start in AP mode and configure via Web UI.
-static const char SETTINGS_PASSWORD[] = "cm";
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
+#endif
 
 // I2C pins for the BME280 sensor
 #define I2C_SDA 21
@@ -54,6 +68,7 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
+static void setupNetworkDefaults();
 
 struct TempSettings
 {
@@ -225,12 +240,15 @@ void setup()
     tempSettings.placeInUi();
 
     ConfigManager.loadAll();
+    setupNetworkDefaults();
 
     setupRuntimeUI();
 
     setupTemperatureMeasuring();
 
-    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");// my dev-Station AP
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
     ConfigManager.startWebServer();
 
     Serial.println("[MAIN] Setup completed successfully. Starting main loop...");
@@ -252,6 +270,50 @@ void onWiFiAPMode()
 {
     wifiServices.onAPMode();
     Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
+}
+
+static void setupNetworkDefaults()
+{
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+#if CM_HAS_WIFI_SECRETS
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
+        Serial.println("-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+
+        // Optional secret fields (not present in every example).
+#ifdef MY_WIFI_IP
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+#endif
+#ifdef MY_USE_DHCP
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+#endif
+#ifdef MY_GATEWAY_IP
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+#endif
+#ifdef MY_SUBNET_MASK
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+#endif
+#ifdef MY_DNS_IP
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+#endif
+        ConfigManager.saveAll();
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("Restarting ESP, after auto setting WiFi credentials");
+        Serial.println("-------------------------------------------------------------");
+        delay(500);
+        ESP.restart();
+#else
+        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
+#endif
+    }
+
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD)
+    {
+        systemSettings.otaPassword.save(OTA_PASSWORD);
+    }
 }
 
 void loop()

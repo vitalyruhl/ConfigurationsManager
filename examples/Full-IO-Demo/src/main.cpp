@@ -10,15 +10,17 @@
 #include "io/IOManager.h"
 #include "alarm/AlarmManager.h"
 
-#if __has_include("secret/wifiSecret.h")
-#include "secret/wifiSecret.h"
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
 #define CM_HAS_WIFI_SECRETS 1
 #else
 #define CM_HAS_WIFI_SECRETS 0
 #endif
 
 #define VERSION CONFIGMANAGER_VERSION
+#ifndef APP_NAME
 #define APP_NAME "CM-Full-IO-Demo"
+#endif
 
 // Demo pin bindings are validated centrally by IOManager against active PinRules.
 static constexpr int DEMO_PIN_AP_MODE_BUTTON = 13;
@@ -32,7 +34,13 @@ static constexpr int DEMO_PIN_LDR_VP = 36;
 static constexpr int DEMO_PIN_AO_PERCENT = 25;
 static constexpr int DEMO_PIN_AO_VOLT = 26;
 
-static const char SETTINGS_PASSWORD[] = ""; // NOTE: Empty string disables password protection for the Settings tab.
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
+#endif
 
 // Global theme override demo.
 // Served via /user_theme.css and auto-injected by the frontend if present.
@@ -94,7 +102,7 @@ static void registerGuiTools();
 
 static void demoAnalogOutputApi();
 
-void checkWifiCredentials();
+static void setupNetworkDefaults();
 //--------------------------------------------------------------------
 
 
@@ -114,7 +122,7 @@ void setup()
     ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
     ConfigManager.setVersion(VERSION); // Set the application version for web UI display
     ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
-    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from wifiSecret.h
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD); // Set the settings password from secrets.h
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
 
     registerIO();
@@ -130,9 +138,11 @@ void setup()
     ConfigManager.loadAll(); // Load all settings from preferences, is necessary before using the settings!
     ioManager.begin();
 
-    checkWifiCredentials();
+    setupNetworkDefaults();
 
-    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");   // Prefer this AP is my dev-station
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
     ConfigManager.startWebServer();
 
     demoAnalogOutputApi();
@@ -591,7 +601,7 @@ void setHoldButtonState(bool on)
     }
 }
 
-void checkWifiCredentials()
+static void setupNetworkDefaults()
 {
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
@@ -625,8 +635,13 @@ void checkWifiCredentials()
         delay(500);
         ESP.restart();
 #else
-        Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
 #endif
+    }
+
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD)
+    {
+        systemSettings.otaPassword.save(OTA_PASSWORD);
     }
 }
 

@@ -14,6 +14,12 @@
 #include <Adafruit_SSD1306.h>
 
 #include "ConfigManager.h"
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
+#define CM_HAS_WIFI_SECRETS 1
+#else
+#define CM_HAS_WIFI_SECRETS 0
+#endif
 #include "settings.h"
 #include "helpers/HelperModule.h"
 
@@ -27,11 +33,12 @@
 #include "mqtt/MQTTManager.h"
 #include "mqtt/MQTTLogOutput.h"
 
-#if __has_include("secret/wifiSecret.h")
-#include "secret/wifiSecret.h"
-#define CM_HAS_WIFI_SECRETS 1
-#else
-#define CM_HAS_WIFI_SECRETS 0
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
 #endif
 
 // predeclare the functions (prototypes)
@@ -57,7 +64,7 @@ static bool getBoilerState();
 static void cb_readTempSensor();
 static void setupTempSensor();
 static void handleShowerRequest(bool requested);
-static void checkCredentials();
+static void setupNetworkDefaults();
 
 //--------------------------------------------------------------------------------------------------------------
 
@@ -172,7 +179,7 @@ void setup()
 
     ConfigManager.loadAll();
 
-    checkCredentials();
+    setupNetworkDefaults();
     mqtt.attach(ConfigManager);
     ioManager.begin();
 
@@ -186,8 +193,9 @@ void setup()
     ShowDisplay();
     setupTempSensor();
     
-    // ConfigManager.setAccessPointMacPriority("e0-08-55-92-55-ac"); //boiler ap
-    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5"); // office ap
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
     ConfigManager.startWebServer();
 
     lmg.log("System setup completed.");
@@ -1331,10 +1339,8 @@ static void handleShowerRequest(bool v)
     }
 }
 
-void checkCredentials()
+static void setupNetworkDefaults()
 {
-    ConfigManager.loadAll(); // Ensure we have the latest settings loaded before checking credentials
-
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
@@ -1367,25 +1373,33 @@ void checkCredentials()
         delay(500);
         ESP.restart();
 #else
-        Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
 #endif
     }
 
     if (mqttSettings.server.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
+#if defined(MY_MQTT_BROKER_IP) && defined(MY_MQTT_BROKER_PORT) && defined(MY_MQTT_ROOT)
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         mqttSettings.server.set(MY_MQTT_BROKER_IP);
         mqttSettings.port.set(MY_MQTT_BROKER_PORT);
+#ifdef MY_MQTT_USERNAME
         mqttSettings.username.set(MY_MQTT_USERNAME);
+#endif
+#ifdef MY_MQTT_PASSWORD
         mqttSettings.password.set(MY_MQTT_PASSWORD);
+#endif
         mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
         ConfigManager.saveAll();
         lmg.log(LL::Debug, "-------------------------------------------------------------");
 #else
-        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
+        lmg.log(LL::Info, "SETUP: MQTT server is empty; secret/secrets.h does not provide MQTT defaults for this example");
+#endif
+#else
+        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/secrets.h is missing; leaving MQTT unconfigured");
 #endif
     }
 

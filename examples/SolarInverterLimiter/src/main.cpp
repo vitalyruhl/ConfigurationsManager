@@ -27,8 +27,8 @@
 #include "helpers/HelperModule.h"
 #include "Smoother/Smoother.h"
 
-#if __has_include("secret/wifiSecret.h")
-#include "secret/wifiSecret.h"
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
 #define CM_HAS_WIFI_SECRETS 1
 #else
 #define CM_HAS_WIFI_SECRETS 0
@@ -44,6 +44,14 @@
 
 #ifndef APP_NAME
 #define APP_NAME "SolarInverterLimiter"
+#endif
+
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
 #endif
 
 #ifndef VERSION
@@ -263,6 +271,7 @@ void setup()
     ConfigManager.setAppName(APP_NAME);
     ConfigManager.setAppTitle(APP_NAME);
     ConfigManager.setVersion(VERSION);
+    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
     ConfigManager.setCustomCss(GLOBAL_THEME_OVERRIDE, sizeof(GLOBAL_THEME_OVERRIDE) - 1);
     ConfigManager.enableBuiltinSystemProvider();
 
@@ -291,9 +300,9 @@ void setup()
     ConfigManager.setRoamingCooldown(30);
     ConfigManager.setRoamingImprovement(10);
 
-    // Prefer this AP, fallback to others
-    // ConfigManager.setAccessPointMacPriority("3C:A6:2F:B8:54:B1");//shest
-    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5"); // dev-Station
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
 
     updateMqttTopics();
     setupGUI();
@@ -717,7 +726,7 @@ static void setupNetworkDefaults()
         delay(500);
         ESP.restart();
 #else
-        lmg.log(LL::Warn, "SETUP: WiFi credentials missing/invalid but secret/wifiSecret.h is missing; using UI/AP mode");
+        lmg.log(LL::Warn, "SETUP: WiFi credentials missing/invalid but secret/secrets.h is missing; using UI/AP mode");
 #endif
     }
 
@@ -741,11 +750,16 @@ static void setupNetworkDefaults()
         ConfigManager.saveAll();
         lmg.log(LL::Debug, "-------------------------------------------------------------");
 #else
-        lmg.log(LL::Info, "SETUP: MQTT server is empty; secret/wifiSecret.h does not provide MQTT defaults for this example");
+        lmg.log(LL::Info, "SETUP: MQTT server is empty; secret/secrets.h does not provide MQTT defaults for this example");
 #endif
 #else
-        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
+        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/secrets.h is missing; leaving MQTT unconfigured");
 #endif
+    }
+
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD)
+    {
+        systemSettings.otaPassword.save(OTA_PASSWORD);
     }
 }
 

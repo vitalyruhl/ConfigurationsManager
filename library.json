@@ -48,6 +48,8 @@
       "**/.piolibdeps/**",
       "webui/node_modules",
       "src/main.cpp",
+      "**/secret/secrets.h",
+      "**/secret/wifiSecret.h",
       ".vscode",
       ".idea",
       "*.code-workspace"

@@ -11,11 +11,27 @@
 #include "alarm/AlarmManager.h"
 
 #define VERSION CONFIGMANAGER_VERSION
+
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
+#define CM_HAS_WIFI_SECRETS 1
+#else
+#define CM_HAS_WIFI_SECRETS 0
+#endif
+
+#ifndef APP_NAME
 #define APP_NAME "CM-Full-GUI-Demo"
+#endif
+
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
+#endif
 
 extern ConfigManagerClass ConfigManager;
-
-static const char SETTINGS_PASSWORD[] = "cm";
 
 // Global theme override demo.
 // Served via /user_theme.css and auto-injected by the frontend if present.
@@ -151,13 +167,14 @@ static void setupGuiSensors();
 static void setupGuiIoTest();
 static void setupGuiSystem();
 static void cbTestButton();
+static void setupNetworkDefaults();
 
 void setup()
 {
     Serial.begin(115200);
 
     ConfigManagerClass::setLogger([](const char *msg) {
-        Serial.print("[ConfigManager] ");
+        Serial.print("[CM] ");
         Serial.println(msg);
     });
 
@@ -177,10 +194,13 @@ void setup()
 
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
-    
+
+    setupNetworkDefaults();
     setupGUI();
 
-    ConfigManager.setAccessPointMacPriority("60:B5:8D:4C:E1:D5");
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
     ConfigManager.startWebServer();
 
     Serial.println("[MOCKED DATA] Sensor values are randomized every 3 seconds");
@@ -377,6 +397,50 @@ static void setupGuiSystem()
 static void cbTestButton()
 {
     Serial.println("[GUI] Test Button pressed");
+}
+
+static void setupNetworkDefaults()
+{
+    if (wifiSettings.wifiSsid.get().isEmpty())
+    {
+#if CM_HAS_WIFI_SECRETS
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
+        Serial.println("-------------------------------------------------------------");
+        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+
+        // Optional secret fields (not present in every example).
+#ifdef MY_WIFI_IP
+        wifiSettings.staticIp.set(MY_WIFI_IP);
+#endif
+#ifdef MY_USE_DHCP
+        wifiSettings.useDhcp.set(MY_USE_DHCP);
+#endif
+#ifdef MY_GATEWAY_IP
+        wifiSettings.gateway.set(MY_GATEWAY_IP);
+#endif
+#ifdef MY_SUBNET_MASK
+        wifiSettings.subnet.set(MY_SUBNET_MASK);
+#endif
+#ifdef MY_DNS_IP
+        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+#endif
+        ConfigManager.saveAll();
+        Serial.println("-------------------------------------------------------------");
+        Serial.println("Restarting ESP, after auto setting WiFi credentials");
+        Serial.println("-------------------------------------------------------------");
+        delay(500);
+        ESP.restart();
+#else
+        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
+#endif
+    }
+
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD)
+    {
+        systemSettings.otaPassword.save(OTA_PASSWORD);
+    }
 }
 
 // Global WiFi event hooks used by ConfigManager.

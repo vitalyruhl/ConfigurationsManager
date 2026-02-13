@@ -1,7 +1,7 @@
 #pragma once
 
-// Copy this file to wifiSecret.h and adjust values.
-// NOTE: wifiSecret.h must stay out of version control.
+// Copy this file to secrets.h and adjust values.
+// NOTE: secrets.h must stay out of version control.
 
 // WiFi credentials
 #define MY_WIFI_SSID "YOUR_WIFI_SSID"
@@ -18,4 +18,7 @@
 #define MY_MQTT_BROKER_PORT 1883
 #define MY_MQTT_USERNAME "mqtt-username"
 #define MY_MQTT_PASSWORD "mqtt-password"
-#define MY_MQTT_ROOT "TestDevice01"
+#define MY_MQTT_ROOT "BoilerSaver01"
+
+#define SETTINGS_PASSWORD "cm"
+#define OTA_PASSWORD "ota"

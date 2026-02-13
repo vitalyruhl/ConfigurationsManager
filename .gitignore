@@ -30,10 +30,14 @@ pnpm-debug.log*
 # Env
 .env*
 /src/secret
+/examples/*/src/secret/secrets.h
+/examples/*/src/secret/wifiSecret.h
+/dev-info/secret/secrets.h
 /webui/dist/
 /webui/dist/assets
 webui/dist/index.html.gz
-wifiSecret.h
+secrets.h
+/secret/secrets.h
 /webui/dist/index.html
 /tools/_buildlogs
 .pio-home

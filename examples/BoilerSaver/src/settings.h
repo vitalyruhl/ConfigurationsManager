@@ -9,7 +9,9 @@
 
 #define APP_VERSION "3.3.0"
 #define VERSION_DATE "05.11.2025"
+#ifndef APP_NAME
 #define APP_NAME "Boiler-Saver"
+#endif
 
 extern ConfigManagerClass ConfigManager;
 

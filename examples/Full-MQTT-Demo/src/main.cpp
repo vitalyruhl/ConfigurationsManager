@@ -11,8 +11,8 @@
 // Optional logging module
 #include "logging/LoggingManager.h"
 
-#if __has_include("secret/wifiSecret.h")
-#include "secret/wifiSecret.h"
+#if __has_include("secret/secrets.h")
+#include "secret/secrets.h"
 #define CM_HAS_WIFI_SECRETS 1
 #else
 #define CM_HAS_WIFI_SECRETS 0
@@ -24,10 +24,19 @@
 #include "mqtt/MQTTLogOutput.h"
 
 #define VERSION CONFIGMANAGER_VERSION
+#ifndef APP_NAME
 #define APP_NAME "CM-Full-MQTT-Demo"
+#endif
 
 extern ConfigManagerClass ConfigManager;
-static const char SETTINGS_PASSWORD[] = "";
+
+#ifndef SETTINGS_PASSWORD
+#define SETTINGS_PASSWORD ""
+#endif
+
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD SETTINGS_PASSWORD
+#endif
 
 // Global theme override demo.
 // Served via /user_theme.css and auto-injected by the frontend if present.
@@ -84,7 +93,7 @@ void onWiFiDisconnected();
 void onWiFiAPMode();
 void setupMqtt();
 void Initial_logging();
-void checkCredentials();
+static void setupNetworkDefaults();
 void setupGUI();
 void publishImediatelyButtonState();
 void applySubscriptionDemo();
@@ -161,10 +170,15 @@ void setup()
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
 
-    checkCredentials();
+    setupNetworkDefaults();
     setupGUI();
 
     pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+// Prefer selected AP when provided in secret file.
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+#endif
 
     // Settings-driven WiFi startup (DHCP/static/AP fallback).
     ConfigManager.startWebServer();
@@ -437,10 +451,8 @@ void sendAllMQTTLog(const unsigned long now, unsigned long &lastLoopLogMs)
     }
 }
 
-void checkCredentials()
+static void setupNetworkDefaults()
 {
-    ConfigManager.loadAll(); // Ensure we have the latest settings loaded before checking credentials
-
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
@@ -473,30 +485,38 @@ void checkCredentials()
         delay(500);
         ESP.restart();
 #else
-        Serial.println("SETUP: WiFi SSID is empty but secret/wifiSecret.h is missing; using UI/AP mode");
+        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
 #endif
     }
 
     if (mqttSettings.server.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
+#if defined(MY_MQTT_BROKER_IP) && defined(MY_MQTT_BROKER_PORT) && defined(MY_MQTT_ROOT)
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         lmg.log(LL::Debug, "SETUP: *** MQTT Broker is empty, setting My values *** ");
         lmg.log(LL::Debug, "-------------------------------------------------------------");
         mqttSettings.server.set(MY_MQTT_BROKER_IP);
         mqttSettings.port.set(MY_MQTT_BROKER_PORT);
+#ifdef MY_MQTT_USERNAME
         mqttSettings.username.set(MY_MQTT_USERNAME);
+#endif
+#ifdef MY_MQTT_PASSWORD
         mqttSettings.password.set(MY_MQTT_PASSWORD);
+#endif
         mqttSettings.publishTopicBase.set(MY_MQTT_ROOT);
         ConfigManager.saveAll();
         lmg.log(LL::Debug, "-------------------------------------------------------------");
 #else
-        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/wifiSecret.h is missing; leaving MQTT unconfigured");
+        lmg.log(LL::Info, "SETUP: MQTT server is empty; secret/secrets.h does not provide MQTT defaults for this example");
+#endif
+#else
+        lmg.log(LL::Info, "SETUP: MQTT server is empty and secret/secrets.h is missing; leaving MQTT unconfigured");
 #endif
     }
 
-    if (systemSettings.otaPassword.get() != SETTINGS_PASSWORD)
+    if (systemSettings.otaPassword.get() != OTA_PASSWORD)
     {
-        systemSettings.otaPassword.save(SETTINGS_PASSWORD);
+        systemSettings.otaPassword.save(OTA_PASSWORD);
     }
 }
