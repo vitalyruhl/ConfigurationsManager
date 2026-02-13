@@ -14,8 +14,6 @@
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
-- new bug after refactoring: [ 49629][E][WiFiSTA.cpp:232] begin(): SSID too long or missing! ( pio run -e usb -t clean; pio run -e usb -t upload - does no matter) 
-
 
 ## Medium Priority (Prio 5)
 
