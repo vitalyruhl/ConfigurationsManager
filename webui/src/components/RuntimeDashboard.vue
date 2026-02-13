@@ -987,6 +987,7 @@ let pollTimer = null;
 let ws = null;
 let wsRetry = 0;
 let wsConnecting = false;
+let wsReconnectTimer = null;
 let runtimeMetaLastAttemptMs = 0;
 let runtimeMetaRequestInFlight = false;
 let runtimeMetaRetryTimer = null;
@@ -1355,10 +1356,8 @@ function initLive() {
 function startWebSocket(url) {
   try {
     if (ws) {
-      try {
-        ws.close();
-      } catch (e) {
-        /* ignore */
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        return;
       }
     }
     if (wsConnecting) return; // avoid racing connections
@@ -1392,6 +1391,10 @@ function startWebSocket(url) {
       wsConnected.value = true;
       wsRetry = 0;
       wsConnecting = false;
+      if (wsReconnectTimer) {
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = null;
+      }
       // Stop polling when WebSocket is connected
       if (pollTimer) {
         clearInterval(pollTimer);
@@ -1454,6 +1457,12 @@ function startWebSocket(url) {
 }
 
 function scheduleWsReconnect(url) {
+  if (wsConnected.value || wsConnecting) {
+    return;
+  }
+  if (wsReconnectTimer) {
+    return;
+  }
   // If we've retried many times without success, WebSocket is likely disabled
   if (wsRetry >= 5) {
     //console.log("WebSocket appears to be disabled after multiple failures, using polling mode only");
@@ -1466,7 +1475,8 @@ function scheduleWsReconnect(url) {
   // Start with a gentler backoff to avoid thrashing on flaky links
   const delay = Math.min(8000, 1000 + wsRetry * wsRetry * 600);
   wsRetry++;
-  setTimeout(() => {
+  wsReconnectTimer = setTimeout(() => {
+    wsReconnectTimer = null;
     startWebSocket(url);
   }, delay);
   if (!pollTimer) {
@@ -2405,6 +2415,10 @@ onBeforeUnmount(() => {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
   }
   if (runtimeMetaRetryTimer) {
     clearTimeout(runtimeMetaRetryTimer);

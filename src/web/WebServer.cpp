@@ -422,7 +422,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
                     return;
                 }
 
-                if (jsonSize > 16384) { // 16KB limit - use chunked response for large JSON
+                if (jsonSize > 4096) { // Prefer chunked mode early to reduce heap pressure/fragmentation.
                     WEB_LOG_VERBOSE("config.json chunked response (%u)", (unsigned)jsonSize);
                     auto jsonShared = std::make_shared<String>(std::move(json));
 
@@ -439,11 +439,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
                             memcpy(buffer, jsonShared->c_str() + index, chunkSize);
                             return chunkSize;
                         });
+                    if (!response) {
+                        WEB_LOG("Error: beginChunkedResponse failed for config.json");
+                        request->send(500, "application/json", "{\"error\":\"response_alloc_failed\"}");
+                        return;
+                    }
                     enableCORS(response);
                     request->send(response);
                 } else {
                     // Normal response for smaller JSON
                     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+                    if (!response) {
+                        WEB_LOG("Error: beginResponse failed for config.json");
+                        request->send(500, "application/json", "{\"error\":\"response_alloc_failed\"}");
+                        return;
+                    }
                     enableCORS(response);
                     request->send(response);
                 }
@@ -1030,6 +1040,9 @@ void ConfigManagerWeb::addCustomRoute(const char* path, WebRequestMethodComposit
 }
 
 void ConfigManagerWeb::enableCORS(AsyncWebServerResponse* response) {
+    if (!response) {
+        return;
+    }
     response->addHeader("Access-Control-Allow-Origin", "*");
     response->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     response->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Settings-Token");
