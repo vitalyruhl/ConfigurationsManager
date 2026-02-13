@@ -52,6 +52,7 @@ private:
     void setupAPIRoutes();
     void setupOTARoutes();
     void setupRuntimeRoutes();
+    void setupRuntimeActionRoutes();
     void handleCSSRequest(AsyncWebServerRequest* request);
     void handleJSRequest(AsyncWebServerRequest* request);
     void handleRootRequest(AsyncWebServerRequest* request);
