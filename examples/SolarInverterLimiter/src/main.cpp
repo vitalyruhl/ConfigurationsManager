@@ -604,6 +604,7 @@ static void setupMqtt()
     mqtt.setBufferSize(1024);
 
     mqtt.attach(ConfigManager);
+    mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
     mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 
     // Receive: grid import W (from power meter JSON)

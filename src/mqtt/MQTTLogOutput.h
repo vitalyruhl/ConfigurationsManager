@@ -60,6 +60,9 @@ public:
         if (!mqtt_.isConnected()) {
             return;
         }
+        if (mqtt_.isProcessingIncomingMessage()) {
+            return;
+        }
         const String base = mqtt_.getMqttBaseTopic();
         if (base.isEmpty()) {
             return;

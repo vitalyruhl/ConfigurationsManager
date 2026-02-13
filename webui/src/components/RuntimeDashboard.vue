@@ -32,9 +32,19 @@
     <div v-if="isLogView" class="log-view">
       <div class="log-head">
         <span>{{ logEntries.length ? "Live logging (WebSocket)" : "Waiting for logs..." }}</span>
-        <button type="button" class="clear-btn" @click="clearLogs">Clear</button>
+        <div class="log-controls">
+          <button
+            type="button"
+            class="clear-btn"
+            :class="{ active: autoScrollLogs }"
+            @click="autoScrollLogs = !autoScrollLogs"
+          >
+            Auto-scroll: {{ autoScrollLogs ? "On" : "Off" }}
+          </button>
+          <button type="button" class="clear-btn" @click="clearLogs">Clear</button>
+        </div>
       </div>
-      <div class="log-list">
+      <div ref="logListEl" class="log-list">
         <table v-if="useLogTable" class="log-table">
           <thead>
             <tr>
@@ -507,6 +517,8 @@ const liveLayout = ref(null);
 const activeLivePage = ref("");
 const logEntries = logStore.entries;
 const logEnabled = logStore.enabled;
+const logListEl = ref(null);
+const autoScrollLogs = ref(true);
 const showBoolStateText = ref(false);
 const flashing = ref(false);
 const otaFileInput = ref(null);
@@ -1020,10 +1032,22 @@ function appendLogEntry(entry) {
   if (logEntries.value.length > LOG_MAX_ENTRIES) {
     logEntries.value.splice(0, logEntries.value.length - LOG_MAX_ENTRIES);
   }
+  if (isLogView.value && autoScrollLogs.value) {
+    nextTick(scrollLogsToBottom);
+  }
 }
 
 function clearLogs() {
   logEntries.value = [];
+  if (isLogView.value) {
+    nextTick(scrollLogsToBottom);
+  }
+}
+
+function scrollLogsToBottom() {
+  const el = logListEl.value;
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
 }
 
 const sortedRuntimeGroups = computed(() => {
@@ -2399,6 +2423,12 @@ watch(showBoolStateText, (v) => {
   }
 });
 
+watch(isLogView, (v) => {
+  if (!v) return;
+  if (!autoScrollLogs.value) return;
+  nextTick(scrollLogsToBottom);
+});
+
 onMounted(() => {
   loadInitialPreferences();
   fetchRuntimeMeta();
@@ -2601,6 +2631,12 @@ defineExpose({ startFlash });
   font-weight: 600;
 }
 
+.log-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .clear-btn {
   border: 1px solid var(--cm-card-border);
   background: var(--cm-bg);
@@ -2608,6 +2644,11 @@ defineExpose({ startFlash });
   border-radius: 6px;
   padding: 6px 10px;
   cursor: pointer;
+}
+
+.clear-btn.active {
+  border-color: var(--cm-tab-active-bg);
+  color: var(--cm-tab-active-bg);
 }
 
 .log-list {

@@ -259,6 +259,7 @@ public:
     void disconnect();
 
     bool isConnected() const;
+    bool isProcessingIncomingMessage() const { return processingIncomingMessage_; }
     ConnectionState getState() const { return state_; }
     uint8_t getCurrentRetry() const { return currentRetry_; }
     unsigned long getLastConnectionAttempt() const { return lastConnectionAttemptMs_; }
@@ -414,6 +415,7 @@ private:
     String lastTopic_;
     String lastPayload_;
     unsigned long lastMessageMs_ = 0;
+    bool processingIncomingMessage_ = false;
 
     // Topic registry
     std::vector<ReceiveItem> receiveItems_;
@@ -1502,6 +1504,15 @@ inline bool MQTTManager::publish(const char* topic, const char* payload, bool re
     if (topic && topic[0]) {
         CM_LOG_VERBOSE("[MQTT][TX] %s", topic);
     }
+    if (payload && payload[0]) {
+        String payloadPreview(payload);
+        payloadPreview.trim();
+        constexpr size_t kMaxTxPayloadPreview = 200;
+        if (payloadPreview.length() > kMaxTxPayloadPreview) {
+            payloadPreview = payloadPreview.substring(0, kMaxTxPayloadPreview) + "...";
+        }
+        CM_LOG_VERBOSE("[MQTT][TX][P] %s", payloadPreview.c_str());
+    }
     return mqttClient_.publish(topic, payload, retained);
 }
 
@@ -2018,8 +2029,18 @@ inline void MQTTManager::setState_(ConnectionState newState)
 
 inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length)
 {
+    processingIncomingMessage_ = true;
     if (topic && topic[0]) {
         CM_LOG_VERBOSE("[MQTT][RX] %s", topic);
+    }
+    if (payload && length > 0) {
+        String payloadPreview(reinterpret_cast<const char*>(payload), length);
+        payloadPreview.trim();
+        constexpr size_t kMaxPayloadPreview = 200;
+        if (payloadPreview.length() > kMaxPayloadPreview) {
+            payloadPreview = payloadPreview.substring(0, kMaxPayloadPreview) + "...";
+        }
+        CM_LOG_VERBOSE("[MQTT][RX][P] %s", payloadPreview.c_str());
     }
 
     lastTopic_ = topic ? String(topic) : String();
@@ -2042,6 +2063,7 @@ inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* p
     if (onMessage_) {
         onMessage_(topic, payload, length);
     }
+    processingIncomingMessage_ = false;
 }
 
 inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payload, unsigned int length)
@@ -2050,7 +2072,12 @@ inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payl
         return;
     }
 
+    String incomingTopic(topic);
+    incomingTopic.trim();
     const String rawPayload(reinterpret_cast<const char*>(payload), length);
+    String normalizedPayload = rawPayload;
+    normalizedPayload.trim();
+    bool matchedAny = false;
 
     for (auto& item : receiveItems_) {
         if (!item.target) {
@@ -2060,43 +2087,33 @@ inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payl
         if (configuredTopic.isEmpty()) {
             continue;
         }
-        if (strcmp(topic, configuredTopic.c_str()) != 0) {
+        if (incomingTopic != configuredTopic) {
             continue;
         }
+        matchedAny = true;
 
         String extracted;
         const String keyPath = getReceiveJsonKeyPath_(item);
-        const bool hasJson = rawPayload.startsWith("{");
+        const bool hasJson = normalizedPayload.startsWith("{") || normalizedPayload.startsWith("[");
         bool ok = false;
 
         if (hasJson) {
-            ok = tryExtractJsonValueAsString_(rawPayload, keyPath, extracted);
+            ok = tryExtractJsonValueAsString_(normalizedPayload, keyPath, extracted);
         } else {
             if (!isNoneKeyPath_(keyPath)) {
                 ok = false;
             } else {
-                extracted = rawPayload;
+                extracted = normalizedPayload;
                 extracted.trim();
                 ok = true;
             }
         }
 
         if (!ok) {
-            // Defensive defaults
-            switch (item.type) {
-            case ValueType::Float:
-                *static_cast<float*>(item.target) = 0.0f;
-                break;
-            case ValueType::Int:
-                *static_cast<int*>(item.target) = 0;
-                break;
-            case ValueType::Bool:
-                *static_cast<bool*>(item.target) = false;
-                break;
-            case ValueType::String:
-                *static_cast<String*>(item.target) = String();
-                break;
-            }
+            MQTT_LOG("[W] map parse fail: id=%s topic=%s key=%s",
+                     item.id.c_str(),
+                     topic,
+                     keyPath.c_str());
             continue;
         }
 
@@ -2105,6 +2122,11 @@ inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payl
             float f = 0.0f;
             if (tryParseFloat_(extracted, f)) {
                 *static_cast<float*>(item.target) = f;
+                CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
+            } else {
+                MQTT_LOG("[W] float parse fail: id=%s value=%s",
+                         item.id.c_str(),
+                         extracted.c_str());
             }
             break;
         }
@@ -2112,6 +2134,11 @@ inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payl
             int v = 0;
             if (tryParseInt_(extracted, v)) {
                 *static_cast<int*>(item.target) = v;
+                CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
+            } else {
+                MQTT_LOG("[W] int parse fail: id=%s value=%s",
+                         item.id.c_str(),
+                         extracted.c_str());
             }
             break;
         }
@@ -2119,13 +2146,23 @@ inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payl
             bool b = false;
             if (tryParseBool_(extracted, b)) {
                 *static_cast<bool*>(item.target) = b;
+                CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
+            } else {
+                MQTT_LOG("[W] bool parse fail: id=%s value=%s",
+                         item.id.c_str(),
+                         extracted.c_str());
             }
             break;
         }
         case ValueType::String:
             *static_cast<String*>(item.target) = extracted;
+            CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
             break;
         }
+    }
+
+    if (!matchedAny) {
+        CM_LOG_VERBOSE("[MQTT][MAP] no mapping for topic=%s", incomingTopic.c_str());
     }
 }
 
