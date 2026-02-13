@@ -6,6 +6,24 @@ The IO wiring is split into definition, settings placement, and runtime layout s
 
 If you want a GUI-only showcase without IO-related parts, see `examples/Full-GUI-Demo`.
 
+## How to run
+
+From the repo root:
+
+```bash
+pio run -d examples/Full-IO-Demo -e usb
+pio run -d examples/Full-IO-Demo -e usb -t upload
+```
+
+## First start / AP mode
+
+If no SSID is configured yet, the device starts in AP mode.
+Open the printed AP URL from Serial (usually `http://192.168.4.1`) and configure WiFi via the Web UI.
+
+## Optional secrets defaults
+
+You can copy `src/secret/secrets.example.h` to `src/secret/secrets.h` and set default WiFi credentials for faster startup.
+
 ## Screenshots
 
 ![Runtime GUI](cm-full-io-demo-gui.jpg)

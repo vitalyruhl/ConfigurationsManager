@@ -25,4 +25,4 @@ Open the printed AP URL from Serial (192.168.4.1) and configure WiFi via the Web
 
 ## Screenshot
 
-![CM Minimal Demo Web UI](CM-Minimal-Demo-V3.3.0.jpg)
+![CM Minimal Demo Web UI](CM-Minimal-Demo-V4.0.0.jpg)

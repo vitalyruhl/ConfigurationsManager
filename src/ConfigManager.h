@@ -44,7 +44,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "3.3.0" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.0.0" // Synced to library.json
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(

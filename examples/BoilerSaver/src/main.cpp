@@ -610,18 +610,18 @@ static void setupLogging()
     Serial.begin(115200);
 
     auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
-    serialOut->setLevel(LL::Trace);
+    serialOut->setLevel(LL::Debug);
     serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis);
     serialOut->setRateLimitMs(2);
     lmg.addOutput(std::move(serialOut));
 
-    lmg.setGlobalLevel(LL::Trace);
-    lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+    lmg.setGlobalLevel(LL::Debug);
+    lmg.attachToConfigManager(LL::Debug, LL::Debug, "");
 
     //add GUI Log Output
     auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 50); // default 30-message startup buffer
     guiOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
-    guiOut->setLevel(LL::Trace);
+    guiOut->setLevel(LL::Debug);
     lmg.addOutput(std::move(guiOut));
 
 }

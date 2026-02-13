@@ -48,7 +48,7 @@ GIT WORKFLOW GUIDELINES
   - release/*:
     - runnable snapshot branches
     - must always be buildable and runnable
-    - versioned by release (e.g. release/v3.3.0, release/v3.4.0, ...)
+    - versioned by release (e.g. release/v4.0.0, release/v4.1.0, ...)
   - feature/*:
     - work-in-progress branches
     - may be unfinished or temporarily broken

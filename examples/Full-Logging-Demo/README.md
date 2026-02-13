@@ -1,28 +1,28 @@
-# CM Minimal Demo (minimal)
+# CM Full Logging Demo (Full-Logging-Demo)
 
-This example is the smallest recommended starting point for the library.
+This example focuses on the logging module and runtime log visibility in the Web UI.
 
 ## What it demonstrates
 
-- Minimal ConfigManager setup (logging, app metadata)
 - Core settings templates: WiFi + System + NTP via `cm::CoreSettings`
 - Settings-driven startup via `ConfigManager.startWebServer()` (DHCP/static/AP fallback)
-- WiFi hook lifecycle via `cm::CoreWiFiServices` (OTA init + NTP sync ticker)
+- Logging output levels and centralized logging callbacks
+- Runtime log stream visible in GUI (when logging is enabled)
 
 ## How to run
 
 From the repo root:
 
 ```bash
-pio run -d examples/minimal -e usb
-pio run -d examples/minimal -e usb -t upload
+pio run -d examples/Full-Logging-Demo -e usb
+pio run -d examples/Full-Logging-Demo -e usb -t upload
 ```
 
 ## First start / AP mode
 
 If no SSID is configured yet, the device starts in AP mode.
-Open the printed AP URL from Serial (192.168.4.1) and configure WiFi via the Web UI.
+Open the printed AP URL from Serial (usually `http://192.168.4.1`) and configure WiFi via the Web UI.
 
-## Screenshot
+## Optional secrets defaults
 
-![CM Minimal Demo Web UI](CM-Minimal-Demo-V3.3.0.jpg)
+You can copy `src/secret/secrets.example.h` to `src/secret/secrets.h` and set default WiFi credentials for faster startup.

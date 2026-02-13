@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 3.3.0
+> Version 4.0.0
 
 ## Why this exists
 
@@ -81,7 +81,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | Troubleshooting                           | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)     |
 | MQTT Module                               | [docs/MQTT.md](docs/MQTT.md)                           |
 | Changelog                                 | [docs/CHANGELOG.md](docs/CHANGELOG.md)                 |
-| Build Options (v3 change note)            | [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)         |
+| Build Options / Feature Flags             | [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)         |
 
 ## Requirements
 
@@ -95,7 +95,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 
 ```bash
 # PlatformIO
-pio pkg install --library "vitaly.ruhl/ESP32ConfigManager"
+pio pkg install --library "vitaly.ruhl/ESP32 Configuration Manager"
 ```
 
 ## Quick Start Guide
@@ -118,6 +118,16 @@ Upload:
 pio run -d examples/minimal -e usb -t upload --upload-port COM5
 ```
 
+### Example secrets
+
+Most examples read optional defaults from `src/secret/secrets.h`.
+
+1. Copy `src/secret/secrets.example.h` to `src/secret/secrets.h` in the selected example.
+2. Adjust credentials and optional defaults.
+3. Build/upload as usual.
+
+If `secrets.h` is missing, examples fall back to settings UI/AP workflow.
+
 ### 2) Use as a library in your own project
 
 Minimal `platformio.ini` snippet:
@@ -137,14 +147,14 @@ build_flags =
     ; -DCM_ENABLE_VERBOSE_LOGGING=0
 
 lib_deps =
-    vitaly.ruhl/ESP32 Configuration Manager@^3.3.0
+    vitaly.ruhl/ESP32 Configuration Manager@^4.0.0
 ```
 
 For a complete minimal firmware pattern, see `docs/GETTING_STARTED.md`.
 
-## Notes (v3)
+## Notes (v4)
 
-- v3.0.0+ ships the embedded WebUI directly in the library (`src/html_content.*`).
+- v4.0.0 continues to ship the embedded WebUI directly in the library (`src/html_content.*`).
 
 ## Security Notice
 
@@ -161,9 +171,12 @@ Each example is a standalone PlatformIO project:
 
 - [examples/minimal](examples/minimal) - minimal demo
 - [examples/BME280-Temp-Sensor](examples/BME280-Temp-Sensor) - BME280 temp sensor
+- [examples/Full-Logging-Demo](examples/Full-Logging-Demo) - logging and runtime log output demo
+- [examples/Full-MQTT-Demo](examples/Full-MQTT-Demo) - MQTT integration demo
 - [examples/Full-GUI-Demo](examples/Full-GUI-Demo) - full GUI demo
 - [examples/Full-IO-Demo](examples/Full-IO-Demo) - IOManager demo (incl. core settings templates)
 - [examples/ChipInfo](examples/ChipInfo) - device/chip information demo
+- [examples/BoilerSaver](examples/BoilerSaver) - real-world boiler controller example
 - [examples/SolarInverterLimiter](examples/SolarInverterLimiter) - real-world larger project using this library
 
 Build an example:
@@ -201,9 +214,9 @@ More:
 
 ### The embedded Web UI automatically adapts to desktop and mobile devices.
 
->New in v3.3.0
->![alt text](examples//screenshots/V3.3.0-GUI-STD.jpg) 
->![alt text](examples//screenshots/V3.3.0-GUI-Dark.jpg)
+>Current UI snapshots
+>![alt text](examples/screenshots/V4.0.0-GUI-STD.jpg)
+>![alt text](examples/screenshots/V4.0.0-GUI-Dark.jpg)
 
 > Example on Monitor HD
 > ![Example on Monitor HD](examples/screenshots/test-hd.jpg)

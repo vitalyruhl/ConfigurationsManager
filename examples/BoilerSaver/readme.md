@@ -1,57 +1,33 @@
-# ESP32 - Boiler Saver
+# BoilerSaver (ESP32)
 
-This project is a simple ESP32-based boiler saver that can be used to limit the power output of a
-boiler uses a Relay, that decrease temperature by add a parallel resistor to the given temperature sensor. 
-The project uses an ESP32 microcontroller, a current sensor, and a relay module to control the power output of the boiler.
+This example is a larger real-world project based on the ConfigurationsManager library.
+It combines runtime controls, sensor input, optional MQTT integration, and Web UI configuration.
 
-## Features
+## What it demonstrates
 
-- not used
+- Complex settings structure with grouped pages/cards
+- Runtime actions and live values (`/runtime.json`, `/runtime_meta.json`)
+- Optional MQTT defaults via `src/secret/secrets.h`
+- Integration of external components (e.g. OneWire/DallasTemperature, OLED)
 
-## Hardware Requirements
+## How to run
 
-- ESP32 microcontroller
+From the repo root:
 
-
-## Wiring Diagram (Not ready yet!)
-
-- see Wokwi for a wiring example
-
-## Home Assistant Integration (Not ready yet!)
-
-- Add the following to your configuration.yaml file:
-
-```yaml
-mqtt:
-  sensor:
-    - name: "SolarLimiter_SetValue"
-      state_topic: "SolarLimiter/SetValue"
-      unique_id: SolarLimiter_SetValue
-      device_class: power
-      unit_of_measurement: "W"
-
-    - name: "SolarLimiter_GetValue"
-      state_topic: "SolarLimiter/GetValue"
-      unique_id: SolarLimiter_GetValue
-      device_class: power
-      unit_of_measurement: "W"
-
-    - name: "SolarLimiter_Temperature"
-      state_topic: "SolarLimiter/Temperature"
-      unique_id: SolarLimiter_Temperature
-      device_class: temperature
-      unit_of_measurement: "°C"
-
-    - name: "SolarLimiter_Humidity"
-      state_topic: "SolarLimiter/Humidity"
-      unique_id: SolarLimiter_Humidity
-      device_class: humidity
-      unit_of_measurement: "%"
-
-    - name: "SolarLimiter_Dewpoint"
-      state_topic: "SolarLimiter/Dewpoint"
-      unique_id: SolarLimiter_Dewpoint
-      device_class: temperature
-      unit_of_measurement: "°C"
-
+```bash
+pio run -d examples/BoilerSaver -e usb
+pio run -d examples/BoilerSaver -e usb -t upload
 ```
+
+## First start / AP mode
+
+If no SSID is configured yet, the device starts in AP mode.
+Open the printed AP URL from Serial (usually `http://192.168.4.1`) and configure WiFi via the Web UI.
+
+## Optional secrets defaults
+
+You can copy `src/secret/secrets.example.h` to `src/secret/secrets.h` and set default WiFi/MQTT credentials.
+
+## Additional docs
+
+- Wiring and integration notes: `examples/BoilerSaver/docs/`

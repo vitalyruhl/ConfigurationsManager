@@ -19,7 +19,7 @@ Recommended docs files:
 ## 2. Branching model
 
 - `main`: published / released branch (do **not** develop directly here)
-- `release/v3.3.0`: runnable snapshot branch (must always build/run)
+- `release/v4.0.0`: runnable snapshot branch (must always build/run)
 - `feature/*`: work-in-progress branches (may be unfinished/broken)
 - Suggested naming:
   - `feature/<short-topic>`

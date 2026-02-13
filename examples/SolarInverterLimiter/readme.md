@@ -2,8 +2,6 @@
 
 This project is an ESP32-based solar inverter limiter that can be used to limit the power output of a solar inverter to a specific value. The project uses an ESP32 microcontroller and an RS485 module to communicate with the inverter.
 
-This project is still under development and not considered stable yet.
-
 ## Features
 
 - ESP32-based solar inverter limiter
@@ -23,8 +21,6 @@ This project is still under development and not considered stable yet.
   - Build: `pio run -e usb`
   - Upload: `pio run -e usb -t upload`
 2. On first boot (or when WiFi SSID is empty) the device starts an access point:
-  - SSID: `ESP32_Config`
-  - Password: `config1234`
 3. Connect to the AP and open the web UI (usually `http://192.168.4.1/`) to configure WiFi/MQTT and other settings.
 4. After WiFi is configured the web UI will be available on the device IP in your LAN.
 
@@ -34,12 +30,12 @@ This project is still under development and not considered stable yet.
 - see Wokwi for a wiring example
 
 ```
-ESP32 Pin  | RS485 Pin
------------|----------
-  GPIO 19   | TXD (Transmitter)
-  GPIO 18   | RXD (Receiver) don't use this pin, only for RXD
-  GND       | GND
-  VCC       | VCC (5V or 3.3V depending on the RS485 module)
+ESP32 Pin | RS485 Pin
+--------- | ---------
+GPIO 19   | TXD (Transmitter)
+GPIO 18   | RXD (Receiver)
+GND       | GND
+VCC       | VCC (5V or 3.3V depending on the RS485 module)
 ```
 
 ## Home Assistant Integration

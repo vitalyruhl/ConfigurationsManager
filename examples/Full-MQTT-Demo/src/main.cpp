@@ -311,14 +311,14 @@ void Initial_logging()
 {
     Serial.begin(115200);
     auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
-    serialOut->setLevel(LL::Trace);
+    serialOut->setLevel(LL::Debug);
     serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis);
     serialOut->setRateLimitMs(2);
     lmg.addOutput(std::move(serialOut));
 
-    lmg.setGlobalLevel(LL::Trace);
+    lmg.setGlobalLevel(LL::Debug);
     auto scopedSetup = lmg.scopedTag("SETUP");
-    lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+    lmg.attachToConfigManager(LL::Debug, LL::Debug, "");
 
     //------------------------------------------------------------------------------------
     // Add MQTT log output (optional)
@@ -331,7 +331,7 @@ void Initial_logging()
     // This shows how to add a dedicated log output without changing the core logger.
     {
         auto customLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
-        customLog->setLevel(LL::Trace);
+        customLog->setLevel(LL::Debug);
         customLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
         customLog->setRateLimitMs(50);
         customLog->setUnretainedEnabled(false);

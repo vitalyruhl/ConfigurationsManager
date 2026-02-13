@@ -7,7 +7,7 @@
 
 #include "ConfigManager.h"
 
-#define APP_VERSION "3.3.0"
+#define APP_VERSION "4.0.0"
 #define VERSION_DATE "05.11.2025"
 #ifndef APP_NAME
 #define APP_NAME "Boiler-Saver"

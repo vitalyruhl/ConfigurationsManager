@@ -2,8 +2,9 @@
 
 This changelog is a curated overview.
 
-## 3.3.0
+## 4.0.0
 
+- Breaking release from the 3.2.x line (public API and behavior refactors across modules/examples).
 - IOManager module (digital IO + analog IO incl. alarms + DAC outputs)
 - Core settings templates / injection
 - Runtime + WebUI robustness improvements

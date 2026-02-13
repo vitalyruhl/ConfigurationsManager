@@ -179,14 +179,14 @@ void Initial_logging_Serial()
 {
     Serial.begin(115200);
     auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
-    serialOut->setLevel(LL::Trace);
+    serialOut->setLevel(LL::Debug);
     serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::Millis); // add millisecond timestamp - uncommented to disable timestamp
     serialOut->setRateLimitMs(2); // limit to 1 message per 2 ms
     lmg.addOutput(std::move(serialOut)); // Default serial output
 
-    lmg.setGlobalLevel(LL::Trace);
+    lmg.setGlobalLevel(LL::Debug);
     auto scopedSetup = lmg.scopedTag("SETUP");
-    lmg.attachToConfigManager(LL::Info, LL::Trace, "");
+    lmg.attachToConfigManager(LL::Debug, LL::Debug, "");
 
     // DateTime output for tags starting with "DT-"
     {
@@ -205,7 +205,7 @@ void Initial_logging_GUI()
 
     auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 30); // default 30-message startup buffer
     guiOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
-    guiOut->setLevel(LL::Trace);
+    guiOut->setLevel(LL::Debug);
     lmg.addOutput(std::move(guiOut));
 
 

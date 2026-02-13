@@ -55,7 +55,7 @@
 #endif
 
 #ifndef VERSION
-#define VERSION "3.3.0"
+#define VERSION "4.0.0"
 #endif
 
 // predeclare the functions (prototypes)
@@ -545,7 +545,7 @@ static void setupLogging()
     lmg.addOutput(std::move(serialOut));
 
     lmg.setGlobalLevel(LL::Debug);
-    lmg.attachToConfigManager(LL::Info, LL::Debug, "");
+    lmg.attachToConfigManager(LL::Debug, LL::Debug, "");
 
     auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 50);
     guiOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
