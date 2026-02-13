@@ -283,6 +283,7 @@ void setupGUI()
         .label("Temperature")
         .unit("°C")
         .precision(1)
+        .addCSSClass("myCSSTempClass")
         .order(10);
 
     boilerCard.value("Bo_TimeLeftFmt", []()

@@ -29,7 +29,8 @@
 
 ## Done / Resolved
 
-- build all examples ant flash to a test device (USB) to verify no build issues and basic functionality (e.g. AP mode starts, web server responds)
+- build all examples and flash to a test device (USB) to verify no build issues and basic functionality (e.g. AP mode starts, web server responds)
+- 2026-02-13: all examples except `ChipInfo` were flashed on COM3 and checked via HTTP/curl; behavior verified OK (BME280 AP-mode without creds is expected), OTA update also verified OK.
 
 ## Status Notes
 
