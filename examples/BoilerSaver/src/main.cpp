@@ -1283,8 +1283,8 @@ void onWiFiConnected()
     wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
     ShowDisplay();
 
-    lmg.log(LL::Info, "WiFi connected");
-    lmg.log(LL::Info, "Station Mode: http://%s", WiFi.localIP().toString().c_str());
+    lmg.log(LL::Warn, "WiFi connected");
+    lmg.log(LL::Warn, "Station Mode: http://%s", WiFi.localIP().toString().c_str());
     lmg.log(LL::Info, "WLAN strength: %d dBm", WiFi.RSSI());
 }
 
