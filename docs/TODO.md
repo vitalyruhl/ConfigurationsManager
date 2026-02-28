@@ -14,11 +14,39 @@
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
-- no items yet
-- in pio under dependencys - is empty, but we need some...
-- in pio under Readme - i need min 1 screenshot in the front
-- in pio under Readme - new hook - perfect for beginners...
-- take neu screenshot of the new API design and add it to the Readme (and maybe also to the wiki)
+- Add new stability check:
+
+  ´´´cpp
+
+      static bool ensureNvsReady()
+      {
+          esp_err_t err = nvs_flash_init();
+          if (err == ESP_OK)
+          {
+              return true;
+          }
+
+          if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND || err == ESP_ERR_NVS_INVALID_STATE)
+          {
+              const esp_err_t eraseErr = nvs_flash_erase();
+              if (eraseErr != ESP_OK)
+              {
+                  Serial.printf("[E] NVS erase failed (%d)\n", static_cast<int>(eraseErr));
+                  return false;
+              }
+
+              err = nvs_flash_init();
+              if (err == ESP_OK)
+              {
+                  return true;
+              }
+          }
+
+          Serial.printf("[E] NVS init failed (%d)\n", static_cast<int>(err));
+          return false;
+      }
+
+  ´´´
 
 ## Medium Priority (Prio 5)
 
