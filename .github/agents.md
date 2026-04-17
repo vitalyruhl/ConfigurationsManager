@@ -1,17 +1,17 @@
+# agents.md
+
 Role:
 you are my coding assistant. Follow the instructions in this file carefully when generating code.
 
-========================================
-COMMUNICATION STYLE
-========================================
+## COMMUNICATION STYLE
+
 - Use informal tone with "you" (not "Sie" or formal language)
 - Answer in German
 - Give only a brief overview after completing tasks
 - Provide detailed explanations only when explicitly asked
 
-========================================
-SEMI-AUTOMATIC WORKFLOW GUIDELINES
-========================================
+## SEMI-AUTOMATIC WORKFLOW GUIDELINES
+
 - User changes are sacred:
   - Never revert or overwrite user edits without asking first.
 
@@ -39,9 +39,8 @@ SEMI-AUTOMATIC WORKFLOW GUIDELINES
   - Before rename/delete: always search references and update them.
   - Before running terminal commands that modify the workspace: ensure goal and scope are clear.
 
-========================================
-GIT WORKFLOW GUIDELINES
-========================================
+## GIT WORKFLOW GUIDELINES
+
 - Branch roles in this repository:
   - main:
     - published / released branch
@@ -104,13 +103,11 @@ GIT WORKFLOW GUIDELINES
     - Verify the active branch matches the topic.
     - If not, emit a [W] warning and propose 2–3 suitable branch names.
 
-
 - GitHub CLI:
   - Prefer gh for PRs, CI checks, issues, when available.
 
-========================================
-CODE STYLE (STRICT, GLOBAL)
-========================================
+## CODE STYLE (STRICT, GLOBAL)
+
 - All code comments in English only
 - Clear, descriptive variable names (English only)
 - All function names in English only
@@ -121,9 +118,8 @@ CODE STYLE (STRICT, GLOBAL)
   - log messages
   - outputs
 
-----------------------------------------
-DOCUMENTATION EXCEPTION (.md FILES)
-----------------------------------------
+## DOCUMENTATION EXCEPTION (.md FILES)
+
 - The strict logging severity and efficiency rules apply to:
   - source code
   - headers
@@ -135,14 +131,14 @@ DOCUMENTATION EXCEPTION (.md FILES)
   - Long-form tags like [WARNING], [NOTE], [INFO] are allowed in prose text.
 
 - IMPORTANT:
-  - Code blocks inside Markdown files (```cpp, ```c, ```text, etc.)
+  - Code blocks inside Markdown files (```cpp,```c, ```text, etc.)
     MUST still follow the Global Logging Severity & Efficiency Policy.
   - Only narrative documentation text is exempt, not code examples.
 
-========================================
-GLOBAL LOGGING SEVERITY & EFFICIENCY POLICY
+## GLOBAL LOGGING SEVERITY & EFFICIENCY POLICY
+
 (ESP32 / Flash-Optimized, Mandatory)
-========================================
+
 - ALL log messages MUST use short, ASCII-only severity tags.
 - Allowed severity tags:
   - [E] = Error
@@ -167,9 +163,8 @@ GLOBAL LOGGING SEVERITY & EFFICIENCY POLICY
   - Log message updates do NOT count as public API changes.
   - Rename safety rules do NOT apply to log text.
 
-----------------------------------------
-LOG MESSAGE EFFICIENCY RULE
-----------------------------------------
+## LOG MESSAGE EFFICIENCY RULE
+
 - Log messages must be semantically clear but as short as reasonably possible.
 - Prefer compression over verbosity to reduce flash usage.
 - Avoid filler words when meaning remains clear:
@@ -183,24 +178,21 @@ LOG MESSAGE EFFICIENCY RULE
   - module prefix ([IO], [CM], etc.)
   - surrounding context
 
-----------------------------------------
-LOW-LEVEL LOGGING GUIDANCE
-----------------------------------------
+## LOW-LEVEL LOGGING GUIDANCE
+
 - IO and hardware-level logs are typically debug- or trace-oriented.
 - Treat LOG output as [D] or [T] by default.
 - Prefer [W] only for notable but recoverable conditions.
 - Use [E] only for critical IO failures.
 
-========================================
-RENAME & LOGGING INTERACTION (PHASE RULE)
-========================================
+## RENAME & LOGGING INTERACTION (PHASE RULE)
+
 - API renames and logging normalization MUST be treated as separate concerns.
 - Logging normalization MUST NOT be mixed with API renaming phases.
 - Log text changes do NOT trigger rename safety rules.
 
-========================================
-TOOLING & SEARCH POLICY
-========================================
+## TOOLING & SEARCH POLICY
+
 - Preferred search tool:
   - ALWAYS use ripgrep (rg) for code searches, audits, and reference checks.
     - if is not installed, give instructions to install it first. (choco install ripgrep)
@@ -214,9 +206,8 @@ TOOLING & SEARCH POLICY
   - Prefer PowerShell-native commands for replacements and filtering.
   - sed/awk may be used ONLY if explicitly available and confirmed.
 
-========================================
-RENAME SAFETY RULE
-========================================
+## RENAME SAFETY RULE
+
 - Before any API rename:
   - Perform a full reference search using rg.
 - After renaming:
@@ -228,9 +219,8 @@ RENAME SAFETY RULE
   - docs/
   - tests/
 
-========================================
-TESTING & BUILD VALIDATION
-========================================
+## TESTING & BUILD VALIDATION
+
 - Unit tests for core components
 - Mock implementations for testing
   - mocked data must be clearly marked as [MOCKED!]
@@ -238,7 +228,59 @@ TESTING & BUILD VALIDATION
   - Exception: If no `.cpp` or `.h` files were changed, do not run `pio run`.
 - If tests are affected, run pio test for at least one environment.
 
-========================================
-FINAL RULE
-========================================
+## Available tools
+
+- jq (1.8.1)
+  - Use for JSON processing only
+  - Use jq-style selectors with leading dot (e.g. `.field.subfield`)
+  - Do not use for YAML/TOML
+
+- dasel (v3.2.1)
+  - Use for YAML/TOML/XML queries
+  - Query syntax has NO leading dot (`object_type`, not `.object_type`)
+  - Read via stdin / PowerShell pipe
+  - Example:
+    - `Get-Content file.yaml | dasel -i yaml 'object_type'`
+  - Do not use deprecated flags like `-f`
+  - Do not assume jq-compatible syntax
+
+- fd (10.4.2)
+  - Use for file discovery (preferred over `dir` / `Get-ChildItem`)
+  - Example: `fd .yaml`
+
+- rg (ripgrep 14.1.0)
+  - Use for text search inside files
+  - Prefer over `findstr` / `Select-String`
+  - Always provide a pattern
+  - Example: `rg "object_type"`
+
+- git (2.53.0)
+  - Always inspect repo state before acting
+  - Use:
+    - `git status --short --branch`
+    - `git log --oneline -1`
+  - Do not perform destructive operations unless explicitly requested
+
+- uv (0.11.6)
+  - Use for Python execution
+  - Prefer `uv run` over global Python
+  - Do not assume system Python environment
+
+- gh cli (2.89.0)
+  - Use for GitHub operations (PRs, issues, projects)
+  - Prefer over manual/API usage
+  - Example:
+    - `gh pr view`
+    - `gh project item-list`
+
+## Tool guardrails
+
+- Do not mix jq and dasel syntax
+- Do not use deprecated dasel flags (`-f`)
+- Prefer structured tools (jq/dasel) over text parsing
+- Do not assume repo or PR state → verify with git/gh
+- Do not assume global Python → use `uv run`
+
+## FINAL RULE
+
 - Never mark an issue as solved or fixed until the user explicitly confirms it works.
