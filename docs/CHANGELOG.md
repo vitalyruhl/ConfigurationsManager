@@ -2,6 +2,16 @@
 
 This changelog is a curated overview.
 
+## 4.0.2
+
+- WebUI npm dependencies updated; Vite upgraded to 8.0.13.
+- Added esbuild as an explicit devDependency for the Vite 8 build path.
+- WebUI build target changed to `esnext` for Vite 8 / Rolldown compatibility.
+- WebUI package version aligned with the ConfigurationsManager package/library version at 4.0.2.
+- Independent example firmware/app versions were not changed.
+- SolarInverterLimiter remains close to the flash limit after the update.
+- Older browser compatibility may be reduced because the WebUI no longer targets the previous legacy browser output.
+
 ## 4.0.0
 
 - Breaking release from the 3.2.x line (public API and behavior refactors across modules/examples).
