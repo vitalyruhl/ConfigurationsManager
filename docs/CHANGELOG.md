@@ -2,6 +2,13 @@
 
 This changelog is a curated overview.
 
+## 4.0.3
+
+- WiFi reconnect recovery now retries after stalled ESP32 WiFi idle/scan states
+  instead of waiting indefinitely.
+- SolarInverterLimiter firmware version bumped to 4.1.2 for the runtime WiFi
+  recovery behavior change.
+
 ## 4.0.2
 
 - WebUI npm dependencies updated; Vite upgraded to 8.0.13.

@@ -504,22 +504,28 @@ void ConfigManagerWiFi::handleReconnection() {
   if (WiFi.getMode() == WIFI_AP) return; // Don't reconnect in AP mode
   if (stackResetInProgress || roamingReconnectPending) return;
 
+  unsigned long now = millis();
+  const unsigned long elapsedSinceAttempt = now - lastReconnectAttempt;
+
   // Avoid reconnect storms while the WiFi stack is already busy.
   // Some ESP32 Arduino stacks report WL_IDLE_STATUS during an ongoing connect and
   // WL_SCAN_COMPLETED transiently during scans.
   const int wifiStatus = WiFi.status();
-  if (wifiStatus == WL_IDLE_STATUS || wifiStatus == WL_SCAN_COMPLETED) {
+  const bool stackBusy = (wifiStatus == WL_IDLE_STATUS || wifiStatus == WL_SCAN_COMPLETED);
+  if (stackBusy && elapsedSinceAttempt < reconnectInterval) {
     return;
   }
 
-  unsigned long now = millis();
-
   // Non-blocking reconnection attempt
-  if (now - lastReconnectAttempt >= reconnectInterval) {
+  if (elapsedSinceAttempt >= reconnectInterval) {
     lastReconnectAttempt = now;
     if (currentState != WIFI_STATE_RECONNECTING) {
       transitionToState(WIFI_STATE_RECONNECTING);
     }
+    WIFI_LOG("Reconnect attempt %u after status %d (%s)",
+             static_cast<unsigned int>(connectAttempts) + 1U,
+             wifiStatus,
+             getWiFiStatusString(wifiStatus).c_str());
     attemptConnect();
   }
 }
