@@ -56,8 +56,8 @@
     ]
   },
   "dependencies": [
-    "bblanchon/ArduinoJson@~7.4.1",
-    "esphome/ESPAsyncWebServer-esphome@~3.2.2",
+    "bblanchon/ArduinoJson@~7.4.3",
+    "esphome/ESPAsyncWebServer-esphome@~3.4.0",
     "esphome/AsyncTCP-esphome@2.1.4"
   ]
 }
