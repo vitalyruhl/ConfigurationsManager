@@ -28,9 +28,33 @@ Branch And Workflow:
   updates, and branch cleanup.
 - Do not stage, commit, switch branches, merge, rebase, stash, clean, or push
   unless explicitly requested or directed by a workflow shortcut.
-- If the active branch is `main` or `master`, warn before file-changing work and
-  use the workflow rules for branch handling.
+- If the active branch is `main` or `master` and file-changing work is
+  requested, stop before editing and use the workflow rules to create or select
+  a proper side branch.
+- The only direct-edit exception on `main` or `master` is an explicitly
+  requested docs-only TODO update under `docs/TODO.md` or `docs/todo_*.md`.
 - Work on one side branch at a time.
+
+Version Handling:
+
+- Dependency updates, PlatformIO configuration changes, library metadata
+  changes, firmware code changes, and example changes that affect build outputs
+  require an appropriate project version bump unless the user explicitly says
+  not to bump.
+- Governance-only and documentation-only changes do not require a version bump.
+  Report that the version bump was skipped by policy.
+- Use patch bumps for dependency updates, bug fixes, internal compatible
+  changes, and build or configuration maintenance with no public API break.
+- Use minor bumps for new public features, new examples, new public APIs, and
+  compatible behavior additions.
+- Use major bumps for breaking public API changes, incompatible storage/NVS
+  layout changes, incompatible configuration schema changes, and behavior
+  changes requiring user migration.
+- Before changing versions, search for version declarations and report the
+  candidate files found.
+- If multiple version declarations exist, report them before changing versions.
+- If the version source of truth is unclear, stop and report candidate files
+  instead of guessing.
 
 Rename Safety:
 
@@ -62,6 +86,17 @@ Testing And Build Validation:
 - Mock implementations or mocked data used in tests must be clearly marked as
   `[MOCKED!]`.
 - If validation cannot be run, report the reason plainly.
+
+Reporting:
+
+- Inspect relevant diffs before reporting file-changing work.
+- Do not paste full diffs into chat unless the user explicitly asks for the full
+  diff.
+- Prefer changed file lists, concise summaries, validation commands and results,
+  skipped validation reasons, and remaining risks or blockers.
+- Prefer `git diff --stat` or focused summaries for reporting.
+- Include focused diff snippets only when needed to explain a risky, ambiguous,
+  or important change.
 
 Strict Stops:
 

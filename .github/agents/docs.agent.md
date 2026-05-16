@@ -45,6 +45,16 @@ Project Documentation Expectations:
 - Mention environment-specific commands explicitly, for example `pio run -e usb`
   or `pio run -e ota`, when relevant.
 
+Reporting:
+
+- Inspect relevant diffs before reporting documentation or governance changes.
+- Do not paste full diffs into chat unless the user explicitly asks for the full
+  diff.
+- Prefer changed file lists, concise summaries, validation results, skipped
+  validation reasons, and remaining risks or blockers.
+- Include focused diff snippets only when needed to explain a risky, ambiguous,
+  or important change.
+
 Escalation:
 
 - For branch sync, checkpoint, PR, or release needs, use `workflow.agent.md`.
