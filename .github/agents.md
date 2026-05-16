@@ -1,286 +1,296 @@
-# agents.md
 
-Role:
-you are my coding assistant. Follow the instructions in this file carefully when generating code.
+# AGENTS.md
 
-## COMMUNICATION STYLE
+Repository guidance for contributors and coding agents.
 
-- Use informal tone with "you" (not "Sie" or formal language)
-- Answer in German
-- Give only a brief overview after completing tasks
-- Provide detailed explanations only when explicitly asked
+This repository is `ConfigurationsManager`, a C++/ESP32 project built with
+PlatformIO and the Arduino framework. The repository also contains a web UI and
+support tooling used by the embedded project.
 
-## SEMI-AUTOMATIC WORKFLOW GUIDELINES
+## Communication
 
-- User changes are sacred:
-  - Never revert or overwrite user edits without asking first.
+- Use informal German ("du") when talking to the user.
+- Keep explanations short unless detail is explicitly requested.
+- After completing work, summarize briefly.
+- Internal chat with the user may remain informal German according to these
+  communication rules.
+- Only normal chat with the user may be German by default. Repository artifacts
+  must remain in English unless the user explicitly requests a different
+  language for a specific artifact.
 
-- Confirm-before-write:
-  - If requirements are ambiguous or the change impacts multiple subsystems/files,
-    ask 1–3 precise clarifying questions or propose 2–3 options before editing.
+## Repository Text Language
 
-- One side-branch at a time:
-  - Do not work on more than one side-branch simultaneously.
+- Governance files under `.github/`, repository documentation, generated
+  project text, issue text, pull request text, review comments created by
+  agents, code comments, error messages, log messages, and commit messages
+  created by agents must be written in English.
+- Do not translate repository artifacts to German just because the user chat is
+  German.
+- If a specific artifact must be written in another language, require an
+  explicit user request for that artifact.
 
-- Step-by-step workflow:
-  - Implement changes incrementally in small steps:
-    fix → verify → commit → continue.
+## GitHub Text Language
 
-- Do not revert user edits unless asked:
-  - Even if unrelated to the current topic.
+- GitHub Issue titles must be written in English.
+- GitHub Issue bodies must be written in English.
+- GitHub Pull Request titles and descriptions must be written in English.
+- GitHub comments created by agents should be written in English unless the user
+  explicitly requests otherwise.
+- Do not create German GitHub issue or PR text by default.
+- These rules apply only to GitHub and repository artifacts, not to normal chat
+  with the user.
 
-- Autonomy levels:
-  - Level A (safe): Read-only actions (search, read, analyze) may be done immediately.
-  - Level B (normal): Small, clearly scoped changes (1–2 files, obvious fix) may be implemented immediately.
-  - Level C (risky): Changes involving settings structure/storage/NVS, OTA, security,
-    build pipelines, or large refactors REQUIRE explicit confirmation.
+## Repository Scope
 
-- Safety gates:
-  - Before rename/delete: always search references and update them.
-  - Before running terminal commands that modify the workspace: ensure goal and scope are clear.
+- Primary project configuration: `platformio.ini`.
+- Main firmware source code lives under `src/`.
+- Web UI sources and build tooling live under `webui/`.
+- Examples live under `examples/`.
+- Supporting documentation lives under `docs/` and `README.md`.
+- Tests live under `test/` when present.
+- Support scripts and repository tooling live under `tools/`.
+- Wokwi simulation files may live under example-specific `Wokwi/` folders.
+- Do not assume Python application release flows or a standalone backend web
+  service unless the repository explicitly introduces them.
 
-## GIT WORKFLOW GUIDELINES
+## Agent Routing
 
-- Branch roles in this repository:
-  - main:
-    - published / released branch
-  - release/*:
-    - runnable snapshot branches
-    - must always be buildable and runnable
-    - versioned by release (e.g. release/v3.3.0, release/v3.4.0, ...)
-  - feature/*:
-    - work-in-progress branches
-    - may be unfinished or temporarily broken
+- `.github/AGENTS.md` is the canonical source for repository-wide rules.
+- `.github/agents/control-plane.agent.md` only routes work to the correct agent.
+- Use `.github/agents/refactor.agent.md` for code changes, refactors, tests, and
+  build validation.
+- Use `.github/agents/workflow.agent.md` for branches, issues, PRs, releases,
+  checkpoints, and explicit session-close workflows.
+- Use `.github/agents/docs.agent.md` for documentation work.
+- Agent files may add scope-specific rules, but they must not contradict this
+  file. If they do, follow this file and report the drift.
 
-- "Feierabend" workflow trigger:
-  - If the user says:
-    "ich mach jetzt feierabend" or "ich will jetzt feierabend machen"
-  - Treat this as an end-of-session cue.
+## Tracking Policy
 
-  Default behavior:
-  - Commit the current work branch (feature/*).
-  - use git add -A and a meaningful commit message.
-  - Push the work branch to origin.
-  - Run a PlatformIO build in the repo root:
-      pio run -e usb
-    (must succeed without errors).
-    - Exception: If no `.cpp` or `.h` files were changed, skip this build step.
-  - Only if the build succeeds (or was skipped due to no `.cpp`/`.h` changes):
-    - Update the active release/* branch to match the work branch exactly.
-    - Prefer fast-forward updates.
-    - If fast-forward is not possible, ask explicitly before force-pushing
-      (push --force-with-lease).
-  - Push the updated release/* branch.
+- GitHub Issues may be used for tracked work when useful.
+- GitHub Pull Requests may be used for review and integration when useful.
+- GitHub Project usage is optional and repository-specific.
+- Current GitHub Project: `ConfigurationsManager` (#5)
+- When tracked workflow or project coordination is relevant, agents may use the
+  configured GitHub Project.
+- Do not invent mandatory project-board updates for tasks that do not actually
+  use tracking.
+- If the configured GitHub Project changes later, update this file and keep
+  workflow guidance consistent with the new value.
 
-- Never change main directly:
-  - If the active branch is main/master:
-    - Emit a [WARNUNG] warning
-    - use git add -A and a meaningful commit message, if user has changed files.
+## Safety Principles
 
-- Exception:
-  - Docs-only TODO updates (docs/TODO.md, docs/todo_*.md)
-    may be committed directly to main.
+- User changes are sacred. Never revert or overwrite user edits without asking.
+- Analyze before modifying files.
+- Do not make functional project-code changes unless explicitly requested or
+  strictly required to correct governance references.
+- Do not invent project rules. Preserve existing project-specific rules unless
+  they are clearly obsolete or consciously replaced by newer governance.
+- Do not mark an issue as solved or fixed until the user confirms it works.
+- Before rename/delete operations, search references first and update them.
+- Before terminal commands that modify the workspace, ensure goal and scope are
+  clear.
+- If requirements are ambiguous or a change impacts multiple subsystems/files,
+  ask 1-3 precise questions or propose 2-3 options before editing.
+- Work incrementally in small steps: fix, verify, checkpoint or commit only when
+  requested, then continue.
+- Work on one side branch at a time.
+- Before multi-file refactors or other risky changes, ensure the baseline is
+  understood and either clean, committed, or intentionally dirty by user
+  request.
 
-- Git command rules:
-  - Read-only git commands may be run without asking:
-    git status, git diff, git log, git show, git branch, git remote -v
-  - Commands that modify history or working tree require confirmation:
-    git add, commit, switch/checkout, reset, merge, rebase, clean, stash, cherry-pick
+## Autonomy Levels
 
-- Staging / committing:
-  - Stage/commit/push ONLY on explicit user request.
-  - If staging is requested, prefer:
-    git add -A
+- Level A, safe: read-only actions such as search, read, and analysis may be done
+  immediately.
+- Level B, normal: small, clearly scoped changes may be implemented immediately.
+- Level C, risky: changes involving settings structure, storage/NVS, OTA,
+  security, build pipelines, or large refactors require explicit confirmation.
 
-- Command execution style:
-  - Do NOT prepend Set-Location for git commands.
-  - Only change directories when required for non-git commands.
-  - Use Push-Location / Pop-Location to restore the original directory.
+## Repository Workflow Rules
 
-- Large changes require a clean baseline:
-  - Before multi-file refactors or risky changes, ensure work is committed or stashed.
-  - Branch naming check:
-    - Verify the active branch matches the topic.
-    - If not, emit a [W] warning and propose 2–3 suitable branch names.
+- Route branch, release, PR, merge, checkpoint, and cleanup operations through
+  `.github/agents/workflow.agent.md`.
+- `main` is the published or released branch.
+- `release/*` branches are runnable snapshot branches and must stay buildable
+  and runnable.
+- `release/*` branches are versioned by release, for example `release/v4.0.0`.
+- `feature/*` branches are work-in-progress branches and may be unfinished or
+  temporarily broken.
+- Do not change `main` directly.
+- Docs-only TODO updates under `docs/TODO.md` or `docs/todo_*.md` may be
+  committed directly to `main` only when the user explicitly requests that
+  workflow.
+- If the active branch is `main` or `master`, emit a `[W]` warning before
+  file-changing work.
+- Read-only git commands may be run without asking:
+  - `git status`
+  - `git diff`
+  - `git log`
+  - `git show`
+  - `git branch`
+  - `git remote -v`
+- Commands that modify history or working tree require confirmation:
+  - `git add`
+  - `git commit`
+  - `git switch` / `git checkout`
+  - `git reset`
+  - `git merge`
+  - `git rebase`
+  - `git clean`
+  - `git stash`
+  - `git cherry-pick`
+- Stage, commit, and push only on explicit user request or when a named
+  workflow explicitly requires it.
+- If staging is requested, prefer `git add -A`.
+- Do not prepend `Set-Location` to git commands. Use the configured working
+  directory. For non-git commands that must change directory, use
+  `Push-Location` / `Pop-Location`.
+- Prefer gh for PRs, CI checks, issues, and project operations when available.
 
-- GitHub CLI:
-  - Prefer gh for PRs, CI checks, issues, when available.
+## Session-Close Workflow
 
-## CODE STYLE (STRICT, GLOBAL)
+- Default session-close behavior:
+  - commit the current work branch (`feature/*`) with `git add -A` and a
+    meaningful English commit message
+  - push the work branch to `origin`
+  - run `pio run -e usb` from the repository root when `.cpp` or `.h` files
+    changed
+  - if that build succeeds, or was skipped because no `.cpp` or `.h` files
+    changed, update the active `release/*` branch to match the work branch
+  - prefer fast-forward updates for the release branch
+  - if fast-forward is not possible, ask explicitly before using
+    `--force-with-lease`
+  - push the updated release branch
 
-- All code comments in English only
-- Clear, descriptive variable names (English only)
-- All function names in English only
-- All error and log messages in English
-- Emojis are forbidden everywhere:
-  - code
-  - comments
-  - log messages
-  - outputs
+## Code Rules
 
-## DOCUMENTATION EXCEPTION (.md FILES)
+- Code comments must be in English.
+- Identifiers and function names must be in English.
+- Error and log messages must be in English.
+- Emojis are forbidden in code, comments, logs, and generated outputs.
+- Favor small, coherent changes over broad speculative refactors.
+- Keep hardware-facing and configuration-sensitive changes conservative.
 
-- The strict logging severity and efficiency rules apply to:
-  - source code
-  - headers
-  - examples
-  - tests
+## Documentation Exception
 
-- Markdown documentation files (*.md) are EXEMPT from strict logging rules:
-  - Readability and clarity have priority over flash optimization.
-  - Long-form tags like [WARNING], [NOTE], [INFO] are allowed in prose text.
+- Markdown prose is exempt from flash-oriented logging brevity rules.
+- Markdown prose may use readable long-form tags such as `[WARNING]`, `[NOTE]`,
+  and `[INFO]`.
+- Code blocks inside Markdown are not exempt. Code examples and text log
+  examples must still follow the global logging policy from this file.
+- Documentation must still be written in English unless the user explicitly
+  requests a different language for a specific document.
 
-- IMPORTANT:
-  - Code blocks inside Markdown files (```cpp,```c, ```text, etc.)
-    MUST still follow the Global Logging Severity & Efficiency Policy.
-  - Only narrative documentation text is exempt, not code examples.
+## Logging Policy
 
-## GLOBAL LOGGING SEVERITY & EFFICIENCY POLICY
+All source code, headers, examples, tests, and code blocks inside Markdown must
+follow this policy.
 
-(ESP32 / Flash-Optimized, Mandatory)
+- Log messages must use short ASCII-only severity tags:
+  - `[E]` error
+  - `[W]` warning
+  - `[I]` info
+  - `[D]` debug
+  - `[T]` trace
+- Long tags such as `[ERROR]`, `[WARNING]`, `[INFO]`, `[DEBUG]`, and `[SUCCESS]`
+  are forbidden in code/log output.
+- Verbose is not a severity level. Verbose controls whether logs are emitted;
+  severity tags describe impact.
+- Severity reassignment is allowed when technically justified.
+- Log message updates are not public API renames.
+- Keep log text semantically clear and as short as reasonably possible to reduce
+  flash usage.
+- Prefer common abbreviations such as `cfg`, `init`, `ok`, `fail`, `adc`, `pwm`,
+  and `io` where clarity remains intact.
+- Do not repeat information already encoded by severity tags, module prefixes,
+  or surrounding context.
+- IO and hardware-level logs are usually `[D]` or `[T]`. Use `[W]` for notable
+  recoverable conditions and `[E]` for critical failures.
 
-- ALL log messages MUST use short, ASCII-only severity tags.
-- Allowed severity tags:
-  - [E] = Error
-  - [W] = Warning
-  - [I] = Info
-  - [D] = Debug
-  - [T] = Trace
+## Rename And Logging Interaction
 
-- Long tags are FORBIDDEN everywhere:
-  - [ERROR], [WARNING], [INFO], [DEBUG], [SUCCESS], etc.
+- API renames and logging normalization are separate concerns.
+- Do not mix logging normalization into API rename phases.
+- Before any API rename, perform a full reference search with rg.
+- After renaming, rerun rg to ensure old names do not remain in relevant
+  project files such as `src/`, `include/`, `lib/`, `test/`, `docs/`, and
+  examples when present.
 
-- Verbose is NOT a severity level:
-  - Verbose controls WHETHER logs are emitted.
-  - Severity tags describe WHAT the log means.
+## Tool Policy
 
-- Severity reassignment is ALLOWED:
-  - The agent MAY change severity levels
-    (e.g. [W] → [D]) if technically justified.
-  - Severity must reflect the actual relevance and impact of the message.
+- Prefer available VS Code or agent-workspace tools first when they fit the task.
+- Prefer locally installed CLI tools next.
+- Do not use unnecessarily heavy tools when simple search or inspection is
+  enough.
+- Known local tools on the user's Windows/PowerShell environment may include:
+  - git
+  - gh
+  - rg
+  - fd
+  - jq
+  - dasel
+  - jc
+  - 7z
+  - pwsh
+  - winget
+  - choco
+  - coreutils
+  - node / npm
+  - python
+  - uv
+  - platformio / pio, if installed for this repository
+- Preferred tools:
+  - rg for text search, audits, and reference checks.
+  - fd for file discovery, audits, and reference checks.
+  - git for version-control inspection and explicit version-control actions.
+  - platformio / pio for PlatformIO build, upload, monitor, and test flows.
+  - gh for GitHub PRs, CI checks, issues, and project operations when
+    available.
+  - jq for JSON.
+  - dasel for YAML, TOML, JSON, or XML inspection when it is the safest fit.
+- If rg or fd is missing, report that and give a simple install hint instead
+  of silently using a weaker search path for audits or reference checks.
+- When reporting search results, include the rg pattern used.
+- Do not assume every listed tool is installed on every machine. If a required
+  tool is missing, report the failed command clearly.
+- Do not install or upgrade tools unless the user explicitly asks.
+- On Windows, do not assume sed or awk are available. Prefer
+  PowerShell-native commands unless availability was confirmed.
+- Use dasel for YAML, TOML, JSON, or XML inspection and edits when it is the
+  safest fit.
+- Use jq for JSON.
+- Use gh for GitHub operations when authenticated and available.
+- Use 7z for archive inspection or extraction when needed.
+- Use uv only when Python tooling is actually part of the task. Do not infer
+  Python project workflows from the presence of uv.
+- Do not mix jq and dasel syntax.
+- Do not use deprecated dasel flags.
+- Prefer structured tools over brittle text parsing when that reduces risk.
+- Do not assume repository, branch, PR, or project state. Verify with git and
+  gh.
 
-- Logging text changes are NOT API renames:
-  - Log message updates do NOT count as public API changes.
-  - Rename safety rules do NOT apply to log text.
+## Validation Baseline
 
-## LOG MESSAGE EFFICIENCY RULE
+- Always run at least one PlatformIO build after `.cpp` or `.h` changes.
+- Default build check:
+  - `pio run -e usb`
+- If only Markdown or governance files changed, skip PlatformIO build unless the
+  user asks for it.
+- If tests are affected, run `pio test` for at least one relevant environment.
+- If a required validation cannot run, report that plainly.
 
-- Log messages must be semantically clear but as short as reasonably possible.
-- Prefer compression over verbosity to reduce flash usage.
-- Avoid filler words when meaning remains clear:
-  - "already exists" → "exists"
-  - "both enabled" → "both ON"
-  - "using pull-up" → "use pull-up"
-- Prefer standard abbreviations:
-  - cfg, init, ok, fail, pull-up/down, adc, pwm, io
-- Do NOT repeat information already encoded by:
-  - severity tag
-  - module prefix ([IO], [CM], etc.)
-  - surrounding context
+## Mandatory Reporting
 
-## LOW-LEVEL LOGGING GUIDANCE
+After file-changing work, report:
 
-- IO and hardware-level logs are typically debug- or trace-oriented.
-- Treat LOG output as [D] or [T] by default.
-- Prefer [W] only for notable but recoverable conditions.
-- Use [E] only for critical IO failures.
+- branch used
+- files changed
+- validation run
+- skipped validation with reason
+- remaining risks or blockers
 
-## RENAME & LOGGING INTERACTION (PHASE RULE)
+## Final Rule
 
-- API renames and logging normalization MUST be treated as separate concerns.
-- Logging normalization MUST NOT be mixed with API renaming phases.
-- Log text changes do NOT trigger rename safety rules.
-
-## TOOLING & SEARCH POLICY
-
-- Preferred search tool:
-  - ALWAYS use ripgrep (rg) for code searches, audits, and reference checks.
-    - if is not installed, give instructions to install it first. (choco install ripgrep)
-  - ALWAYS use sharkdp.fd (fd) for file searches, audits, and reference checks.
-    - if is not installed, give instructions to install it first. (winget install sharkdp.fd)
-- When reporting search results:
-  - Include the rg pattern used.
-
-- Windows compatibility:
-  - Do NOT assume sed or awk are available.
-  - Prefer PowerShell-native commands for replacements and filtering.
-  - sed/awk may be used ONLY if explicitly available and confirmed.
-
-## RENAME SAFETY RULE
-
-- Before any API rename:
-  - Perform a full reference search using rg.
-- After renaming:
-  - Re-run rg to ensure no old names remain.
-- A rename is incomplete if any reference remains in:
-  - src/
-  - include/
-  - examples/
-  - docs/
-  - tests/
-
-## TESTING & BUILD VALIDATION
-
-- Unit tests for core components
-- Mock implementations for testing
-  - mocked data must be clearly marked as [MOCKED!]
-- Always run at least one PlatformIO build after changes.
-  - Exception: If no `.cpp` or `.h` files were changed, do not run `pio run`.
-- If tests are affected, run pio test for at least one environment.
-
-## Available tools
-
-- jq (1.8.1)
-  - Use for JSON processing only
-  - Use jq-style selectors with leading dot (e.g. `.field.subfield`)
-  - Do not use for YAML/TOML
-
-- dasel (v3.2.1)
-  - Use for YAML/TOML/XML queries
-  - Query syntax has NO leading dot (`object_type`, not `.object_type`)
-  - Read via stdin / PowerShell pipe
-  - Example:
-    - `Get-Content file.yaml | dasel -i yaml 'object_type'`
-  - Do not use deprecated flags like `-f`
-  - Do not assume jq-compatible syntax
-
-- fd (10.4.2)
-  - Use for file discovery (preferred over `dir` / `Get-ChildItem`)
-  - Example: `fd .yaml`
-
-- rg (ripgrep 14.1.0)
-  - Use for text search inside files
-  - Prefer over `findstr` / `Select-String`
-  - Always provide a pattern
-  - Example: `rg "object_type"`
-
-- git (2.53.0)
-  - Always inspect repo state before acting
-  - Use:
-    - `git status --short --branch`
-    - `git log --oneline -1`
-  - Do not perform destructive operations unless explicitly requested
-
-- uv (0.11.6)
-  - Use for Python execution
-  - Prefer `uv run` over global Python
-  - Do not assume system Python environment
-
-- gh cli (2.89.0)
-  - Use for GitHub operations (PRs, issues, projects)
-  - Prefer over manual/API usage
-  - Example:
-    - `gh pr view`
-    - `gh project item-list`
-
-## Tool guardrails
-
-- Do not mix jq and dasel syntax
-- Do not use deprecated dasel flags (`-f`)
-- Prefer structured tools (jq/dasel) over text parsing
-- Do not assume repo or PR state → verify with git/gh
-- Do not assume global Python → use `uv run`
-
-## FINAL RULE
-
-- Never mark an issue as solved or fixed until the user explicitly confirms it works.
+- Never mark an issue as solved or fixed until the user explicitly confirms it
+  works.

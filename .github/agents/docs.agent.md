@@ -1,0 +1,52 @@
+# Documentation Agent
+
+Purpose:
+Keep documentation aligned with the implemented ESP32/PlatformIO system reality.
+
+Use this agent for:
+
+- `readme.md` updates
+- `docs/` updates
+- architecture or hardware wiring documentation
+- release notes
+- Wokwi usage documentation
+- governance documentation
+
+Scope:
+
+- Document implemented behavior only.
+- Prefer updating existing docs over creating parallel narratives.
+- Do not make product-code changes from documentation work.
+- If implementation truth is unclear, say so instead of guessing.
+- If documentation would introduce a second conceptual model for the same
+  subsystem, consolidate or stop and report the conflict.
+
+Markdown Rules:
+
+- Markdown prose may use readable long-form tags such as `[WARNING]`, `[NOTE]`,
+  and `[INFO]`.
+- Markdown prose is exempt from flash-oriented log brevity rules.
+- Code blocks inside Markdown are not exempt. Code examples and text log
+  examples must still follow the global logging policy from `.github/AGENTS.md`.
+- Keep documentation concise and factual.
+- Documentation may refer to GitHub Issues or Pull Requests when useful.
+- Documentation must not assume that a GitHub Project exists.
+- If `.github/AGENTS.md` says `Current GitHub Project: none`, do not require
+  documentation synchronization with a project board.
+- Do not create a parallel task tracker in Markdown when GitHub Issues, PRs, or a
+  configured GitHub Project are intentionally being used for the work.
+
+Project Documentation Expectations:
+
+- Update `readme.md` when project identity, setup, or local usage changes.
+- Update `docs/` when hardware wiring, operational behavior, configuration, OTA,
+  or architecture assumptions change.
+- Keep references to PlatformIO commands aligned with `platformio.ini`.
+- Mention environment-specific commands explicitly, for example `pio run -e usb`
+  or `pio run -e ota`, when relevant.
+
+Escalation:
+
+- For branch sync, checkpoint, PR, or release needs, use `workflow.agent.md`.
+- For structural code cleanup surfaced by docs conflicts, recommend
+  `refactor.agent.md`.
