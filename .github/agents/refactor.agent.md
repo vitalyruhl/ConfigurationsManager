@@ -85,8 +85,16 @@ Testing And Build Validation:
 - Run at least one PlatformIO build after `.cpp` or `.h` changes.
 - Default validation:
   - `pio run -e usb`
+- For affected examples, run the relevant example build.
 - If tests are affected, run `pio test` for at least one relevant environment.
+- Run relevant tests when tests are present and affected.
 - Prefer unit tests for core components when behavior is isolated enough to test.
+- Use configured and enabled GitHub Actions or checks when they exist. Do not
+  invent required CI workflows.
+- If no enabled CI is configured, report that and rely on required local
+  validation.
+- Docker or image builds are not required unless configured in this repository
+  or explicitly in scope.
 - If OTA-specific behavior or upload configuration changes, validate the relevant
   PlatformIO environment as far as safely possible without assuming device
   availability.
