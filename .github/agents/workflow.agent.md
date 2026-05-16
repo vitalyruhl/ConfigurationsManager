@@ -151,6 +151,15 @@ This agent must apply `.github/AGENTS.md`.
 - Before changing versions, search for version declarations and report the
   candidate files found.
 - If multiple version declarations exist, report them before changing versions.
+- Treat the ConfigurationsManager package/library version as the main project
+  version.
+- Treat the WebUI package under `webui/` as part of the repository build
+  artifact, not as an independent example firmware or app.
+- When WebUI npm dependencies, WebUI build metadata, or WebUI package metadata
+  change, align the WebUI package version with the ConfigurationsManager
+  package/library version.
+- Bump an example firmware or app version only when that example itself is
+  intentionally changed or released.
 - If the version source of truth is unclear, stop and report candidate files
   instead of guessing.
 
