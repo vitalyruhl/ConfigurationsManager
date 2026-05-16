@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "keywords": "esp32, configuration, wifi, web-server, ota, iot, automation",
   "description": "Robust configuration management system with web interface for ESP32 and ota support.",
   "repository": {
@@ -56,8 +56,8 @@
     ]
   },
   "dependencies": [
-    "bblanchon/ArduinoJson@~7.4.1",
-    "esphome/ESPAsyncWebServer-esphome@~3.2.2",
+    "bblanchon/ArduinoJson@~7.4.3",
+    "esphome/ESPAsyncWebServer-esphome@~3.4.0",
     "esphome/AsyncTCP-esphome@2.1.4"
   ]
 }
