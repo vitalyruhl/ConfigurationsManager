@@ -10,6 +10,33 @@ This project is an ESP32-based solar inverter limiter that can be used to limit 
 - Configurable power output limit
 - Web-based settings UI (ConfigManager)
 
+## ConfigManager v4 note
+
+- This project is aligned to `ESP32 Configuration Manager` `v4.x` (currently `^4.0.0` in `platformio.ini`).
+- The pre-build step uses `tools/precompile_wrapper.py`.
+- The wrapper delegates to the library script inside `.pio/libdeps/<env>/ESP32 Configuration Manager/tools/preCompile_script.py`.
+- This keeps WebUI/header generation in sync with the installed ConfigManager library version.
+
+## Maintenance notes 2026-05-15
+
+- Governance was migrated from `.github/copilot-instructions.md` to the agent-based structure in `.github/AGENTS.md` and `.github/agents/*.agent.md`.
+- The repository guidance now treats this project as a C++/ESP32/PlatformIO project. GitHub Projects are optional; the current project value is `none`.
+- GitHub Issues, Pull Requests, and agent-created GitHub comments should be written in English. Normal user chat may remain informal German.
+- The legacy Feierabend workflow trigger was removed in favor of explicit workflow shortcuts.
+- PID inverter regulation now uses signed E320 grid power from `tele/powerMeter/powerMeter/SENSOR` at JSON path `E320.Power_in`.
+- PID base target is `solarPowerW + signedGridPowerW + offset`; positive grid power means import and negative grid power means export.
+- PID logging derives `gridIn = max(signedGridPowerW, 0)` and `gridOut = max(-signedGridPowerW, 0)` for live diagnostics.
+- Home Assistant should publish electricity price inputs to `SolarLimiter/Input/ElectricityPrice` and `SolarLimiter/Input/NegativePrice`.
+- Negative-price handling is available in the ESP32 settings: force output to configured minimum or explicitly set output to `0` when `NegativePrice` is `1`.
+- Dependency maintenance updated `Adafruit GFX Library` to `1.12.6`, `ArduinoJson` to `7.4.3`, and PlatformIO platform `espressif32` to `platformio/espressif32@7.0.1`.
+- `pio pkg outdated`, `pio run -e usb`, and `pio run -e ota` were successful after the dependency updates.
+- Live OTA upload and boot smoke test succeeded after the `espressif32` update.
+
+Open follow-up:
+- Firmware flash usage remains tight at about `98.8%`.
+- PID tuning may still require further live observation.
+- Negative-price handling should be verified during an actual negative-price period or with a controlled MQTT test payload.
+
 ## Hardware Requirements
 
 - ESP32 microcontroller

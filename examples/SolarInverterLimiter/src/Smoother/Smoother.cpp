@@ -1,14 +1,11 @@
 #include "Smoother.h"
 
-Smoother::Smoother(int size, int correctionOffset, int min, int max)
-  : bufferSize(size),
-    bufferIndex(0),
-    correctionOffset(correctionOffset),
-    minLimit(min),
-    maxLimit(max)
+Smoother::Smoother(int size)
+  : bufferSize(size > 0 ? size : 1),
+    bufferIndex(0)
 {
   buffer = new int[bufferSize];
-  fillBufferOnStart(minLimit);
+  fillBufferOnStart(0);
 }
 
 Smoother::~Smoother() {
@@ -17,35 +14,28 @@ Smoother::~Smoother() {
 
 void Smoother::fillBufferOnStart(int initialValue) {
   for (int i = 0; i < bufferSize; ++i) {
-    buffer[i] = initialValue + correctionOffset;
+    buffer[i] = initialValue;
   }
   bufferIndex = 0;
 }
 
 void Smoother::reset() {
-  fillBufferOnStart(minLimit);
+  fillBufferOnStart(0);
 }
 
-void Smoother::setCorrectionOffset(int offset) {
-  correctionOffset = offset;
-}
+void Smoother::setBufferSize(int size) {
+  if (size <= 0 || size == bufferSize) {
+    return;
+  }
 
-void Smoother::setLimits(int min, int max) {
-  minLimit = min;
-  maxLimit = max;
-}
-
-int Smoother::applyLimiter(int value) {
-  if (value >= maxLimit) return maxLimit;
-  if (value < minLimit) return minLimit;
-  return value;
+  delete[] buffer;
+  bufferSize = size;
+  buffer = new int[bufferSize];
+  fillBufferOnStart(0);
 }
 
 int Smoother::smooth(int newValue) {
-  if (newValue == 0) {
-    return applyLimiter(buffer[bufferIndex]);
-  }
-  buffer[bufferIndex] = newValue + correctionOffset;
+  buffer[bufferIndex] = newValue;
   bufferIndex = (bufferIndex + 1) % bufferSize;
 
   long sum = 0;
@@ -54,5 +44,5 @@ int Smoother::smooth(int newValue) {
   }
 
   int average = sum / bufferSize;
-  return applyLimiter(average);
+  return average;
 }

@@ -1,4 +1,7 @@
 #include <Arduino.h>
+#include <esp_system.h>
+#include <nvs_flash.h>
+#include <Preferences.h>
 #include <Ticker.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -55,8 +58,15 @@
 #endif
 
 #ifndef VERSION
-#define VERSION "4.0.0"
+#define VERSION "4.1.1"
 #endif
+
+enum class NegativePriceSettingPreference : uint8_t
+{
+    None,
+    ForceMin,
+    SetZero
+};
 
 // predeclare the functions (prototypes)
 void SetupStartDisplay();
@@ -78,8 +88,18 @@ void onWiFiAPMode();
 static void setupLogging();
 static void setupMqtt();
 static void setupNetworkDefaults();
+static void attachSystemSettings();
+static void syncStoredCodeVersion();
 static void registerProjectSettings();
+static void configureLimiterSettingsBehavior();
+static void normalizeNegativePriceSettings(NegativePriceSettingPreference preferred, bool persist, bool logCorrection);
 static void registerIOBindings();
+static bool ensureNvsReady();
+static const char *resetReasonToText(esp_reset_reason_t reason);
+static bool isValidMacAddress(const String &value);
+static void applyAccessPointMacPriority();
+static void resetPidController();
+static int computePidStabilizedTarget(int baseTarget, int configuredMin, int configuredMax);
 static void updateMqttTopics();
 static void publishMqttNow();
 static void updateStatusLED();
@@ -100,7 +120,13 @@ struct LimiterSettings
     Config<int> minOutput{ConfigOptions<int>{.key = "LimiterMinW", .name = "Min Output (W)", .category = "Limiter", .defaultValue = 500, .sortOrder = 3}};
     Config<int> inputCorrectionOffset{ConfigOptions<int>{.key = "LimiterCorrW", .name = "Input Correction Offset (W)", .category = "Limiter", .defaultValue = 50, .sortOrder = 4}};
     Config<int> smoothingSize{ConfigOptions<int>{.key = "LimiterSmooth", .name = "Smoothing Level", .category = "Limiter", .defaultValue = 10, .sortOrder = 5}};
-    Config<float> RS232PublishPeriod{ConfigOptions<float>{.key = "LimiterRS485P", .name = "RS485 Publish Period (s)", .category = "Limiter", .defaultValue = 2.0f, .sortOrder = 6}};
+    Config<bool> usePidSmoothing{ConfigOptions<bool>{.key = "LimiterUsePID", .name = "Use PID Smoothing", .category = "Limiter", .defaultValue = false, .sortOrder = 6}};
+    Config<float> pidKp{ConfigOptions<float>{.key = "LimiterPIDKp", .name = "PID Kp", .category = "Limiter", .defaultValue = 0.35f, .sortOrder = 7}};
+    Config<float> pidKi{ConfigOptions<float>{.key = "LimiterPIDKi", .name = "PID Ki", .category = "Limiter", .defaultValue = 0.05f, .sortOrder = 8}};
+    Config<float> pidKd{ConfigOptions<float>{.key = "LimiterPIDKd", .name = "PID Kd", .category = "Limiter", .defaultValue = 0.02f, .sortOrder = 9}};
+    Config<bool> forceMinOnNegativePrice{ConfigOptions<bool>{.key = "LimiterNegPrice", .name = "Force Min On Negative Price", .category = "Limiter", .defaultValue = false, .sortOrder = 10}};
+    Config<bool> setZeroOnNegativePrice{ConfigOptions<bool>{.key = "LimNegZero", .name = "Set 0 On Negative Price", .category = "Limiter", .defaultValue = false, .sortOrder = 11}};
+    Config<float> RS232PublishPeriod{ConfigOptions<float>{.key = "LimiterRS485P", .name = "RS485 Publish Period (s)", .category = "Limiter", .defaultValue = 2.0f, .sortOrder = 12}};
 
     void attachTo(ConfigManagerClass &cfg)
     {
@@ -109,6 +135,12 @@ struct LimiterSettings
         cfg.addSetting(&minOutput);
         cfg.addSetting(&inputCorrectionOffset);
         cfg.addSetting(&smoothingSize);
+        cfg.addSetting(&usePidSmoothing);
+        cfg.addSetting(&pidKp);
+        cfg.addSetting(&pidKi);
+        cfg.addSetting(&pidKd);
+        cfg.addSetting(&forceMinOnNegativePrice);
+        cfg.addSetting(&setZeroOnNegativePrice);
         cfg.addSetting(&RS232PublishPeriod);
     }
 };
@@ -149,7 +181,7 @@ struct I2CSettings
 
 struct FanSettings
 {
-    Config<bool> enabled{ConfigOptions<bool>{.key = "FanEnable", .name = "Enable Fan Control", .category = "Fan", .defaultValue = true, .sortOrder = 1}};
+    Config<bool> enabled{ConfigOptions<bool>{.key = "FanEnable", .name = "Enable Fan Control", .category = "Fan", .defaultValue = false, .sortOrder = 1}};
     Config<float> onThreshold{ConfigOptions<float>{.key = "FanOn", .name = "Fan ON above (C)", .category = "Fan", .defaultValue = 30.0f, .sortOrder = 2}};
     Config<float> offThreshold{ConfigOptions<float>{.key = "FanOff", .name = "Fan OFF below (C)", .category = "Fan", .defaultValue = 27.0f, .sortOrder = 3}};
 
@@ -187,6 +219,16 @@ struct DisplaySettings
     }
 };
 
+struct WiFiRoamingSettings
+{
+    Config<String> preferredApMac{ConfigOptions<String>{.key = "WiFiMacPrio", .name = "Preferred AP MAC", .category = "WiFi", .defaultValue = "", .sortOrder = 90}};
+
+    void attachTo(ConfigManagerClass &cfg)
+    {
+        cfg.addSetting(&preferredApMac);
+    }
+};
+
 BME280_I2C bme280;
 
 static constexpr int OLED_WIDTH = 128;
@@ -201,9 +243,12 @@ Ticker displayTicker;
 Smoother *powerSmoother = nullptr; // there is a memory allocation in setup, better use a pointer here
 
 // global helper variables
-int currentGridImportW = 0; // amount of electricity being imported from grid
-int inverterSetValue = 0;   // current power inverter should deliver (default to zero)
+int currentGridImportW = 0; // signed grid power: positive import, negative export
+int inverterCalculatedValue = 0; // calculated controller output before final send decision
+int inverterSetValue = 0;        // value sent to RS485 (with offset and min-max, or max when limiter off)
 int solarPowerW = 0;        // current solar production
+bool negativePriceActive = false; // MQTT input: true forces minimum output when enabled
+float electricityPriceEurKwh = 0.0f; // optional MQTT input for status/logging
 float temperature = 0.0;    // current temperature in Celsius
 float Dewpoint = 0.0;       // current dewpoint in Celsius
 float Humidity = 0.0;       // current humidity in percent
@@ -211,6 +256,7 @@ float Pressure = 0.0;       // current pressure in hPa
 
 bool displayActive = true; // flag to indicate if the display is active
 static bool displayInitialized = false;
+static bool bme280Initialized = false;
 static bool dewpointRiskActive = false;   // tracks dewpoint alarm state
 static bool heaterLatchedState = false;   // hysteresis latch for heater
 static bool manualOverrideActive = false; // when enabled, buttons control relays and automation pauses
@@ -236,6 +282,7 @@ I2CSettings i2cSettings;
 FanSettings fanSettings;
 HeaterSettings heaterSettings;
 DisplaySettings displaySettings;
+WiFiRoamingSettings wifiRoamingSettings;
 RS485_Settings rs485settings;
 
 static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
@@ -251,10 +298,26 @@ static constexpr char IO_AP_ID[] = "ap_btn";
 
 static String mqttBaseTopic;
 static String topicPublishSetValueW;
+static String topicPublishCalculatedValueW;
 static String topicPublishGridImportW;
 static String topicPublishTempC;
 static String topicPublishHumidityPct;
 static String topicPublishDewpointC;
+
+struct PidControllerState
+{
+    bool initialized = false;
+    float output = 0.0f;
+    float integral = 0.0f;
+    float previousError = 0.0f;
+    unsigned long lastUpdateMs = 0;
+};
+
+static PidControllerState pidController;
+static bool lastLimiterModeWasPid = false;
+static int lastNegativePriceOverrideTarget = -1;
+static NegativePriceSettingPreference lastNegativePriceSettingPreference = NegativePriceSettingPreference::None;
+static bool normalizingNegativePriceSettings = false;
 
 #pragma endregion configurationn variables
 
@@ -264,8 +327,12 @@ static String topicPublishDewpointC;
 
 void setup()
 {
+    Serial.begin(115200);
+    ensureNvsReady();
+
     setupLogging();
     lmg.scopedTag("SETUP");
+    lmg.logTag(LL::Info, "SETUP", "Reset reason: %s (%d)", resetReasonToText(esp_reset_reason()), static_cast<int>(esp_reset_reason()));
     lmg.log("System setup start...");
 
     ConfigManager.setAppName(APP_NAME);
@@ -276,22 +343,21 @@ void setup()
     ConfigManager.enableBuiltinSystemProvider();
 
     coreSettings.attachWiFi(ConfigManager);
-    coreSettings.attachSystem(ConfigManager);
+    attachSystemSettings();
     coreSettings.attachNtp(ConfigManager);
 
     registerProjectSettings();
+    configureLimiterSettingsBehavior();
     registerIOBindings();
     setupMqtt();
 
     ConfigManager.checkSettingsForErrors();
     ConfigManager.loadAll();
+    normalizeNegativePriceSettings(NegativePriceSettingPreference::None, true, true);
+    syncStoredCodeVersion();
     delay(100);
-
     setupNetworkDefaults();
-
     ioManager.begin();
-
-    // Apply WiFi reboot timeout from settings (minutes)
 
     ConfigManager.startWebServer();
 
@@ -299,10 +365,7 @@ void setup()
     ConfigManager.setRoamingThreshold(-75);
     ConfigManager.setRoamingCooldown(30);
     ConfigManager.setRoamingImprovement(10);
-
-#if defined(WIFI_FILTER_MAC_PRIORITY)
-    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
-#endif
+    applyAccessPointMacPriority();
 
     updateMqttTopics();
     setupGUI();
@@ -311,12 +374,8 @@ void setup()
 
     cm::helpers::pulseWait(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh, 3, 100);
 
-    powerSmoother = new Smoother(
-        limiterSettings.smoothingSize.get(),
-        limiterSettings.inputCorrectionOffset.get(),
-        limiterSettings.minOutput.get(),
-        limiterSettings.maxOutput.get());
-    powerSmoother->fillBufferOnStart(limiterSettings.minOutput.get());
+    powerSmoother = new Smoother(limiterSettings.smoothingSize.get());
+    powerSmoother->fillBufferOnStart(currentGridImportW);
 
     RS485begin();
     SetupStartTemperatureMeasuring();
@@ -327,6 +386,34 @@ void setup()
     setHeaterRelay(false);
 
     lmg.logTag(LL::Info, "SETUP", "Completed successfully. Starting main loop...");
+}
+
+static bool ensureNvsReady()
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_OK)
+    {
+        return true;
+    }
+
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND || err == ESP_ERR_NVS_INVALID_STATE)
+    {
+        const esp_err_t eraseErr = nvs_flash_erase();
+        if (eraseErr != ESP_OK)
+        {
+            Serial.printf("[E] NVS erase failed (%d)\n", static_cast<int>(eraseErr));
+            return false;
+        }
+
+        err = nvs_flash_init();
+        if (err == ESP_OK)
+        {
+            return true;
+        }
+    }
+
+    Serial.printf("[E] NVS init failed (%d)\n", static_cast<int>(err));
+    return false;
 }
 
 void loop()
@@ -435,12 +522,31 @@ void setupGUI()
         .precision(0)
         .order(3);
 
+    limiter.value("invCalc", []()
+                  { return inverterCalculatedValue; })
+        .label("Calculated Setpoint")
+        .unit("W")
+        .precision(0)
+        .order(4);
+
     limiter.value("solar", []()
                   { return solarPowerW; })
         .label("Solar power")
         .unit("W")
         .precision(0)
-        .order(4);
+        .order(5);
+
+    limiter.value("negPrice", []()
+                  { return negativePriceActive; })
+        .label("Negative Price")
+        .order(6);
+
+    limiter.value("price", []()
+                  { return electricityPriceEurKwh; })
+        .label("Electricity Price")
+        .unit("EUR/kWh")
+        .precision(3)
+        .order(7);
     // endregion Limiter
 
     // region relay outputs
@@ -539,17 +645,17 @@ static void setupLogging()
     Serial.begin(115200);
 
     auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
-    serialOut->setLevel(LL::Debug);
+    serialOut->setLevel(LL::Info);
     serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
     serialOut->setRateLimitMs(2);
     lmg.addOutput(std::move(serialOut));
 
-    lmg.setGlobalLevel(LL::Debug);
-    lmg.attachToConfigManager(LL::Debug, LL::Debug, "");
+    lmg.setGlobalLevel(LL::Info);
+    lmg.attachToConfigManager(LL::Info, LL::Info, "");
 
     auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 50);
     guiOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
-    guiOut->setLevel(LL::Debug);
+    guiOut->setLevel(LL::Info);
     lmg.addOutput(std::move(guiOut));
 }
 
@@ -606,6 +712,37 @@ static void registerIOBindings()
         apOptions);
 }
 
+static const char *resetReasonToText(esp_reset_reason_t reason)
+{
+    switch (reason)
+    {
+    case ESP_RST_UNKNOWN:
+        return "UNKNOWN";
+    case ESP_RST_POWERON:
+        return "POWERON";
+    case ESP_RST_EXT:
+        return "EXT";
+    case ESP_RST_SW:
+        return "SW";
+    case ESP_RST_PANIC:
+        return "PANIC";
+    case ESP_RST_INT_WDT:
+        return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+        return "TASK_WDT";
+    case ESP_RST_WDT:
+        return "WDT";
+    case ESP_RST_DEEPSLEEP:
+        return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+        return "BROWNOUT";
+    case ESP_RST_SDIO:
+        return "SDIO";
+    default:
+        return "OTHER";
+    }
+}
+
 static void setupMqtt()
 {
     // Tasmota SENSOR payloads can exceed PubSubClient default packet size (~256B).
@@ -616,10 +753,10 @@ static void setupMqtt()
     mqtt.addMQTTRuntimeProviderToGUI(ConfigManager, "mqtt");
     mqtt.addMqttSettingsToSettingsGroup(ConfigManager, "MQTT", "MQTT Settings", 40);
 
-    // Receive: grid import W (from power meter JSON)
+    // Receive: signed grid power W (positive import, negative export)
     mqtt.addTopicReceiveInt(
         "grid_import_w",
-        "Grid Import",
+        "Grid Power",
         "tele/powerMeter/powerMeter/SENSOR",
         &currentGridImportW,
         "W",
@@ -633,8 +770,26 @@ static void setupMqtt()
         "W",
         "ENERGY.Power");
 
+    mqtt.addTopicReceiveBool(
+        "negative_price",
+        "Negative Price",
+        "SolarLimiter/Input/NegativePrice",
+        &negativePriceActive,
+        "none");
+
+    mqtt.addTopicReceiveFloat(
+        "electricity_price",
+        "Electricity Price",
+        "SolarLimiter/Input/ElectricityPrice",
+        &electricityPriceEurKwh,
+        "EUR/kWh",
+        3,
+        "none");
+
     mqtt.addMqttTopicToSettingsGroup(ConfigManager, "grid_import_w", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 50);
     mqtt.addMqttTopicToSettingsGroup(ConfigManager, "solar_power_w", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 51);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "negative_price", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 52);
+    mqtt.addMqttTopicToSettingsGroup(ConfigManager, "electricity_price", "MQTT-Topics", "MQTT-Topics", "MQTT-Received", 53);
 
     // Optional: show receive topics in runtime UI
     // mqtt.addMqttTopicToLiveGroup(ConfigManager, "grid_import_w", "mqtt", "MQTT-Received", "MQTT-Received", 1);
@@ -643,7 +798,7 @@ static void setupMqtt()
     if (!mqttLogAdded)
     {
         auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
-        mqttLog->setLevel(LL::Debug);
+        mqttLog->setLevel(LL::Info);
         mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
         lmg.addOutput(std::move(mqttLog));
         mqttLogAdded = true;
@@ -658,7 +813,73 @@ static void registerProjectSettings()
     fanSettings.attachTo(ConfigManager);
     heaterSettings.attachTo(ConfigManager);
     displaySettings.attachTo(ConfigManager);
+    wifiRoamingSettings.attachTo(ConfigManager);
     rs485settings.attachTo(ConfigManager);
+}
+
+static void configureLimiterSettingsBehavior()
+{
+    limiterSettings.smoothingSize.showIfFunc = []()
+    { return !limiterSettings.usePidSmoothing.get(); };
+
+    limiterSettings.forceMinOnNegativePrice.setCallback([](bool enabled)
+                                                        {
+        if (normalizingNegativePriceSettings || !enabled)
+        {
+            return;
+        }
+        lastNegativePriceSettingPreference = NegativePriceSettingPreference::ForceMin;
+        normalizeNegativePriceSettings(NegativePriceSettingPreference::ForceMin, true, true); });
+
+    limiterSettings.setZeroOnNegativePrice.setCallback([](bool enabled)
+                                                       {
+        if (normalizingNegativePriceSettings || !enabled)
+        {
+            return;
+        }
+        lastNegativePriceSettingPreference = NegativePriceSettingPreference::SetZero;
+        normalizeNegativePriceSettings(NegativePriceSettingPreference::SetZero, true, true); });
+}
+
+static void normalizeNegativePriceSettings(NegativePriceSettingPreference preferred, bool persist, bool logCorrection)
+{
+    if (!limiterSettings.forceMinOnNegativePrice.get() || !limiterSettings.setZeroOnNegativePrice.get())
+    {
+        return;
+    }
+
+    NegativePriceSettingPreference winner = preferred;
+    if (winner == NegativePriceSettingPreference::None)
+    {
+        winner = lastNegativePriceSettingPreference;
+    }
+    if (winner == NegativePriceSettingPreference::None)
+    {
+        winner = NegativePriceSettingPreference::ForceMin;
+    }
+
+    normalizingNegativePriceSettings = true;
+    if (winner == NegativePriceSettingPreference::SetZero)
+    {
+        limiterSettings.forceMinOnNegativePrice.set(false);
+    }
+    else
+    {
+        winner = NegativePriceSettingPreference::ForceMin;
+        limiterSettings.setZeroOnNegativePrice.set(false);
+    }
+    normalizingNegativePriceSettings = false;
+    lastNegativePriceSettingPreference = winner;
+
+    if (logCorrection)
+    {
+        lmg.logTag(LL::Warn, "PRICE", "Corrected conflicting negative-price settings -> %s",
+                   winner == NegativePriceSettingPreference::SetZero ? "zero" : "min");
+    }
+    if (persist)
+    {
+        ConfigManager.saveAll();
+    }
 }
 
 static bool hasValidStationCredentials(const String &ssid, const String &password)
@@ -721,10 +942,9 @@ static void setupNetworkDefaults()
 #endif
         ConfigManager.saveAll();
         lmg.log(LL::Debug, "-------------------------------------------------------------");
-        lmg.log(LL::Debug, "Restarting ESP, after auto setting WiFi credentials");
+        lmg.log(LL::Info, "Applied WiFi defaults from secrets");
+        lmg.log(LL::Info, "Skipping forced reboot to avoid reset loops");
         lmg.log(LL::Debug, "-------------------------------------------------------------");
-        delay(500);
-        ESP.restart();
 #else
         lmg.log(LL::Warn, "SETUP: WiFi credentials missing/invalid but secret/secrets.h is missing; using UI/AP mode");
 #endif
@@ -761,6 +981,110 @@ static void setupNetworkDefaults()
     {
         systemSettings.otaPassword.save(OTA_PASSWORD);
     }
+
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    if (wifiRoamingSettings.preferredApMac.get().isEmpty())
+    {
+        wifiRoamingSettings.preferredApMac.save(WIFI_FILTER_MAC_PRIORITY);
+    }
+#endif
+}
+
+static void attachSystemSettings()
+{
+    ConfigManager.setCategoryLayoutOverride(cm::CoreCategories::System, cm::CoreCategories::System, cm::CoreCategories::System, "System Settings", 20);
+    ConfigManager.addSettingsPage(cm::CoreCategories::System, 20);
+    ConfigManager.addSettingsGroup(cm::CoreCategories::System, cm::CoreCategories::System, "System Settings", 20);
+    ConfigManager.addSetting(&systemSettings.allowOTA);
+    ConfigManager.addSetting(&systemSettings.otaPassword);
+}
+
+static void syncStoredCodeVersion()
+{
+    ConfigManager.setVersion(VERSION);
+
+    Preferences prefs;
+    if (!prefs.begin("ConfigManager", false))
+    {
+        lmg.logTag(LL::Warn, "SETUP", "Version sync skipped: preferences unavailable");
+        return;
+    }
+
+    const char *versionKey = systemSettings.version.getKey();
+    const String codeVersion(VERSION);
+    const String storedVersion = prefs.getString(versionKey, "");
+    if (storedVersion != codeVersion)
+    {
+        const size_t bytesWritten = prefs.putString(versionKey, codeVersion);
+        if (bytesWritten > 0)
+        {
+            lmg.logTag(LL::Info, "SETUP", "Stored version synced to %s", VERSION);
+        }
+        else
+        {
+            lmg.logTag(LL::Warn, "SETUP", "Stored version sync failed");
+        }
+    }
+    prefs.end();
+}
+
+static bool isValidMacAddress(const String &value)
+{
+    if (value.length() != 17)
+    {
+        return false;
+    }
+
+    for (int i = 0; i < value.length(); ++i)
+    {
+        const char c = value.charAt(i);
+        if ((i + 1) % 3 == 0)
+        {
+            if (c != ':')
+            {
+                return false;
+            }
+            continue;
+        }
+
+        const bool isDigit = (c >= '0' && c <= '9');
+        const bool isUpperHex = (c >= 'A' && c <= 'F');
+        const bool isLowerHex = (c >= 'a' && c <= 'f');
+        if (!isDigit && !isUpperHex && !isLowerHex)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void applyAccessPointMacPriority()
+{
+    String preferredMac = wifiRoamingSettings.preferredApMac.get();
+    preferredMac.trim();
+
+#if defined(WIFI_FILTER_MAC_PRIORITY)
+    if (preferredMac.isEmpty())
+    {
+        preferredMac = WIFI_FILTER_MAC_PRIORITY;
+    }
+#endif
+
+    if (preferredMac.isEmpty())
+    {
+        lmg.logTag(LL::Debug, "WiFi", "AP MAC priority not configured");
+        return;
+    }
+
+    if (!isValidMacAddress(preferredMac))
+    {
+        lmg.logTag(LL::Warn, "WiFi", "AP MAC priority invalid: %s", preferredMac.c_str());
+        return;
+    }
+
+    ConfigManager.setAccessPointMacPriority(preferredMac.c_str());
+    lmg.logTag(LL::Info, "WiFi", "AP MAC priority set: %s", preferredMac.c_str());
 }
 
 static void updateMqttTopics()
@@ -793,10 +1117,70 @@ static void updateMqttTopics()
 
     mqttBaseTopic = base;
     topicPublishSetValueW = mqttBaseTopic + "/SetValue";
+    topicPublishCalculatedValueW = mqttBaseTopic + "/CalculatedValue";
     topicPublishGridImportW = mqttBaseTopic + "/GetValue";
     topicPublishTempC = mqttBaseTopic + "/Temperature";
     topicPublishHumidityPct = mqttBaseTopic + "/Humidity";
     topicPublishDewpointC = mqttBaseTopic + "/Dewpoint";
+}
+
+static void resetPidController()
+{
+    pidController.initialized = false;
+    pidController.output = 0.0f;
+    pidController.integral = 0.0f;
+    pidController.previousError = 0.0f;
+    pidController.lastUpdateMs = 0;
+}
+
+static int computePidStabilizedTarget(int baseTarget, int configuredMin, int configuredMax)
+{
+    const unsigned long nowMs = millis();
+    float dtSeconds = limiterSettings.RS232PublishPeriod.get();
+
+    if (pidController.initialized)
+    {
+        const unsigned long elapsedMs = nowMs - pidController.lastUpdateMs;
+        if (elapsedMs > 0)
+        {
+            dtSeconds = static_cast<float>(elapsedMs) / 1000.0f;
+        }
+    }
+
+    dtSeconds = constrain(dtSeconds, 0.05f, 10.0f);
+
+    if (!pidController.initialized)
+    {
+        pidController.initialized = true;
+        pidController.output = constrain(static_cast<float>(baseTarget), static_cast<float>(configuredMin), static_cast<float>(configuredMax));
+        pidController.integral = 0.0f;
+        pidController.previousError = 0.0f;
+    }
+
+    // PID setpoint is the desired inverter target. PID input is the last commanded target.
+    const float error = static_cast<float>(baseTarget) - pidController.output;
+    const float candidateIntegral = constrain(pidController.integral + error * dtSeconds, -5000.0f, 5000.0f);
+    const float derivative = (error - pidController.previousError) / dtSeconds;
+    const float delta = limiterSettings.pidKp.get() * error +
+                        limiterSettings.pidKi.get() * candidateIntegral +
+                        limiterSettings.pidKd.get() * derivative;
+
+    const float candidateOutput = pidController.output + delta;
+    const float clampedOutput = constrain(candidateOutput, static_cast<float>(configuredMin), static_cast<float>(configuredMax));
+
+    if (candidateOutput == clampedOutput ||
+        (candidateOutput > static_cast<float>(configuredMax) && error < 0.0f) ||
+        (candidateOutput < static_cast<float>(configuredMin) && error > 0.0f))
+    {
+        pidController.integral = candidateIntegral;
+    }
+
+    pidController.output = clampedOutput;
+
+    pidController.previousError = error;
+    pidController.lastUpdateMs = nowMs;
+
+    return static_cast<int>(roundf(pidController.output));
 }
 
 static void setFanRelay(bool on)
@@ -851,6 +1235,7 @@ static void publishMqttNow()
     updateMqttTopics();
 
     mqtt.publishExtraTopic("setvalue_w", topicPublishSetValueW.c_str(), String(inverterSetValue), false);
+    mqtt.publishExtraTopic("calculated_w", topicPublishCalculatedValueW.c_str(), String(inverterCalculatedValue), false);
     mqtt.publishExtraTopic("grid_import_w", topicPublishGridImportW.c_str(), String(currentGridImportW), false);
     mqtt.publishExtraTopic("temperature_c", topicPublishTempC.c_str(), String(temperature), false);
     mqtt.publishExtraTopic("humidity_pct", topicPublishHumidityPct.c_str(), String(Humidity), false);
@@ -891,21 +1276,103 @@ static void updateStatusLED()
 
 void cb_RS485Listener()
 {
-    // inverterSetValue = powerSmoother.smooth(currentGridImportW);
-    inverterSetValue = powerSmoother->smooth(currentGridImportW);
-    // (legacy) previously: if (generalSettings.enableController.get())
-    if (limiterSettings.enableController.get())
+    int configuredMin = limiterSettings.minOutput.get();
+    int configuredMax = limiterSettings.maxOutput.get();
+    if (configuredMin > configuredMax)
     {
-        // rs485.sendToRS485(static_cast<uint16_t>(inverterSetValue));
-        // legacy comment: powerSmoother.setCorrectionOffset(generalSettings.inputCorrectionOffset.get());
-        powerSmoother->setCorrectionOffset(limiterSettings.inputCorrectionOffset.get()); // apply the correction offset to the smoother, if needed
-        sendToRS485(static_cast<uint16_t>(inverterSetValue));
-        lmg.logTag(LL::Trace, "RS485", "Controller enabled -> set inverter to %d W", inverterSetValue);
+        const int tmp = configuredMin;
+        configuredMin = configuredMax;
+        configuredMax = tmp;
+    }
+
+    if (powerSmoother != nullptr)
+    {
+        powerSmoother->setBufferSize(limiterSettings.smoothingSize.get());
+    }
+
+    const bool usePidSmoothing = limiterSettings.usePidSmoothing.get();
+    if (usePidSmoothing != lastLimiterModeWasPid)
+    {
+        resetPidController();
+        if (powerSmoother != nullptr)
+        {
+            powerSmoother->fillBufferOnStart(currentGridImportW);
+        }
+        lastLimiterModeWasPid = usePidSmoothing;
+    }
+
+    const int offset = limiterSettings.inputCorrectionOffset.get();
+    const int currentInverterOutputW = solarPowerW;
+    const int signedGridPowerW = currentGridImportW;
+    const int gridImportW = max(signedGridPowerW, 0);
+    const int gridExportW = max(-signedGridPowerW, 0);
+    const bool negativePriceForceMinEnabled = limiterSettings.forceMinOnNegativePrice.get();
+    const bool negativePriceSetZeroEnabled = !negativePriceForceMinEnabled && limiterSettings.setZeroOnNegativePrice.get();
+    const bool negativePriceMinActive = negativePriceActive && negativePriceForceMinEnabled;
+    const bool negativePriceZeroActive = negativePriceActive && negativePriceSetZeroEnabled;
+    const int negativePriceOverrideTarget = negativePriceZeroActive ? 0 : (negativePriceMinActive ? configuredMin : -1);
+    if (negativePriceOverrideTarget != lastNegativePriceOverrideTarget)
+    {
+        if (negativePriceOverrideTarget >= 0)
+        {
+            lmg.logTag(LL::Info, "PRICE", "Negative price active (%.3f EUR/kWh) -> forcing %d W", electricityPriceEurKwh, negativePriceOverrideTarget);
+        }
+        else
+        {
+            lmg.logTag(LL::Info, "PRICE", "Negative price inactive (%.3f EUR/kWh) -> resuming normal output path", electricityPriceEurKwh);
+        }
+        lastNegativePriceOverrideTarget = negativePriceOverrideTarget;
+    }
+    int pidBaseTarget = 0;
+    int pidClampedBaseTarget = 0;
+    int pidInput = 0;
+
+    if (negativePriceOverrideTarget >= 0)
+    {
+        resetPidController();
+        inverterCalculatedValue = negativePriceOverrideTarget;
+    }
+    else if (usePidSmoothing)
+    {
+        pidBaseTarget = currentInverterOutputW + signedGridPowerW + offset;
+        pidClampedBaseTarget = constrain(pidBaseTarget, configuredMin, configuredMax);
+        pidInput = pidController.initialized ? static_cast<int>(roundf(pidController.output)) : pidClampedBaseTarget;
+        inverterCalculatedValue = computePidStabilizedTarget(pidBaseTarget, configuredMin, configuredMax);
+    }
+    else if (powerSmoother != nullptr)
+    {
+        inverterCalculatedValue = powerSmoother->smooth(currentGridImportW);
     }
     else
     {
+        inverterCalculatedValue = configuredMax;
+        lmg.logTag(LL::Warn, "RS485", "Smoother not initialized -> fallback to MAX");
+    }
+
+    if (negativePriceOverrideTarget >= 0)
+    {
+        inverterSetValue = negativePriceOverrideTarget;
+        sendToRS485(static_cast<uint16_t>(inverterSetValue));
+    }
+    else if (limiterSettings.enableController.get())
+    {
+        const int correctedValue = usePidSmoothing ? inverterCalculatedValue : inverterCalculatedValue + offset;
+        inverterSetValue = constrain(correctedValue, configuredMin, configuredMax);
+        sendToRS485(static_cast<uint16_t>(inverterSetValue));
+        lmg.logTag(LL::Trace, "RS485", "Controller enabled -> set inverter to %d W (calc=%d, corr=%d)", inverterSetValue, inverterCalculatedValue, correctedValue);
+        if (usePidSmoothing)
+        {
+            lmg.logTag(LL::Debug, "PID", "inv=%d gridSigned=%d gridIn=%d gridOut=%d off=%d base=%d clamp=%d in=%d out=%d min=%d max=%d set=%d",
+                       currentInverterOutputW, signedGridPowerW, gridImportW, gridExportW, offset, pidBaseTarget, pidClampedBaseTarget,
+                       pidInput, inverterCalculatedValue, configuredMin, configuredMax, inverterSetValue);
+        }
+    }
+    else
+    {
+        inverterSetValue = configuredMax;
+        resetPidController();
         lmg.logTag(LL::Info, "RS485", "Controller disabled -> using MAX output");
-        sendToRS485(limiterSettings.maxOutput.get()); // send the maxOutput to the RS485 module
+        sendToRS485(static_cast<uint16_t>(inverterSetValue));
     }
 }
 
@@ -967,10 +1434,12 @@ void SetupStartTemperatureMeasuring()
         bme280.BME280_MODE_NORMAL);
     if (!isStatus)
     {
+        bme280Initialized = false;
         lmg.logTag(LL::Error, "BME280", "BME280 init failed");
     }
     else
     {
+        bme280Initialized = true;
         lmg.logTag(LL::Info, "BME280", "BME280 ready. Starting measurement ticker...");
 
         temperatureTicker.attach(tempSettings.readIntervalSec.get(), readBme280); // Attach the ticker to read BME280
@@ -1000,15 +1469,35 @@ void onWiFiAPMode()
 
 void readBme280()
 {
+    if (!bme280Initialized)
+    {
+        lmg.logTag(LL::Warn, "BME280", "Skip read: sensor not initialized");
+        return;
+    }
+
     // todo: add settings for correcting the values!!!
     //   set sea-level pressure
     bme280.setSeaLevelPressure(tempSettings.seaLevelPressure.get());
 
     bme280.read();
 
-    temperature = bme280.data.temperature + tempSettings.tempCorrection.get(); // apply correction
-    Humidity = bme280.data.humidity + tempSettings.humidityCorrection.get();   // apply correction
-    Pressure = bme280.data.pressure;
+    const float measuredTemperature = bme280.data.temperature + tempSettings.tempCorrection.get();
+    const float measuredHumidity = bme280.data.humidity + tempSettings.humidityCorrection.get();
+    const float measuredPressure = bme280.data.pressure;
+
+    const bool temperatureValid = isfinite(measuredTemperature) && measuredTemperature >= -20.0f && measuredTemperature <= 70.0f;
+    const bool humidityValid = isfinite(measuredHumidity) && measuredHumidity >= 0.0f && measuredHumidity <= 100.0f;
+    const bool pressureValid = isfinite(measuredPressure) && measuredPressure >= 300.0f && measuredPressure <= 1200.0f;
+
+    if (!temperatureValid || !humidityValid || !pressureValid)
+    {
+        lmg.logTag(LL::Warn, "BME280", "Invalid read T=%.1f H=%.1f P=%.1f -> keep last", measuredTemperature, measuredHumidity, measuredPressure);
+        return;
+    }
+
+    temperature = measuredTemperature;
+    Humidity = measuredHumidity;
+    Pressure = measuredPressure;
     Dewpoint = cm::helpers::computeDewPoint(temperature, Humidity);
 
     // output formatted values to serial console
