@@ -121,8 +121,11 @@ support tooling used by the embedded project.
 - Docs-only TODO updates under `docs/TODO.md` or `docs/todo_*.md` may be
   committed directly to `main` only when the user explicitly requests that
   workflow.
-- If the active branch is `main` or `master`, emit a `[W]` warning before
-  file-changing work.
+- If the active branch is `main` or `master` and file-changing work is
+  requested, stop before editing and route through
+  `.github/agents/workflow.agent.md` to create or select a proper side branch.
+- The only direct-edit exception on `main` or `master` is an explicitly
+  requested docs-only TODO update under `docs/TODO.md` or `docs/todo_*.md`.
 - Read-only git commands may be run without asking:
   - `git status`
   - `git diff`
@@ -147,6 +150,27 @@ support tooling used by the embedded project.
   directory. For non-git commands that must change directory, use
   `Push-Location` / `Pop-Location`.
 - Prefer gh for PRs, CI checks, issues, and project operations when available.
+
+## Version Policy
+
+- Require an appropriate project version bump for dependency updates,
+  PlatformIO configuration changes, library metadata changes, firmware code
+  changes, or example changes that affect build outputs unless the user
+  explicitly says not to bump.
+- Governance-only and documentation-only changes do not require a version bump.
+  Report that the version bump was skipped by policy.
+- Use patch version bumps for dependency updates, bug fixes, internal compatible
+  changes, and build or configuration maintenance with no public API break.
+- Use minor version bumps for new public features, new examples, new public
+  APIs, and compatible behavior additions.
+- Use major version bumps for breaking public API changes, incompatible
+  storage/NVS layout changes, incompatible configuration schema changes, and
+  behavior changes requiring user migration.
+- Before changing versions, search for version declarations and report the
+  candidate files found.
+- If multiple version declarations exist, report them before changing versions.
+- If the version source of truth is unclear, stop and report candidate files
+  instead of guessing.
 
 ## Session-Close Workflow
 
@@ -286,9 +310,16 @@ After file-changing work, report:
 
 - branch used
 - files changed
+- concise summary of what changed
 - validation run
 - skipped validation with reason
 - remaining risks or blockers
+
+Inspect relevant diffs before reporting file-changing work. Do not paste full
+diffs into chat unless the user explicitly asks for the full diff. Prefer
+`git diff --stat`, changed file lists, and focused summaries. Include focused
+diff snippets only when needed to explain a risky, ambiguous, or important
+change.
 
 ## Final Rule
 

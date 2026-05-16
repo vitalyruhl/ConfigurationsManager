@@ -19,6 +19,10 @@ This agent must apply `.github/AGENTS.md`.
 - Do not change `main` directly.
 - Docs-only TODO updates under `docs/TODO.md` or `docs/todo_*.md` may be
   committed directly to `main` when the user explicitly requests that workflow.
+- If file-changing work is requested while the active branch is `main` or
+  `master`, stop before editing and create or select a proper side branch.
+- The only direct-edit exception on `main` or `master` is an explicitly
+  requested docs-only TODO update under `docs/TODO.md` or `docs/todo_*.md`.
 
 ## Git Command Rules
 
@@ -53,8 +57,8 @@ This agent must apply `.github/AGENTS.md`.
 - Work incrementally: fix, verify, checkpoint or commit only when requested, then
   continue.
 - Verify the active branch matches the task.
-- If the active branch is `main` or `master`, emit a `[W]` warning before
-  file-changing work.
+- If the active branch is `main` or `master`, warn and stop before
+  file-changing work unless the direct-edit docs-only TODO exception applies.
 - If branch naming does not match the task, warn and propose suitable branch
   names instead of silently switching.
 - Never revert user edits unless explicitly asked.
@@ -97,6 +101,27 @@ This agent must apply `.github/AGENTS.md`.
   local devices.
 - If no `.cpp` or `.h` files changed, skip PlatformIO build unless requested.
 
+## Version Bump Workflow
+
+- Dependency updates, PlatformIO configuration changes, library metadata
+  changes, firmware code changes, and example changes that affect build outputs
+  require an appropriate project version bump unless the user explicitly says
+  not to bump.
+- Governance-only and documentation-only changes do not require a version bump.
+  Report that the version bump was skipped by policy.
+- Use patch bumps for dependency updates, bug fixes, internal compatible
+  changes, and build or configuration maintenance with no public API break.
+- Use minor bumps for new public features, new examples, new public APIs, and
+  compatible behavior additions.
+- Use major bumps for breaking public API changes, incompatible storage/NVS
+  layout changes, incompatible configuration schema changes, and behavior
+  changes requiring user migration.
+- Before changing versions, search for version declarations and report the
+  candidate files found.
+- If multiple version declarations exist, report them before changing versions.
+- If the version source of truth is unclear, stop and report candidate files
+  instead of guessing.
+
 ## Release Branch Workflow
 
 - `release/*` branches should represent runnable snapshots.
@@ -104,8 +129,9 @@ This agent must apply `.github/AGENTS.md`.
   state.
 - If fast-forward is not possible, ask explicitly before force-pushing. Prefer
   `--force-with-lease` if force-push is approved.
-- Do not invent semantic-version or `pyproject.toml` release steps for this
-  repository unless the repository later adds such files and policy.
+- Do not invent Python or `pyproject.toml` release steps for this repository
+  unless the repository later adds such files and policy.
+- Project version bumps are governed by `Version Bump Workflow`.
 
 ## Workflow Shortcuts
 
@@ -139,8 +165,15 @@ Report:
 
 - current branch
 - files changed when relevant
+- concise summary of what changed
 - git actions performed
 - validation run
 - validation skipped with reason
 - release branch updates if any
 - remaining blockers or risks
+
+Inspect relevant diffs before reporting file-changing work. Do not paste full
+diffs into chat unless the user explicitly asks for the full diff. Prefer
+`git diff --stat`, changed file lists, and focused summaries. Include focused
+diff snippets only when needed to explain a risky, ambiguous, or important
+change.
