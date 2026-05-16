@@ -133,6 +133,23 @@ This agent must apply `.github/AGENTS.md`.
 - Docker or image builds are not required unless configured in this repository
   or explicitly in scope.
 
+## Documentation Impact Workflow
+
+- Before `workflow.toMain` prepares or merges changes into `main`, perform a
+  documentation impact check.
+- Check whether the changed files or behavior require updates to `README.md`,
+  `docs/`, release notes, or governance documentation.
+- If documentation is affected, route through `docs.agent.md` before merging.
+- If `docs/CHANGELOG.md` exists and the change is user-visible,
+  release-relevant, dependency-related, build-related, or version-related,
+  update it or explicitly justify why no changelog update is needed.
+- If documentation is not affected, report that documentation sync is not
+  required and why.
+- Do not invent documentation updates for purely internal changes.
+- Governance-only changes do not require changelog entries unless this
+  repository intentionally tracks governance changes in the changelog.
+- Documentation-only changes do not require a version bump.
+
 ## Version Bump Workflow
 
 - Dependency updates, PlatformIO configuration changes, library metadata
@@ -151,6 +168,15 @@ This agent must apply `.github/AGENTS.md`.
 - Before changing versions, search for version declarations and report the
   candidate files found.
 - If multiple version declarations exist, report them before changing versions.
+- Treat the ConfigurationsManager package/library version as the main project
+  version.
+- Treat the WebUI package under `webui/` as part of the repository build
+  artifact, not as an independent example firmware or app.
+- When WebUI npm dependencies, WebUI build metadata, or WebUI package metadata
+  change, align the WebUI package version with the ConfigurationsManager
+  package/library version.
+- Bump an example firmware or app version only when that example itself is
+  intentionally changed or released.
 - If the version source of truth is unclear, stop and report candidate files
   instead of guessing.
 
@@ -178,7 +204,8 @@ These names describe expected intent if the user invokes them:
   relevant validation, do not merge to `main`, do not update `release/*`, and do
   not push unless explicitly requested or covered by a named workflow.
 - `workflow.toMain`: get validated work onto `main` through the agreed pull
-  request workflow unless the user explicitly requested fast-forward or `ff`.
+  request workflow unless the user explicitly requested fast-forward or `ff`;
+  perform the documentation impact check before merging.
 - `workflow.cleanBranches`: delete only branches verified as integrated.
 - `workflow.end`: inspect repository state and report current branch, changed
   files, validation state, and blockers without claiming merge or fix success.

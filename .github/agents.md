@@ -131,6 +131,22 @@ support tooling used by the embedded project.
   exception.
 - Fast-forward integration to `main` is allowed only when the user explicitly
   requests fast-forward or `ff`.
+- Before preparing or merging changes into `main`, perform a documentation
+  impact check.
+- The documentation impact check must decide whether changed files or behavior
+  require documentation updates.
+- If documentation is affected, route the work through
+  `.github/agents/docs.agent.md` before integration.
+- If `docs/CHANGELOG.md` exists and the change is user-visible,
+  release-relevant, dependency-related, build-related, or version-related,
+  update it or explicitly justify why no changelog update is needed.
+- If documentation is not affected, report that documentation sync is not
+  required and why.
+- Do not invent documentation updates for purely internal or governance-only
+  changes unless governance documentation itself changed.
+- Governance-only changes do not require changelog entries unless this
+  repository intentionally starts tracking governance changes in the changelog.
+- Documentation-only changes do not require a version bump.
 - Read-only git commands may be run without asking:
   - `git status`
   - `git diff`
@@ -199,6 +215,13 @@ support tooling used by the embedded project.
 - Bump library or project version declarations for dependency and build metadata
   changes. Do not automatically bump independent example firmware or app
   versions.
+- Treat the ConfigurationsManager package/library version as the main project
+  version.
+- Treat the WebUI package under `webui/` as part of the repository build
+  artifact, not as an independent example firmware or app.
+- When WebUI npm dependencies, WebUI build metadata, or WebUI package metadata
+  change, align the WebUI package version with the ConfigurationsManager
+  package/library version.
 - Bump an example firmware or app version only when that example itself is
   intentionally changed or released.
 - If the version source of truth is unclear, stop and report candidate files
