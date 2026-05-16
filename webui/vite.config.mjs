@@ -6,7 +6,7 @@ export default defineConfig({
   build: {
     cssCodeSplit: false,
     sourcemap: false,
-    target: ['es2018', 'firefox78', 'chrome87', 'safari13'], // Better browser compatibility
+    target: 'esnext',
     minify: 'esbuild',
     rollupOptions: {
       output: {
