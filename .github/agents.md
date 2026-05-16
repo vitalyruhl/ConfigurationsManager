@@ -111,6 +111,7 @@ support tooling used by the embedded project.
 
 - Route branch, release, PR, merge, checkpoint, and cleanup operations through
   `.github/agents/workflow.agent.md`.
+- Integrate into `main` through pull requests by default.
 - `main` is the published or released branch.
 - `release/*` branches are runnable snapshot branches and must stay buildable
   and runnable.
@@ -126,6 +127,10 @@ support tooling used by the embedded project.
   `.github/agents/workflow.agent.md` to create or select a proper side branch.
 - The only direct-edit exception on `main` or `master` is an explicitly
   requested docs-only TODO update under `docs/TODO.md` or `docs/todo_*.md`.
+- Direct pushes to `main` are forbidden unless the user explicitly requests an
+  exception.
+- Fast-forward integration to `main` is allowed only when the user explicitly
+  requests fast-forward or `ff`.
 - Read-only git commands may be run without asking:
   - `git status`
   - `git diff`
@@ -150,6 +155,28 @@ support tooling used by the embedded project.
   directory. For non-git commands that must change directory, use
   `Push-Location` / `Pop-Location`.
 - Prefer gh for PRs, CI checks, issues, and project operations when available.
+
+## Pull Request Review Policy
+
+- Maintainer-owned PRs do not require external review by repository governance.
+- Maintainer-owned PRs may be merged when required validation passed and GitHub
+  branch protection allows the merge.
+- External contributor PRs require review before merge. Do not merge unreviewed
+  external contributions.
+- Branch protection or ruleset bypass may only be used when the user explicitly
+  requests owner/admin bypass for the current action.
+- Do not use owner/admin bypass automatically.
+- If GitHub branch protection blocks a merge because review is required, report
+  the blocker and do not bypass branch protection.
+- If a maintainer-owned PR is blocked only by a review requirement and required
+  validation passed, report that owner/admin bypass may be possible when
+  configured.
+- If review is not intended for maintainer-owned PRs, recommend adjusting branch
+  protection instead of bypassing it.
+- Do not bypass external contributor PR review unless the user explicitly
+  confirms a repository-owner exception after reviewing the PR.
+- Required status checks must not be bypassed unless the user explicitly
+  confirms an owner/admin exception and the reason is reported.
 
 ## Version Policy
 
@@ -303,12 +330,20 @@ follow this policy.
 
 ## Validation Baseline
 
+- Use configured and enabled GitHub Actions or checks when they exist.
+- Do not invent required CI workflows.
+- If no enabled CI is configured, report that and rely on required local
+  validation.
 - Always run at least one PlatformIO build after `.cpp` or `.h` changes.
 - Default build check:
   - `pio run -e usb`
+- For affected examples, run the relevant example build.
 - If only Markdown or governance files changed, skip PlatformIO build unless the
   user asks for it.
 - If tests are affected, run `pio test` for at least one relevant environment.
+- Run relevant tests when tests are present and affected.
+- Docker or image builds are not required unless configured in this repository
+  or explicitly in scope.
 - If a required validation cannot run, report that plainly.
 
 ## Mandatory Reporting

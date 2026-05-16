@@ -17,12 +17,17 @@ This agent must apply `.github/AGENTS.md`.
   temporarily broken.
 - Work on one side branch at a time.
 - Do not change `main` directly.
+- Integrate into `main` through pull requests by default.
 - Docs-only TODO updates under `docs/TODO.md` or `docs/todo_*.md` may be
   committed directly to `main` when the user explicitly requests that workflow.
 - If file-changing work is requested while the active branch is `main` or
   `master`, stop before editing and create or select a proper side branch.
 - The only direct-edit exception on `main` or `master` is an explicitly
   requested docs-only TODO update under `docs/TODO.md` or `docs/todo_*.md`.
+- Direct pushes to `main` are forbidden unless the user explicitly requests an
+  exception.
+- Fast-forward integration to `main` is allowed only when the user explicitly
+  requests fast-forward or `ff`.
 
 ## Git Command Rules
 
@@ -69,6 +74,25 @@ This agent must apply `.github/AGENTS.md`.
 - Keep PRs scoped to one coherent change.
 - Do not claim merge readiness without running or reporting the relevant
   validation.
+- Maintainer-owned PRs do not require external review by repository governance.
+- Maintainer-owned PRs may be merged when required validation passed and GitHub
+  branch protection allows the merge.
+- External contributor PRs require review before merge. Do not merge unreviewed
+  external contributions.
+- Branch protection or ruleset bypass may only be used when the user explicitly
+  requests owner/admin bypass for the current action.
+- Do not use owner/admin bypass automatically.
+- If GitHub branch protection blocks a merge because review is required, report
+  the blocker and do not bypass branch protection.
+- If a maintainer-owned PR is blocked only by a review requirement and required
+  validation passed, report that owner/admin bypass may be possible when
+  configured.
+- If review is not intended for maintainer-owned PRs, recommend adjusting branch
+  protection instead of bypassing it.
+- Do not bypass external contributor PR review unless the user explicitly
+  confirms a repository-owner exception after reviewing the PR.
+- Required status checks must not be bypassed unless the user explicitly
+  confirms an owner/admin exception and the reason is reported.
 - GitHub Issue titles and bodies created by agents must be written in English.
 - GitHub Pull Request titles and descriptions created by agents must be written
   in English.
@@ -91,8 +115,13 @@ This agent must apply `.github/AGENTS.md`.
 
 ## PlatformIO Workflow
 
+- Use configured and enabled GitHub Actions or checks when they exist.
+- Do not invent required CI workflows.
+- If no enabled CI is configured, report that and rely on required local
+  validation.
 - Default build validation:
   - `pio run -e usb`
+- For affected examples, run the relevant example build.
 - OTA environment validation, when explicitly relevant:
   - `pio run -e ota`
 - Upload commands require explicit user request because they interact with
@@ -100,6 +129,9 @@ This agent must apply `.github/AGENTS.md`.
 - Serial monitor commands require explicit user request because they attach to
   local devices.
 - If no `.cpp` or `.h` files changed, skip PlatformIO build unless requested.
+- Run relevant tests when tests are present and affected.
+- Docker or image builds are not required unless configured in this repository
+  or explicitly in scope.
 
 ## Version Bump Workflow
 
@@ -145,7 +177,8 @@ These names describe expected intent if the user invokes them:
 - `workflow.ready`: prepare work for review or integration, run or report
   relevant validation, do not merge to `main`, do not update `release/*`, and do
   not push unless explicitly requested or covered by a named workflow.
-- `workflow.toMain`: get validated work onto `main` through the agreed workflow.
+- `workflow.toMain`: get validated work onto `main` through the agreed pull
+  request workflow unless the user explicitly requested fast-forward or `ff`.
 - `workflow.cleanBranches`: delete only branches verified as integrated.
 - `workflow.end`: inspect repository state and report current branch, changed
   files, validation state, and blockers without claiming merge or fix success.
