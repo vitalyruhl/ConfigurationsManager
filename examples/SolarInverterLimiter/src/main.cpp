@@ -58,7 +58,7 @@
 #endif
 
 #ifndef VERSION
-#define VERSION "4.1.2"
+#define VERSION "4.1.1"
 #endif
 
 enum class NegativePriceSettingPreference : uint8_t

@@ -169,8 +169,15 @@ support tooling used by the embedded project.
 - Before changing versions, search for version declarations and report the
   candidate files found.
 - If multiple version declarations exist, report them before changing versions.
+- Bump library or project version declarations for dependency and build metadata
+  changes. Do not automatically bump independent example firmware or app
+  versions.
+- Bump an example firmware or app version only when that example itself is
+  intentionally changed or released.
 - If the version source of truth is unclear, stop and report candidate files
   instead of guessing.
+- If version ownership is unclear, stop and report candidate files instead of
+  guessing.
 
 ## Session-Close Workflow
 
