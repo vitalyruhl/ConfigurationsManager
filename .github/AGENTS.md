@@ -1,4 +1,3 @@
-
 # AGENTS.md
 
 Repository guidance for contributors and coding agents.
@@ -6,6 +5,46 @@ Repository guidance for contributors and coding agents.
 This repository is `ConfigurationsManager`, a C++/ESP32 project built with
 PlatformIO and the Arduino framework. The repository also contains a web UI and
 support tooling used by the embedded project.
+
+## Mandatory Governance Load Preflight
+
+Before executing any agent command, workflow shortcut, branch action,
+validation, file edit, commit, push, pull request, merge, release-branch update,
+or cleanup action, the agent MUST explicitly read the applicable governance
+files.
+
+Required reads:
+
+- `.github/AGENTS.md`
+- `.github/agents/<selected-agent>.agent.md`
+
+For workflow shortcuts, the selected agent is:
+
+- `.github/agents/workflow.agent.md`
+
+The agent MUST NOT rely on repository-wide search to discover these files,
+because hidden directories such as `.github/` may be skipped by default search
+tools.
+
+If governance files are known by path, read them directly instead of discovering
+them through search.
+
+If using ripgrep to inspect governance, the agent MUST include hidden paths, for
+example:
+
+rg --hidden -n "workflow\.begin|workflow\.audit|workflow\.toMain|workflow\.cleanBranches" .
+
+If using fd to inspect governance, the agent MUST include hidden paths, for
+example:
+
+fd --hidden "AGENTS|agent\.md|workflow\.agent\.md" .
+
+Plain `rg ... .` or plain `fd ... .` MUST NOT be treated as sufficient for
+governance discovery, because they may skip hidden directories such as
+`.github/`.
+
+Failure to read the required governance files is a hard blocker and must be
+reported before any further action.
 
 ## Communication
 
@@ -28,6 +67,20 @@ support tooling used by the embedded project.
   German.
 - If a specific artifact must be written in another language, require an
   explicit user request for that artifact.
+
+## User Text Normalization
+
+- User prompts may contain informal German, mixed German/English wording, and
+  obvious spelling mistakes.
+- Normalize free text into clean English when deriving branch names, issue/PR
+  titles, task labels, or governance wording.
+- Do not silently normalize exact paths, commands, symbols, identifiers,
+  explicitly provided names, issue/PR numbers, tags, versions, or quoted
+  literals.
+- If the user says to use a name exactly, preserve it.
+- Check quoted path casing against repository state.
+- If intent is unclear or normalization changes scope, stop and ask.
+- Example: `gevernance-sharpenes` may derive `governance-sharpening`.
 
 ## GitHub Text Language
 
@@ -116,6 +169,12 @@ support tooling used by the embedded project.
 - `release/*` branches are runnable snapshot branches and must stay buildable
   and runnable.
 - `release/*` branches are versioned by release, for example `release/v4.0.0`.
+- Do not assume `release/*` branches exist. Missing release branches do not
+  block normal pull-request based `main` integration unless release sync is
+  explicitly in scope.
+- If release sync is explicitly requested and no suitable release branch exists,
+  report that and skip the release update unless the user explicitly asks to
+  create or update a release branch.
 - `feature/*` branches are work-in-progress branches and may be unfinished or
   temporarily broken.
 - Do not change `main` directly.
@@ -131,6 +190,14 @@ support tooling used by the embedded project.
   exception.
 - Fast-forward integration to `main` is allowed only when the user explicitly
   requests fast-forward or `ff`.
+- Workflow shortcuts may be chained only in sequence. `workflow.audit` remains
+  strictly read-only and must finish by reporting blockers before any follow-up
+  shortcut runs.
+- If `workflow.audit` is followed by `workflow.toMain` or
+  `workflow.cleanBranches`, continue only when the user explicitly requested the
+  follow-up shortcut and no blockers remain.
+- If blockers remain after audit, stop before merge, cleanup, release updates,
+  or other destructive actions.
 - Before preparing or merging changes into `main`, perform a documentation
   impact check.
 - The documentation impact check must decide whether changed files or behavior
@@ -171,6 +238,19 @@ support tooling used by the embedded project.
   directory. For non-git commands that must change directory, use
   `Push-Location` / `Pop-Location`.
 - Prefer gh for PRs, CI checks, issues, and project operations when available.
+- For `workflow.toMain`, commit, push, pull request creation, pull request
+  merge, and branch cleanup are allowed only when explicitly requested by the
+  shortcut and only after repository state, validation needs, and documentation
+  impact have been checked.
+- Before merging to `main`, run or report relevant validation, perform the
+  documentation impact check, and report GitHub blockers such as required
+  reviews, failing checks, conflicts, or branch protection.
+- Owner/admin bypass may be used only when the user explicitly requested it for
+  the current action. Required status checks must not be bypassed unless the
+  user explicitly confirms that exception and the reason is reported.
+- For `workflow.cleanBranches`, delete only branches verified as integrated.
+  Do not delete active, unmerged, or ambiguous branches, and report skipped
+  branches with the reason.
 
 ## Pull Request Review Policy
 
@@ -239,6 +319,9 @@ support tooling used by the embedded project.
     changed
   - if that build succeeds, or was skipped because no `.cpp` or `.h` files
     changed, update the active `release/*` branch to match the work branch
+  - if no suitable release branch exists or no release branch is in scope,
+    report that and skip the release update unless the user explicitly asks to
+    create or update one
   - prefer fast-forward updates for the release branch
   - if fast-forward is not possible, ask explicitly before using
     `--force-with-lease`
@@ -330,14 +413,37 @@ follow this policy.
     available.
   - jq for JSON.
   - dasel for YAML, TOML, JSON, or XML inspection when it is the safest fit.
+- When searching for governance, agent instructions, workflow shortcuts, branch
+  rules, pull request rules, issue rules, validation rules, version rules, or
+  repository policy, include hidden paths.
+- For governance searches with rg, use `rg --hidden`.
+- For governance discovery with fd, use `fd --hidden`.
+- Plain `rg ... .` or plain `fd ... .` is not sufficient for governance
+  discovery because hidden directories such as `.github/` may be skipped.
+- When governance files are known by path, prefer reading those files directly
+  over discovering them through repository-wide search.
 - If rg or fd is missing, report that and give a simple install hint instead
   of silently using a weaker search path for audits or reference checks.
-- When reporting search results, include the rg pattern used.
+- When reporting search results, include the rg pattern used and state whether
+  hidden paths were included when governance, policy, workflow, or agent files
+  were in scope.
 - Do not assume every listed tool is installed on every machine. If a required
   tool is missing, report the failed command clearly.
 - Do not install or upgrade tools unless the user explicitly asks.
 - On Windows, do not assume sed or awk are available. Prefer
   PowerShell-native commands unless availability was confirmed.
+- Shell command quality:
+  - Prefer simple robust commands over complex shell-escaped one-liners.
+  - On Windows/PowerShell, prefer single quotes for regex/search patterns.
+  - Avoid PowerShell backticks in search patterns unless required.
+  - If quoting fails, retry once with safer quoting; do not repeat equivalent
+    broken commands.
+  - If quoting remains unclear, simplify, split the search, or read known files
+    directly.
+  - Do not treat failed commands as evidence about repository content.
+  - Distinguish command failure, no matches, missing files, and missing tools in
+    reports.
+  - Example: `rg --hidden -n 'workflow\.begin|workflow\.audit' .github`.
 - Use dasel for YAML, TOML, JSON, or XML inspection and edits when it is the
   safest fit.
 - Use jq for JSON.
@@ -348,8 +454,9 @@ follow this policy.
 - Do not mix jq and dasel syntax.
 - Do not use deprecated dasel flags.
 - Prefer structured tools over brittle text parsing when that reduces risk.
-- Do not assume repository, branch, PR, or project state. Verify with git and
-  gh.
+- Do not assume repository, branch, PR, project, or governance state. Verify
+  repository state with git and gh, and verify governance state by explicitly
+  reading the relevant governance files.
 
 ## Validation Baseline
 
@@ -363,6 +470,12 @@ follow this policy.
 - For affected examples, run the relevant example build.
 - If only Markdown or governance files changed, skip PlatformIO build unless the
   user asks for it.
+- Governance-only changes require a governance consistency check, but do not
+  require PlatformIO validation by themselves.
+- A governance consistency check means reading the affected governance files and
+  verifying that agent routing, shortcut rules, branch rules, tool policy,
+  validation rules, version rules, and reporting rules do not contradict each
+  other.
 - If tests are affected, run `pio test` for at least one relevant environment.
 - Run relevant tests when tests are present and affected.
 - Docker or image builds are not required unless configured in this repository
@@ -374,6 +487,8 @@ follow this policy.
 After file-changing work, report:
 
 - branch used
+- governance files read, when governance, workflow, branch, PR, merge, release,
+  validation, version, or cleanup rules were in scope
 - files changed
 - concise summary of what changed
 - validation run

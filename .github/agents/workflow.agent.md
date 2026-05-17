@@ -6,6 +6,25 @@ release branches, and explicit session-close handling.
 
 This agent must apply `.github/AGENTS.md`.
 
+## Mandatory governance load
+
+Before executing any agent command, workflow shortcut, branch action, validation, file edit, or merge action, the agent MUST read the relevant governance files explicitly.
+
+Required reads:
+
+- `.github/AGENTS.md`
+- `.github/agents/<selected-agent>.agent.md`
+
+For workflow shortcuts, the selected agent is:
+
+- `.github/agents/workflow.agent.md`
+
+The agent MUST NOT rely on repository-wide search to discover these files, because `.github/` may be hidden from default search tools.
+
+If using ripgrep to inspect governance, the agent MUST use `--hidden`, for example:
+
+- rg --hidden -n "workflow\.begin|workflow\.audit|workflow\.toMain|workflow\.cleanBranches" .
+
 ## Branch Model
 
 - `main` is the published/released branch.
@@ -13,6 +32,11 @@ This agent must apply `.github/AGENTS.md`.
   runnable.
 - `release/*` branches are versioned by release, for example `release/v4.0.0`
   or `release/v4.1.0`.
+- Do not assume `release/*` branches exist. If no suitable release branch
+  exists, report that and skip release-branch updates unless the user explicitly
+  asks to create or update one.
+- Missing release branches do not block normal pull-request based `main`
+  integration unless release sync is explicitly in scope.
 - `feature/*` branches are work-in-progress branches and may be unfinished or
   temporarily broken.
 - Work on one side branch at a time.
@@ -68,6 +92,30 @@ This agent must apply `.github/AGENTS.md`.
   names instead of silently switching.
 - Never revert user edits unless explicitly asked.
 
+## Branch Name And Title Derivation
+
+- Derive branch names, issue titles, pull request titles, and task labels from
+  the task intent, not by blindly copying informal free text.
+- Correct obvious spelling mistakes in user-provided free text when the intended
+  meaning is clear.
+- Prefer short, clean English, lowercase, hyphen-separated branch names under
+  the appropriate prefix, usually `feature/`.
+- Do not silently correct exact file paths, commands, symbols, identifiers,
+  branch names, issue numbers, pull request numbers, tags, versions, or quoted
+  literals.
+- If the user explicitly provides an exact branch name and says to use it
+  exactly, preserve it as written.
+- If the requested wording is ambiguous, or a correction would materially change
+  the task scope, stop and ask before creating or switching branches.
+- Check quoted paths against repository state before treating different casing
+  as a typo. For example, `.github/agents.md` and `.github/AGENTS.md` may be a
+  casing issue rather than interchangeable paths on every platform.
+- Examples:
+  - `use workflow.begin [gevernance-sharpenes]` may derive
+    `feature/governance-sharpening`.
+  - `use workflow.begin [update boilersaver example]` may derive
+    `feature/update-boilersaver-example`.
+
 ## GitHub Workflow
 
 - Prefer gh for PRs, CI checks, and issues when available.
@@ -102,15 +150,10 @@ This agent must apply `.github/AGENTS.md`.
   reason to create German GitHub issue or PR text by default.
 - Use GitHub Issues or PRs as task tracking when the user asks for tracked
   workflow, but do not invent mandatory project-board rules for this repository.
-- GitHub Project usage is optional and controlled by `.github/AGENTS.md`
-  `Tracking Policy`.
-- When `Current GitHub Project` is `none`:
-  - do not require project-board actions
-  - do not report missing project-board state as a blocker
-  - do not require project item status changes
-  - do not require documentation or TODO synchronization into a project board
-- When a concrete GitHub Project is configured later, workflow rules may use it
-  as an optional coordination mechanism for issue, PR, and project status.
+- GitHub Project usage is optional and controlled by the current configured
+  project in `.github/AGENTS.md` `Tracking Policy`.
+- Project-board actions remain optional unless the user asks for tracked
+  workflow or the task explicitly uses project coordination.
 - Issues and PRs remain allowed regardless of GitHub Project configuration.
 
 ## PlatformIO Workflow
@@ -183,6 +226,11 @@ This agent must apply `.github/AGENTS.md`.
 ## Release Branch Workflow
 
 - `release/*` branches should represent runnable snapshots.
+- Do not assume a release branch exists.
+- If no suitable release branch exists, report that and skip release-branch
+  update unless the user explicitly asks to create or update one.
+- Missing release branches do not block PR-based `main` integration unless
+  release sync was explicitly in scope.
 - Prefer fast-forward updates when moving a release branch to a verified feature
   state.
 - If fast-forward is not possible, ask explicitly before force-pushing. Prefer
@@ -195,10 +243,27 @@ This agent must apply `.github/AGENTS.md`.
 
 These names describe expected intent if the user invokes them:
 
-- `workflow.begin`: prepare the correct branch for a new task.
+- `workflow.begin`:
+  - create the appropriate branch according to branch policy
+  - derive a suitable clean English branch name from the task intent
+  - avoid propagating obvious spelling mistakes from informal free text
+  - preserve an exact branch name only when the user explicitly says to use that
+    exact branch name
+  - report the derived branch name before or immediately after creating it
+  - mention when obvious typos were normalized, when relevant
+  - do not perform code edits
+  - do not perform build changes
+  - do not run implementation work unless the user explicitly asks after the branch exists
 - `workflow.checkpoint`: create a commit and push the current coherent state.
 - `workflow.docs`: perform a narrow documentation-only synchronization.
 - `workflow.audit`: read-only workflow or repository-state audit.
+  - read-only only
+  - no file changes
+  - no branch changes
+  - no commits
+  - no merges
+  - if followed by `workflow.toMain` or `workflow.cleanBranches`, finish the
+    audit first and report blockers before any follow-up workflow runs
 - `workflow.ship`: build and verify artifacts without implicit merge.
 - `workflow.ready`: prepare work for review or integration, run or report
   relevant validation, do not merge to `main`, do not update `release/*`, and do
@@ -206,7 +271,19 @@ These names describe expected intent if the user invokes them:
 - `workflow.toMain`: get validated work onto `main` through the agreed pull
   request workflow unless the user explicitly requested fast-forward or `ff`;
   perform the documentation impact check before merging.
+  - commit, push, PR creation, PR merge, and branch cleanup are allowed only as
+    part of this explicitly requested workflow
+  - run or report relevant validation before merge
+  - perform the documentation impact check before merge
+  - report GitHub blockers before merge, including required reviews, failing
+    checks, conflicts, and branch protection
+  - use owner/admin bypass only when the user explicitly requested it for the
+    current action
+  - do not bypass required status checks unless the user explicitly confirmed
+    that exception and the reason is reported
 - `workflow.cleanBranches`: delete only branches verified as integrated.
+  - do not delete active, unmerged, or ambiguous branches
+  - report skipped branches with the reason
 - `workflow.end`: inspect repository state and report current branch, changed
   files, validation state, and blockers without claiming merge or fix success.
   Do not commit, push, merge, or update release branches unless explicitly
@@ -218,6 +295,12 @@ Shortcut behavior must remain conservative:
 - Avoid destructive operations.
 - Report blockers plainly.
 - Do not create parallel branch lines for the same work.
+- Chained shortcuts run sequentially. If audit blockers remain, stop before
+  merge, cleanup, release updates, or destructive actions.
+- Follow-up workflows after `workflow.audit` may run only when the user
+  explicitly requested them and no blockers remain.
+- Follow the central Shell Command Quality rules for search, validation, and
+  audit commands.
 
 ## Mandatory Reporting
 
