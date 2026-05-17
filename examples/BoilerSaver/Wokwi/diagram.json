@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "author": "Vitaly Ruhl",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp1", "top": 4.7, "left": -33.8, "attrs": {} },
+    { "type": "wokwi-relay-module", "id": "relay1", "top": 307.4, "left": 201.6, "attrs": {} },
+    {
+      "type": "wokwi-text",
+      "id": "text2",
+      "top": 374.4,
+      "left": 163.2,
+      "attrs": { "text": "Relay (OFF=NC active)" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": 217.4,
+      "left": -230.4,
+      "attrs": { "color": "green", "xray": "1" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text4",
+      "top": 220.8,
+      "left": -307.2,
+      "attrs": { "text": "AP-Mode" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn3",
+      "top": 92.6,
+      "left": -230.4,
+      "attrs": { "color": "green", "xray": "1" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text5",
+      "top": 105.6,
+      "left": -345.6,
+      "attrs": { "text": "Reset-to-default" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 360,
+      "left": 421.85,
+      "rotate": 90,
+      "attrs": { "value": "2400" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text9",
+      "top": 220.8,
+      "left": 297.6,
+      "attrs": { "text": "(I2C) GM009605" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn2",
+      "top": 6.2,
+      "left": -240,
+      "attrs": { "color": "green", "xray": "1" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text3",
+      "top": 19.2,
+      "left": -384,
+      "attrs": { "text": "Will Shower Button" }
+    },
+    { "type": "wokwi-potentiometer", "id": "pot1", "top": 248.3, "left": 527.8, "attrs": {} },
+    {
+      "type": "wokwi-text",
+      "id": "text6",
+      "top": 220.8,
+      "left": 518.4,
+      "attrs": { "text": "202 = 2 kOhm" }
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled1",
+      "top": 127.94,
+      "left": 297.83,
+      "attrs": { "i2cAddress": "0x3c" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 388.8,
+      "left": 786.65,
+      "rotate": 90,
+      "attrs": { "value": "1000" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text7",
+      "top": 374.4,
+      "left": 835.2,
+      "attrs": { "text": "Heater-NTC" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text8",
+      "top": 297.6,
+      "left": 614.4,
+      "attrs": { "text": "target: ~1.5 kOhm (Relay OFF)" }
+    },
+    { "type": "wokwi-ds18b20", "id": "ds1", "top": -183.53, "left": -111.12, "attrs": {} },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": -33.6,
+      "left": -134.95,
+      "attrs": { "value": "4700" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text10",
+      "top": -201.6,
+      "left": -211.2,
+      "attrs": { "text": "DS18B20 (GPIO26, 4.7k pull-up)" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "text1",
+      "top": -220.8,
+      "left": -211.2,
+      "attrs": { "text": "Real Temperature measurment" }
+    }
+  ],
+  "connections": [
+    [ "relay1:VCC", "esp1:VIN", "red", [ "h-288", "v-134.4" ] ],
+    [ "relay1:GND", "esp1:GND.1", "black", [ "h-19.2", "v-154", "v-28.7" ] ],
+    [ "relay1:IN", "esp1:D23", "yellow", [ "h-86.4", "v-134.6", "v-182.5" ] ],
+    [ "btn1:1.r", "esp1:D13", "green", [ "v0" ] ],
+    [ "esp1:GND.2", "btn1:2.r", "black", [ "h-96", "v66.9" ] ],
+    [ "btn3:2.r", "esp1:GND.2", "black", [ "h0.2", "v57.9" ] ],
+    [ "btn3:1.r", "esp1:D14", "green", [ "h57.8", "v47.9" ] ],
+    [ "btn3:2.r", "btn2:2.r", "black", [ "h9.8", "v-86.4" ] ],
+    [ "btn2:1.r", "esp1:D33", "green", [ "h96.2", "v96" ] ],
+    [ "r2:1", "pot1:GND", "green", [ "v0" ] ],
+    [ "r2:2", "pot1:SIG", "green", [ "v18", "h115.6" ] ],
+    [ "esp1:D22", "oled1:SCL", "magenta", [ "h0" ] ],
+    [ "esp1:D21", "oled1:SDA", "purple", [ "h0" ] ],
+    [ "esp1:3V3", "oled1:VCC", "red", [ "h220.5", "v-86.4", "h76.65" ] ],
+    [ "esp1:GND.1", "oled1:GND", "black", [ "h191.7", "v-67.3", "h76.8" ] ],
+    [ "pot1:VCC", "r1:1", "orange", [ "v19.2", "h230.15" ] ],
+    [ "r2:1", "relay1:NC", "green", [ "v-19.2", "h-48", "v10.8" ] ],
+    [ "relay1:COM", "r1:2", "gold", [ "h49.2", "v104.2", "h326.4", "h124.8" ] ],
+    [ "esp1:3V3", "ds1:VCC", "red", [ "h28.5", "v-297.6" ] ],
+    [ "r3:1", "ds1:DQ", "gold", [ "v-9.6", "h-48" ] ],
+    [ "r3:2", "ds1:VCC", "red", [ "v-19.2", "h-48" ] ],
+    [ "btn2:2.r", "ds1:GND", "black", [ "h19.4", "v-115", "h48" ] ],
+    [ "r3:1", "esp1:D26", "gold", [ "h-9.05", "v123.95", "h57.6", "v9.7" ] ]
+  ],
+  "dependencies": {}
+}

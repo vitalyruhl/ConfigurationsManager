@@ -5,6 +5,7 @@ I2CSettings i2cSettings;
 DisplaySettings displaySettings;
 BoilerSettings boilerSettings;
 TempSensorSettings tempSensorSettings;
+WiFiUiSettings wifiUiSettings;
 
 // Function to register all settings with ConfigManager
 // This solves the static initialization order problem
@@ -13,4 +14,5 @@ void initializeAllSettings() {
     boilerSettings.create();
     displaySettings.create();
     tempSensorSettings.create();
+    wifiUiSettings.create();
 }
