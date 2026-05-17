@@ -1203,10 +1203,8 @@ const hasVisibleAlarm = computed(() => {
   return false;
 });
 
-// Replace previous canFlash with strict gating:
-// - Disable when probe says disabled (403/404)
-// - Enable when probe says enabled (200) OR runtime.system.otaActive === true
-// - Ignore config/meta for enabling to avoid stale states; only use config to pre-disable when explicitly false
+// Gate flashing by OTA endpoint availability. runtime.system.otaActive only
+// describes an active transfer and must not disable the idle Flash button.
 const canFlash = computed(() => {
   //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
   
@@ -1215,18 +1213,6 @@ const canFlash = computed(() => {
     //console.log('[canFlash] Disabled by probe');
     return false;
   }
-
-  // If runtime system indicates OTA active, trust it
-  try {
-    if (
-      runtime.value?.system &&
-      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-    ) {
-      const result = !!runtime.value.system.otaActive && !flashing.value;
-      //console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
-      return result;
-    }
-  } catch (e) {}
 
   // If endpoint probe succeeded, enable
   if (otaEndpointAvailable.value === true) {
@@ -1255,14 +1241,6 @@ const canFlash = computed(() => {
 const otaEnabled = computed(() => {
   // Same source of truth as canFlash, but without the flashing guard
   if (otaEndpointAvailable.value === false) return false;
-  try {
-    if (
-      runtime.value?.system &&
-      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-    ) {
-      return !!runtime.value.system.otaActive;
-    }
-  } catch (e) {}
   if (otaEndpointAvailable.value === true) return true;
   const systemConfig = props.config?.System;
   if (
