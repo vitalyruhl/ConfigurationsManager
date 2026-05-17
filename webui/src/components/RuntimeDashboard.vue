@@ -509,6 +509,7 @@ const logStore = {
 const notify = inject("notify", () => {});
 const updateToast = inject("updateToast", () => {});
 const dismissToast = inject("dismissToast", () => {});
+const fetchStoredPassword = inject("fetchStoredPassword", null);
 
 const runtime = ref({});
 const runtimeMeta = ref([]);
@@ -2240,21 +2241,50 @@ function openOtaFilePicker() {
   return true;
 }
 
-function startFlash(options = {}) {
+async function resolveFlashPassword(options = {}) {
+  const passwordRequired = otaPasswordRequired();
+  const hasProvidedPassword = options && Object.prototype.hasOwnProperty.call(options, "otaPassword");
+  if (hasProvidedPassword) {
+    const providedPassword = String(options.otaPassword ?? "");
+    if (providedPassword.length || !passwordRequired) {
+      return { available: true, password: providedPassword };
+    }
+  }
+
+  if (typeof fetchStoredPassword === "function") {
+    try {
+      const storedPassword = String(
+        (await fetchStoredPassword("System", "OTAPass")) ?? ""
+      );
+      if (storedPassword.length || !passwordRequired) {
+        return { available: true, password: storedPassword };
+      }
+    } catch (e) {}
+  }
+
+  return { available: false, password: "" };
+}
+
+async function startFlash(options = {}) {
   if (!canFlash.value) {
     notifySafe("OTA is disabled", "error");
     return;
   }
-  const hasProvidedPassword = options && Object.prototype.hasOwnProperty.call(options, "otaPassword");
+  const allowPasswordPrompt = !options || options.allowPasswordPrompt !== false;
   savedOtaPassword.value = '';
   otaPassword.value = '';
-  if (hasProvidedPassword) {
-    savedOtaPassword.value = String(options.otaPassword ?? '');
+  const flashPassword = await resolveFlashPassword(options);
+  if (flashPassword.available) {
+    savedOtaPassword.value = flashPassword.password;
     openOtaFilePicker();
     return;
   }
   if (!otaPasswordRequired()) {
     openOtaFilePicker();
+    return;
+  }
+  if (!allowPasswordPrompt) {
+    notifySafe("Unable to access the stored OTA password. Verify System / OTA Password before flashing.", "error", 8000);
     return;
   }
   showPasswordModal.value = true;
@@ -2292,6 +2322,13 @@ async function onFlashFileSelected(event) {
 // Handle password modal confirmation
 function confirmPasswordInput() {
   const password = otaPassword.value.trim();
+  if (otaPasswordRequired() && !password.length) {
+    notifySafe("OTA password is required to start flashing.", "error");
+    nextTick(() => {
+      if (passwordInput.value) passwordInput.value.focus();
+    });
+    return;
+  }
   showPasswordModal.value = false;
 
   // If a file was already selected (unlikely in new flow), upload now; otherwise open picker
