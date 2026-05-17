@@ -87,6 +87,7 @@ private:
   void checkSmartRoaming();  // Smart roaming check method
   String findBestBSSID();    // Find best BSSID considering MAC filter/priority
   void attemptConnect();     // Apply phased connection strategy
+  bool isOtaActive_() const;
   void beginWiFiConnection_();
   void startStackReset_();
   bool advanceStackReset_();

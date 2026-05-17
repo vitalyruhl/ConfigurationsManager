@@ -144,6 +144,14 @@ void ConfigManagerWiFi::setCallbacks(WiFiConnectedCallback onConnected, WiFiDisc
   onAPModeCallback = onAPMode;
 }
 
+bool ConfigManagerWiFi::isOtaActive_() const {
+#if CM_ENABLE_OTA
+  return ConfigManager.getOTAManager().isActive();
+#else
+  return false;
+#endif
+}
+
 void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wifiPassword) {
   ssid = wifiSSID;
   password = wifiPassword;
@@ -248,6 +256,10 @@ void ConfigManagerWiFi::startStackReset_() {
   if (stackResetInProgress) {
     return;
   }
+  if (isOtaActive_()) {
+    WIFI_LOG_VERBOSE("WiFi stack reset skipped during OTA");
+    return;
+  }
 
   WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
   WiFi.disconnect(true);
@@ -259,6 +271,9 @@ void ConfigManagerWiFi::startStackReset_() {
 
 bool ConfigManagerWiFi::advanceStackReset_() {
   if (!stackResetInProgress) {
+    return false;
+  }
+  if (isOtaActive_()) {
     return false;
   }
 
@@ -311,6 +326,9 @@ void ConfigManagerWiFi::processPendingRoamingReconnect_() {
     return;
   }
   if (stackResetInProgress) {
+    return;
+  }
+  if (isOtaActive_()) {
     return;
   }
 
@@ -409,7 +427,7 @@ void ConfigManagerWiFi::update() {
                            wifiStatus, getWiFiStatusString(wifiStatus).c_str());
           lastStatusLog = millis();
 
-          if (wifiStatus == WL_NO_SSID_AVAIL) {
+          if (!isOtaActive_() && wifiStatus == WL_NO_SSID_AVAIL) {
             logNoSsidAvailScan_();
           }
         }
@@ -421,12 +439,12 @@ void ConfigManagerWiFi::update() {
   }
 
   // Check auto-reboot condition
-  if (autoRebootEnabled && currentState != WIFI_STATE_AP_MODE) {
+  if (!isOtaActive_() && autoRebootEnabled && currentState != WIFI_STATE_AP_MODE) {
     checkAutoReboot();
   }
 
   // Check smart roaming when connected
-  if (currentState == WIFI_STATE_CONNECTED) {
+  if (!isOtaActive_() && currentState == WIFI_STATE_CONNECTED) {
     checkSmartRoaming();
   }
 }
@@ -502,6 +520,7 @@ void ConfigManagerWiFi::transitionToState(WiFiManagerState newState) {
 
 void ConfigManagerWiFi::handleReconnection() {
   if (WiFi.getMode() == WIFI_AP) return; // Don't reconnect in AP mode
+  if (isOtaActive_()) return;
   if (stackResetInProgress || roamingReconnectPending) return;
 
   unsigned long now = millis();
@@ -532,6 +551,7 @@ void ConfigManagerWiFi::handleReconnection() {
 
 void ConfigManagerWiFi::checkAutoReboot() {
   if (!autoRebootEnabled || autoRebootTimeoutMs == 0) return;
+  if (isOtaActive_()) return;
 
   unsigned long now = millis();
   unsigned long timeSinceLastConnection = now - lastGoodConnectionMillis;
@@ -591,12 +611,20 @@ void ConfigManagerWiFi::forceReconnect() {
   lastReconnectAttempt = 0; // Reset timer to trigger immediate reconnect
 }
 void ConfigManagerWiFi::reconnect() {
+  if (isOtaActive_()) {
+    WIFI_LOG_VERBOSE("Manual reconnect skipped during OTA");
+    return;
+  }
   WIFI_LOG("Manual reconnect requested");
   WiFi.disconnect();
   forceReconnect();
 }
 
 void ConfigManagerWiFi::disconnect() {
+  if (isOtaActive_()) {
+    WIFI_LOG_VERBOSE("Manual disconnect skipped during OTA");
+    return;
+  }
   WIFI_LOG("Manual disconnect requested");
   roamingReconnectPending = false;
   roamingTargetBSSID = "";
@@ -653,6 +681,10 @@ int ConfigManagerWiFi::getRSSI() const {
 //  - Attempt 3+ (phase >=2): keep retrying and periodically reset the WiFi stack
 //    (restart only via auto-reboot timeout to avoid reboot loops on weak networks)
 void ConfigManagerWiFi::attemptConnect() {
+  if (isOtaActive_()) {
+    WIFI_LOG_VERBOSE("Connect attempt skipped during OTA");
+    return;
+  }
   if (stackResetInProgress) {
     WIFI_LOG_VERBOSE("Stack reset in progress, deferring connect attempt");
     return;
@@ -742,6 +774,9 @@ bool ConfigManagerWiFi::isSmartRoamingEnabled() const {
 }
 
 void ConfigManagerWiFi::checkSmartRoaming() {
+  if (isOtaActive_()) {
+    return;
+  }
   if (!smartRoamingEnabled || ssid.isEmpty()) {
     return;
   }
@@ -896,6 +931,10 @@ String ConfigManagerWiFi::getPriorityMac() const {
 
 // Helper method to find the best BSSID considering MAC filter/priority
 String ConfigManagerWiFi::findBestBSSID() {
+  if (isOtaActive_()) {
+    WIFI_LOG_VERBOSE("BSSID scan skipped during OTA");
+    return "";
+  }
   if (ssid.isEmpty()) {
     WIFI_LOG("No SSID set, skipping BSSID selection");
     return "";
@@ -1029,6 +1068,10 @@ String ConfigManagerWiFi::getWiFiStatusString(int status) const {
 }
 
 void ConfigManagerWiFi::performStackReset() {
+  if (isOtaActive_()) {
+    WIFI_LOG_VERBOSE("Manual WiFi stack reset skipped during OTA");
+    return;
+  }
   if (!stackResetInProgress) {
     startStackReset_();
   }
@@ -1050,6 +1093,9 @@ void ConfigManagerWiFi::performStackReset() {
 }
 
 void ConfigManagerWiFi::logNoSsidAvailScan_() {
+  if (isOtaActive_()) {
+    return;
+  }
   const unsigned long now = millis();
   if (ssid.isEmpty()) {
     WIFI_LOG("[WARNING] WL_NO_SSID_AVAIL but SSID is empty");

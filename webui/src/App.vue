@@ -1145,8 +1145,8 @@ async function confirmSettingsAuth() {
   // Check if we need to start flash after authentication
   if (pendingFlashStart.value) {
     pendingFlashStart.value = false;
-    notify("Access granted - Starting OTA flash...", "success");
-    runtimeDashboard.value?.startFlash();
+    notify("Access granted - starting OTA flash...", "success");
+    await startFlash();
     return;
   }
 
@@ -1460,7 +1460,16 @@ async function startFlash() {
     notify("Preparing Flash UI… please try again in a moment", "info");
     return;
   }
-  runtimeDashboard.value?.startFlash();
+
+  let flashOptions = {};
+  try {
+    flashOptions = {
+      otaPassword: await fetchStoredPassword("System", "OTAPass"),
+    };
+  } catch (e) {
+    notify("Stored OTA password unavailable; enter it manually.", "info", 6000);
+  }
+  runtimeDashboard.value?.startFlash(flashOptions);
 }
 function handleCanFlashChange(v) {
   canFlash.value = !!v;

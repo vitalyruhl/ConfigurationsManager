@@ -2,6 +2,11 @@
 
 This changelog is a curated overview.
 
+## 4.0.4
+
+- OTA uploads now hold an active OTA guard so WiFi roaming scans, reconnect
+  attempts, and WiFi stack resets cannot interrupt an in-progress transfer.
+
 ## 4.0.3
 
 - WiFi reconnect recovery now retries after stalled ESP32 WiFi idle/scan states

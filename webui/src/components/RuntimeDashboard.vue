@@ -2252,21 +2252,31 @@ function otaPasswordRequired() {
   return true;
 }
 
-function startFlash() {
+function openOtaFilePicker() {
+  if (!otaFileInput.value) {
+    notifySafe("Browser file input not ready.", "error");
+    return false;
+  }
+  otaFileInput.value.value = "";
+  otaFileInput.value.click();
+  return true;
+}
+
+function startFlash(options = {}) {
   if (!canFlash.value) {
     notifySafe("OTA is disabled", "error");
     return;
   }
-  // Ask for OTA password first (single prompt at button press)
+  const hasProvidedPassword = options && Object.prototype.hasOwnProperty.call(options, "otaPassword");
   savedOtaPassword.value = '';
   otaPassword.value = '';
+  if (hasProvidedPassword) {
+    savedOtaPassword.value = String(options.otaPassword ?? '');
+    openOtaFilePicker();
+    return;
+  }
   if (!otaPasswordRequired()) {
-    if (!otaFileInput.value) {
-      notifySafe("Browser file input not ready.", "error");
-      return;
-    }
-    otaFileInput.value.value = "";
-    otaFileInput.value.click();
+    openOtaFilePicker();
     return;
   }
   showPasswordModal.value = true;

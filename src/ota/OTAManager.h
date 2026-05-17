@@ -30,6 +30,7 @@ public:
 private:
     bool otaEnabled;
     bool otaInitialized;
+    bool otaActive;
     String otaPassword;
     String otaHostname;
     ConfigManagerClass* configManager;

@@ -7,6 +7,7 @@ This ensures the script runs during PlatformIO build process.
 import os
 import sys
 import subprocess
+import json
 from pathlib import Path
 
 # Try to access PlatformIO/SCons build environment 
@@ -57,6 +58,69 @@ def vlog(message):
         return
     log(message)
 
+def _path_from_package_uri(uri: str):
+    """Resolve PlatformIO local package URIs to filesystem paths."""
+    if not uri:
+        return None
+    for prefix in ("symlink://", "file://"):
+        if uri.startswith(prefix):
+            raw = uri[len(prefix):]
+            if raw.startswith("/") and len(raw) > 2 and raw[2] == ":":
+                raw = raw[1:]
+            return Path(raw)
+    return None
+
+def _looks_like_config_manager(path: Path) -> bool:
+    return (
+        path.exists()
+        and path.is_dir()
+        and (path / "tools" / "preCompile_script.py").exists()
+        and (path / "webui").is_dir()
+        and (path / "src").is_dir()
+    )
+
+def _resolve_config_manager_library(project_dir: Path, active_env: str) -> Path:
+    """Find the installed or linked ConfigurationsManager library path."""
+    libdeps_dir = project_dir / ".pio" / "libdeps" / active_env
+    candidates = [
+        libdeps_dir / "ESP32 Configuration Manager",
+        libdeps_dir / "ConfigurationsManager",
+    ]
+
+    if libdeps_dir.exists():
+        for link_file in libdeps_dir.glob("*.pio-link"):
+            try:
+                data = json.loads(link_file.read_text(encoding="utf-8"))
+                spec = data.get("spec", {}) if isinstance(data, dict) else {}
+                uri_path = _path_from_package_uri(str(spec.get("uri", "")))
+                if uri_path is not None:
+                    candidates.append(uri_path)
+            except Exception as exc:
+                print(f"[precompile_wrapper] Warning: could not read {link_file}: {exc}")
+
+    ini_path = project_dir / "platformio.ini"
+    if ini_path.exists():
+        try:
+            for line in ini_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                candidate = line.strip().lstrip(";").strip()
+                uri_path = _path_from_package_uri(candidate)
+                if uri_path is not None:
+                    candidates.append(uri_path)
+                elif candidate and (":" in candidate or candidate.startswith("\\")):
+                    candidates.append(Path(candidate))
+        except Exception as exc:
+            print(f"[precompile_wrapper] Warning: could not inspect platformio.ini: {exc}")
+
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        if _looks_like_config_manager(resolved):
+            return resolved
+
+    return candidates[0]
+
 def main():
     if not SCONS_AVAILABLE:
         print("[precompile_wrapper] Starting precompile wrapper...")
@@ -74,7 +138,7 @@ def main():
         active_env = os.environ.get('PIOENV') or os.environ.get('PLATFORMIO_ENV') or 'usb'
 
     # Find the ESP32 Configuration Manager library directory
-    lib_path = project_dir / ".pio" / "libdeps" / active_env / "ESP32 Configuration Manager"
+    lib_path = _resolve_config_manager_library(project_dir, active_env)
     
     if not lib_path.exists():
         print(f"[precompile_wrapper] Library not found at: {lib_path}")
@@ -263,19 +327,23 @@ def main():
         print(f"[precompile_wrapper] Changed CWD to: {os.getcwd()}")
         print(f"[precompile_wrapper] Running: {sys.executable} {precompile_script}")
         
-        # Always try to ensure webui sources are available
-        try:
-            _ensure_webui_sources(lib_path)
-        except Exception as e_copy:
-            print(f"[precompile_wrapper] Note: could not ensure webui sources: {e_copy}")
+        local_checkout = (lib_path / ".git").exists()
+        if local_checkout:
+            print("[precompile_wrapper] Using local checkout directly; source sync skipped")
+        else:
+            # Always try to ensure webui sources are available
+            try:
+                _ensure_webui_sources(lib_path)
+            except Exception as e_copy:
+                print(f"[precompile_wrapper] Note: could not ensure webui sources: {e_copy}")
 
-        # Ensure backend (C++) sources are synced from the local workspace if available
-        try:
-            synced = _sync_cpp_sources(lib_path)
-            if synced:
-                print("[precompile_wrapper] Using local backend sources")
-        except Exception as e_sync:
-            print(f"[precompile_wrapper] Note: C++ source sync step failed: {e_sync}")
+            # Ensure backend (C++) sources are synced from the local workspace if available
+            try:
+                synced = _sync_cpp_sources(lib_path)
+                if synced:
+                    print("[precompile_wrapper] Using local backend sources")
+            except Exception as e_sync:
+                print(f"[precompile_wrapper] Note: C++ source sync step failed: {e_sync}")
 
         # Ensure header generator is available where library expects it (lib/tools)
         try:
