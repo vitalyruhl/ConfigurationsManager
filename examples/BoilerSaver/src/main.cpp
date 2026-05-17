@@ -63,8 +63,10 @@ static void setBoilerState(bool on);
 static bool getBoilerState();
 static void cb_readTempSensor();
 static void setupTempSensor();
+static void applyTempReadInterval();
 static void handleShowerRequest(bool requested);
 static void setupNetworkDefaults();
+static void applyWiFiMacPriority();
 
 //--------------------------------------------------------------------------------------------------------------
 
@@ -77,7 +79,7 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 
 // static const char SETTINGS_PASSWORD[] = "";
 
-// Global pulse helper: built-in LED
+// Built-in LED pulse helper for WiFi status patterns.
 static cm::helpers::PulseOutput buildinLED(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh);
 
 static cm::LoggingManager &lmg = cm::LoggingManager::instance();
@@ -193,9 +195,7 @@ void setup()
     ShowDisplay();
     setupTempSensor();
     
-#if defined(WIFI_FILTER_MAC_PRIORITY)
-    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
-#endif
+    applyWiFiMacPriority();
     ConfigManager.startWebServer();
 
     lmg.log("System setup completed.");
@@ -400,7 +400,6 @@ void UpdateBoilerAlarmState()
 
     if (globalAlarmState != previousState)
     {
-        // todo -a add a new LL:state:Alarm for alarms
         lmg.log(LL::Error, "Temperature %.1f°C -> %s",
                 temperature, globalAlarmState ? "HEATER ON" : "HEATER OFF");
         handeleBoilerState(true); // Force boiler if the temperature is too low
@@ -510,7 +509,7 @@ static void cb_readTempSensor()
     lmg.scopedTag("TEMP");
     if (!ds18)
     {
-        lmg.log(LL::Warn, "DS18B20 sensor not initialized");
+        lmg.log(LL::Error, "DS18B20 sensor not initialized");
         return;
     }
     ds18->requestTemperatures();
@@ -527,7 +526,7 @@ static void cb_readTempSensor()
             sensorFaultState = true;
             lmg.log(LL::Error, "SENSOR FAULT detected! Reading: %.2f°C", t);
         }
-        lmg.log(LL::Warn, "Invalid temperature reading: %.2f°C (sensor fault)", t);
+        lmg.log(LL::Error, "Invalid temperature reading: %.2f°C (sensor fault)", t);
         // Try to check if sensor is still present
         uint8_t deviceCount = ds18->getDeviceCount();
         lmg.log(LL::Debug, "Devices still found: %d", deviceCount);
@@ -594,12 +593,24 @@ static void setupTempSensor()
         lmg.log(LL::Info, "Resolution set to 12-bit");
     }
 
+    tempSensorSettings.readInterval->setCallback([](int)
+                                                 { applyTempReadInterval(); });
+    applyTempReadInterval();
+        lmg.log(LL::Debug, "DS18B20 initialized on GPIO %d, offset %.2f°C",
+            pin, tempSensorSettings.corrOffset->get());
+}
+
+static void applyTempReadInterval()
+{
     float intervalSec = (float)tempSensorSettings.readInterval->get();
     if (intervalSec < 1.0f)
-        intervalSec = 30.0f;
+    {
+        intervalSec = 10.0f;
+    }
+
+    TempReadTicker.detach();
     TempReadTicker.attach(intervalSec, cb_readTempSensor);
-    lmg.log(LL::Debug, "DS18B20 initialized on GPIO %d, interval %.1fs, offset %.2f°C",
-            pin, intervalSec, tempSensorSettings.corrOffset->get());
+    lmg.log(LL::Debug, "Temp read interval set: %.1fs", intervalSec);
 }
 
 //----------------------------------------
@@ -638,7 +649,7 @@ static void registerIOBindings()
 
     ioManager.addDigitalInput(IO_AP_ID, "AP Mode Button", 13, true, true, false, true);
 
-    ioManager.addDigitalInput(IO_SHOWER_ID, "Shower Request Button", 33, true, true, false, true);
+    ioManager.addDigitalInput(IO_SHOWER_ID, "Shower Request Button", 19, true, true, false, true);
 
     ioManager.addDigitalInputToSettingsGroup(IO_SHOWER_ID, "I/O", "Shower HW-Btn", "Shower HW-Btn", 100);
     ioManager.addDigitalInputToLive(IO_SHOWER_ID, 100, "Boiler", "Boiler", "Boiler", "Shower HW-Btn", false);
@@ -683,6 +694,13 @@ static void registerIOBindings()
         cm::IOManager::DigitalInputEventCallbacks{
             .onPress = []()
             {
+                if (!displayActive)
+                {
+                    lmg.log(LL::Debug, "[MAIN] Shower button pressed while display OFF -> wake display only");
+                    ShowDisplay();
+                    return;
+                }
+
                 const bool newState = !willShowerRequested;
                 lmg.log(LL::Debug, "[MAIN] Shower button pressed -> toggling shower request to %s",
                         newState ? "ON" : "OFF");
@@ -862,8 +880,6 @@ static void publishMqttState(bool retained)
         }
     }
 
-    // TODO: add into IO-Manager Blinker support
-    buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 100, /*gapMs*/ 1500);
 }
 
 static void publishMqttStateIfNeeded()
@@ -1228,6 +1244,15 @@ void ShowDisplay()
 void ShowDisplayOff()
 {
     displayTicker.detach();                      // Stop the ticker to prevent multiple calls
+
+    if (willShowerRequested)
+    {
+        display.ssd1306_command(SSD1306_DISPLAYON);
+        displayActive = true;
+        displayTicker.attach(displaySettings.onTimeSec->get(), ShowDisplayOff);
+        return;
+    }
+
     display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
     // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
 
@@ -1264,8 +1289,7 @@ void updateStatusLED()
         buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 200, /*gapMs*/ 0);
         break;
     case 2: // Connected: 60ms ON heartbeat every 2s -> 120ms pulse + 1880ms gap
-        // mooved into send mqtt function to have heartbeat with mqtt messages
-        //  buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 120, /*gapMs*/ 1880);
+        buildinLED.setPulseRepeat(/*count*/ 1, /*periodMs*/ 100, /*gapMs*/ 1500);
         break;
     case 3: // Connecting: double blink every ~1s -> two 200ms pulses + 600ms gap
         buildinLED.setPulseRepeat(/*count*/ 3, /*periodMs*/ 200, /*gapMs*/ 600);
@@ -1274,9 +1298,6 @@ void updateStatusLED()
 }
 
 //----------------------------------------
-// WIFI MANAGER CALLBACK FUNCTIONS
-//----------------------------------------
-
 void onWiFiConnected()
 {
     lmg.scopedTag("MAIN/WIFI");
@@ -1341,6 +1362,14 @@ static void handleShowerRequest(bool v)
 
 static void setupNetworkDefaults()
 {
+#if CM_HAS_WIFI_SECRETS && defined(WIFI_FILTER_MAC_PRIORITY)
+    if (wifiUiSettings.apMacPriority != nullptr && wifiUiSettings.apMacPriority->get().isEmpty())
+    {
+        wifiUiSettings.apMacPriority->set(String(WIFI_FILTER_MAC_PRIORITY));
+        ConfigManager.saveAll();
+    }
+#endif
+
     if (wifiSettings.wifiSsid.get().isEmpty())
     {
 #if CM_HAS_WIFI_SECRETS
@@ -1407,4 +1436,21 @@ static void setupNetworkDefaults()
     {
         systemSettings.otaPassword.save(OTA_PASSWORD);
     }
+}
+
+static void applyWiFiMacPriority()
+{
+    if (wifiUiSettings.apMacPriority == nullptr)
+    {
+        return;
+    }
+
+    const String preferredApMac = wifiUiSettings.apMacPriority->get();
+    if (preferredApMac.isEmpty())
+    {
+        return;
+    }
+
+    ConfigManager.setAccessPointMacPriority(preferredApMac);
+    lmg.log(LL::Debug, "WiFi AP MAC priority active: %s", preferredApMac.c_str());
 }

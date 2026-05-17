@@ -7,8 +7,8 @@
 
 #include "ConfigManager.h"
 
-#define APP_VERSION "4.0.0"
-#define VERSION_DATE "05.11.2025"
+#define APP_VERSION "4.0.3"
+#define VERSION_DATE "17.05.2026"
 #ifndef APP_NAME
 #define APP_NAME "Boiler-Saver"
 #endif
@@ -64,22 +64,22 @@ struct BoilerSettings {
         onThreshold = &ConfigManager.addSettingFloat("BoI_OnT")
                           .name("Alarm Under Temperature")
                           .category("Boiler")
-                          .defaultValue(55.0f)
+                          .defaultValue(60.0f)
                           .build();
         offThreshold = &ConfigManager.addSettingFloat("BoI_OffT")
                            .name("You can shower now temperature")
                            .category("Boiler")
-                           .defaultValue(80.0f)
+                           .defaultValue(78.0f)
                            .build();
         boilerTimeMin = &ConfigManager.addSettingInt("BoI_Time")
                              .name("Boiler Max Heating Time (min)")
                              .category("Boiler")
-                             .defaultValue(90)
+                             .defaultValue(120)
                              .build();
         stopTimerOnTarget = &ConfigManager.addSettingBool("BoI_StopOnT")
                                  .name("Stop timer when target reached")
                                  .category("Boiler")
-                                 .defaultValue(true)
+                                 .defaultValue(false)
                                  .build();
         onlyOncePerPeriod = &ConfigManager.addSettingBool("YSNOnce")
                                  .name("Notify once per period")
@@ -118,17 +118,30 @@ struct TempSensorSettings {
         gpioPin = &ConfigManager.addSettingInt("TsPin")
                        .name("GPIO Pin")
                        .category("Temp Sensor")
-                       .defaultValue(18)
+                       .defaultValue(26)
                        .build();
         corrOffset = &ConfigManager.addSettingFloat("TsOfs")
                           .name("Correction Offset")
                           .category("Temp Sensor")
-                          .defaultValue(0.0f)
+                          .defaultValue(15.0f)
                           .build();
         readInterval = &ConfigManager.addSettingInt("TsInt")
                              .name("Read Interval (s)")
                              .category("Temp Sensor")
-                             .defaultValue(30)
+                             .defaultValue(10)
+                             .build();
+    }
+};
+
+struct WiFiUiSettings {
+    Config<String> *apMacPriority = nullptr;
+
+    void create()
+    {
+        apMacPriority = &ConfigManager.addSettingString("WiFiMacPr")
+                             .name("Preferred AP MAC (optional)")
+                             .category("WiFi")
+                             .defaultValue(String(""))
                              .build();
     }
 };
@@ -137,6 +150,7 @@ extern I2CSettings i2cSettings;
 extern DisplaySettings displaySettings;
 extern TempSensorSettings tempSensorSettings;
 extern BoilerSettings boilerSettings;
+extern WiFiUiSettings wifiUiSettings;
 
 // Function to register all settings with ConfigManager
 // This must be called after ConfigManager is properly initialized
