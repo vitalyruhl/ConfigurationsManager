@@ -30,9 +30,10 @@ Markdown Rules:
   examples must still follow the global logging policy from `.github/AGENTS.md`.
 - Keep documentation concise and factual.
 - Documentation may refer to GitHub Issues or Pull Requests when useful.
-- Documentation must not assume that a GitHub Project exists.
-- If `.github/AGENTS.md` says `Current GitHub Project: none`, do not require
-  documentation synchronization with a project board.
+- Documentation must use the current configured GitHub Project from
+  `.github/AGENTS.md` when project coordination is explicitly in scope.
+- Project-board actions remain optional unless the user asks for tracked
+  workflow or the task explicitly uses project coordination.
 - Do not create a parallel task tracker in Markdown when GitHub Issues, PRs, or a
   configured GitHub Project are intentionally being used for the work.
 
