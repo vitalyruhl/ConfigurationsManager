@@ -509,6 +509,7 @@ const logStore = {
 const notify = inject("notify", () => {});
 const updateToast = inject("updateToast", () => {});
 const dismissToast = inject("dismissToast", () => {});
+const fetchStoredPassword = inject("fetchStoredPassword", null);
 
 const runtime = ref({});
 const runtimeMeta = ref([]);
@@ -1203,10 +1204,8 @@ const hasVisibleAlarm = computed(() => {
   return false;
 });
 
-// Replace previous canFlash with strict gating:
-// - Disable when probe says disabled (403/404)
-// - Enable when probe says enabled (200) OR runtime.system.otaActive === true
-// - Ignore config/meta for enabling to avoid stale states; only use config to pre-disable when explicitly false
+// Gate flashing by OTA endpoint availability. runtime.system.otaActive only
+// describes an active transfer and must not disable the idle Flash button.
 const canFlash = computed(() => {
   //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
   
@@ -1215,18 +1214,6 @@ const canFlash = computed(() => {
     //console.log('[canFlash] Disabled by probe');
     return false;
   }
-
-  // If runtime system indicates OTA active, trust it
-  try {
-    if (
-      runtime.value?.system &&
-      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-    ) {
-      const result = !!runtime.value.system.otaActive && !flashing.value;
-      //console.log('[canFlash] Runtime otaActive:', runtime.value.system.otaActive, 'Result:', result);
-      return result;
-    }
-  } catch (e) {}
 
   // If endpoint probe succeeded, enable
   if (otaEndpointAvailable.value === true) {
@@ -1255,14 +1242,6 @@ const canFlash = computed(() => {
 const otaEnabled = computed(() => {
   // Same source of truth as canFlash, but without the flashing guard
   if (otaEndpointAvailable.value === false) return false;
-  try {
-    if (
-      runtime.value?.system &&
-      Object.prototype.hasOwnProperty.call(runtime.value.system, "otaActive")
-    ) {
-      return !!runtime.value.system.otaActive;
-    }
-  } catch (e) {}
   if (otaEndpointAvailable.value === true) return true;
   const systemConfig = props.config?.System;
   if (
@@ -2252,21 +2231,60 @@ function otaPasswordRequired() {
   return true;
 }
 
-function startFlash() {
+function openOtaFilePicker() {
+  if (!otaFileInput.value) {
+    notifySafe("Browser file input not ready.", "error");
+    return false;
+  }
+  otaFileInput.value.value = "";
+  otaFileInput.value.click();
+  return true;
+}
+
+async function resolveFlashPassword(options = {}) {
+  const passwordRequired = otaPasswordRequired();
+  const hasProvidedPassword = options && Object.prototype.hasOwnProperty.call(options, "otaPassword");
+  if (hasProvidedPassword) {
+    const providedPassword = String(options.otaPassword ?? "");
+    if (providedPassword.length || !passwordRequired) {
+      return { available: true, password: providedPassword };
+    }
+  }
+
+  if (typeof fetchStoredPassword === "function") {
+    try {
+      const storedPassword = String(
+        (await fetchStoredPassword("System", "OTAPass")) ?? ""
+      );
+      if (storedPassword.length || !passwordRequired) {
+        return { available: true, password: storedPassword };
+      }
+    } catch (e) {}
+  }
+
+  return { available: false, password: "" };
+}
+
+async function startFlash(options = {}) {
   if (!canFlash.value) {
     notifySafe("OTA is disabled", "error");
     return;
   }
-  // Ask for OTA password first (single prompt at button press)
+  const allowPasswordPrompt = !options || options.allowPasswordPrompt !== false;
   savedOtaPassword.value = '';
   otaPassword.value = '';
+  const flashPassword = await resolveFlashPassword(options);
+  if (flashPassword.available) {
+    savedOtaPassword.value = flashPassword.password;
+    openOtaFilePicker();
+    return;
+  }
   if (!otaPasswordRequired()) {
-    if (!otaFileInput.value) {
-      notifySafe("Browser file input not ready.", "error");
-      return;
-    }
-    otaFileInput.value.value = "";
-    otaFileInput.value.click();
+    openOtaFilePicker();
+    return;
+  }
+  if (!allowPasswordPrompt) {
+    notifySafe("Unable to access the stored OTA password. Verify System / OTA Password before flashing.", "error", 8000);
     return;
   }
   showPasswordModal.value = true;
@@ -2304,6 +2322,13 @@ async function onFlashFileSelected(event) {
 // Handle password modal confirmation
 function confirmPasswordInput() {
   const password = otaPassword.value.trim();
+  if (otaPasswordRequired() && !password.length) {
+    notifySafe("OTA password is required to start flashing.", "error");
+    nextTick(() => {
+      if (passwordInput.value) passwordInput.value.focus();
+    });
+    return;
+  }
   showPasswordModal.value = false;
 
   // If a file was already selected (unlikely in new flow), upload now; otherwise open picker

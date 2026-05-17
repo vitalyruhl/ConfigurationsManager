@@ -102,7 +102,7 @@
               type="password"
               placeholder="Enter settings password"
               @keyup.escape="cancelSettingsAuth"
-              autocomplete="off"
+              autocomplete="current-password"
             />
           </div>
           <div class="modal-buttons">
@@ -230,6 +230,48 @@ function normalizeSettingLabel(value) {
   return String(value || "")
     .trim()
     .toLowerCase();
+}
+
+function normalizePasswordLookupToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/password/g, "pass")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function resolveStoredPasswordKey(categoryKey, requestedKey) {
+  const categoryObj = config.value && config.value[categoryKey];
+  if (!categoryObj || typeof categoryObj !== "object") {
+    return requestedKey;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(categoryObj, requestedKey)) {
+    return requestedKey;
+  }
+
+  const requestedToken = normalizePasswordLookupToken(requestedKey);
+  if (!requestedToken.length) {
+    return requestedKey;
+  }
+
+  for (const [storageKey, settingData] of Object.entries(categoryObj)) {
+    if (storageKey === "categoryPretty" || !settingData || typeof settingData !== "object") {
+      continue;
+    }
+
+    const candidates = [
+      storageKey,
+      settingData.key,
+      settingData.displayName,
+      settingData.name,
+    ];
+    if (candidates.some((candidate) => normalizePasswordLookupToken(candidate) === requestedToken)) {
+      return storageKey;
+    }
+  }
+
+  return requestedKey;
 }
 
 function findSettingContext(categoryKey, keyName) {
@@ -644,8 +686,9 @@ async function fetchStoredPassword(category, key) {
     showSettingsAuth.value = true;
     throw new Error("Not authenticated");
   }
+  const resolvedKey = resolveStoredPasswordKey(category, key);
   const r = await fetch(
-    `/config/password?category=${rURIComp(category)}&key=${rURIComp(key)}`,
+    `/config/password?category=${rURIComp(category)}&key=${rURIComp(resolvedKey)}`,
     {
       method: "GET",
       headers: { "X-Settings-Token": settingsAuthToken.value },
@@ -1145,8 +1188,8 @@ async function confirmSettingsAuth() {
   // Check if we need to start flash after authentication
   if (pendingFlashStart.value) {
     pendingFlashStart.value = false;
-    notify("Access granted - Starting OTA flash...", "success");
-    runtimeDashboard.value?.startFlash();
+    notify("Access granted - starting OTA flash...", "success");
+    await startFlash();
     return;
   }
 
@@ -1460,7 +1503,19 @@ async function startFlash() {
     notify("Preparing Flash UI… please try again in a moment", "info");
     return;
   }
-  runtimeDashboard.value?.startFlash();
+
+  let flashOptions = {};
+  try {
+    flashOptions = {
+      otaPassword: await fetchStoredPassword("System", "OTAPass"),
+      allowPasswordPrompt: false,
+    };
+  } catch (e) {
+    flashOptions = {
+      allowPasswordPrompt: false,
+    };
+  }
+  runtimeDashboard.value?.startFlash(flashOptions);
 }
 function handleCanFlashChange(v) {
   canFlash.value = !!v;
