@@ -6,6 +6,11 @@ This changelog is a curated overview.
 
 - OTA uploads now hold an active OTA guard so WiFi roaming scans, reconnect
   attempts, and WiFi stack resets cannot interrupt an in-progress transfer.
+- WebUI flash now reuses the stored OTA password after Settings/Auth instead of
+  opening a second OTA password prompt, including setups that expose hashed
+  storage keys in `config.json`.
+- SolarInverterLimiter now declares `Adafruit BusIO` explicitly so the SSD1306
+  display stack builds cleanly in both `usb` and `ota` environments.
 
 ## 4.0.3
 
