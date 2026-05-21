@@ -58,8 +58,18 @@
 #endif
 
 #ifndef VERSION
-#define VERSION "4.1.2"
+#define VERSION "4.2.0"
 #endif
+
+#ifndef FEATURE_FAN_ENABLED
+#define FEATURE_FAN_ENABLED 0
+#endif
+
+#ifndef FEATURE_HEATER_ENABLED
+#define FEATURE_HEATER_ENABLED 0
+#endif
+
+#define FEATURE_ANY_RELAY_OUTPUTS (FEATURE_FAN_ENABLED || FEATURE_HEATER_ENABLED)
 
 enum class NegativePriceSettingPreference : uint8_t
 {
@@ -76,8 +86,12 @@ void readBme280();
 void WriteToDisplay();
 void SetupStartTemperatureMeasuring();
 void ProjectConfig();
+#if FEATURE_FAN_ENABLED
 void CheckVentilator(float currentTemperature);
+#endif
+#if FEATURE_HEATER_ENABLED
 void EvaluateHeater(float currentTemperature);
+#endif
 void ShowDisplayOn();
 void ShowDisplayOff();
 static void logNetworkIpInfo(const char *context);
@@ -103,11 +117,17 @@ static int computePidStabilizedTarget(int baseTarget, int configuredMin, int con
 static void updateMqttTopics();
 static void publishMqttNow();
 static void updateStatusLED();
+#if FEATURE_FAN_ENABLED
 static void setFanRelay(bool on);
-static void setHeaterRelay(bool on);
-static void setManualOverride(bool on);
 static bool getFanRelay();
+#endif
+#if FEATURE_HEATER_ENABLED
+static void setHeaterRelay(bool on);
 static bool getHeaterRelay();
+#endif
+#if FEATURE_ANY_RELAY_OUTPUTS
+static void setManualOverride(bool on);
+#endif
 //--------------------------------------------------------------------------------------------------------------
 
 #pragma region configuration variables
@@ -179,6 +199,7 @@ struct I2CSettings
     }
 };
 
+#if FEATURE_FAN_ENABLED
 struct FanSettings
 {
     Config<bool> enabled{ConfigOptions<bool>{.key = "FanEnable", .name = "Enable Fan Control", .category = "Fan", .defaultValue = false, .sortOrder = 1}};
@@ -192,7 +213,9 @@ struct FanSettings
         cfg.addSetting(&offThreshold);
     }
 };
+#endif
 
+#if FEATURE_HEATER_ENABLED
 struct HeaterSettings
 {
     Config<bool> enabled{ConfigOptions<bool>{.key = "HeatEnable", .name = "Enable Heater Control", .category = "Heater", .defaultValue = false, .sortOrder = 1}};
@@ -206,6 +229,7 @@ struct HeaterSettings
         cfg.addSetting(&offTemp);
     }
 };
+#endif
 
 struct DisplaySettings
 {
@@ -257,9 +281,13 @@ float Pressure = 0.0;       // current pressure in hPa
 bool displayActive = true; // flag to indicate if the display is active
 static bool displayInitialized = false;
 static bool bme280Initialized = false;
+#if FEATURE_HEATER_ENABLED
 static bool dewpointRiskActive = false;   // tracks dewpoint alarm state
 static bool heaterLatchedState = false;   // hysteresis latch for heater
+#endif
+#if FEATURE_ANY_RELAY_OUTPUTS
 static bool manualOverrideActive = false; // when enabled, buttons control relays and automation pauses
+#endif
 
 static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 .rw[data-group="sensors"][data-key="temp"]{ color:rgb(198, 16, 16) !important; font-weight:900; font-size: 1.2rem; }
@@ -279,8 +307,12 @@ static cm::AlarmManager alarmManager;
 LimiterSettings limiterSettings;
 TempSettings tempSettings;
 I2CSettings i2cSettings;
+#if FEATURE_FAN_ENABLED
 FanSettings fanSettings;
+#endif
+#if FEATURE_HEATER_ENABLED
 HeaterSettings heaterSettings;
+#endif
 DisplaySettings displaySettings;
 WiFiRoamingSettings wifiRoamingSettings;
 RS485_Settings rs485settings;
@@ -291,8 +323,12 @@ static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
+#if FEATURE_FAN_ENABLED
 static constexpr char IO_FAN_ID[] = "fan_relay";
+#endif
+#if FEATURE_HEATER_ENABLED
 static constexpr char IO_HEATER_ID[] = "heater_relay";
+#endif
 static constexpr char IO_RESET_ID[] = "reset_btn";
 static constexpr char IO_AP_ID[] = "ap_btn";
 
@@ -382,8 +418,12 @@ void setup()
 
     RS485Ticker.attach(limiterSettings.RS232PublishPeriod.get(), cb_RS485Listener);
 
+#if FEATURE_FAN_ENABLED
     setFanRelay(false);
+#endif
+#if FEATURE_HEATER_ENABLED
     setHeaterRelay(false);
+#endif
 
     lmg.logTag(LL::Info, "SETUP", "Completed successfully. Starting main loop...");
 }
@@ -433,11 +473,17 @@ void loop()
 
     WriteToDisplay();
 
+#if FEATURE_ANY_RELAY_OUTPUTS
     if (!manualOverrideActive)
     {
+#if FEATURE_FAN_ENABLED
         CheckVentilator(temperature);
+#endif
+#if FEATURE_HEATER_ENABLED
         EvaluateHeater(temperature);
+#endif
     }
+#endif
     delay(10);
 }
 
@@ -451,10 +497,14 @@ void setupGUI()
     ConfigManager.addSettingsGroup("Temp", "Temp", "Temp Settings", 70);
     ConfigManager.addSettingsPage("I2C", 80);
     ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Settings", 80);
+#if FEATURE_FAN_ENABLED
     ConfigManager.addSettingsPage("Fan", 90);
     ConfigManager.addSettingsGroup("Fan", "Fan", "Fan Settings", 90);
+#endif
+#if FEATURE_HEATER_ENABLED
     ConfigManager.addSettingsPage("Heater", 100);
     ConfigManager.addSettingsGroup("Heater", "Heater", "Heater Settings", 100);
+#endif
     ConfigManager.addSettingsPage("Display", 110);
     ConfigManager.addSettingsGroup("Display", "Display", "Display Settings", 110);
     ConfigManager.addSettingsPage("RS485", 120);
@@ -550,6 +600,7 @@ void setupGUI()
     // endregion Limiter
 
     // region relay outputs
+#if FEATURE_ANY_RELAY_OUTPUTS
     auto outputs = ConfigManager.liveGroup("Outputs")
                        .page("Limiter", 30)
                        .card("Outputs", 30)
@@ -564,6 +615,7 @@ void setupGUI()
                { setManualOverride(on); })
         .order(0);
 
+#if FEATURE_FAN_ENABLED
     outputs.stateButton(
                "ventilator",
                "Ventilator Relay Active",
@@ -575,7 +627,9 @@ void setupGUI()
                "On",
                "Off")
         .order(1);
+#endif
 
+#if FEATURE_HEATER_ENABLED
     outputs.stateButton(
                "heater",
                "Heater Relay Active",
@@ -613,6 +667,8 @@ void setupGUI()
               dewpointRiskActive = false;
               lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
               EvaluateHeater(temperature); });
+#endif
+#endif
     // endregion relay outputs
 }
 
@@ -664,11 +720,15 @@ static void registerIOBindings()
     lmg.scopedTag("IO");
     analogReadResolution(12);
 
+#if FEATURE_FAN_ENABLED
     ioManager.addDigitalOutput(IO_FAN_ID, "Cooling Fan Relay", 23, true, true);
     ioManager.addDigitalOutputToSettingsGroup(IO_FAN_ID, "I/O", "Cooling Fan Relay", "Cooling Fan Relay", 1);
+#endif
 
+#if FEATURE_HEATER_ENABLED
     ioManager.addDigitalOutput(IO_HEATER_ID, "Heater Relay", 27, true, true);
     ioManager.addDigitalOutputToSettingsGroup(IO_HEATER_ID, "I/O", "Heater Relay", "Heater Relay", 2);
+#endif
 
     ioManager.addDigitalInput(IO_RESET_ID, "Reset Button", 14, true, true, false, true);
     ioManager.addDigitalInputToSettingsGroup(IO_RESET_ID, "I/O", "Reset Button", "Reset Button", 10);
@@ -810,8 +870,12 @@ static void registerProjectSettings()
     limiterSettings.attachTo(ConfigManager);
     tempSettings.attachTo(ConfigManager);
     i2cSettings.attachTo(ConfigManager);
+#if FEATURE_FAN_ENABLED
     fanSettings.attachTo(ConfigManager);
+#endif
+#if FEATURE_HEATER_ENABLED
     heaterSettings.attachTo(ConfigManager);
+#endif
     displaySettings.attachTo(ConfigManager);
     wifiRoamingSettings.attachTo(ConfigManager);
     rs485settings.attachTo(ConfigManager);
@@ -1183,6 +1247,7 @@ static int computePidStabilizedTarget(int baseTarget, int configuredMin, int con
     return static_cast<int>(roundf(pidController.output));
 }
 
+#if FEATURE_FAN_ENABLED
 static void setFanRelay(bool on)
 {
     if (!fanSettings.enabled.get())
@@ -1192,34 +1257,47 @@ static void setFanRelay(bool on)
     ioManager.setState(IO_FAN_ID, on);
 }
 
+static bool getFanRelay()
+{
+    return ioManager.getState(IO_FAN_ID);
+}
+#endif
+
+#if FEATURE_HEATER_ENABLED
 static void setHeaterRelay(bool on)
 {
-    if (!heaterSettings.enabled.get() && !manualOverrideActive)
+    if (!heaterSettings.enabled.get()
+#if FEATURE_ANY_RELAY_OUTPUTS
+        && !manualOverrideActive
+#endif
+    )
     {
         on = false;
     }
     ioManager.setState(IO_HEATER_ID, on);
 }
 
+static bool getHeaterRelay()
+{
+    return ioManager.getState(IO_HEATER_ID);
+}
+#endif
+
+#if FEATURE_ANY_RELAY_OUTPUTS
 static void setManualOverride(bool on)
 {
     manualOverrideActive = on;
     if (!manualOverrideActive)
     {
+#if FEATURE_FAN_ENABLED
         CheckVentilator(temperature);
+#endif
+#if FEATURE_HEATER_ENABLED
         EvaluateHeater(temperature);
+#endif
     }
 }
-
-static bool getFanRelay()
-{
-    return ioManager.getState(IO_FAN_ID);
-}
-
-static bool getHeaterRelay()
-{
-    return ioManager.getState(IO_HEATER_ID);
-}
+#endif
 
 //----------------------------------------
 // MQTT FUNCTIONS
@@ -1563,12 +1641,15 @@ void WriteToDisplay()
     display.display();
 }
 
+#if FEATURE_FAN_ENABLED
 void CheckVentilator(float currentTemperature)
 {
+#if FEATURE_ANY_RELAY_OUTPUTS
     if (manualOverrideActive)
     {
         return;
     }
+#endif
     if (!fanSettings.enabled.get())
     {
         setFanRelay(false);
@@ -1583,14 +1664,18 @@ void CheckVentilator(float currentTemperature)
         setFanRelay(false);
     }
 }
+#endif
 
+#if FEATURE_HEATER_ENABLED
 void EvaluateHeater(float currentTemperature)
 {
 
+#if FEATURE_ANY_RELAY_OUTPUTS
     if (manualOverrideActive)
     {
         return;
     }
+#endif
 
     if (dewpointRiskActive)
     {
@@ -1616,6 +1701,7 @@ void EvaluateHeater(float currentTemperature)
     }
     setHeaterRelay(heaterLatchedState);
 }
+#endif
 
 void ShowDisplayOn()
 {

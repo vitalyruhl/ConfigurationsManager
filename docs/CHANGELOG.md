@@ -2,6 +2,13 @@
 
 This changelog is a curated overview.
 
+## 4.0.6
+
+- SolarInverterLimiter example now defaults to ConfigurationsManager 4.0.5 and
+  keeps relay output code behind compile-time feature flags to reduce firmware
+  size when fan and heater outputs are unused.
+- SolarInverterLimiter firmware version bumped to 4.2.0.
+
 ## 4.0.5
 
 - Web and HTTP OTA routes are now registered only once, preventing repeated
