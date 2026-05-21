@@ -13,6 +13,8 @@ ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     : server(webServer)
     , configManager(nullptr)
     , initialized(false)
+    , routesDefined(false)
+    , serverStarted(false)
     , embedWebUI(CM_EMBED_WEBUI ? true : false)
     , customHTML(nullptr)
     , customHTMLLen(0)
@@ -120,19 +122,28 @@ bool ConfigManagerWeb::isStarted() const {
 
 void ConfigManagerWeb::defineAllRoutes() {
     if (!initialized || !server) {
-        WEB_LOG("Cannot define routes - not initialized");
+        WEB_LOG("[W] Cannot define routes - not initialized");
         return;
     }
 
-    setupStaticRoutes();
-    setupAPIRoutes();
-    setupRuntimeRoutes();
+    if (!routesDefined) {
+        setupStaticRoutes();
+        setupAPIRoutes();
+        setupRuntimeRoutes();
+        routesDefined = true;
 
-    WEB_LOG("All routes defined");
+        WEB_LOG("[I] All routes defined");
+    } else {
+        WEB_LOG_VERBOSE("[D] Routes already defined");
+    }
 
-    // Start the server
-    server->begin();
-    WEB_LOG("Server started on port 80");
+    if (!serverStarted) {
+        server->begin();
+        serverStarted = true;
+        WEB_LOG("[I] Server started on port 80");
+    } else {
+        WEB_LOG_VERBOSE("[D] Server already started");
+    }
 }
 
 void ConfigManagerWeb::setupStaticRoutes() {

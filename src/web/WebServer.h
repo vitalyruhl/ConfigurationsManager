@@ -24,6 +24,8 @@ private:
     AsyncWebServer* server;
     ConfigManagerClass* configManager;
     bool initialized;
+    bool routesDefined;
+    bool serverStarted;
 
     // Callbacks for ConfigManager integration
     JsonProvider configJsonProvider;

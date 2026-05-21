@@ -31,6 +31,7 @@ private:
     bool otaEnabled;
     bool otaInitialized;
     bool otaActive;
+    bool webRoutesConfigured;
     String otaPassword;
     String otaHostname;
     ConfigManagerClass* configManager;

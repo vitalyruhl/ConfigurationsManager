@@ -8,6 +8,7 @@ ConfigManagerOTA::ConfigManagerOTA()
     : otaEnabled(false)
     , otaInitialized(false)
     , otaActive(false)
+    , webRoutesConfigured(false)
     , configManager(nullptr)
 {
 }
@@ -132,6 +133,10 @@ bool ConfigManagerOTA::isActive() const {
 
 void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
     if (!server) return;
+    if (webRoutesConfigured) {
+        OTA_LOG("[D] Web routes already configured");
+        return;
+    }
 
     // OTA upload endpoint
     server->on("/ota_update", HTTP_GET,
@@ -153,7 +158,8 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
         }
     );
 
-    OTA_LOG("Web routes configured");
+    webRoutesConfigured = true;
+    OTA_LOG("[I] Web routes configured");
 }
 
 void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {

@@ -2,6 +2,13 @@
 
 This changelog is a curated overview.
 
+## 4.0.5
+
+- Web and HTTP OTA routes are now registered only once, preventing repeated
+  WiFi reconnects from growing the AsyncWebServer handler list.
+- WebSocket live updates now default to a 1000 ms interval and skip runtime JSON
+  generation while no WebSocket clients are connected.
+
 ## 4.0.4
 
 - OTA uploads now hold an active OTA guard so WiFi roaming scans, reconnect
