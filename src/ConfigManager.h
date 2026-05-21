@@ -44,7 +44,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "4.0.4" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.0.5" // Synced to library.json
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
@@ -1905,7 +1905,7 @@ public:
     bool wsInitialized = false;
     bool wsEnabled = false;
     bool pushOnConnect = true;
-    uint32_t wsInterval = 2000;
+    uint32_t wsInterval = 1000;
 
     unsigned long wsLastPush = 0;
     std::function<String()> customPayloadBuilder;
@@ -2696,7 +2696,7 @@ public:
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
-        WebSocketPush(true, 250);
+        WebSocketPush(true);
         setPushOnConnect(true);
         if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
         {
@@ -2765,7 +2765,7 @@ public:
         webManager.begin(this);
         otaManager.begin(this);
         runtimeManager.begin(this);
-        WebSocketPush(true, 250);
+        WebSocketPush(true);
         setPushOnConnect(true);
         if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
         {
@@ -2800,7 +2800,7 @@ public:
 
         webManager.begin(this);
         runtimeManager.begin(this);
-        WebSocketPush(true, 250);
+        WebSocketPush(true);
         setPushOnConnect(true);
         if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
         {
@@ -3185,8 +3185,12 @@ public:
 
     void handleWebsocketPush()
     {
-        if (!wsEnabled)
+        if (!wsEnabled || !ws)
             return;
+        wsHeartbeatMaintenance();
+        if (wsClients.empty())
+            return;
+
         unsigned long now = millis();
         if (now - wsLastPush < wsInterval)
             return;
@@ -3203,11 +3207,9 @@ public:
         }
 
         sendWebSocketText(payload);
-        // Run manual heartbeat maintenance
-        wsHeartbeatMaintenance();
     }
 
-    void enableWebSocketPush(uint32_t intervalMs = 2000)
+    void enableWebSocketPush(uint32_t intervalMs = 1000)
     {
         if (!wsInitialized)
         {
@@ -3273,7 +3275,7 @@ public:
     void setWebSocketInterval(uint32_t intervalMs) { wsInterval = intervalMs; }
     void setPushOnConnect(bool v) { pushOnConnect = v; }
     void setCustomLivePayloadBuilder(std::function<String()> fn) { customPayloadBuilder = fn; }
-    void WebSocketPush(bool enable = true, uint32_t intervalMs = 2000)
+    void WebSocketPush(bool enable = true, uint32_t intervalMs = 1000)
     {
 #if CM_ENABLE_WS_PUSH
         if (enable) {
@@ -3288,7 +3290,7 @@ public:
     }
 #else
     void handleWebsocketPush() {}
-    void enableWebSocketPush(uint32_t = 2000) {}
+    void enableWebSocketPush(uint32_t = 1000) {}
     void disableWebSocketPush() {}
     void setWebSocketInterval(uint32_t) {}
     void setPushOnConnect(bool) {}
