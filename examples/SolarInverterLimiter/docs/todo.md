@@ -11,31 +11,51 @@ Legend:
 
 ## P0 (critical) – Anglicize the project (repo-wide)
 
-
-
-- [COMPLETED] Ensure English-only repository artifacts
-	- Review /docs/* and translate remaining German text to English
-	- Review /dev-info/* and translate remaining German text to English (keep technical meaning)
-	- Review /src/* and translate remaining German comments/strings to English
-	- Replace emojis in repository artifacts with plain text tags like [INFO]/[WARNING]/[ERROR]
-	- Ensure new documentation is written in English (chat explanations remain German)
-
-
-- [CURRENT] Rename non-English/typo identifiers (incremental)
-	- Replace German variable/function names with English equivalents (update all references)
-	- Keep external interfaces stable (MQTT topics/JSON keys) unless explicitly intended
-
-
-- [COMPLETED] Align project guidance
-	- Keep language policy consistent across README, docs, and .github instructions
-	- Remove outdated or misleading usage text (e.g. references to non-existing config_example.h)
+- no critical features
 
 ## P0 (critical) – ConfigManager refactor (functional, buildable)
 
-- [COMPLETED] ConfigManager refactor aligned to ConfigManager 4.0.0
-	- Settings migrated to ConfigOptions API (no builder)
-	- Runtime/WiFi APIs aligned
-	- `pio run -e usb` builds successfully
-	- Note: No backward compatibility / migration by explicit decision
+- no critical features for CM
 
 ## P1 (high) – Update HomeAssistant YAML to the new structure
+
+## P1 (high) – Reduce firmware flash usage
+
+- [NEXT] Evaluate OLED display stack replacement
+	- Current assessment: replacing `Adafruit SSD1306` + `Adafruit GFX` is likely worth about 12-16 KB Flash and 1024 B RAM with a text-only OLED library
+	- Alternative assessment: a lighter graphics/text library with similar layout is likely worth about 6-10 KB Flash
+	- Current display usage is mostly text plus a simple frame, so a smaller display stack should preserve user-visible behavior
+	- Bigger flash savings are more likely in the embedded ConfigManager WebUI, but that is a separate larger effort
+
+## P1 (high) – Add asymmetric inverter setpoint ramp limiting
+
+- [NEXT] Add an asymmetric slew-rate / ramp limiter after the PID or setpoint calculation
+	- Apply the limiter after the calculated target setpoint is clamped to `minInverterPower` and `maxInverterPower`
+	- Use separate configurable settings instead of hardcoded values:
+		- `maxSetpointRiseWattsPerSecond`
+		- `maxSetpointFallWattsPerSecond`
+	- Rising setpoint should be slower
+	- Falling setpoint should be faster
+	- This is an output conditioning layer after the PID / setpoint calculation, not a replacement for PID tuning
+	- Why this is useful:
+		- fast down-ramp reduces the risk of unwanted feed-in when consumption drops
+		- slow up-ramp avoids reacting too aggressively to short consumption spikes
+	- Suggested flow:
+		```text
+		calculatedTarget = calculateSetpointOrPidOutput(...)
+		clampedTarget = clamp(calculatedTarget, minInverterPower, maxInverterPower)
+		limitedSetpoint = applyAsymmetricRampLimit(
+		    clampedTarget,
+		    previousSetpoint,
+		    maxSetpointRiseWattsPerSecond,
+		    maxSetpointFallWattsPerSecond,
+		    deltaTimeSeconds
+		)
+		```
+	- Validation notes for later:
+		- verify that setpoint drops quickly when a large load switches off
+		- verify that setpoint rises gradually when load increases
+		- verify that short spikes do not immediately pull the inverter setpoint up
+		- verify that zero-feed-in behavior is improved or at least not degraded
+		- keep the logic non-blocking
+		- preserve existing PID / setpoint calculation behavior when both ramp settings are disabled or set high enough
