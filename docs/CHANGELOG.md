@@ -10,6 +10,8 @@ This changelog is a curated overview.
   to 550..60000 ms while keeping the existing API.
 - Smart WiFi roaming now throttles scan attempts separately from actual roaming
   reconnect attempts to avoid repeated scans when no better AP is available.
+- SolarInverterLimiter now offers an `ota_no_oled_no_bme` build variant and hides
+  BME280/I2C-only settings and telemetry when the optional sensor/display stack is disabled.
 
 ## 4.0.6
 

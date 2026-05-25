@@ -3,10 +3,8 @@
 #include <nvs_flash.h>
 #include <Preferences.h>
 #include <Ticker.h>
-#include <Wire.h>
 #include <WiFi.h>
 #include <time.h>
-#include <BME280_I2C.h>
 #include <new>
 
 #include <AsyncTCP.h>
@@ -29,6 +27,10 @@
 #include "Smoother/Smoother.h"
 
 // Feature flags
+#ifndef FEATURE_BME280_ENABLED
+#define FEATURE_BME280_ENABLED 1
+#endif
+
 #ifndef FEATURE_OLED_DISPLAY_ENABLED
 #define FEATURE_OLED_DISPLAY_ENABLED 1
 #endif
@@ -45,7 +47,16 @@
 #define FEATURE_MQTT_LOGGER_ENABLED 0
 #endif
 
+#define FEATURE_ANY_I2C (FEATURE_OLED_DISPLAY_ENABLED || FEATURE_BME280_ENABLED)
 #define FEATURE_ANY_RELAY_OUTPUTS (FEATURE_FAN_ENABLED || FEATURE_HEATER_ENABLED)
+
+#if FEATURE_ANY_I2C
+#include <Wire.h>
+#endif
+
+#if FEATURE_BME280_ENABLED
+#include <BME280_I2C.h>
+#endif
 
 #if FEATURE_OLED_DISPLAY_ENABLED
 #include <Adafruit_GFX.h>
@@ -98,8 +109,10 @@ enum class NegativePriceSettingPreference : uint8_t
 
 // Startup and lifecycle
 void cb_RS485Listener();
+#if FEATURE_BME280_ENABLED
 bool readBme280();
 void SetupStartTemperatureMeasuring();
+#endif
 void setupGUI();
 void onWiFiConnected();
 void onWiFiDisconnected();
@@ -125,7 +138,9 @@ static const char *resetReasonToText(esp_reset_reason_t reason);
 static void updateMqttTopics();
 static void publishMqttNow();
 static void handleRS485Scheduler();
+#if FEATURE_BME280_ENABLED
 static bool handleTemperatureScheduler();
+#endif
 static void updateStatusLED();
 
 // RS485 and limiter helpers
@@ -200,6 +215,7 @@ struct LimiterSettings
     }
 };
 
+#if FEATURE_BME280_ENABLED
 struct TempSettings
 {
     Config<float> tempCorrection{ConfigOptions<float>{.key = "TCO", .name = "Temperature Correction", .category = "Temp", .defaultValue = 0.1f, .sortOrder = 1}};
@@ -217,7 +233,9 @@ struct TempSettings
         cfg.addSetting(&dewpointRiskWindow);
     }
 };
+#endif
 
+#if FEATURE_ANY_I2C
 struct I2CSettings
 {
     Config<int> sdaPin{ConfigOptions<int>{.key = "I2CSDA", .name = "SDA Pin", .category = "I2C", .defaultValue = 21, .sortOrder = 1}};
@@ -237,6 +255,7 @@ struct I2CSettings
 #endif
     }
 };
+#endif
 
 #if FEATURE_FAN_ENABLED
 struct FanSettings
@@ -296,8 +315,12 @@ struct WiFiRoamingSettings
 
 // Global settings/config instances
 LimiterSettings limiterSettings;
+#if FEATURE_BME280_ENABLED
 TempSettings tempSettings;
+#endif
+#if FEATURE_ANY_I2C
 I2CSettings i2cSettings;
+#endif
 #if FEATURE_FAN_ENABLED
 FanSettings fanSettings;
 #endif
@@ -317,7 +340,9 @@ static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
 // Hardware objects
+#if FEATURE_BME280_ENABLED
 BME280_I2C bme280;
+#endif
 Ticker RS485Ticker;
 
 #if FEATURE_OLED_DISPLAY_ENABLED
@@ -336,25 +361,33 @@ int inverterSetValue = 0;          // value sent to RS485 (with offset and min-m
 int solarPowerW = 0;               // current solar production
 bool negativePriceActive = false;  // MQTT input: true forces minimum output when enabled
 float electricityPriceEurKwh = 0.0f; // optional MQTT input for status/logging
+#if FEATURE_BME280_ENABLED
 float temperature = 0.0;           // current temperature in Celsius
 float Dewpoint = 0.0;              // current dewpoint in Celsius
 float Humidity = 0.0;              // current humidity in percent
 float Pressure = 0.0;              // current pressure in hPa
+#endif
 
 static String mqttBaseTopic;
 static String topicPublishSetValueW;
 static String topicPublishCalculatedValueW;
 static String topicPublishGridImportW;
+#if FEATURE_BME280_ENABLED
 static String topicPublishTempC;
 static String topicPublishHumidityPct;
 static String topicPublishDewpointC;
+#endif
 
 // Scheduler/timing state
+#if FEATURE_BME280_ENABLED
 static bool bme280Initialized = false;
 static volatile bool rs485TickDue = false;
 static unsigned long nextTemperatureReadMs = 0;
 static constexpr unsigned long MIN_TEMPERATURE_READ_INTERVAL_MS = 1000UL;
 static constexpr unsigned long MAX_TEMPERATURE_READ_INTERVAL_MS = 3600000UL;
+#else
+static volatile bool rs485TickDue = false;
+#endif
 
 #if FEATURE_OLED_DISPLAY_ENABLED
 // Display state
@@ -368,8 +401,10 @@ static constexpr unsigned long MAX_DISPLAY_ON_MS = 86400000UL;
 #endif
 
 // Feature-specific globals
-#if FEATURE_HEATER_ENABLED
+#if FEATURE_HEATER_ENABLED && FEATURE_BME280_ENABLED
 static bool dewpointRiskActive = false;   // tracks dewpoint alarm state
+#endif
+#if FEATURE_HEATER_ENABLED
 static bool heaterLatchedState = false;   // hysteresis latch for heater
 #endif
 #if FEATURE_ANY_RELAY_OUTPUTS
@@ -479,7 +514,9 @@ void setup()
     }
 
     RS485begin();
+#if FEATURE_BME280_ENABLED
     SetupStartTemperatureMeasuring();
+#endif
 
     RS485Ticker.attach(limiterSettings.RS232PublishPeriod.get(), cb_RS485Listener);
 
@@ -527,7 +564,11 @@ void loop()
     mqtt.loop();
     publishMqttNow();
     handleRS485Scheduler();
+#if FEATURE_BME280_ENABLED
     const bool temperatureUpdated = handleTemperatureScheduler();
+#else
+    const bool temperatureUpdated = false;
+#endif
     lmg.loop();
     ioManager.update();
 
@@ -563,10 +604,14 @@ void setupGUI()
     // coreSettings owns the WiFi/System/NTP pages now; MQTT module registers its own layout.
     ConfigManager.addSettingsPage("Limiter", 60);
     ConfigManager.addSettingsGroup("Limiter", "Limiter", "Limiter Settings", 60);
+#if FEATURE_BME280_ENABLED
     ConfigManager.addSettingsPage("Temp", 70);
     ConfigManager.addSettingsGroup("Temp", "Temp", "Temp Settings", 70);
+#endif
+#if FEATURE_ANY_I2C
     ConfigManager.addSettingsPage("I2C", 80);
     ConfigManager.addSettingsGroup("I2C", "I2C", "I2C Settings", 80);
+#endif
 #if FEATURE_FAN_ENABLED
     ConfigManager.addSettingsPage("Fan", 90);
     ConfigManager.addSettingsGroup("Fan", "Fan", "Fan Settings", 90);
@@ -585,6 +630,7 @@ void setupGUI()
     ConfigManager.addSettingsGroup("I/O", "I/O", "I/O Settings", 130);
 
     // region sensor fields BME280
+#if FEATURE_BME280_ENABLED
     auto sensors = ConfigManager.liveGroup("sensors")
                        .page("Limiter", 10)
                        .card("Sensors", 10)
@@ -617,6 +663,7 @@ void setupGUI()
         .unit("hPa")
         .precision(1)
         .order(13);
+#endif
     // endregion sensor fields
 
     // region Limiter
@@ -701,7 +748,7 @@ void setupGUI()
         .order(1);
 #endif
 
-#if FEATURE_HEATER_ENABLED
+#if FEATURE_HEATER_ENABLED && FEATURE_BME280_ENABLED
     outputs.stateButton(
                "heater",
                "Heater Relay Active",
@@ -739,6 +786,18 @@ void setupGUI()
               dewpointRiskActive = false;
               lmg.logTag(LL::Info, "ALARM", "Dewpoint risk EXIT");
               EvaluateHeater(temperature); });
+#elif FEATURE_HEATER_ENABLED
+    outputs.stateButton(
+               "heater",
+               "Heater Relay Active",
+               []()
+               { return getHeaterRelay(); },
+               [](bool on)
+               { setHeaterRelay(on); },
+               getHeaterRelay(),
+               "On",
+               "Off")
+        .order(2);
 #endif
 #endif
     // endregion relay outputs
@@ -947,8 +1006,12 @@ static void setupMqtt()
 static void registerProjectSettings()
 {
     limiterSettings.attachTo(ConfigManager);
+#if FEATURE_BME280_ENABLED
     tempSettings.attachTo(ConfigManager);
+#endif
+#if FEATURE_ANY_I2C
     i2cSettings.attachTo(ConfigManager);
+#endif
 #if FEATURE_FAN_ENABLED
     fanSettings.attachTo(ConfigManager);
 #endif
@@ -1269,9 +1332,11 @@ static void updateMqttTopics()
     topicPublishSetValueW = mqttBaseTopic + "/SetValue";
     topicPublishCalculatedValueW = mqttBaseTopic + "/CalculatedValue";
     topicPublishGridImportW = mqttBaseTopic + "/GetValue";
+#if FEATURE_BME280_ENABLED
     topicPublishTempC = mqttBaseTopic + "/Temperature";
     topicPublishHumidityPct = mqttBaseTopic + "/Humidity";
     topicPublishDewpointC = mqttBaseTopic + "/Dewpoint";
+#endif
 }
 
 static void publishMqttNow()
@@ -1286,9 +1351,11 @@ static void publishMqttNow()
     mqtt.publishExtraTopicLazy("setvalue_w", topicPublishSetValueW.c_str(), []() { return String(inverterSetValue); }, false);
     mqtt.publishExtraTopicLazy("calculated_w", topicPublishCalculatedValueW.c_str(), []() { return String(inverterCalculatedValue); }, false);
     mqtt.publishExtraTopicLazy("grid_import_w", topicPublishGridImportW.c_str(), []() { return String(currentGridImportW); }, false);
+#if FEATURE_BME280_ENABLED
     mqtt.publishExtraTopicLazy("temperature_c", topicPublishTempC.c_str(), []() { return String(temperature); }, false);
     mqtt.publishExtraTopicLazy("humidity_pct", topicPublishHumidityPct.c_str(), []() { return String(Humidity); }, false);
     mqtt.publishExtraTopicLazy("dewpoint_c", topicPublishDewpointC.c_str(), []() { return String(Dewpoint); }, false);
+#endif
 }
 
 static void resetPidController()
@@ -1448,6 +1515,7 @@ static void handleRS485Scheduler()
     processRS485Tick();
 }
 
+#if FEATURE_BME280_ENABLED
 static bool handleTemperatureScheduler()
 {
     if (!bme280Initialized)
@@ -1467,6 +1535,7 @@ static bool handleTemperatureScheduler()
     nextTemperatureReadMs = now + intervalMs;
     return readBme280();
 }
+#endif
 
 static void updateStatusLED()
 {
@@ -1625,6 +1694,7 @@ void testRS232()
     }
 }
 
+#if FEATURE_BME280_ENABLED
 void SetupStartTemperatureMeasuring()
 {
     // init BME280 for temperature and humidity sensor
@@ -1653,6 +1723,7 @@ void SetupStartTemperatureMeasuring()
                                                               MAX_TEMPERATURE_READ_INTERVAL_MS);
     }
 }
+#endif
 
 void onWiFiConnected()
 {
@@ -1674,6 +1745,7 @@ void onWiFiAPMode()
     lmg.logTag(LL::Debug, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
+#if FEATURE_BME280_ENABLED
 bool readBme280()
 {
     if (!bme280Initialized)
@@ -1717,6 +1789,7 @@ bool readBme280()
     lmg.logTag(LL::Trace, "BME280", "-----------------------");
     return true;
 }
+#endif
 
 // Limiter provider moved into setup() for clarity
 
@@ -1802,6 +1875,7 @@ void WriteToDisplay()
     }
 
     display.setCursor(3, 3);
+#if FEATURE_BME280_ENABLED
     if (temperature > 0)
     {
         display.printf("<- %d W|Temp: %2.1f", currentGridImportW, temperature);
@@ -1820,6 +1894,12 @@ void WriteToDisplay()
     {
         display.printf("-> %d W", inverterSetValue);
     }
+#else
+    display.printf("<- %d W", currentGridImportW);
+
+    display.setCursor(3, 13);
+    display.printf("-> %d W", inverterSetValue);
+#endif
 
     display.display();
 }
@@ -1939,10 +2019,12 @@ void EvaluateHeater(float currentTemperature)
     }
 #endif
 
+#if FEATURE_BME280_ENABLED
     if (dewpointRiskActive)
     {
         heaterLatchedState = true;
     }
+#endif
 
     if (heaterSettings.enabled.get())
     {
