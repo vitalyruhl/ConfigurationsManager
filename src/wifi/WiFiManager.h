@@ -46,6 +46,7 @@ private:
   int roamingThreshold;        // dBm threshold for roaming trigger
   unsigned long roamingCooldown; // Minimum time between roaming attempts (ms)
   int roamingImprovement;      // Minimum signal improvement required (dBm)
+  unsigned long lastRoamingScanMillis;
   unsigned long lastRoamingAttempt;
 
   // MAC Address Filtering and Priority

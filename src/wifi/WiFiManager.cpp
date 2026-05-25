@@ -86,6 +86,7 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , roamingThreshold(-75)             // Default -75 dBm
   , roamingCooldown(120000)           // Default 120 seconds in ms
   , roamingImprovement(10)            // Default 10 dBm improvement
+  , lastRoamingScanMillis(0)
   , lastRoamingAttempt(0)
   , macFilterEnabled(false)           // MAC filtering disabled by default
   , macPriorityEnabled(false)         // MAC priority disabled by default
@@ -791,11 +792,6 @@ void ConfigManagerWiFi::checkSmartRoaming() {
 
   unsigned long currentTime = millis();
   
-  // Check cooldown period (skip if this is the first roaming attempt)
-  if (lastRoamingAttempt > 0 && currentTime - lastRoamingAttempt < roamingCooldown) {
-    return;
-  }
-
   int currentRSSI = WiFi.RSSI();
   
   // Only check if signal is below threshold
@@ -803,13 +799,26 @@ void ConfigManagerWiFi::checkSmartRoaming() {
     return;
   }
 
+  // Reconnect cooldown is only updated when a real roam is scheduled.
+  if (lastRoamingAttempt > 0 && currentTime - lastRoamingAttempt < roamingCooldown) {
+    return;
+  }
+
+  // Scan cooldown is separate from the reconnect cooldown so weak RSSI cannot
+  // trigger WiFi.scanNetworks() on every loop when no better AP is available.
+  if (lastRoamingScanMillis > 0 && currentTime - lastRoamingScanMillis < roamingCooldown) {
+    return;
+  }
+
   WIFI_LOG_VERBOSE("Current RSSI (%d dBm) below threshold (%d dBm), scanning for better APs...", 
            currentRSSI, roamingThreshold);
 
   // Scan for networks
+  lastRoamingScanMillis = currentTime;
   int networkCount = WiFi.scanNetworks();
   if (networkCount <= 0) {
     WIFI_LOG_VERBOSE("No networks found during roaming scan");
+    WiFi.scanDelete();
     return;
   }
 

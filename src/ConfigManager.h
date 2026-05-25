@@ -44,7 +44,11 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "4.0.6" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.1.0" // Synced to library.json
+
+static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
+static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
+static constexpr uint32_t CM_WS_PUSH_INTERVAL_MAX_MS = 60000;
 
 #if CM_ENABLE_THEMING && CM_ENABLE_STYLE_RULES
 inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
@@ -1905,7 +1909,7 @@ public:
     bool wsInitialized = false;
     bool wsEnabled = false;
     bool pushOnConnect = true;
-    uint32_t wsInterval = 1000;
+    uint32_t wsInterval = CM_WS_PUSH_INTERVAL_DEFAULT_MS;
 
     unsigned long wsLastPush = 0;
     std::function<String()> customPayloadBuilder;
@@ -3183,6 +3187,11 @@ public:
     }
     size_t getWebSocketClientCount() const { return wsClients.size(); }
 
+    static uint32_t clampWebSocketInterval_(uint32_t intervalMs)
+    {
+        return std::min(std::max(intervalMs, CM_WS_PUSH_INTERVAL_MIN_MS), CM_WS_PUSH_INTERVAL_MAX_MS);
+    }
+
     void handleWebsocketPush()
     {
         if (!wsEnabled || !ws)
@@ -3209,7 +3218,7 @@ public:
         sendWebSocketText(payload);
     }
 
-    void enableWebSocketPush(uint32_t intervalMs = 1000)
+    void enableWebSocketPush(uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS)
     {
         if (!wsInitialized)
         {
@@ -3266,16 +3275,16 @@ public:
             wsInitialized = true;
             CM_CORE_LOG_VERBOSE("[WS] Handler registered");
         }
-        wsInterval = intervalMs;
+        wsInterval = clampWebSocketInterval_(intervalMs);
         wsEnabled = true;
         CM_CORE_LOG_VERBOSE("[WS] Push enabled i=%lu ms", (unsigned long)wsInterval);
     }
 
     void disableWebSocketPush() { wsEnabled = false; }
-    void setWebSocketInterval(uint32_t intervalMs) { wsInterval = intervalMs; }
+    void setWebSocketInterval(uint32_t intervalMs) { wsInterval = clampWebSocketInterval_(intervalMs); }
     void setPushOnConnect(bool v) { pushOnConnect = v; }
     void setCustomLivePayloadBuilder(std::function<String()> fn) { customPayloadBuilder = fn; }
-    void WebSocketPush(bool enable = true, uint32_t intervalMs = 1000)
+    void WebSocketPush(bool enable = true, uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS)
     {
 #if CM_ENABLE_WS_PUSH
         if (enable) {
@@ -3290,7 +3299,7 @@ public:
     }
 #else
     void handleWebsocketPush() {}
-    void enableWebSocketPush(uint32_t = 1000) {}
+    void enableWebSocketPush(uint32_t = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {}
     void disableWebSocketPush() {}
     void setWebSocketInterval(uint32_t) {}
     void setPushOnConnect(bool) {}

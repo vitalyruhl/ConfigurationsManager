@@ -295,11 +295,13 @@ You can override theme variables in `/user_theme.css`:
 ## 12. WebSocket Push
 
 ```cpp
-ConfigManager.enableWebSocketPush(2000);
+ConfigManager.enableWebSocketPush();
 ConfigManager.handleWebsocketPush();
 ```
 
 The UI prefers WebSocket and falls back to polling `/runtime.json`.
+The default push interval is 5000 ms; explicit values are clamped to
+550..60000 ms.
 
 ## 13. Custom Payload (Optional)
 
@@ -352,7 +354,7 @@ ConfigManager.sendWarnMessage(
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
 | `ConfigManager.addRuntimeProvider` | `addRuntimeProvider(const RuntimeValueProvider& provider)`<br>`addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order = 100)` | Registers runtime data providers for the Live UI. | Provider callbacks should stay non-blocking. |
-| `ConfigManager.enableWebSocketPush` | `enableWebSocketPush(uint32_t intervalMs = 2000)` | Enables push updates for runtime/live data. | UI falls back to polling when push is disabled. |
+| `ConfigManager.enableWebSocketPush` | `enableWebSocketPush(uint32_t intervalMs = 5000)` | Enables push updates for runtime/live data. | UI falls back to polling when push is disabled; intervals are clamped to 550..60000 ms. |
 | `ConfigManager.setCustomLivePayloadBuilder` | `setCustomLivePayloadBuilder(std::function<String()> fn)` | Replaces default runtime payload generation with custom JSON. | Advanced customization hook. |
 | `ConfigManager.sendWarnMessage` | `sendWarnMessage(...)` | Shows runtime warning dialog with optional callbacks/context. | Use for operator-visible runtime events. |
 
