@@ -289,25 +289,68 @@ reported before any further action.
 - Use major version bumps for breaking public API changes, incompatible
   storage/NVS layout changes, incompatible configuration schema changes, and
   behavior changes requiring user migration.
-- Before changing versions, search for version declarations and report the
-  candidate files found.
-- If multiple version declarations exist, report them before changing versions.
-- Bump library or project version declarations for dependency and build metadata
-  changes. Do not automatically bump independent example firmware or app
-  versions.
-- Treat the ConfigurationsManager package/library version as the main project
-  version.
+- `library.json` is the canonical source of truth for the ConfigurationsManager
+  project/library version. Do not silently use `src/ConfigManager.h`,
+  `webui/package.json`, `webui/package-lock.json`, README text, changelog text,
+  or any example file as the source of truth.
+- All other project/library version occurrences are mirrors and must be
+  synchronized from `library.json` when the ConfigurationsManager
+  project/library version changes.
+- Before changing versions, release metadata, changelog/release notes, package
+  metadata, library metadata, or files that may contain the project version,
+  scan the repository for relevant version occurrences and report the candidate
+  files found. The scan must include at least:
+  - `library.json`
+  - `src/ConfigManager.h`
+  - `webui/package.json`
+  - `webui/package-lock.json`
+  - `examples/minimal/platformio.ini`
+  - `examples/minimal/src/main.cpp`
+  - `docs/CHANGELOG.md` or the resolved changelog path when different
+  - README version badges or version mentions, when present
+  - any additional files found by ripgrep containing the current or target
+    version string
+- Suggested version scan commands:
+  - `rg -n "version|VERSION|CONFIG_MANAGER_VERSION|CONFIGMANAGER_VERSION|CM_VERSION" .`
+  - `rg -n "<current-version>|<target-version>" .`
+- The following known mirrors must carry the same ConfigurationsManager
+  project/library version whenever the project version is changed:
+  - `library.json`
+  - `src/ConfigManager.h`
+  - `webui/package.json`
+  - `webui/package-lock.json`
+  - minimal example version references, including
+    `examples/minimal/platformio.ini`, `examples/minimal/src/main.cpp`, and any
+    other minimal example file containing the library/app version
+- If a required mirror path does not exist, report the missing path instead of
+  silently ignoring it.
+- The minimal example is part of the library smoke/example baseline and must
+  mirror the ConfigurationsManager project/library version.
+- Other examples may have independent firmware/application versions. Do not
+  automatically change them unless the issue explicitly asks for that example
+  version to change. Preserve example-specific version policies and mention
+  them in the report when relevant.
 - Treat the WebUI package under `webui/` as part of the repository build
-  artifact, not as an independent example firmware or app.
-- When WebUI npm dependencies, WebUI build metadata, or WebUI package metadata
-  change, align the WebUI package version with the ConfigurationsManager
-  package/library version.
-- Bump an example firmware or app version only when that example itself is
-  intentionally changed or released.
-- If the version source of truth is unclear, stop and report candidate files
-  instead of guessing.
-- If version ownership is unclear, stop and report candidate files instead of
-  guessing.
+  artifact, not as an independent example firmware or app. `webui/package.json`
+  and `webui/package-lock.json` are mirrors of `library.json`.
+- `webui/package-lock.json` is generated but still must be updated
+  consistently when `webui/package.json` changes. Prefer npm tooling where
+  appropriate so the lockfile remains consistent. If npm is not run, explain how
+  `package-lock.json` was updated or why it was not updated.
+- Version changes that affect the published library/package must include a
+  changelog update unless the governing issue explicitly says otherwise. Before
+  editing changelog/docs, follow the docs-agent rules. If the changelog location
+  is ambiguous, inspect the repository and report the resolved path.
+- If version files disagree before work starts, report the mismatch before
+  changing version-related files. If the intended target version is ambiguous,
+  stop and ask for clarification.
+- After any version-related change, report:
+  - canonical version from `library.json`
+  - all synchronized files and the version found in each
+  - files intentionally not changed and why
+  - commands used for version scanning
+  - build/test validation performed
+  - any remaining mismatch or risk
 
 ## Session-Close Workflow
 

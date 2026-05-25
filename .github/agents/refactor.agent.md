@@ -62,6 +62,35 @@ Use this agent for:
 - Follow the central Version Policy in `.github/AGENTS.md`.
 - Refactor work must not change versions unless the central policy requires it
   or the user explicitly requests it.
+- When refactor work touches versioning, release metadata, changelog/release
+  notes, package metadata, library metadata, or files that may contain the
+  project version, run and report a version scan before editing. Include at
+  least these commands or stricter equivalents:
+  - `rg -n "version|VERSION|CONFIG_MANAGER_VERSION|CONFIGMANAGER_VERSION|CM_VERSION" .`
+  - `rg -n "<current-version>|<target-version>" .`
+- Treat `library.json` as the only canonical source of truth for the
+  ConfigurationsManager project/library version. `src/ConfigManager.h`,
+  `webui/package.json`, `webui/package-lock.json`, README text, changelog text,
+  and example files are mirrors or independent app versions, not sources of
+  truth.
+- When the project/library version changes, synchronize the known mirror paths:
+  `library.json`, `src/ConfigManager.h`, `webui/package.json`,
+  `webui/package-lock.json`, `examples/minimal/platformio.ini`,
+  `examples/minimal/src/main.cpp`, and any other minimal example file containing
+  the library/app version. Report any missing listed path.
+- Keep the minimal example aligned with the ConfigurationsManager
+  project/library version. Do not automatically change other examples'
+  firmware/application versions unless the issue explicitly asks for it.
+- Prefer npm tooling for WebUI package version changes so
+  `webui/package-lock.json` remains consistent. If npm is not run, explain how
+  the lockfile was updated or why it was not updated.
+- If version mirrors disagree before work starts, report the mismatch before
+  changing version-related files. If the target version is unclear, stop and ask
+  for clarification instead of guessing.
+- After version-related changes, report the canonical `library.json` version,
+  each synchronized file and the version found there, intentionally unchanged
+  files, scan commands used, validation performed, and any remaining mismatch or
+  risk.
 
 ## Rename Safety:
 
