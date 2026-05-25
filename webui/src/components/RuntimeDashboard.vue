@@ -520,7 +520,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["can-flash-change"]);
+const emit = defineEmits(["can-flash-change", "ota-active-change"]);
 
 const LOG_MAX_ENTRIES = 1000;
 
@@ -554,6 +554,8 @@ const otaFileInput = ref(null);
 const wsConnected = ref(false);
 const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
 const isLogView = computed(() => props.view === "log");
+const otaRuntimeActive = computed(() => !!runtime.value?.system?.otaActive);
+const externalOtaActive = computed(() => otaRuntimeActive.value && !flashing.value);
 const uploadProgressWidth = computed(() => {
   if (uploadProgress.value === null) return "0%";
   const value = Number(uploadProgress.value);
@@ -1244,10 +1246,12 @@ const hasVisibleAlarm = computed(() => {
   return false;
 });
 
-// Gate flashing by OTA endpoint availability. runtime.system.otaActive only
-// describes an active transfer and must not disable the idle Flash button.
+// Gate flashing by endpoint availability and any active OTA transfer.
 const canFlash = computed(() => {
   //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
+  if (flashing.value || otaRuntimeActive.value) {
+    return false;
+  }
   
   // Probe is authoritative when negative
   if (otaEndpointAvailable.value === false) {
@@ -1258,7 +1262,7 @@ const canFlash = computed(() => {
   // If endpoint probe succeeded, enable
   if (otaEndpointAvailable.value === true) {
     //console.log('[canFlash] Enabled by probe success');
-    return !flashing.value;
+    return true;
   }
 
   // If config explicitly says disabled, pre-disable
@@ -1298,7 +1302,10 @@ const otaEnabled = computed(() => {
 watch(canFlash, (val) => {
   emit("can-flash-change", val);
 });
-watch(otaEnabled, (v) => emit("can-flash-change", v && !flashing.value));
+watch(otaEnabled, (v) => emit("can-flash-change", v && !flashing.value && !otaRuntimeActive.value));
+watch(externalOtaActive, (active) => {
+  emit("ota-active-change", active);
+}, { immediate: true });
 
 function preventNavigationDuringUpload(event) {
   if (!flashing.value) return;
