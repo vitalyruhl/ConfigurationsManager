@@ -319,6 +319,7 @@ reported before any further action.
   - `src/ConfigManager.h`
   - `webui/package.json`
   - `webui/package-lock.json`
+  - README version badges or project/library version mentions, when present
   - minimal example version references, including
     `examples/minimal/platformio.ini`, `examples/minimal/src/main.cpp`, and any
     other minimal example file containing the library/app version
