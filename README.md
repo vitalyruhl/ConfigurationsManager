@@ -1,6 +1,17 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.0.0
+> Version 4.1.1
+
+## Preview Before Installing
+
+If you want to quickly evaluate coding style and project structure before installing,
+check the standalone examples in [examples/](examples/).
+
+Recommended first look:
+
+- [examples/minimal](examples/minimal)
+- [examples/Full-GUI-Demo](examples/Full-GUI-Demo)
+- [examples/Full-IO-Demo](examples/Full-IO-Demo)
 
 ## Why this exists
 
@@ -12,7 +23,7 @@ But together they quickly turn into repetitive boilerplate that distracts from t
 
 This library exists to solve that once.
 
-It provides a structured, type-safe way to define settings, persist them, expose them through a responsive Web UI, and interact with live runtime data — without forcing you to design yet another custom web server or configuration layer.
+It provides a structured, type-safe way to define config/settings, persist them, expose them through a responsive Web UI, and interact with live runtime data — without forcing you to design yet another custom web server or configuration layer.
 
 You focus on your application logic.
 The infrastructure is already there.
