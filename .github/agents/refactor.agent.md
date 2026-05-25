@@ -75,9 +75,10 @@ Use this agent for:
   truth.
 - When the project/library version changes, synchronize the known mirror paths:
   `library.json`, `src/ConfigManager.h`, `webui/package.json`,
-  `webui/package-lock.json`, `examples/minimal/platformio.ini`,
-  `examples/minimal/src/main.cpp`, and any other minimal example file containing
-  the library/app version. Report any missing listed path.
+  `webui/package-lock.json`, README version badges or project/library version
+  mentions, `examples/minimal/platformio.ini`, `examples/minimal/src/main.cpp`,
+  and any other minimal example file containing the library/app version. Report
+  any missing listed path.
 - Keep the minimal example aligned with the ConfigurationsManager
   project/library version. Do not automatically change other examples'
   firmware/application versions unless the issue explicitly asks for it.
