@@ -3218,6 +3218,23 @@ public:
         sendWebSocketText(payload);
     }
 
+    bool pushRuntimeSnapshot()
+    {
+        if (!wsEnabled || !ws)
+            return false;
+        String payload;
+        if (customPayloadBuilder)
+        {
+            payload = customPayloadBuilder();
+        }
+        else
+        {
+            payload = runtimeManager.runtimeValuesToJSON();
+        }
+        wsLastPush = millis();
+        return sendWebSocketText(payload);
+    }
+
     void enableWebSocketPush(uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS)
     {
         if (!wsInitialized)
@@ -3304,6 +3321,7 @@ public:
     void setWebSocketInterval(uint32_t) {}
     void setPushOnConnect(bool) {}
     void setCustomLivePayloadBuilder(std::function<String()>) {}
+    bool pushRuntimeSnapshot() { return false; }
 #endif
 
     // Logging

@@ -8,6 +8,8 @@ This changelog is a curated overview.
   against accidental page navigation while the firmware upload is running.
 - WebUI now also reacts to externally initiated OTA activity, such as
   PlatformIO/ArduinoOTA uploads, with a global lock overlay for unsafe actions.
+- OTA activity state changes now push an immediate runtime update and stale OTA
+  activity is cleared automatically after a 120 second inactivity timeout.
 - AP/setup mode now redirects minimal captive-portal compatibility probes
   (`/generate_204`, `/canonical.html`) and guarded unknown navigation routes to
   the Web UI entry point while preserving normal 404 behavior in STA/runtime mode.
