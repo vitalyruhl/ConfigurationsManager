@@ -7,8 +7,15 @@
 #include <WiFi.h>
 #include <time.h>
 #include <BME280_I2C.h>
+#ifndef FEATURE_OLED_DISPLAY_ENABLED
+#define FEATURE_OLED_DISPLAY_ENABLED 1
+#endif
+
+#if FEATURE_OLED_DISPLAY_ENABLED
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#endif
+#include <new>
 
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -24,7 +31,13 @@
 
 #define CM_MQTT_NO_DEFAULT_HOOKS
 #include "mqtt/MQTTManager.h"
+#ifndef FEATURE_MQTT_LOGGER_ENABLED
+#define FEATURE_MQTT_LOGGER_ENABLED 0
+#endif
+
+#if FEATURE_MQTT_LOGGER_ENABLED
 #include "mqtt/MQTTLogOutput.h"
+#endif
 
 #include "RS485Module/RS485Module.h"
 #include "helpers/HelperModule.h"
@@ -58,7 +71,7 @@
 #endif
 
 #ifndef VERSION
-#define VERSION "4.2.0"
+#define VERSION "4.3.0"
 #endif
 
 #ifndef FEATURE_FAN_ENABLED
@@ -67,6 +80,14 @@
 
 #ifndef FEATURE_HEATER_ENABLED
 #define FEATURE_HEATER_ENABLED 0
+#endif
+
+#ifndef FEATURE_OLED_DISPLAY_ENABLED
+#define FEATURE_OLED_DISPLAY_ENABLED 1
+#endif
+
+#ifndef FEATURE_MQTT_LOGGER_ENABLED
+#define FEATURE_MQTT_LOGGER_ENABLED 0
 #endif
 
 #define FEATURE_ANY_RELAY_OUTPUTS (FEATURE_FAN_ENABLED || FEATURE_HEATER_ENABLED)
@@ -79,11 +100,15 @@ enum class NegativePriceSettingPreference : uint8_t
 };
 
 // predeclare the functions (prototypes)
+#if FEATURE_OLED_DISPLAY_ENABLED
 void SetupStartDisplay();
+#endif
 void cb_RS485Listener();
 void testRS232();
-void readBme280();
+bool readBme280();
+#if FEATURE_OLED_DISPLAY_ENABLED
 void WriteToDisplay();
+#endif
 void SetupStartTemperatureMeasuring();
 void ProjectConfig();
 #if FEATURE_FAN_ENABLED
@@ -92,8 +117,10 @@ void CheckVentilator(float currentTemperature);
 #if FEATURE_HEATER_ENABLED
 void EvaluateHeater(float currentTemperature);
 #endif
+#if FEATURE_OLED_DISPLAY_ENABLED
 void ShowDisplayOn();
 void ShowDisplayOff();
+#endif
 static void logNetworkIpInfo(const char *context);
 void setupGUI();
 void onWiFiConnected();
@@ -117,6 +144,14 @@ static int computePidStabilizedTarget(int baseTarget, int configuredMin, int con
 static void updateMqttTopics();
 static void publishMqttNow();
 static void updateStatusLED();
+static void processRS485Tick();
+static void handleRS485Scheduler();
+static bool handleTemperatureScheduler();
+#if FEATURE_OLED_DISPLAY_ENABLED
+static void handleDisplayScheduler();
+static void handleDisplayPowerScheduler();
+#endif
+static bool ensurePowerSmoother(int initialValue);
 #if FEATURE_FAN_ENABLED
 static void setFanRelay(bool on);
 static bool getFanRelay();
@@ -188,14 +223,18 @@ struct I2CSettings
     Config<int> sdaPin{ConfigOptions<int>{.key = "I2CSDA", .name = "SDA Pin", .category = "I2C", .defaultValue = 21, .sortOrder = 1}};
     Config<int> sclPin{ConfigOptions<int>{.key = "I2CSCL", .name = "SCL Pin", .category = "I2C", .defaultValue = 22, .sortOrder = 2}};
     Config<int> busFreq{ConfigOptions<int>{.key = "I2CFreq", .name = "Bus Frequency (Hz)", .category = "I2C", .defaultValue = 400000, .sortOrder = 3}};
+#if FEATURE_OLED_DISPLAY_ENABLED
     Config<int> displayAddr{ConfigOptions<int>{.key = "I2CDisp", .name = "Display Address", .category = "I2C", .defaultValue = 0x3C, .sortOrder = 4}};
+#endif
 
     void attachTo(ConfigManagerClass &cfg)
     {
         cfg.addSetting(&sdaPin);
         cfg.addSetting(&sclPin);
         cfg.addSetting(&busFreq);
+#if FEATURE_OLED_DISPLAY_ENABLED
         cfg.addSetting(&displayAddr);
+#endif
     }
 };
 
@@ -231,6 +270,7 @@ struct HeaterSettings
 };
 #endif
 
+#if FEATURE_OLED_DISPLAY_ENABLED
 struct DisplaySettings
 {
     Config<bool> turnDisplayOff{ConfigOptions<bool>{.key = "DispSleep", .name = "Turn Display Off", .category = "Display", .defaultValue = true, .sortOrder = 1}};
@@ -242,6 +282,7 @@ struct DisplaySettings
         cfg.addSetting(&onTimeSec);
     }
 };
+#endif
 
 struct WiFiRoamingSettings
 {
@@ -255,14 +296,14 @@ struct WiFiRoamingSettings
 
 BME280_I2C bme280;
 
+#if FEATURE_OLED_DISPLAY_ENABLED
 static constexpr int OLED_WIDTH = 128;
 static constexpr int OLED_HEIGHT = 32;
 static constexpr int OLED_RESET_PIN = 4; // keep legacy wiring default
 Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET_PIN);
+#endif
 
 Ticker RS485Ticker;
-Ticker temperatureTicker;
-Ticker displayTicker;
 
 Smoother *powerSmoother = nullptr; // there is a memory allocation in setup, better use a pointer here
 
@@ -278,9 +319,20 @@ float Dewpoint = 0.0;       // current dewpoint in Celsius
 float Humidity = 0.0;       // current humidity in percent
 float Pressure = 0.0;       // current pressure in hPa
 
+static bool bme280Initialized = false;
+static volatile bool rs485TickDue = false;
+static unsigned long nextTemperatureReadMs = 0;
+#if FEATURE_OLED_DISPLAY_ENABLED
 bool displayActive = true; // flag to indicate if the display is active
 static bool displayInitialized = false;
-static bool bme280Initialized = false;
+static unsigned long nextDisplayRefreshMs = 0;
+static unsigned long displayOffAtMs = 0;
+static constexpr unsigned long DISPLAY_REFRESH_INTERVAL_MS = 1000UL;
+static constexpr unsigned long MIN_DISPLAY_ON_MS = 1000UL;
+static constexpr unsigned long MAX_DISPLAY_ON_MS = 86400000UL;
+#endif
+static constexpr unsigned long MIN_TEMPERATURE_READ_INTERVAL_MS = 1000UL;
+static constexpr unsigned long MAX_TEMPERATURE_READ_INTERVAL_MS = 3600000UL;
 #if FEATURE_HEATER_ENABLED
 static bool dewpointRiskActive = false;   // tracks dewpoint alarm state
 static bool heaterLatchedState = false;   // hysteresis latch for heater
@@ -313,7 +365,9 @@ FanSettings fanSettings;
 #if FEATURE_HEATER_ENABLED
 HeaterSettings heaterSettings;
 #endif
+#if FEATURE_OLED_DISPLAY_ENABLED
 DisplaySettings displaySettings;
+#endif
 WiFiRoamingSettings wifiRoamingSettings;
 RS485_Settings rs485settings;
 
@@ -351,6 +405,7 @@ struct PidControllerState
 
 static PidControllerState pidController;
 static bool lastLimiterModeWasPid = false;
+static int lastSmootherRequestedSize = -1;
 static int lastNegativePriceOverrideTarget = -1;
 static NegativePriceSettingPreference lastNegativePriceSettingPreference = NegativePriceSettingPreference::None;
 static bool normalizingNegativePriceSettings = false;
@@ -405,13 +460,17 @@ void setup()
 
     updateMqttTopics();
     setupGUI();
+#if FEATURE_OLED_DISPLAY_ENABLED
     SetupStartDisplay();
     ShowDisplayOn();
+#endif
 
     cm::helpers::pulseWait(LED_BUILTIN, cm::helpers::PulseOutput::ActiveLevel::ActiveHigh, 3, 100);
 
-    powerSmoother = new Smoother(limiterSettings.smoothingSize.get());
-    powerSmoother->fillBufferOnStart(currentGridImportW);
+    if (!limiterSettings.usePidSmoothing.get())
+    {
+        ensurePowerSmoother(currentGridImportW);
+    }
 
     RS485begin();
     SetupStartTemperatureMeasuring();
@@ -461,6 +520,8 @@ void loop()
     ConfigManager.getWiFiManager().update();
     mqtt.loop();
     publishMqttNow();
+    handleRS485Scheduler();
+    const bool temperatureUpdated = handleTemperatureScheduler();
     lmg.loop();
     ioManager.update();
 
@@ -471,10 +532,13 @@ void loop()
     updateStatusLED();
     cm::helpers::PulseOutput::loopAll();
 
-    WriteToDisplay();
+#if FEATURE_OLED_DISPLAY_ENABLED
+    handleDisplayScheduler();
+    handleDisplayPowerScheduler();
+#endif
 
 #if FEATURE_ANY_RELAY_OUTPUTS
-    if (!manualOverrideActive)
+    if (temperatureUpdated && !manualOverrideActive)
     {
 #if FEATURE_FAN_ENABLED
         CheckVentilator(temperature);
@@ -505,8 +569,10 @@ void setupGUI()
     ConfigManager.addSettingsPage("Heater", 100);
     ConfigManager.addSettingsGroup("Heater", "Heater", "Heater Settings", 100);
 #endif
+#if FEATURE_OLED_DISPLAY_ENABLED
     ConfigManager.addSettingsPage("Display", 110);
     ConfigManager.addSettingsGroup("Display", "Display", "Display Settings", 110);
+#endif
     ConfigManager.addSettingsPage("RS485", 120);
     ConfigManager.addSettingsGroup("RS485", "RS485", "RS485 Settings", 120);
     ConfigManager.addSettingsPage("I/O", 130);
@@ -743,8 +809,11 @@ static void registerIOBindings()
         cm::IOManager::DigitalInputEventCallbacks{
             .onPress = []()
             {
+#if FEATURE_OLED_DISPLAY_ENABLED
                 lmg.logTag(LL::Debug, "IO", "Reset button pressed -> show display");
-                ShowDisplayOn(); },
+                ShowDisplayOn();
+#endif
+            },
             .onLongPressOnStartup = []()
             {
                 lmg.logTag(LL::Warn, "IO", "Reset button pressed at startup -> restoring defaults");
@@ -762,8 +831,11 @@ static void registerIOBindings()
         cm::IOManager::DigitalInputEventCallbacks{
             .onPress = []()
             {
+#if FEATURE_OLED_DISPLAY_ENABLED
                 lmg.logTag(LL::Debug, "IO", "AP button pressed -> show display");
-                ShowDisplayOn(); },
+                ShowDisplayOn();
+#endif
+            },
             .onLongPressOnStartup = []()
             {
                 lmg.logTag(LL::Warn, "IO", "AP button pressed at startup -> starting AP mode");
@@ -854,15 +926,12 @@ static void setupMqtt()
     // Optional: show receive topics in runtime UI
     // mqtt.addMqttTopicToLiveGroup(ConfigManager, "grid_import_w", "mqtt", "MQTT-Received", "MQTT-Received", 1);
 
-    static bool mqttLogAdded = false;
-    if (!mqttLogAdded)
-    {
-        auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
-        mqttLog->setLevel(LL::Info);
-        mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
-        lmg.addOutput(std::move(mqttLog));
-        mqttLogAdded = true;
-    }
+#if FEATURE_MQTT_LOGGER_ENABLED
+    auto mqttLog = std::make_unique<cm::MQTTLogOutput>(mqtt);
+    mqttLog->setLevel(LL::Info);
+    mqttLog->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
+    lmg.addOutput(std::move(mqttLog));
+#endif
 }
 
 static void registerProjectSettings()
@@ -876,7 +945,9 @@ static void registerProjectSettings()
 #if FEATURE_HEATER_ENABLED
     heaterSettings.attachTo(ConfigManager);
 #endif
+#if FEATURE_OLED_DISPLAY_ENABLED
     displaySettings.attachTo(ConfigManager);
+#endif
     wifiRoamingSettings.attachTo(ConfigManager);
     rs485settings.attachTo(ConfigManager);
 }
@@ -1179,6 +1250,11 @@ static void updateMqttTopics()
         base = APP_NAME;
     }
 
+    if (base == mqttBaseTopic)
+    {
+        return;
+    }
+
     mqttBaseTopic = base;
     topicPublishSetValueW = mqttBaseTopic + "/SetValue";
     topicPublishCalculatedValueW = mqttBaseTopic + "/CalculatedValue";
@@ -1312,13 +1388,155 @@ static void publishMqttNow()
 
     updateMqttTopics();
 
-    mqtt.publishExtraTopic("setvalue_w", topicPublishSetValueW.c_str(), String(inverterSetValue), false);
-    mqtt.publishExtraTopic("calculated_w", topicPublishCalculatedValueW.c_str(), String(inverterCalculatedValue), false);
-    mqtt.publishExtraTopic("grid_import_w", topicPublishGridImportW.c_str(), String(currentGridImportW), false);
-    mqtt.publishExtraTopic("temperature_c", topicPublishTempC.c_str(), String(temperature), false);
-    mqtt.publishExtraTopic("humidity_pct", topicPublishHumidityPct.c_str(), String(Humidity), false);
-    mqtt.publishExtraTopic("dewpoint_c", topicPublishDewpointC.c_str(), String(Dewpoint), false);
+    mqtt.publishExtraTopicLazy("setvalue_w", topicPublishSetValueW.c_str(), []() { return String(inverterSetValue); }, false);
+    mqtt.publishExtraTopicLazy("calculated_w", topicPublishCalculatedValueW.c_str(), []() { return String(inverterCalculatedValue); }, false);
+    mqtt.publishExtraTopicLazy("grid_import_w", topicPublishGridImportW.c_str(), []() { return String(currentGridImportW); }, false);
+    mqtt.publishExtraTopicLazy("temperature_c", topicPublishTempC.c_str(), []() { return String(temperature); }, false);
+    mqtt.publishExtraTopicLazy("humidity_pct", topicPublishHumidityPct.c_str(), []() { return String(Humidity); }, false);
+    mqtt.publishExtraTopicLazy("dewpoint_c", topicPublishDewpointC.c_str(), []() { return String(Dewpoint); }, false);
 }
+
+static unsigned long secondsToMsClamped(int seconds, unsigned long minMs, unsigned long maxMs)
+{
+    if (seconds <= 0)
+    {
+        return minMs;
+    }
+    const unsigned long secondsValue = static_cast<unsigned long>(seconds);
+    if (secondsValue > maxMs / 1000UL)
+    {
+        return maxMs;
+    }
+    const unsigned long ms = secondsValue * 1000UL;
+    if (ms < minMs)
+    {
+        return minMs;
+    }
+    if (ms > maxMs)
+    {
+        return maxMs;
+    }
+    return ms;
+}
+
+static bool timeReached(unsigned long now, unsigned long target)
+{
+    return target == 0 || static_cast<long>(now - target) >= 0;
+}
+
+static bool ensurePowerSmoother(int initialValue)
+{
+    if (powerSmoother != nullptr)
+    {
+        if (!powerSmoother->isReady())
+        {
+            delete powerSmoother;
+            powerSmoother = nullptr;
+        }
+        else
+        {
+            return true;
+        }
+    }
+
+    const int requestedSize = limiterSettings.smoothingSize.get();
+    powerSmoother = new (std::nothrow) Smoother(requestedSize);
+    if (powerSmoother == nullptr || !powerSmoother->isReady())
+    {
+        delete powerSmoother;
+        powerSmoother = nullptr;
+        lastSmootherRequestedSize = -1;
+        lmg.logTag(LL::Warn, "SMOOTH", "Buffer allocation failed");
+        return false;
+    }
+
+    lastSmootherRequestedSize = requestedSize;
+    powerSmoother->fillBufferOnStart(initialValue);
+    return true;
+}
+
+static bool updatePowerSmootherSizeIfNeeded(int initialValue)
+{
+    if (!ensurePowerSmoother(initialValue) || powerSmoother == nullptr)
+    {
+        return false;
+    }
+
+    const int requestedSize = limiterSettings.smoothingSize.get();
+    if (requestedSize == lastSmootherRequestedSize)
+    {
+        return powerSmoother->isReady();
+    }
+
+    const int previousSize = powerSmoother->size();
+    powerSmoother->setBufferSize(requestedSize);
+    lastSmootherRequestedSize = requestedSize;
+    if (powerSmoother->size() != previousSize)
+    {
+        powerSmoother->fillBufferOnStart(initialValue);
+    }
+
+    return powerSmoother->isReady();
+}
+
+static void handleRS485Scheduler()
+{
+    if (!rs485TickDue)
+    {
+        return;
+    }
+
+    rs485TickDue = false;
+    processRS485Tick();
+}
+
+static bool handleTemperatureScheduler()
+{
+    if (!bme280Initialized)
+    {
+        return false;
+    }
+
+    const unsigned long now = millis();
+    if (!timeReached(now, nextTemperatureReadMs))
+    {
+        return false;
+    }
+
+    const unsigned long intervalMs = secondsToMsClamped(tempSettings.readIntervalSec.get(),
+                                                        MIN_TEMPERATURE_READ_INTERVAL_MS,
+                                                        MAX_TEMPERATURE_READ_INTERVAL_MS);
+    nextTemperatureReadMs = now + intervalMs;
+    return readBme280();
+}
+
+#if FEATURE_OLED_DISPLAY_ENABLED
+static void handleDisplayScheduler()
+{
+    const unsigned long now = millis();
+    if (!timeReached(now, nextDisplayRefreshMs))
+    {
+        return;
+    }
+
+    nextDisplayRefreshMs = now + DISPLAY_REFRESH_INTERVAL_MS;
+    WriteToDisplay();
+}
+
+static void handleDisplayPowerScheduler()
+{
+    if (!displayActive || !displaySettings.turnDisplayOff.get() || displayOffAtMs == 0)
+    {
+        return;
+    }
+
+    const unsigned long now = millis();
+    if (timeReached(now, displayOffAtMs))
+    {
+        ShowDisplayOff();
+    }
+}
+#endif
 
 static void updateStatusLED()
 {
@@ -1354,6 +1572,11 @@ static void updateStatusLED()
 
 void cb_RS485Listener()
 {
+    rs485TickDue = true;
+}
+
+static void processRS485Tick()
+{
     int configuredMin = limiterSettings.minOutput.get();
     int configuredMax = limiterSettings.maxOutput.get();
     if (configuredMin > configuredMax)
@@ -1363,20 +1586,20 @@ void cb_RS485Listener()
         configuredMax = tmp;
     }
 
-    if (powerSmoother != nullptr)
-    {
-        powerSmoother->setBufferSize(limiterSettings.smoothingSize.get());
-    }
-
     const bool usePidSmoothing = limiterSettings.usePidSmoothing.get();
     if (usePidSmoothing != lastLimiterModeWasPid)
     {
         resetPidController();
-        if (powerSmoother != nullptr)
+        if (!usePidSmoothing && ensurePowerSmoother(currentGridImportW))
         {
             powerSmoother->fillBufferOnStart(currentGridImportW);
         }
         lastLimiterModeWasPid = usePidSmoothing;
+    }
+
+    if (!usePidSmoothing)
+    {
+        updatePowerSmootherSizeIfNeeded(currentGridImportW);
     }
 
     const int offset = limiterSettings.inputCorrectionOffset.get();
@@ -1417,7 +1640,7 @@ void cb_RS485Listener()
         pidInput = pidController.initialized ? static_cast<int>(roundf(pidController.output)) : pidClampedBaseTarget;
         inverterCalculatedValue = computePidStabilizedTarget(pidBaseTarget, configuredMin, configuredMax);
     }
-    else if (powerSmoother != nullptr)
+    else if (powerSmoother != nullptr && powerSmoother->isReady())
     {
         inverterCalculatedValue = powerSmoother->smooth(currentGridImportW);
     }
@@ -1472,6 +1695,7 @@ void testRS232()
     }
 }
 
+#if FEATURE_OLED_DISPLAY_ENABLED
 void SetupStartDisplay()
 {
     Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
@@ -1497,6 +1721,7 @@ void SetupStartDisplay()
     display.println("Starting!");
     display.display();
 }
+#endif
 
 void SetupStartTemperatureMeasuring()
 {
@@ -1518,10 +1743,12 @@ void SetupStartTemperatureMeasuring()
     else
     {
         bme280Initialized = true;
-        lmg.logTag(LL::Info, "BME280", "BME280 ready. Starting measurement ticker...");
+        lmg.logTag(LL::Info, "BME280", "BME280 ready. Starting measurement scheduler...");
 
-        temperatureTicker.attach(tempSettings.readIntervalSec.get(), readBme280); // Attach the ticker to read BME280
-        readBme280();                                                             // initial read
+        readBme280();
+        nextTemperatureReadMs = millis() + secondsToMsClamped(tempSettings.readIntervalSec.get(),
+                                                              MIN_TEMPERATURE_READ_INTERVAL_MS,
+                                                              MAX_TEMPERATURE_READ_INTERVAL_MS);
     }
 }
 
@@ -1545,12 +1772,12 @@ void onWiFiAPMode()
     lmg.logTag(LL::Debug, "WiFi", "AP Mode: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
-void readBme280()
+bool readBme280()
 {
     if (!bme280Initialized)
     {
         lmg.logTag(LL::Warn, "BME280", "Skip read: sensor not initialized");
-        return;
+        return false;
     }
 
     // todo: add settings for correcting the values!!!
@@ -1570,7 +1797,7 @@ void readBme280()
     if (!temperatureValid || !humidityValid || !pressureValid)
     {
         lmg.logTag(LL::Warn, "BME280", "Invalid read T=%.1f H=%.1f P=%.1f -> keep last", measuredTemperature, measuredHumidity, measuredPressure);
-        return;
+        return false;
     }
 
     temperature = measuredTemperature;
@@ -1586,10 +1813,12 @@ void readBme280()
     lmg.logTag(LL::Trace, "BME280", "Pressure   : %.0f hPa", Pressure);
     lmg.logTag(LL::Trace, "BME280", "Altitude   : %.2f m", bme280.data.altitude);
     lmg.logTag(LL::Trace, "BME280", "-----------------------");
+    return true;
 }
 
 // Limiter provider moved into setup() for clarity
 
+#if FEATURE_OLED_DISPLAY_ENABLED
 void WriteToDisplay()
 {
     if (!displayInitialized || !displayActive)
@@ -1640,6 +1869,7 @@ void WriteToDisplay()
 
     display.display();
 }
+#endif
 
 #if FEATURE_FAN_ENABLED
 void CheckVentilator(float currentTemperature)
@@ -1703,21 +1933,23 @@ void EvaluateHeater(float currentTemperature)
 }
 #endif
 
+#if FEATURE_OLED_DISPLAY_ENABLED
 void ShowDisplayOn()
 {
     if (!displayInitialized)
         return;
-    displayTicker.detach();                                                // Stop the ticker to prevent multiple calls
-    display.ssd1306_command(SSD1306_DISPLAYON);                            // Turn on the display
-    displayTicker.attach(displaySettings.onTimeSec.get(), ShowDisplayOff); // Reattach the ticker to turn off the display after the specified time
+    display.ssd1306_command(SSD1306_DISPLAYON); // Turn on the display
     displayActive = true;
+    displayOffAtMs = millis() + secondsToMsClamped(displaySettings.onTimeSec.get(),
+                                                   MIN_DISPLAY_ON_MS,
+                                                   MAX_DISPLAY_ON_MS);
+    nextDisplayRefreshMs = 0;
 }
 
 void ShowDisplayOff()
 {
     if (!displayInitialized)
         return;
-    displayTicker.detach();                      // Stop the ticker to prevent multiple calls
     display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
     // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
 
@@ -1725,4 +1957,6 @@ void ShowDisplayOff()
     {
         displayActive = false;
     }
+    displayOffAtMs = 0;
 }
+#endif
