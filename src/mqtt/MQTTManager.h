@@ -190,12 +190,39 @@ public:
     bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained);
     bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
 
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+
     bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value);
     bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained);
     bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
     bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value);
     bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained);
     bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
+
+    template <typename PayloadBuilder>
+    bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+
 
     // Individual meta helpers (requested):
     void addLastTopicToGUI(ConfigManagerClass& configManager,
@@ -535,6 +562,13 @@ private:
                                    bool retained,
                                    uint8_t qos,
                                    bool immediate);
+    template <typename PayloadBuilder>
+    bool publishExtraTopicLazyInternal_(const char* id,
+                                       const char* topic,
+                                       PayloadBuilder payloadBuilder,
+                                       bool retained,
+                                       uint8_t qos,
+                                       bool immediate);
 
     static std::unique_ptr<char[]> makeCString_(const String& value)
     {
@@ -573,6 +607,88 @@ private:
 };
 
 // ------------------------ Implementation (header-only) ------------------------
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder)
+{
+    PublishOptions opts = getDefaultPublishOptions_(false, false);
+    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, opts.retained, opts.qos, false);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
+{
+    PublishOptions opts = getDefaultPublishOptions_(false, false);
+    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, opts.qos, false);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
+{
+    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, qos, false);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder)
+{
+    (void)configManager;
+    return publishExtraTopicLazy(id, topic, payloadBuilder);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
+{
+    (void)configManager;
+    return publishExtraTopicLazy(id, topic, payloadBuilder, retained);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
+{
+    (void)configManager;
+    return publishExtraTopicLazy(id, topic, payloadBuilder, retained, qos);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder)
+{
+    PublishOptions opts = getDefaultPublishOptions_(false, true);
+    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, opts.retained, opts.qos, true);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
+{
+    PublishOptions opts = getDefaultPublishOptions_(false, true);
+    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, opts.qos, true);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
+{
+    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, qos, true);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder)
+{
+    (void)configManager;
+    return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
+{
+    (void)configManager;
+    return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder, retained);
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
+{
+    (void)configManager;
+    return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder, retained, qos);
+}
 
 inline MQTTManager::Settings::Settings()
     : enableMQTT(ConfigOptions<bool>{
@@ -1314,6 +1430,39 @@ inline bool MQTTManager::publishExtraTopicInternal_(const char* id,
         return false;
     }
 
+    const bool ok = publishWithQos_(topic, value.c_str(), retained, qos);
+    if (ok && !immediate) {
+        markPublishedNow_(key);
+    }
+    return ok;
+}
+
+template <typename PayloadBuilder>
+inline bool MQTTManager::publishExtraTopicLazyInternal_(const char* id,
+                                                       const char* topic,
+                                                       PayloadBuilder payloadBuilder,
+                                                       bool retained,
+                                                       uint8_t qos,
+                                                       bool immediate)
+{
+    if (!id || !id[0]) {
+        MQTT_LOG("[W] publishExtraTopicLazy: id is empty");
+        return false;
+    }
+    if (!topic || !topic[0]) {
+        MQTT_LOG("[W] publishExtraTopicLazy: topic is empty");
+        return false;
+    }
+    if (!isConnected()) {
+        return false;
+    }
+
+    const String key = String("extra:") + id;
+    if (!immediate && !allowPublishNow_(key, false)) {
+        return false;
+    }
+
+    const String value = payloadBuilder();
     const bool ok = publishWithQos_(topic, value.c_str(), retained, qos);
     if (ok && !immediate) {
         markPublishedNow_(key);

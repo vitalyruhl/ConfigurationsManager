@@ -9,6 +9,7 @@ This project is an ESP32-based solar inverter limiter that can be used to limit 
 - Publishes power and sensor values via MQTT
 - Configurable power output limit
 - Web-based settings UI (ConfigManager)
+- Optional OLED and BME280 sensor support via compile-time feature flags
 
 ## ConfigManager v4 note
 
@@ -50,6 +51,15 @@ Open follow-up:
 2. On first boot (or when WiFi SSID is empty) the device starts an access point:
 3. Connect to the AP and open the web UI (usually `http://192.168.4.1/`) to configure WiFi/MQTT and other settings.
 4. After WiFi is configured the web UI will be available on the device IP in your LAN.
+
+## Build variants
+
+- `usb`: default local build and USB upload workflow.
+- `ota`: OTA build and upload workflow for the full example.
+- `ota_no_oled`: disables the OLED display feature for smaller OTA builds.
+- `ota_no_oled_no_bme`: disables both OLED and BME280 so the example also builds without the I2C sensor/display stack.
+
+When `FEATURE_BME280_ENABLED=0`, the temperature, humidity, and dewpoint runtime values and MQTT topics are omitted. When both OLED and BME280 are disabled, the example also omits the shared I2C settings page.
 
 ## Wiring Diagram
 

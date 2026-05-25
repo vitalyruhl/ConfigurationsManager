@@ -157,6 +157,8 @@ void onMQTTConnected()
 
 - `publishTopic(id)` publishes a receive item value to `<base>/<id>`
 - `publishExtraTopic(id, topic, value)` publishes a custom value to a custom topic
+- `publishExtraTopicLazy(id, topic, callback)` publishes a custom value built by
+  `callback` only after the id/topic, MQTT connection, and interval checks pass.
 - Interval is taken from `MQTTPubPer` (seconds). Use the `Immediately` variants to bypass it.
 - Defaults (unless overridden by parameters):
   - Non-bool: retain=true, qos=0
@@ -268,6 +270,7 @@ ConfigManager.getRuntime().addRuntimeProvider("mqtt", [](JsonObject& data) {
 | `cm::MQTTManager::begin` / `loop` / `disconnect` | `begin()`<br>`loop()`<br>`disconnect()` | Starts and maintains MQTT state machine connection lifecycle. | `loop()` or `update()` must run continuously. |
 | `cm::MQTTManager::publishTopic` / `publishTopicImmediately` | `publishTopic(...)` (6 overloads)<br>`publishTopicImmediately(...)` (6 overloads) | Publishes registered receive-item values to MQTT topics. | Overloads cover retained/qos and `ConfigManager` variants. |
 | `cm::MQTTManager::publishExtraTopic` / `publishExtraTopicImmediately` | `publishExtraTopic(...)` (6 overloads)<br>`publishExtraTopicImmediately(...)` (6 overloads) | Publishes custom values to explicit topics. | Useful for ad-hoc telemetry. |
+| `cm::MQTTManager::publishExtraTopicLazy` / `publishExtraTopicImmediatelyLazy` | `publishExtraTopicLazy(...)` (6 overloads)<br>`publishExtraTopicImmediatelyLazy(...)` (6 overloads) | Builds custom payloads from callbacks only when a publish will be attempted. | Use for values whose payload construction allocates memory or is relatively expensive. |
 | `cm::MQTTManager::addTopicReceive*` | `addTopicReceiveFloat(...)`<br>`addTopicReceiveInt(...)`<br>`addTopicReceiveBool(...)`<br>`addTopicReceiveString(...)` | Registers inbound MQTT topics and parsing targets. | Pair with settings/live placement helpers. |
 | `cm::MQTTManager` UI helpers | `addMqttSettingsToSettingsGroup(...)` (2 overloads)<br>`addMqttTopicToSettingsGroup(...)` (2 overloads)<br>`addMqttTopicToLiveGroup(...)` (2 overloads)<br>`addMQTTRuntimeProviderToGUI(...)`<br>`addLastTopicToGUI(...)`<br>`addLastPayloadToGUI(...)`<br>`addLastMessageAgeToGUI(...)` | Places MQTT data/settings into Settings and Live UI. | Explicit placement model; nothing is auto-shown in Live without helper calls. |
 

@@ -149,9 +149,10 @@ void setup()
 
     delay(1500);
 
-    // Optional: adjust push interval for runtime live values.
+    // Optional: enable push for runtime live values.
     // The WebUI prefers WebSocket (/ws) and falls back to polling (/runtime.json).
-    cfg.enableWebSocketPush(2000);
+    // The default push interval is 5000 ms.
+    cfg.enableWebSocketPush();
 
     if (WiFi.status() == WL_CONNECTED)
     {
