@@ -2,6 +2,12 @@
 
 This changelog is a curated overview.
 
+## 4.1.1
+
+- Expanded PlatformIO library metadata keywords for config-related discovery, including `config`, `config-manager`, `settings`, `wi-fi`, and `nvs` variants.
+- Updated package description wording to include both "config" and "configuration" search intents.
+- WebUI package version aligned with the ConfigurationsManager package/library version at 4.1.1.
+
 ## 4.1.0
 
 - Added lazy MQTT extra-topic publish helpers so payload callbacks run only after

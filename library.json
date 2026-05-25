@@ -1,8 +1,8 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "4.1.0",
-  "keywords": "esp32, configuration, wifi, web-server, ota, iot, automation",
-  "description": "Robust configuration management system with web interface for ESP32 and ota support.",
+  "version": "4.1.1",
+  "keywords": "esp32, configuration, configurations, config, config-manager, configuration-manager, settings, settings-manager, wifi, wi-fi, web-server, web-ui, ota, nvs, preferences, iot, automation",
+  "description": "Robust ESP32 config and configuration manager with web UI, WiFi setup, OTA, and persistent settings via NVS/Preferences.",
   "repository": {
     "type": "git",
     "url": "https://github.com/vitalyruhl/ConfigurationsManager.git"
