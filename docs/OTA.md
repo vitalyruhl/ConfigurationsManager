@@ -13,7 +13,8 @@ Workflow:
 2. Click **Flash** and select the compiled `.bin` (or `.bin.gz`) produced by PlatformIO.
 3. Enter the OTA password when prompted.
    - The SPA sends it as an `X-OTA-PASSWORD` header.
-4. Watch progress notifications.
+4. Watch the upload progress popup.
+   - The popup stays visible while the browser is actively uploading the firmware and warns before accidental page navigation.
    - On success, the device reboots automatically.
 
 ## Backend behavior

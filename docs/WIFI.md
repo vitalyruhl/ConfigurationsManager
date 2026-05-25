@@ -151,6 +151,9 @@ Notes:
 
 - `startAccessPoint()` uses `<appName>_AP` by default.
 - Empty AP password means open network.
+- In AP/setup mode, minimal captive-portal compatibility redirects send
+  `/generate_204`, `/canonical.html`, and guarded unknown browser navigation
+  requests back to the Web UI root. STA/runtime mode keeps normal 404 behavior.
 
 ## Global WiFi hooks
 

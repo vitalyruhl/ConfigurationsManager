@@ -2,6 +2,15 @@
 
 This changelog is a curated overview.
 
+## 4.2.0
+
+- WebUI OTA flashing now shows an active upload progress popup and guards
+  against accidental page navigation while the firmware upload is running.
+- AP/setup mode now redirects minimal captive-portal compatibility probes
+  (`/generate_204`, `/canonical.html`) and guarded unknown navigation routes to
+  the Web UI entry point while preserving normal 404 behavior in STA/runtime mode.
+- WebUI package version aligned with the ConfigurationsManager package/library version at 4.2.0.
+
 ## 4.1.1
 
 - Expanded PlatformIO library metadata keywords for config-related discovery, including `config`, `config-manager`, `settings`, `wi-fi`, and `nvs` variants.
