@@ -29,6 +29,30 @@
       </div>
     </div>
 
+    <div
+      v-if="flashing"
+      class="ota-upload-overlay"
+      role="alertdialog"
+      aria-modal="true"
+      aria-label="Firmware upload in progress"
+    >
+      <div class="ota-upload-card">
+        <h3>Firmware Upload</h3>
+        <p class="ota-upload-status">{{ uploadStatusText }}</p>
+        <div class="ota-progress-track" aria-hidden="true">
+          <div
+            class="ota-progress-bar"
+            :style="{ width: uploadProgressWidth }"
+          ></div>
+        </div>
+        <div class="ota-progress-meta">
+          <span>{{ uploadFileName }}</span>
+          <span>{{ uploadProgressLabel }}</span>
+        </div>
+        <p class="ota-upload-detail">{{ uploadStatusDetails }}</p>
+      </div>
+    </div>
+
     <div v-if="isLogView" class="log-view">
       <div class="log-head">
         <span>{{ logEntries.length ? "Live logging (WebSocket)" : "Waiting for logs..." }}</span>
@@ -496,7 +520,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["can-flash-change"]);
+const emit = defineEmits(["can-flash-change", "ota-active-change"]);
 
 const LOG_MAX_ENTRIES = 1000;
 
@@ -522,10 +546,28 @@ const logListEl = ref(null);
 const autoScrollLogs = ref(true);
 const showBoolStateText = ref(false);
 const flashing = ref(false);
+const uploadProgress = ref(null);
+const uploadStatusText = ref("Preparing upload...");
+const uploadStatusDetails = ref("Keep this page open until the device accepts the update.");
+const uploadFileName = ref("");
 const otaFileInput = ref(null);
 const wsConnected = ref(false);
 const otaEndpointAvailable = ref(null); // null = unknown, true = reachable & not 403-disabled, false = definitely disabled/absent
 const isLogView = computed(() => props.view === "log");
+const otaRuntimeActive = computed(() => !!runtime.value?.system?.otaActive);
+const externalOtaActive = computed(() => otaRuntimeActive.value && !flashing.value);
+const uploadProgressWidth = computed(() => {
+  if (uploadProgress.value === null) return "0%";
+  const value = Number(uploadProgress.value);
+  if (!Number.isFinite(value)) return "0%";
+  return `${Math.max(0, Math.min(100, value))}%`;
+});
+const uploadProgressLabel = computed(() => {
+  if (uploadProgress.value === null) return "Starting...";
+  const value = Number(uploadProgress.value);
+  if (!Number.isFinite(value)) return "Starting...";
+  return `${Math.max(0, Math.min(100, value))}%`;
+});
 const showLogTime = computed(() => logEntries.value.some((e) => e.dt || e.ts !== null));
 const useLogTable = computed(() => {
   if (typeof window === "undefined") return true;
@@ -1204,10 +1246,12 @@ const hasVisibleAlarm = computed(() => {
   return false;
 });
 
-// Gate flashing by OTA endpoint availability. runtime.system.otaActive only
-// describes an active transfer and must not disable the idle Flash button.
+// Gate flashing by endpoint availability and any active OTA transfer.
 const canFlash = computed(() => {
   //console.log('[canFlash] Computing... probe:', otaEndpointAvailable.value, 'flashing:', flashing.value);
+  if (flashing.value || otaRuntimeActive.value) {
+    return false;
+  }
   
   // Probe is authoritative when negative
   if (otaEndpointAvailable.value === false) {
@@ -1218,7 +1262,7 @@ const canFlash = computed(() => {
   // If endpoint probe succeeded, enable
   if (otaEndpointAvailable.value === true) {
     //console.log('[canFlash] Enabled by probe success');
-    return !flashing.value;
+    return true;
   }
 
   // If config explicitly says disabled, pre-disable
@@ -1258,7 +1302,25 @@ const otaEnabled = computed(() => {
 watch(canFlash, (val) => {
   emit("can-flash-change", val);
 });
-watch(otaEnabled, (v) => emit("can-flash-change", v && !flashing.value));
+watch(otaEnabled, (v) => emit("can-flash-change", v && !flashing.value && !otaRuntimeActive.value));
+watch(externalOtaActive, (active) => {
+  emit("ota-active-change", active);
+}, { immediate: true });
+
+function preventNavigationDuringUpload(event) {
+  if (!flashing.value) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+watch(flashing, (active) => {
+  if (typeof window === "undefined") return;
+  if (active) {
+    window.addEventListener("beforeunload", preventNavigationDuringUpload);
+  } else {
+    window.removeEventListener("beforeunload", preventNavigationDuringUpload);
+  }
+});
 
 function normalizeStyle(style) {
   if (!style || typeof style !== "object") return null;
@@ -2361,22 +2423,58 @@ function cancelPasswordInput() {
   }
 }
 
+function handleUploadProgress(event) {
+  if (!event || !event.lengthComputable || event.total <= 0) {
+    uploadProgress.value = null;
+    uploadStatusText.value = "Uploading firmware...";
+    return;
+  }
+
+  const percent = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)));
+  uploadProgress.value = percent;
+  uploadStatusText.value = percent >= 100 ? "Finalizing update..." : "Uploading firmware...";
+}
+
+function uploadFirmware(file, password) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const form = new FormData();
+    form.append("firmware", file, file.name);
+
+    xhr.open("POST", "/ota_update");
+    if (password.length) {
+      xhr.setRequestHeader("X-OTA-PASSWORD", password);
+    }
+
+    xhr.upload.onprogress = handleUploadProgress;
+    xhr.onload = () => {
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        statusText: xhr.statusText,
+        text: xhr.responseText || "",
+      });
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.onabort = () => reject(new Error("Upload aborted"));
+    xhr.send(form);
+  });
+}
+
 // Perform the actual OTA update
 async function performOtaUpdate(file, password) {
-  const headers = new Headers();
-  if (password.length) headers.append("X-OTA-PASSWORD", password);
-  const form = new FormData();
-  form.append("firmware", file, file.name);
   flashing.value = true;
+  uploadFileName.value = file.name;
+  uploadProgress.value = 0;
+  uploadStatusText.value = "Uploading firmware...";
+  uploadStatusDetails.value = "Keep this page open until the device accepts the update.";
   const toastId = notifySafe(`Uploading ${file.name}...`, "info", 15000, true);
   try {
-    const response = await fetch("/ota_update", {
-      method: "POST",
-      headers,
-      body: form,
-    });
+    const response = await uploadFirmware(file, password);
+    uploadProgress.value = 100;
+    uploadStatusText.value = "Finalizing update...";
     let payload = {};
-    const text = await response.text();
+    const text = response.text;
     try {
       payload = text ? JSON.parse(text) : {};
     } catch (e) {
@@ -2396,14 +2494,20 @@ async function performOtaUpdate(file, password) {
       const reason = payload.reason || response.statusText || "Upload failed";
       updateToastSafe(toastId, `Flash failed: ${reason}`, "error", 6000);
     } else {
+      uploadStatusText.value = "Upload complete";
+      uploadStatusDetails.value = "Waiting for the ESP32 to reboot.";
       updateToastSafe(toastId, "Flash done!", "success", 9000);
       notifySafe("Flash done!", "success", 6000);
       notifySafe("Waiting for reboot...", "info", 8000);
     }
   } catch (error) {
+    uploadStatusText.value = "Upload failed";
+    uploadStatusDetails.value = error.message;
     updateToastSafe(toastId, `Flash failed: ${error.message}`, "error", 6000);
   } finally {
     flashing.value = false;
+    uploadProgress.value = null;
+    uploadFileName.value = "";
     if (otaFileInput.value) otaFileInput.value.value = "";
   }
 }
@@ -2467,6 +2571,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("beforeunload", preventNavigationDuringUpload);
+  }
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
@@ -3053,6 +3160,75 @@ label.switch input:checked + .slider:before {
     opacity: 0.6;
     transform: scale(1.1);
   }
+}
+
+.ota-upload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.ota-upload-card {
+  width: min(420px, 92vw);
+  padding: 22px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #f0f6fc;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.48);
+}
+
+.ota-upload-card h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.ota-upload-status {
+  margin: 0 0 14px;
+  color: #c9d1d9;
+  font-size: 14px;
+}
+
+.ota-progress-track {
+  width: 100%;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #21262d;
+}
+
+.ota-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #238636;
+  transition: width 0.18s ease;
+}
+
+.ota-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.ota-progress-meta span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ota-upload-detail {
+  margin: 14px 0 0;
+  color: #8b949e;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 /* OTA Password Modal */

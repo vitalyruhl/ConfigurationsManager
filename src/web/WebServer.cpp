@@ -200,6 +200,16 @@ void ConfigManagerWeb::setupStaticRoutes() {
         request->send(404);
     });
 
+    // Minimal captive-portal compatibility probes. They redirect only while
+    // the device is in AP/setup mode; STA/runtime mode keeps normal 404s.
+    server->on("/generate_204", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleCaptivePortalProbe(request);
+    });
+
+    server->on("/canonical.html", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleCaptivePortalProbe(request);
+    });
+
     // 404 handler
     server->onNotFound([this](AsyncWebServerRequest* request) {
         handleNotFound(request);
@@ -936,10 +946,88 @@ void ConfigManagerWeb::handleJSRequest(AsyncWebServerRequest* request) {
 }
 
 void ConfigManagerWeb::handleNotFound(AsyncWebServerRequest* request) {
+    if (shouldRedirectToPortal(request)) {
+        WEB_LOG_VERBOSE("[D] Captive portal redirect: %s",
+                        request->url().c_str());
+        redirectToPortalRoot(request);
+        return;
+    }
+
     WEB_LOG("404: %s %s",
             request->methodToString(),
             request->url().c_str());
     request->send(404, "text/plain", "Not Found");
+}
+
+void ConfigManagerWeb::handleCaptivePortalProbe(AsyncWebServerRequest* request) {
+    if (isCaptivePortalMode()) {
+        redirectToPortalRoot(request);
+        return;
+    }
+
+    handleNotFound(request);
+}
+
+bool ConfigManagerWeb::isCaptivePortalMode() const {
+    if (configManager && configManager->getWiFiManager().isInAPMode()) {
+        return true;
+    }
+
+    const WiFiMode_t mode = WiFi.getMode();
+    if (mode == WIFI_AP) {
+        return true;
+    }
+
+    return mode == WIFI_AP_STA && WiFi.status() != WL_CONNECTED;
+}
+
+bool ConfigManagerWeb::shouldRedirectToPortal(AsyncWebServerRequest* request) const {
+    if (!request || !isCaptivePortalMode()) {
+        return false;
+    }
+
+    const WebRequestMethodComposite method = request->method();
+    if (method != HTTP_GET && method != HTTP_HEAD) {
+        return false;
+    }
+
+    const String path = request->url();
+    if (path.isEmpty() || path == "/") {
+        return false;
+    }
+
+    const char* reservedPrefixes[] = {
+        "/appinfo",
+        "/config",
+        "/gui",
+        "/live_layout.json",
+        "/ota_update",
+        "/reboot",
+        "/runtime",
+        "/runtime_action",
+        "/script.js",
+        "/style.css",
+        "/user_theme.css",
+        "/version",
+        "/ws",
+    };
+
+    for (const char* prefix : reservedPrefixes) {
+        if (path.startsWith(prefix)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void ConfigManagerWeb::redirectToPortalRoot(AsyncWebServerRequest* request) {
+    AsyncWebServerResponse* response = request->beginResponse(302, "text/plain", "Redirecting to setup portal");
+    response->addHeader("Location", "/");
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void ConfigManagerWeb::addCustomRoute(const char* path, WebRequestMethodComposite method, RequestHandler handler) {

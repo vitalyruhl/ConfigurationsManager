@@ -28,10 +28,13 @@ public:
     typedef std::function<void(const char*)> LogCallback;
 
 private:
+    static constexpr uint32_t OTA_STALE_TIMEOUT_MS = 120000UL;
+
     bool otaEnabled;
     bool otaInitialized;
     bool otaActive;
     bool webRoutesConfigured;
+    uint32_t otaLastActivityMs;
     String otaPassword;
     String otaHostname;
     ConfigManagerClass* configManager;
@@ -43,6 +46,10 @@ private:
     // Helper methods
     void log(const char* format, ...) const;
     void cleanup(AsyncWebServerRequest* request = nullptr);
+    void markActivity();
+    void setActive(bool active);
+    void notifyActivityState();
+    void checkStaleUpload();
 
 public:
     ConfigManagerOTA();

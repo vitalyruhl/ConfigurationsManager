@@ -5,23 +5,26 @@
       <button
         v-if="hasLiveContent"
         :class="{ active: activeTab === 'live' }"
-        @click="activeTab = 'live'"
+        :disabled="externalOtaActive"
+        @click="setActiveTab('live')"
       >
         Live
       </button>
       <button
         :class="{ active: activeTab === 'settings' }"
+        :disabled="externalOtaActive"
         @click="switchToSettings()"
       >
         Settings
       </button>
-      <button class="flash-btn" @click="startFlash" :disabled="!canFlash">
+      <button class="flash-btn" @click="startFlash" :disabled="!canFlash || externalOtaActive">
         Flash
       </button>
       <button
         v-if="hasLiveContent && guiLoggingEnabled"
         :class="{ active: activeTab === 'log' }"
-        @click="activeTab = 'log'"
+        :disabled="externalOtaActive"
+        @click="setActiveTab('log')"
       >
         Log
       </button>
@@ -46,6 +49,19 @@
         >
           ✕
         </button>
+      </div>
+    </div>
+    <div
+      v-if="externalOtaActive"
+      class="ota-active-overlay"
+      role="alertdialog"
+      aria-modal="true"
+      aria-label="OTA update in progress"
+    >
+      <div class="ota-active-card">
+        <h3>OTA update in progress</h3>
+        <p>Please do not change settings, flash firmware, reboot, reset, or navigate away.</p>
+        <p class="ota-active-detail">The ESP32 may reboot automatically when the update finishes.</p>
       </div>
     </div>
     <div
@@ -114,13 +130,15 @@
     </div>
 
     <RuntimeDashboard
-      v-if="activeTab !== 'settings' && hasLiveContent"
+      v-if="hasLiveContent"
+      v-show="activeTab !== 'settings'"
       ref="runtimeDashboard"
       :config="config"
       :view="activeTab"
       @can-flash-change="handleCanFlashChange"
+      @ota-active-change="handleOtaActiveChange"
     />
-    <section v-else-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
+    <section v-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
       <div class="category-tabs" role="tablist" aria-label="Settings categories">
         <button
           v-for="c in settingsCategories"
@@ -145,6 +163,7 @@
                 :settings="card.settings"
                 :title="card.title"
                 :busy-map="opBusy"
+                :disabled="externalOtaActive"
                 @apply-single="applySingle"
                 @save-single="saveSingle"
               />
@@ -153,16 +172,16 @@
         </template>
       </div>
       <div class="action-buttons">
-        <button @click="applyAll" class="apply-btn" :disabled="refreshing">
+        <button @click="applyAll" class="apply-btn" :disabled="refreshing || externalOtaActive">
           {{ refreshing ? "..." : "Apply All" }}
         </button>
-        <button @click="saveAll" class="save-btn" :disabled="refreshing">
+        <button @click="saveAll" class="save-btn" :disabled="refreshing || externalOtaActive">
           {{ refreshing ? "..." : "Save All" }}
         </button>
-        <button @click="resetDefaults" class="reset-btn" :disabled="refreshing">
+        <button @click="resetDefaults" class="reset-btn" :disabled="refreshing || externalOtaActive">
           Reset Defaults
         </button>
-        <button @click="rebootDevice" class="reset-btn" :disabled="refreshing">
+        <button @click="rebootDevice" class="reset-btn" :disabled="refreshing || externalOtaActive">
           Reboot
         </button>
       </div>
@@ -484,6 +503,7 @@ function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
 const activeTab = ref("live");
 const runtimeDashboard = ref(null);
 const canFlash = ref(false);
+const externalOtaActive = ref(false);
 const guiLoggingEnabled = ref(false);
 const toasts = ref([]); // {id,message,type,sticky,ts}
 let toastCounter = 0;
@@ -549,6 +569,17 @@ const selectedSettingsCategory = ref('');
 
 const THEME_COOKIE_KEY = 'cm.theme.v1';
 const themeMode = ref(resolveInitialTheme());
+
+function blockIfExternalOtaActive() {
+  if (!externalOtaActive.value) return false;
+  notify("OTA update active. Please wait until the device finishes or reboots.", "error", 8000);
+  return true;
+}
+
+function setActiveTab(tab) {
+  if (tab !== activeTab.value && blockIfExternalOtaActive()) return;
+  activeTab.value = tab;
+}
 
 function readCookie(name) {
   try {
@@ -1144,6 +1175,8 @@ async function checkLiveContent() {
   }
 }
 async function switchToSettings() {
+  if (activeTab.value !== "settings" && blockIfExternalOtaActive()) return;
+
   // If token is valid, allow immediate access.
   if (isSettingsAuthTokenValid()) {
     settingsAuthenticated.value = true;
@@ -1257,6 +1290,8 @@ async function loadUserTheme() {
   } catch (e) {}
 }
 async function applySingle(category, key, value, opts = {}) {
+  if (blockIfExternalOtaActive()) return;
+
   const { silent = false, skipMutex = false, skipLoad = false } = opts;
   const opKey = `${category}.${key}`;
   opBusy.value[opKey] = true;
@@ -1312,6 +1347,8 @@ async function applySingle(category, key, value, opts = {}) {
   }
 }
 async function saveSingle(category, key, value, opts = {}) {
+  if (blockIfExternalOtaActive()) return;
+
   const { silent = false, skipMutex = false, skipLoad = false } = opts;
   const opKey = `${category}.${key}`;
   opBusy.value[opKey] = true;
@@ -1384,6 +1421,8 @@ function collectSettingsInputs() {
   );
 }
 async function saveAll() {
+  if (blockIfExternalOtaActive()) return;
+
   if (!confirm("Save all settings?")) return;
   const all = {};
   collectSettingsInputs().forEach((input) => {
@@ -1418,6 +1457,8 @@ async function saveAll() {
   }
 }
 async function applyAll() {
+  if (blockIfExternalOtaActive()) return;
+
   if (!confirm("Apply all settings?")) return;
   const all = {};
   collectSettingsInputs().forEach((input) => {
@@ -1452,6 +1493,8 @@ async function applyAll() {
   }
 }
 async function resetDefaults() {
+  if (blockIfExternalOtaActive()) return;
+
   if (!confirm("Reset to defaults?")) return;
   try {
     const r = await fetch("/config/reset", { method: "POST" });
@@ -1464,6 +1507,8 @@ async function resetDefaults() {
   }
 }
 function rebootDevice() {
+  if (blockIfExternalOtaActive()) return;
+
   if (!confirm("Reboot device?")) return;
   fetch("/reboot", { method: "POST" })
     .then((r) => {
@@ -1482,6 +1527,8 @@ async function waitForFlashReady(timeoutMs = 2000) {
 }
 
 async function startFlash() {
+  if (blockIfExternalOtaActive()) return;
+
   // If settings are protected, require auth before starting OTA flash
   if (!isSettingsAuthTokenValid()) {
     pendingFlashStart.value = true;
@@ -1520,6 +1567,25 @@ async function startFlash() {
 function handleCanFlashChange(v) {
   canFlash.value = !!v;
 }
+function handleOtaActiveChange(v) {
+  externalOtaActive.value = !!v;
+}
+
+function preventNavigationDuringExternalOta(event) {
+  if (!externalOtaActive.value) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+watch(externalOtaActive, (active) => {
+  if (typeof window === "undefined") return;
+  if (active) {
+    window.addEventListener("beforeunload", preventNavigationDuringExternalOta);
+  } else {
+    window.removeEventListener("beforeunload", preventNavigationDuringExternalOta);
+  }
+});
+
 onMounted(() => {
   applyTheme(themeMode.value);
   if (shouldShowHttpOnlyHint()) {
@@ -1533,6 +1599,9 @@ onMounted(() => {
   initGuiWebSocket();
 });
 onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("beforeunload", preventNavigationDuringExternalOta);
+  }
   closeGuiWebSocket();
 });
 </script>
@@ -1603,6 +1672,10 @@ onBeforeUnmount(() => {
   background: var(--cm-tab-active-bg, darkorange);
   color: var(--cm-tab-active-fg, #fff);
 }
+.tabs button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .theme-btn {
   background: var(--cm-tab-bg, slategray);
   color: var(--cm-tab-fg, #f5f5f5);
@@ -1615,6 +1688,39 @@ onBeforeUnmount(() => {
   opacity: 0.5;
   cursor: not-allowed;
   background: gainsboro;
+}
+.ota-active-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(4, 12, 20, 0.78);
+  backdrop-filter: blur(6px);
+}
+.ota-active-card {
+  width: min(440px, 92vw);
+  background: var(--cm-card-bg, #ffffff);
+  color: var(--cm-fg, #111827);
+  border: 1px solid var(--cm-card-border, #d1d5db);
+  border-radius: 8px;
+  padding: 1.35rem;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+.ota-active-card h3 {
+  margin: 0 0 0.65rem;
+  color: var(--cm-accent-strong, #034875);
+  font-size: 1.25rem;
+}
+.ota-active-card p {
+  margin: 0.45rem 0 0;
+  line-height: 1.45;
+}
+.ota-active-detail {
+  opacity: 0.78;
+  font-size: 0.92rem;
 }
 .settings-view {
   padding: 1rem 0 2rem;

@@ -8,13 +8,14 @@
             type="checkbox" 
             :checked="inputValue" 
             :name="`${category}.${keyName}`"
+            :disabled="disabled"
             @change="onCheckboxChange($event.target.checked)"
           />
           <span class="slider round"></span>
         </label>
       </div>
       <div class="actions bool-actions">
-        <button class="save-btn" :disabled="busy" @click="emit('save', keyName, inputValue)">
+        <button class="save-btn" :disabled="busy || disabled" @click="emit('save', keyName, inputValue)">
           <span v-if="busy">…</span><span v-else>Save</span>
         </button>
       </div>
@@ -30,13 +31,14 @@
           :value="inputValue"
           @input="onInput($event.target.value)"
           :name="`${category}.${keyName}`"
+          :disabled="disabled"
           data-is-password="1"
         />
         <button
           v-if="isPassword"
           type="button"
           class="pwd-toggle"
-          :disabled="passwordBusy"
+          :disabled="passwordBusy || disabled"
           @click="togglePasswordVisibility"
           :title="passwordVisible ? 'Hide password' : 'Show password'"
           :aria-label="passwordVisible ? 'Hide password' : 'Show password'"
@@ -60,6 +62,7 @@
           :value="inputValue"
           @input="onInput($event.target.value)"
           :name="`${category}.${keyName}`"
+          :disabled="disabled"
         />
         <input
           v-else
@@ -67,17 +70,18 @@
           :value="inputValue"
           @input="onInput($event.target.value)"
           :name="`${category}.${keyName}`"
+          :disabled="disabled"
         />
       </div>
       <div class="actions">
         <button
           class="apply-btn"
-          :disabled="busy"
+          :disabled="busy || disabled"
           @click="emit('apply', keyName, inputValue)"
         >
           <span v-if="busy">…</span><span v-else>Apply</span>
         </button>
-        <button class="save-btn" :disabled="busy" @click="emit('save', keyName, inputValue)">
+        <button class="save-btn" :disabled="busy || disabled" @click="emit('save', keyName, inputValue)">
           <span v-if="busy">…</span><span v-else>Save</span>
         </button>
       </div>
@@ -93,6 +97,7 @@
 .input-area .pwd-toggle:disabled{opacity:.6;cursor:not-allowed}
 .input-area .pwd-toggle:hover:not(:disabled){filter:brightness(.97)}
 .input-area .pwd-toggle .icon{display:flex;align-items:center;justify-content:center}
+input:disabled,button:disabled{opacity:.6;cursor:not-allowed}
 
 /* Switch styles for boolean settings */
 .checkbox-wrapper {
@@ -167,6 +172,7 @@ const props = defineProps({
   keyName: String,
   settingData: Object,
   busy: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['apply', 'save']);

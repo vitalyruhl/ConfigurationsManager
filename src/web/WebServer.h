@@ -59,14 +59,18 @@ private:
     void handleJSRequest(AsyncWebServerRequest* request);
     void handleRootRequest(AsyncWebServerRequest* request);
     void handleNotFound(AsyncWebServerRequest* request);
+    void handleCaptivePortalProbe(AsyncWebServerRequest* request);
 
     bool isSettingsAuthRequired() const;
     bool isSettingsAuthValid(AsyncWebServerRequest* request) const;
     String issueSettingsAuthToken();
+    bool isCaptivePortalMode() const;
+    bool shouldRedirectToPortal(AsyncWebServerRequest* request) const;
 
     // Utility methods
     String getContentType(const String& path);
     void sendWebUI(AsyncWebServerRequest* request);
+    void redirectToPortalRoot(AsyncWebServerRequest* request);
     void enableCORS(AsyncWebServerResponse* response);
     void log(const char* format, ...) const;
 

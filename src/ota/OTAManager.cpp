@@ -9,6 +9,7 @@ ConfigManagerOTA::ConfigManagerOTA()
     , otaInitialized(false)
     , otaActive(false)
     , webRoutesConfigured(false)
+    , otaLastActivityMs(0)
     , configManager(nullptr)
 {
 }
@@ -33,6 +34,48 @@ void ConfigManagerOTA::setCallbacks(RebootCallback reboot, LogCallback logger) {
 
 #if CM_ENABLE_OTA
 
+void ConfigManagerOTA::markActivity() {
+    otaLastActivityMs = millis();
+}
+
+void ConfigManagerOTA::notifyActivityState() {
+    if (configManager) {
+        configManager->pushRuntimeSnapshot();
+    }
+}
+
+void ConfigManagerOTA::setActive(bool active) {
+    if (active) {
+        markActivity();
+    } else {
+        otaLastActivityMs = 0;
+    }
+
+    if (otaActive == active) {
+        return;
+    }
+
+    otaActive = active;
+    notifyActivityState();
+}
+
+void ConfigManagerOTA::checkStaleUpload() {
+    if (!otaActive || otaLastActivityMs == 0) {
+        return;
+    }
+
+    const uint32_t now = millis();
+    if (static_cast<uint32_t>(now - otaLastActivityMs) < OTA_STALE_TIMEOUT_MS) {
+        return;
+    }
+
+    OTA_LOG("[W] Upload stale, clearing OTA active state");
+    if (Update.isRunning()) {
+        Update.abort();
+    }
+    setActive(false);
+}
+
 void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     otaHostname = hostname;
     otaPassword = password;
@@ -51,13 +94,13 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
         }
 
         ArduinoOTA.onStart([this]() {
-            otaActive = true;
+            setActive(true);
             String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
             OTA_LOG("Start updating %s", type.c_str());
         });
 
         ArduinoOTA.onEnd([this]() {
-            otaActive = false;
+            setActive(false);
             OTA_LOG("Update complete");
             // Some ESP32/LwIP combinations can hit a TCP assert shortly after OTA completes.
             // Reboot immediately after a successful update to leave the network stack in a clean state.
@@ -70,6 +113,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
         });
 
         ArduinoOTA.onProgress([this](unsigned int progress, unsigned int total) {
+            markActivity();
             static unsigned int lastPercent = 0;
             unsigned int percent = (progress / (total / 100));
             if (percent != lastPercent && percent % 10 == 0) {
@@ -79,7 +123,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
         });
 
         ArduinoOTA.onError([this](ota_error_t error) {
-            otaActive = false;
+            setActive(false);
             const char* errorStr = "Unknown";
             switch (error) {
                 case OTA_AUTH_ERROR: errorStr = "Auth Failed"; break;
@@ -101,6 +145,9 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
 
 void ConfigManagerOTA::enable(bool enabled) {
     otaEnabled = enabled;
+    if (!enabled) {
+        setActive(false);
+    }
     OTA_LOG("%s", enabled ? "Enabled" : "Disabled");
 }
 
@@ -120,11 +167,13 @@ void ConfigManagerOTA::setHostname(const String& hostname) {
 
 void ConfigManagerOTA::handle() {
     if (!otaEnabled || !otaInitialized) {
+        checkStaleUpload();
         return;
     }
 
     // Non-blocking OTA handle
     ArduinoOTA.handle();
+    checkStaleUpload();
 }
 
 bool ConfigManagerOTA::isActive() const {
@@ -145,8 +194,12 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
                 request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
                 return;
             }
+            if (otaActive) {
+                notifyActivityState();
+            }
             // Treat GET as a lightweight probe endpoint for clients/UI.
-            request->send(200, "application/json", "{\"status\":\"ok\",\"probe\":true}");
+            request->send(200, "application/json",
+                          String("{\"status\":\"ok\",\"probe\":true,\"otaActive\":") + (otaActive ? "true" : "false") + "}");
         });
 
     server->on("/ota_update", HTTP_POST,
@@ -168,7 +221,11 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
         if (!otaEnabled) {
             request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
         } else {
-            request->send(200, "application/json", "{\"status\":\"ok\",\"probe\":true}");
+            if (otaActive) {
+                notifyActivityState();
+            }
+            request->send(200, "application/json",
+                          String("{\"status\":\"ok\",\"probe\":true,\"otaActive\":") + (otaActive ? "true" : "false") + "}");
         }
         return;
     }
@@ -225,7 +282,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
         if (Update.isRunning()) {
             OTA_LOG("Existing update in progress, aborting prior session");
             Update.abort();
-            otaActive = false;
+            setActive(false);
         }
 
         if (!otaEnabled) {
@@ -264,13 +321,13 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
             ctx->hasError = true;
             ctx->statusCode = 500;
             ctx->errorReason = "begin_failed";
-            otaActive = false;
+            setActive(false);
             Update.printError(Serial);
             return;
         }
 
         ctx->began = true;
-        otaActive = true;
+        setActive(true);
         OTA_LOG("HTTP upload start: %s (%lu bytes)", filename.c_str(), static_cast<unsigned long>(expected));
     }
 
@@ -283,11 +340,12 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
     }
 
     if (len) {
+        markActivity();
         if (Update.write(data, len) != len) {
             ctx->hasError = true;
             ctx->statusCode = 500;
             ctx->errorReason = "write_failed";
-            otaActive = false;
+            setActive(false);
             Update.printError(Serial);
             return;
         }
@@ -297,7 +355,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
     if (final) {
         if (Update.end(true)) {
             ctx->success = true;
-            otaActive = false;
+            setActive(false);
             // Refresh runtime sketch metrics cache so UI shows updated values without reboot
             if (configManager) {
                 configManager->getRuntimeManager().refreshSketchInfoCache();
@@ -306,7 +364,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
             ctx->hasError = true;
             ctx->statusCode = 500;
             ctx->errorReason = "end_failed";
-            otaActive = false;
+            setActive(false);
             Update.printError(Serial);
             Update.abort();
         }
@@ -336,7 +394,7 @@ void ConfigManagerOTA::cleanup(AsyncWebServerRequest* request) {
         Update.abort();
     }
     if (ctx->began || ctx->hasError) {
-        otaActive = false;
+        setActive(false);
     }
 
     delete ctx;

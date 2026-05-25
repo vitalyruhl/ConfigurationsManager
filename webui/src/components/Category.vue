@@ -9,6 +9,7 @@
           :keyName="item.left.key"
           :settingData="item.left.data"
           :busy="!!busyMap[category + '.' + item.left.key]"
+          :disabled="disabled"
           @apply="onApply"
           @save="onSave"
         />
@@ -18,6 +19,7 @@
           :keyName="item.right.key"
           :settingData="item.right.data"
           :busy="!!busyMap[category + '.' + item.right.key]"
+          :disabled="disabled"
           @apply="onApply"
           @save="onSave"
         />
@@ -29,6 +31,7 @@
         :keyName="item.key"
         :settingData="item.data"
         :busy="!!busyMap[category + '.' + item.key]"
+        :disabled="disabled"
         @apply="onApply"
         @save="onSave"
       />
@@ -73,7 +76,8 @@ const props = defineProps({
   category: String,
   settings: Object,
   title: { type: String, default: '' },
-  busyMap: { type: Object, default: () => ({}) }
+  busyMap: { type: Object, default: () => ({}) },
+  disabled: { type: Boolean, default: false }
 });
 const emit = defineEmits(['apply-single', 'save-single']);
 const filteredSettings = computed(() => {
@@ -187,9 +191,11 @@ const prettyName = computed(() => {
   return props.category;
 });
 function onApply(key, value) {
+  if (props.disabled) return;
   emit('apply-single', props.category, key, value);
 }
 function onSave(key, value) {
+  if (props.disabled) return;
   emit('save-single', props.category, key, value);
 }
 </script>
