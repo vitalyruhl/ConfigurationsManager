@@ -7,14 +7,6 @@
 #include <WiFi.h>
 #include <time.h>
 #include <BME280_I2C.h>
-#ifndef FEATURE_OLED_DISPLAY_ENABLED
-#define FEATURE_OLED_DISPLAY_ENABLED 1
-#endif
-
-#if FEATURE_OLED_DISPLAY_ENABLED
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#endif
 #include <new>
 
 #include <AsyncTCP.h>
@@ -31,17 +23,38 @@
 
 #define CM_MQTT_NO_DEFAULT_HOOKS
 #include "mqtt/MQTTManager.h"
+
+#include "RS485Module/RS485Module.h"
+#include "helpers/HelperModule.h"
+#include "Smoother/Smoother.h"
+
+// Feature flags
+#ifndef FEATURE_OLED_DISPLAY_ENABLED
+#define FEATURE_OLED_DISPLAY_ENABLED 1
+#endif
+
+#ifndef FEATURE_FAN_ENABLED
+#define FEATURE_FAN_ENABLED 0
+#endif
+
+#ifndef FEATURE_HEATER_ENABLED
+#define FEATURE_HEATER_ENABLED 0
+#endif
+
 #ifndef FEATURE_MQTT_LOGGER_ENABLED
 #define FEATURE_MQTT_LOGGER_ENABLED 0
+#endif
+
+#define FEATURE_ANY_RELAY_OUTPUTS (FEATURE_FAN_ENABLED || FEATURE_HEATER_ENABLED)
+
+#if FEATURE_OLED_DISPLAY_ENABLED
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #endif
 
 #if FEATURE_MQTT_LOGGER_ENABLED
 #include "mqtt/MQTTLogOutput.h"
 #endif
-
-#include "RS485Module/RS485Module.h"
-#include "helpers/HelperModule.h"
-#include "Smoother/Smoother.h"
 
 #if __has_include("secret/secrets.h")
 #include "secret/secrets.h"
@@ -74,24 +87,6 @@
 #define VERSION "4.3.0"
 #endif
 
-#ifndef FEATURE_FAN_ENABLED
-#define FEATURE_FAN_ENABLED 0
-#endif
-
-#ifndef FEATURE_HEATER_ENABLED
-#define FEATURE_HEATER_ENABLED 0
-#endif
-
-#ifndef FEATURE_OLED_DISPLAY_ENABLED
-#define FEATURE_OLED_DISPLAY_ENABLED 1
-#endif
-
-#ifndef FEATURE_MQTT_LOGGER_ENABLED
-#define FEATURE_MQTT_LOGGER_ENABLED 0
-#endif
-
-#define FEATURE_ANY_RELAY_OUTPUTS (FEATURE_FAN_ENABLED || FEATURE_HEATER_ENABLED)
-
 enum class NegativePriceSettingPreference : uint8_t
 {
     None,
@@ -99,33 +94,19 @@ enum class NegativePriceSettingPreference : uint8_t
     SetZero
 };
 
-// predeclare the functions (prototypes)
-#if FEATURE_OLED_DISPLAY_ENABLED
-void SetupStartDisplay();
-#endif
+// Forward declarations
+
+// Startup and lifecycle
 void cb_RS485Listener();
-void testRS232();
 bool readBme280();
-#if FEATURE_OLED_DISPLAY_ENABLED
-void WriteToDisplay();
-#endif
 void SetupStartTemperatureMeasuring();
-void ProjectConfig();
-#if FEATURE_FAN_ENABLED
-void CheckVentilator(float currentTemperature);
-#endif
-#if FEATURE_HEATER_ENABLED
-void EvaluateHeater(float currentTemperature);
-#endif
-#if FEATURE_OLED_DISPLAY_ENABLED
-void ShowDisplayOn();
-void ShowDisplayOff();
-#endif
-static void logNetworkIpInfo(const char *context);
 void setupGUI();
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
+
+// Setup helpers
+static void logNetworkIpInfo(const char *context);
 static void setupLogging();
 static void setupMqtt();
 static void setupNetworkDefaults();
@@ -136,33 +117,52 @@ static void configureLimiterSettingsBehavior();
 static void normalizeNegativePriceSettings(NegativePriceSettingPreference preferred, bool persist, bool logCorrection);
 static void registerIOBindings();
 static bool ensureNvsReady();
-static const char *resetReasonToText(esp_reset_reason_t reason);
 static bool isValidMacAddress(const String &value);
 static void applyAccessPointMacPriority();
-static void resetPidController();
-static int computePidStabilizedTarget(int baseTarget, int configuredMin, int configuredMax);
+
+// MQTT and scheduler helpers
+static const char *resetReasonToText(esp_reset_reason_t reason);
 static void updateMqttTopics();
 static void publishMqttNow();
-static void updateStatusLED();
-static void processRS485Tick();
 static void handleRS485Scheduler();
 static bool handleTemperatureScheduler();
+static void updateStatusLED();
+
+// RS485 and limiter helpers
+void testRS232();
+static void resetPidController();
+static int computePidStabilizedTarget(int baseTarget, int configuredMin, int configuredMax);
+static void processRS485Tick();
+static bool ensurePowerSmoother(int initialValue);
+
+// Display helpers
 #if FEATURE_OLED_DISPLAY_ENABLED
+void SetupStartDisplay();
+void WriteToDisplay();
+void ShowDisplayOn();
+void ShowDisplayOff();
 static void handleDisplayScheduler();
 static void handleDisplayPowerScheduler();
 #endif
-static bool ensurePowerSmoother(int initialValue);
-#if FEATURE_FAN_ENABLED
-static void setFanRelay(bool on);
-static bool getFanRelay();
-#endif
-#if FEATURE_HEATER_ENABLED
-static void setHeaterRelay(bool on);
-static bool getHeaterRelay();
-#endif
+
+// Relay automation helpers
 #if FEATURE_ANY_RELAY_OUTPUTS
 static void setManualOverride(bool on);
 #endif
+
+#if FEATURE_FAN_ENABLED
+void CheckVentilator(float currentTemperature);
+static void setFanRelay(bool on);
+static bool getFanRelay();
+#endif
+
+#if FEATURE_HEATER_ENABLED
+void EvaluateHeater(float currentTemperature);
+static void setHeaterRelay(bool on);
+static bool getHeaterRelay();
+#endif
+
+void ProjectConfig();
 //--------------------------------------------------------------------------------------------------------------
 
 #pragma region configuration variables
@@ -294,7 +294,31 @@ struct WiFiRoamingSettings
     }
 };
 
+// Global settings/config instances
+LimiterSettings limiterSettings;
+TempSettings tempSettings;
+I2CSettings i2cSettings;
+#if FEATURE_FAN_ENABLED
+FanSettings fanSettings;
+#endif
+#if FEATURE_HEATER_ENABLED
+HeaterSettings heaterSettings;
+#endif
+#if FEATURE_OLED_DISPLAY_ENABLED
+DisplaySettings displaySettings;
+#endif
+WiFiRoamingSettings wifiRoamingSettings;
+RS485_Settings rs485settings;
+
+static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
+static cm::CoreSystemSettings &systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
+static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
+static cm::CoreWiFiServices wifiServices;
+
+// Hardware objects
 BME280_I2C bme280;
+Ticker RS485Ticker;
 
 #if FEATURE_OLED_DISPLAY_ENABLED
 static constexpr int OLED_WIDTH = 128;
@@ -303,26 +327,37 @@ static constexpr int OLED_RESET_PIN = 4; // keep legacy wiring default
 Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET_PIN);
 #endif
 
-Ticker RS485Ticker;
-
 Smoother *powerSmoother = nullptr; // there is a memory allocation in setup, better use a pointer here
 
-// global helper variables
-int currentGridImportW = 0; // signed grid power: positive import, negative export
-int inverterCalculatedValue = 0; // calculated controller output before final send decision
-int inverterSetValue = 0;        // value sent to RS485 (with offset and min-max, or max when limiter off)
-int solarPowerW = 0;        // current solar production
-bool negativePriceActive = false; // MQTT input: true forces minimum output when enabled
+// MQTT and runtime state
+int currentGridImportW = 0;        // signed grid power: positive import, negative export
+int inverterCalculatedValue = 0;   // calculated controller output before final send decision
+int inverterSetValue = 0;          // value sent to RS485 (with offset and min-max, or max when limiter off)
+int solarPowerW = 0;               // current solar production
+bool negativePriceActive = false;  // MQTT input: true forces minimum output when enabled
 float electricityPriceEurKwh = 0.0f; // optional MQTT input for status/logging
-float temperature = 0.0;    // current temperature in Celsius
-float Dewpoint = 0.0;       // current dewpoint in Celsius
-float Humidity = 0.0;       // current humidity in percent
-float Pressure = 0.0;       // current pressure in hPa
+float temperature = 0.0;           // current temperature in Celsius
+float Dewpoint = 0.0;              // current dewpoint in Celsius
+float Humidity = 0.0;              // current humidity in percent
+float Pressure = 0.0;              // current pressure in hPa
 
+static String mqttBaseTopic;
+static String topicPublishSetValueW;
+static String topicPublishCalculatedValueW;
+static String topicPublishGridImportW;
+static String topicPublishTempC;
+static String topicPublishHumidityPct;
+static String topicPublishDewpointC;
+
+// Scheduler/timing state
 static bool bme280Initialized = false;
 static volatile bool rs485TickDue = false;
 static unsigned long nextTemperatureReadMs = 0;
+static constexpr unsigned long MIN_TEMPERATURE_READ_INTERVAL_MS = 1000UL;
+static constexpr unsigned long MAX_TEMPERATURE_READ_INTERVAL_MS = 3600000UL;
+
 #if FEATURE_OLED_DISPLAY_ENABLED
+// Display state
 bool displayActive = true; // flag to indicate if the display is active
 static bool displayInitialized = false;
 static unsigned long nextDisplayRefreshMs = 0;
@@ -331,8 +366,8 @@ static constexpr unsigned long DISPLAY_REFRESH_INTERVAL_MS = 1000UL;
 static constexpr unsigned long MIN_DISPLAY_ON_MS = 1000UL;
 static constexpr unsigned long MAX_DISPLAY_ON_MS = 86400000UL;
 #endif
-static constexpr unsigned long MIN_TEMPERATURE_READ_INTERVAL_MS = 1000UL;
-static constexpr unsigned long MAX_TEMPERATURE_READ_INTERVAL_MS = 3600000UL;
+
+// Feature-specific globals
 #if FEATURE_HEATER_ENABLED
 static bool dewpointRiskActive = false;   // tracks dewpoint alarm state
 static bool heaterLatchedState = false;   // hysteresis latch for heater
@@ -356,27 +391,6 @@ static cm::MQTTManager::Settings &mqttSettings = mqtt.settings();
 static cm::IOManager ioManager;
 static cm::AlarmManager alarmManager;
 
-LimiterSettings limiterSettings;
-TempSettings tempSettings;
-I2CSettings i2cSettings;
-#if FEATURE_FAN_ENABLED
-FanSettings fanSettings;
-#endif
-#if FEATURE_HEATER_ENABLED
-HeaterSettings heaterSettings;
-#endif
-#if FEATURE_OLED_DISPLAY_ENABLED
-DisplaySettings displaySettings;
-#endif
-WiFiRoamingSettings wifiRoamingSettings;
-RS485_Settings rs485settings;
-
-static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
-static cm::CoreSystemSettings &systemSettings = coreSettings.system;
-static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
-static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
-static cm::CoreWiFiServices wifiServices;
-
 #if FEATURE_FAN_ENABLED
 static constexpr char IO_FAN_ID[] = "fan_relay";
 #endif
@@ -385,14 +399,6 @@ static constexpr char IO_HEATER_ID[] = "heater_relay";
 #endif
 static constexpr char IO_RESET_ID[] = "reset_btn";
 static constexpr char IO_AP_ID[] = "ap_btn";
-
-static String mqttBaseTopic;
-static String topicPublishSetValueW;
-static String topicPublishCalculatedValueW;
-static String topicPublishGridImportW;
-static String topicPublishTempC;
-static String topicPublishHumidityPct;
-static String topicPublishDewpointC;
 
 struct PidControllerState
 {
@@ -767,17 +773,21 @@ static void setupLogging()
     Serial.begin(115200);
 
     auto serialOut = std::make_unique<cm::LoggingManager::SerialOutput>(Serial);
-    serialOut->setLevel(LL::Info);
+    serialOut->setLevel(LL::Off);
+    // serialOut->setLevel(LL::Info);
+    // serialOut->setLevel(LL::Debug);
     serialOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
     serialOut->setRateLimitMs(2);
     lmg.addOutput(std::move(serialOut));
 
-    lmg.setGlobalLevel(LL::Info);
-    lmg.attachToConfigManager(LL::Info, LL::Info, "");
+    // lmg.setGlobalLevel(LL::Info);
+    lmg.setGlobalLevel(LL::Debug);
+    lmg.attachToConfigManager(LL::Info, LL::Debug, "");
 
-    auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 50);
+    auto guiOut = std::make_unique<cm::LoggingManager::GuiOutput>(ConfigManager, 20);
     guiOut->addTimestamp(cm::LoggingManager::Output::TimestampMode::DateTime);
-    guiOut->setLevel(LL::Info);
+    // guiOut->setLevel(LL::Info);
+    guiOut->setLevel(LL::Debug);
     lmg.addOutput(std::move(guiOut));
 }
 
@@ -1264,6 +1274,23 @@ static void updateMqttTopics()
     topicPublishDewpointC = mqttBaseTopic + "/Dewpoint";
 }
 
+static void publishMqttNow()
+{
+    if (!mqtt.isConnected())
+    {
+        return;
+    }
+
+    updateMqttTopics();
+
+    mqtt.publishExtraTopicLazy("setvalue_w", topicPublishSetValueW.c_str(), []() { return String(inverterSetValue); }, false);
+    mqtt.publishExtraTopicLazy("calculated_w", topicPublishCalculatedValueW.c_str(), []() { return String(inverterCalculatedValue); }, false);
+    mqtt.publishExtraTopicLazy("grid_import_w", topicPublishGridImportW.c_str(), []() { return String(currentGridImportW); }, false);
+    mqtt.publishExtraTopicLazy("temperature_c", topicPublishTempC.c_str(), []() { return String(temperature); }, false);
+    mqtt.publishExtraTopicLazy("humidity_pct", topicPublishHumidityPct.c_str(), []() { return String(Humidity); }, false);
+    mqtt.publishExtraTopicLazy("dewpoint_c", topicPublishDewpointC.c_str(), []() { return String(Dewpoint); }, false);
+}
+
 static void resetPidController()
 {
     pidController.initialized = false;
@@ -1323,78 +1350,9 @@ static int computePidStabilizedTarget(int baseTarget, int configuredMin, int con
     return static_cast<int>(roundf(pidController.output));
 }
 
-#if FEATURE_FAN_ENABLED
-static void setFanRelay(bool on)
-{
-    if (!fanSettings.enabled.get())
-    {
-        on = false;
-    }
-    ioManager.setState(IO_FAN_ID, on);
-}
-
-static bool getFanRelay()
-{
-    return ioManager.getState(IO_FAN_ID);
-}
-#endif
-
-#if FEATURE_HEATER_ENABLED
-static void setHeaterRelay(bool on)
-{
-    if (!heaterSettings.enabled.get()
-#if FEATURE_ANY_RELAY_OUTPUTS
-        && !manualOverrideActive
-#endif
-    )
-    {
-        on = false;
-    }
-    ioManager.setState(IO_HEATER_ID, on);
-}
-
-static bool getHeaterRelay()
-{
-    return ioManager.getState(IO_HEATER_ID);
-}
-#endif
-
-#if FEATURE_ANY_RELAY_OUTPUTS
-static void setManualOverride(bool on)
-{
-    manualOverrideActive = on;
-    if (!manualOverrideActive)
-    {
-#if FEATURE_FAN_ENABLED
-        CheckVentilator(temperature);
-#endif
-#if FEATURE_HEATER_ENABLED
-        EvaluateHeater(temperature);
-#endif
-    }
-}
-#endif
-
 //----------------------------------------
 // MQTT FUNCTIONS
 //----------------------------------------
-
-static void publishMqttNow()
-{
-    if (!mqtt.isConnected())
-    {
-        return;
-    }
-
-    updateMqttTopics();
-
-    mqtt.publishExtraTopicLazy("setvalue_w", topicPublishSetValueW.c_str(), []() { return String(inverterSetValue); }, false);
-    mqtt.publishExtraTopicLazy("calculated_w", topicPublishCalculatedValueW.c_str(), []() { return String(inverterCalculatedValue); }, false);
-    mqtt.publishExtraTopicLazy("grid_import_w", topicPublishGridImportW.c_str(), []() { return String(currentGridImportW); }, false);
-    mqtt.publishExtraTopicLazy("temperature_c", topicPublishTempC.c_str(), []() { return String(temperature); }, false);
-    mqtt.publishExtraTopicLazy("humidity_pct", topicPublishHumidityPct.c_str(), []() { return String(Humidity); }, false);
-    mqtt.publishExtraTopicLazy("dewpoint_c", topicPublishDewpointC.c_str(), []() { return String(Dewpoint); }, false);
-}
 
 static unsigned long secondsToMsClamped(int seconds, unsigned long minMs, unsigned long maxMs)
 {
@@ -1509,34 +1467,6 @@ static bool handleTemperatureScheduler()
     nextTemperatureReadMs = now + intervalMs;
     return readBme280();
 }
-
-#if FEATURE_OLED_DISPLAY_ENABLED
-static void handleDisplayScheduler()
-{
-    const unsigned long now = millis();
-    if (!timeReached(now, nextDisplayRefreshMs))
-    {
-        return;
-    }
-
-    nextDisplayRefreshMs = now + DISPLAY_REFRESH_INTERVAL_MS;
-    WriteToDisplay();
-}
-
-static void handleDisplayPowerScheduler()
-{
-    if (!displayActive || !displaySettings.turnDisplayOff.get() || displayOffAtMs == 0)
-    {
-        return;
-    }
-
-    const unsigned long now = millis();
-    if (timeReached(now, displayOffAtMs))
-    {
-        ShowDisplayOff();
-    }
-}
-#endif
 
 static void updateStatusLED()
 {
@@ -1663,7 +1593,7 @@ static void processRS485Tick()
         lmg.logTag(LL::Trace, "RS485", "Controller enabled -> set inverter to %d W (calc=%d, corr=%d)", inverterSetValue, inverterCalculatedValue, correctedValue);
         if (usePidSmoothing)
         {
-            lmg.logTag(LL::Debug, "PID", "inv=%d gridSigned=%d gridIn=%d gridOut=%d off=%d base=%d clamp=%d in=%d out=%d min=%d max=%d set=%d",
+            lmg.logTag(LL::Trace, "PID", "inv=%d gridSigned=%d gridIn=%d gridOut=%d off=%d base=%d clamp=%d in=%d out=%d min=%d max=%d set=%d",
                        currentInverterOutputW, signedGridPowerW, gridImportW, gridExportW, offset, pidBaseTarget, pidClampedBaseTarget,
                        pidInput, inverterCalculatedValue, configuredMin, configuredMax, inverterSetValue);
         }
@@ -1694,34 +1624,6 @@ void testRS232()
         lmg.logTag(LL::Debug, "RS485", "[MAIN] Received on Serial2");
     }
 }
-
-#if FEATURE_OLED_DISPLAY_ENABLED
-void SetupStartDisplay()
-{
-    Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
-    Wire.setClock(i2cSettings.busFreq.get());
-
-    const uint8_t address = static_cast<uint8_t>(i2cSettings.displayAddr.get());
-    if (!display.begin(SSD1306_SWITCHCAPVCC, address))
-    {
-        displayInitialized = false;
-        displayActive = false;
-        lmg.logTag(LL::Warn, "Display", "SSD1306 init failed (addr=0x%02X)", static_cast<unsigned int>(address));
-        return;
-    }
-
-    displayInitialized = true;
-    displayActive = true;
-
-    display.clearDisplay();
-    display.drawRect(0, 0, 128, 25, WHITE);
-    display.setTextSize(2);
-    display.setTextColor(WHITE);
-    display.setCursor(10, 5);
-    display.println("Starting!");
-    display.display();
-}
-#endif
 
 void SetupStartTemperatureMeasuring()
 {
@@ -1819,6 +1721,58 @@ bool readBme280()
 // Limiter provider moved into setup() for clarity
 
 #if FEATURE_OLED_DISPLAY_ENABLED
+static void handleDisplayScheduler()
+{
+    const unsigned long now = millis();
+    if (!timeReached(now, nextDisplayRefreshMs))
+    {
+        return;
+    }
+
+    nextDisplayRefreshMs = now + DISPLAY_REFRESH_INTERVAL_MS;
+    WriteToDisplay();
+}
+
+static void handleDisplayPowerScheduler()
+{
+    if (!displayActive || !displaySettings.turnDisplayOff.get() || displayOffAtMs == 0)
+    {
+        return;
+    }
+
+    const unsigned long now = millis();
+    if (timeReached(now, displayOffAtMs))
+    {
+        ShowDisplayOff();
+    }
+}
+
+void SetupStartDisplay()
+{
+    Wire.begin(i2cSettings.sdaPin.get(), i2cSettings.sclPin.get());
+    Wire.setClock(i2cSettings.busFreq.get());
+
+    const uint8_t address = static_cast<uint8_t>(i2cSettings.displayAddr.get());
+    if (!display.begin(SSD1306_SWITCHCAPVCC, address))
+    {
+        displayInitialized = false;
+        displayActive = false;
+        lmg.logTag(LL::Warn, "Display", "SSD1306 init failed (addr=0x%02X)", static_cast<unsigned int>(address));
+        return;
+    }
+
+    displayInitialized = true;
+    displayActive = true;
+
+    display.clearDisplay();
+    display.drawRect(0, 0, 128, 25, WHITE);
+    display.setTextSize(2);
+    display.setTextColor(WHITE);
+    display.setCursor(10, 5);
+    display.println("Starting!");
+    display.display();
+}
+
 void WriteToDisplay()
 {
     if (!displayInitialized || !displayActive)
@@ -1868,6 +1822,84 @@ void WriteToDisplay()
     }
 
     display.display();
+}
+
+void ShowDisplayOn()
+{
+    if (!displayInitialized)
+        return;
+    display.ssd1306_command(SSD1306_DISPLAYON); // Turn on the display
+    displayActive = true;
+    displayOffAtMs = millis() + secondsToMsClamped(displaySettings.onTimeSec.get(),
+                                                   MIN_DISPLAY_ON_MS,
+                                                   MAX_DISPLAY_ON_MS);
+    nextDisplayRefreshMs = 0;
+}
+
+void ShowDisplayOff()
+{
+    if (!displayInitialized)
+        return;
+    display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
+    // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
+
+    if (displaySettings.turnDisplayOff.get())
+    {
+        displayActive = false;
+    }
+    displayOffAtMs = 0;
+}
+#endif
+
+#if FEATURE_FAN_ENABLED
+static void setFanRelay(bool on)
+{
+    if (!fanSettings.enabled.get())
+    {
+        on = false;
+    }
+    ioManager.setState(IO_FAN_ID, on);
+}
+
+static bool getFanRelay()
+{
+    return ioManager.getState(IO_FAN_ID);
+}
+#endif
+
+#if FEATURE_HEATER_ENABLED
+static void setHeaterRelay(bool on)
+{
+    if (!heaterSettings.enabled.get()
+#if FEATURE_ANY_RELAY_OUTPUTS
+        && !manualOverrideActive
+#endif
+    )
+    {
+        on = false;
+    }
+    ioManager.setState(IO_HEATER_ID, on);
+}
+
+static bool getHeaterRelay()
+{
+    return ioManager.getState(IO_HEATER_ID);
+}
+#endif
+
+#if FEATURE_ANY_RELAY_OUTPUTS
+static void setManualOverride(bool on)
+{
+    manualOverrideActive = on;
+    if (!manualOverrideActive)
+    {
+#if FEATURE_FAN_ENABLED
+        CheckVentilator(temperature);
+#endif
+#if FEATURE_HEATER_ENABLED
+        EvaluateHeater(temperature);
+#endif
+    }
 }
 #endif
 
@@ -1933,30 +1965,3 @@ void EvaluateHeater(float currentTemperature)
 }
 #endif
 
-#if FEATURE_OLED_DISPLAY_ENABLED
-void ShowDisplayOn()
-{
-    if (!displayInitialized)
-        return;
-    display.ssd1306_command(SSD1306_DISPLAYON); // Turn on the display
-    displayActive = true;
-    displayOffAtMs = millis() + secondsToMsClamped(displaySettings.onTimeSec.get(),
-                                                   MIN_DISPLAY_ON_MS,
-                                                   MAX_DISPLAY_ON_MS);
-    nextDisplayRefreshMs = 0;
-}
-
-void ShowDisplayOff()
-{
-    if (!displayInitialized)
-        return;
-    display.ssd1306_command(SSD1306_DISPLAYOFF); // Turn off the display
-    // display.fillRect(0, 0, 128, 24, BLACK); // Clear the previous message area
-
-    if (displaySettings.turnDisplayOff.get())
-    {
-        displayActive = false;
-    }
-    displayOffAtMs = 0;
-}
-#endif
