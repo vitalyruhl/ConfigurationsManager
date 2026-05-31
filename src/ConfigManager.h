@@ -44,7 +44,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "4.2.0" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.2.1" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;

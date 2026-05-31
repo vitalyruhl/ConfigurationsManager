@@ -2,6 +2,19 @@
 
 This changelog is a curated overview.
 
+## 4.2.1
+
+- WiFi connection health handling now bounds `WL_IDLE_STATUS` and
+  `WL_SCAN_COMPLETED` transients with a grace window so long scan/roaming
+  phases cannot keep a false connected state indefinitely.
+- `lastGoodConnectionMillis` is now refreshed only on healthy STA connectivity
+  (`WL_CONNECTED` with a valid local IP), allowing reconnect escalation and
+  auto-reboot fallback to trigger when recovery fails.
+- Smart Roaming remains enabled and supported; roaming transitions now include
+  additional diagnostics around transient start, grace, expiry, and recovery.
+- WebUI package version aligned with the ConfigurationsManager package/library
+  version at 4.2.1.
+
 ## 4.2.0
 
 - WebUI OTA flashing now shows an active upload progress popup and guards
