@@ -27,6 +27,7 @@ private:
 
   // Timing variables
   unsigned long lastGoodConnectionMillis;
+  unsigned long connectionMonitoringStartedMillis;
   unsigned long lastReconnectAttempt;
   unsigned long reconnectInterval;
   unsigned long autoRebootTimeoutMs;
@@ -67,6 +68,10 @@ private:
   // Diagnostics / throttled logs
   unsigned long lastNoSsidScanMillis;
   unsigned long noSsidScanStartMillis;
+  bool transientStatusActive;
+  int transientStatusCode;
+  unsigned long transientStatusStartedMillis;
+  unsigned long transientStatusLastLogMillis;
 
   // Deferred roaming reconnect (non-blocking replacement for fixed delay).
   bool roamingReconnectPending;

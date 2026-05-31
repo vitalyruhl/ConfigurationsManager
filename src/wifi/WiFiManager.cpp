@@ -12,6 +12,8 @@ namespace
 {
 constexpr uint32_t kRestartMarkerMagic = 0x434D5752; // "CMWR"
 constexpr uint32_t kRestartCauseWiFiAutoReboot = 1;
+constexpr unsigned long kTransientGraceWindowMs = 10000UL;
+constexpr unsigned long kTransientLogIntervalMs = 5000UL;
 
 RTC_DATA_ATTR uint32_t g_restartMarkerMagic = 0;
 RTC_DATA_ATTR uint32_t g_restartMarkerCause = 0;
@@ -68,6 +70,12 @@ void logAndClearRestartMarker()
   g_restartMarkerMagic = 0;
   g_restartMarkerCause = 0;
 }
+
+bool isValidStationIp(const IPAddress &ip)
+{
+  const IPAddress zero;
+  return ip != zero;
+}
 } // namespace
 
 ConfigManagerWiFi::ConfigManagerWiFi()
@@ -75,6 +83,7 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , autoRebootEnabled(false)
   , initialized(false)
   , lastGoodConnectionMillis(0)
+  , connectionMonitoringStartedMillis(0)
   , lastReconnectAttempt(0)
   , reconnectInterval(10000)
   , autoRebootTimeoutMs(0)
@@ -95,6 +104,10 @@ ConfigManagerWiFi::ConfigManagerWiFi()
   , connectAttempts(0)
   , lastNoSsidScanMillis(0)
   , noSsidScanStartMillis(0)
+  , transientStatusActive(false)
+  , transientStatusCode(WL_IDLE_STATUS)
+  , transientStatusStartedMillis(0)
+  , transientStatusLastLogMillis(0)
   , roamingReconnectPending(false)
   , roamingReconnectAtMs(0)
   , roamingTargetBSSID("")
@@ -113,6 +126,11 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
   reconnectInterval = reconnectIntervalMs;
   autoRebootTimeoutMs = autoRebootTimeoutMin * 60000UL; // Convert minutes to milliseconds
   autoRebootEnabled = (autoRebootTimeoutMin > 0);
+  connectionMonitoringStartedMillis = millis();
+  transientStatusActive = false;
+  transientStatusCode = WL_IDLE_STATUS;
+  transientStatusStartedMillis = 0;
+  transientStatusLastLogMillis = 0;
 
   WIFI_LOG_VERBOSE("Config: reconnectInterval=%lu ms, autoReboot=%s (%lu min)",
                    reconnectInterval,
@@ -120,17 +138,16 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
                    autoRebootTimeoutMin);
 
   // Initialize timing
-  lastGoodConnectionMillis = millis();
   lastReconnectAttempt = 0;
 
   // Determine initial state
   if (WiFi.getMode() == WIFI_AP) {
     currentState = WIFI_STATE_AP_MODE;
     WIFI_LOG("Starting in AP mode");
-  } else if (WiFi.status() == WL_CONNECTED) {
+  } else if (WiFi.status() == WL_CONNECTED && isValidStationIp(WiFi.localIP())) {
     currentState = WIFI_STATE_CONNECTED;
     lastGoodConnectionMillis = millis();
-    WIFI_LOG_VERBOSE("Already connected to %s", WiFi.SSID().c_str());
+    WIFI_LOG_VERBOSE("Already connected to %s (IP: %s)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
   } else {
     currentState = WIFI_STATE_DISCONNECTED;
     WIFI_LOG_VERBOSE("Starting disconnected");
@@ -159,6 +176,10 @@ void ConfigManagerWiFi::startConnection(const String& wifiSSID, const String& wi
   useDHCP = true;
   dns1 = IPAddress();
   dns2 = IPAddress();
+  transientStatusActive = false;
+  transientStatusCode = WL_IDLE_STATUS;
+  transientStatusStartedMillis = 0;
+  transientStatusLastLogMillis = 0;
 
   WIFI_LOG_VERBOSE("Starting DHCP connection to %s", ssid.c_str());
 
@@ -179,6 +200,10 @@ void ConfigManagerWiFi::startConnection(const IPAddress& sIP, const IPAddress& g
   dns1 = primaryDNS;
   dns2 = secondaryDNS;
   useDHCP = false;
+  transientStatusActive = false;
+  transientStatusCode = WL_IDLE_STATUS;
+  transientStatusStartedMillis = 0;
+  transientStatusLastLogMillis = 0;
 
   WIFI_LOG_VERBOSE("Starting static IP connection to %s (IP: %s, DNS1: %s, DNS2: %s)",
            ssid.c_str(),
@@ -210,6 +235,11 @@ void ConfigManagerWiFi::applyStaticConfig() {
 
 void ConfigManagerWiFi::startAccessPoint(const String& apSSID, const String& apPassword) {
   WIFI_LOG_VERBOSE("Starting Access Point: %s", apSSID.c_str());
+
+  transientStatusActive = false;
+  transientStatusCode = WL_IDLE_STATUS;
+  transientStatusStartedMillis = 0;
+  transientStatusLastLogMillis = 0;
 
   WiFi.mode(WIFI_AP);
   if (apPassword.length() > 0) {
@@ -379,64 +409,153 @@ void ConfigManagerWiFi::update() {
 
   processPendingRoamingReconnect_();
 
-  // Debug: Log current status every few calls
-  // static int debugCounter = 0;
-  // debugCounter++;
-  // if (debugCounter % 50 == 0) { // Every 50 calls (~every 0.5 second for more frequent debugging)
-  //   WIFI_LOG("DEBUG Update - Current State: %s, WiFi.status(): %d (%s)", 
-  //          getStatusString().c_str(), 
-  //          WiFi.status(), 
-  //          getWiFiStatusString(WiFi.status()).c_str());
-  // }
+  const unsigned long now = millis();
+  const int wifiStatus = WiFi.status();
+  const IPAddress localIp = WiFi.localIP();
+  const bool apMode = (WiFi.getMode() == WIFI_AP);
+  const bool validStaIp = isValidStationIp(localIp);
 
-  // Determine current WiFi state
-  if (WiFi.getMode() == WIFI_AP) {
+  if (apMode) {
+    transientStatusActive = false;
+    transientStatusCode = WL_IDLE_STATUS;
+    transientStatusStartedMillis = 0;
+    transientStatusLastLogMillis = 0;
     if (currentState != WIFI_STATE_AP_MODE) {
       transitionToState(WIFI_STATE_AP_MODE);
     }
-  } else if (WiFi.status() == WL_CONNECTED) {
-    if (currentState != WIFI_STATE_CONNECTED) {
-      // Log detailed connection info when first connecting
-      WIFI_LOG_VERBOSE("WiFi.status() = WL_CONNECTED, IP: %s, Gateway: %s, DNS: %s",
-               WiFi.localIP().toString().c_str(),
-               WiFi.gatewayIP().toString().c_str(),
-               WiFi.dnsIP().toString().c_str());
-      transitionToState(WIFI_STATE_CONNECTED);
+  } else if (wifiStatus == WL_CONNECTED) {
+    if (validStaIp) {
+      if (transientStatusActive) {
+        WIFI_LOG_VERBOSE("Transient status cleared after %lu ms (status=%d, IP=%s)",
+                         now - transientStatusStartedMillis,
+                         transientStatusCode,
+                         localIp.toString().c_str());
+      }
+      transientStatusActive = false;
+      transientStatusCode = WL_IDLE_STATUS;
+      transientStatusStartedMillis = 0;
+      transientStatusLastLogMillis = 0;
+      if (currentState != WIFI_STATE_CONNECTED) {
+        transitionToState(WIFI_STATE_CONNECTED);
+      }
+      lastGoodConnectionMillis = now;
+    } else if (currentState == WIFI_STATE_CONNECTED) {
+      WIFI_LOG("Healthy WiFi check failed: status=%d, IP=%s, logicalState=%s -> recovery", 
+               wifiStatus,
+               localIp.toString().c_str(),
+               getStatusString().c_str());
+      transientStatusActive = false;
+      transientStatusCode = WL_IDLE_STATUS;
+      transientStatusStartedMillis = 0;
+      transientStatusLastLogMillis = 0;
+      roamingReconnectPending = false;
+      roamingTargetBSSID = "";
+      transitionToState(WIFI_STATE_RECONNECTING);
+      attemptConnect();
+    } else if (currentState == WIFI_STATE_CONNECTING) {
+      // Waiting for DHCP/IP assignment; do not count this as healthy yet.
     }
-    // Update last good connection time
-    lastGoodConnectionMillis = millis();
-  } else {
-    // WiFi is not reporting WL_CONNECTED - log the actual status
-    const int wifiStatus = WiFi.status();
+  } else if (wifiStatus == WL_SCAN_COMPLETED || wifiStatus == WL_IDLE_STATUS) {
+    if (currentState == WIFI_STATE_CONNECTED) {
+      if (!transientStatusActive || transientStatusCode != wifiStatus) {
+        transientStatusActive = true;
+        transientStatusCode = wifiStatus;
+        transientStatusStartedMillis = now;
+        transientStatusLastLogMillis = 0;
+        WIFI_LOG("Transient WiFi status start: status=%d (%s), logicalState=%s, IP=%s, RSSI=%d",
+                 wifiStatus,
+                 getWiFiStatusString(wifiStatus).c_str(),
+                 getStatusString().c_str(),
+                 localIp.toString().c_str(),
+                 WiFi.RSSI());
+      }
 
-    // The ESP32 WiFi stack can temporarily report WL_SCAN_COMPLETED (and sometimes WL_IDLE_STATUS)
-    // even while the link is still up (e.g. during scans/roaming). If we were connected before,
-    // treat this as a transient state to avoid false disconnect transitions and reconnect storms.
-    if (currentState == WIFI_STATE_CONNECTED && (wifiStatus == WL_SCAN_COMPLETED || wifiStatus == WL_IDLE_STATUS)) {
-      WIFI_LOG_VERBOSE("Transient status while connected: %d (%s)",
-                       wifiStatus, getWiFiStatusString(wifiStatus).c_str());
-      lastGoodConnectionMillis = millis();
-    } else {
-      if (currentState == WIFI_STATE_CONNECTED) {
-        WIFI_LOG("Connection lost! WiFi.status() = %d", wifiStatus);
-        transitionToState(WIFI_STATE_DISCONNECTED);
-      } else if (currentState == WIFI_STATE_CONNECTING) {
-        // Still trying to connect, log status periodically
-        static unsigned long lastStatusLog = 0;
-        if (millis() - lastStatusLog > 5000) { // Log every 5 seconds
-          WIFI_LOG_VERBOSE("Still connecting... WiFi.status() = %d (%s)",
-                           wifiStatus, getWiFiStatusString(wifiStatus).c_str());
-          lastStatusLog = millis();
+      const unsigned long transientElapsed = now - transientStatusStartedMillis;
+      if (transientElapsed < kTransientGraceWindowMs) {
+        if (transientStatusLastLogMillis == 0 || now - transientStatusLastLogMillis >= kTransientLogIntervalMs) {
+          transientStatusLastLogMillis = now;
+          WIFI_LOG_VERBOSE("Transient WiFi status within grace: status=%d (%s), elapsed=%lu ms, logicalState=%s, IP=%s, RSSI=%d",
+                           wifiStatus,
+                           getWiFiStatusString(wifiStatus).c_str(),
+                           transientElapsed,
+                           getStatusString().c_str(),
+                           localIp.toString().c_str(),
+                           WiFi.RSSI());
+        }
+      } else {
+        WIFI_LOG("Transient WiFi status expired: status=%d (%s), elapsed=%lu ms, logicalState=%s, IP=%s, RSSI=%d -> recovery",
+                 wifiStatus,
+                 getWiFiStatusString(wifiStatus).c_str(),
+                 transientElapsed,
+                 getStatusString().c_str(),
+                 localIp.toString().c_str(),
+                 WiFi.RSSI());
+        transientStatusActive = false;
+        transientStatusCode = WL_IDLE_STATUS;
+        transientStatusStartedMillis = 0;
+        transientStatusLastLogMillis = 0;
+        roamingReconnectPending = false;
+        roamingTargetBSSID = "";
+        transitionToState(WIFI_STATE_RECONNECTING);
+        attemptConnect();
+      }
+    } else if (currentState == WIFI_STATE_CONNECTING) {
+      static unsigned long lastStatusLog = 0;
+      if (now - lastStatusLog > 5000) {
+        WIFI_LOG_VERBOSE("Still connecting... WiFi.status() = %d (%s), logicalState=%s, IP=%s, RSSI=%d",
+                         wifiStatus,
+                         getWiFiStatusString(wifiStatus).c_str(),
+                         getStatusString().c_str(),
+                         localIp.toString().c_str(),
+                         WiFi.RSSI());
+        lastStatusLog = now;
 
-          if (!isOtaActive_() && wifiStatus == WL_NO_SSID_AVAIL) {
-            logNoSsidAvailScan_();
-          }
+        if (!isOtaActive_() && wifiStatus == WL_NO_SSID_AVAIL) {
+          logNoSsidAvailScan_();
         }
       }
 
-      // Handle reconnection attempts (non-blocking)
+      handleReconnection();
+    } else {
       handleReconnection();
     }
+  } else {
+    if (transientStatusActive) {
+      WIFI_LOG_VERBOSE("Transient WiFi status cleared by non-transient status=%d (%s)",
+                       wifiStatus,
+                       getWiFiStatusString(wifiStatus).c_str());
+    }
+    transientStatusActive = false;
+    transientStatusCode = WL_IDLE_STATUS;
+    transientStatusStartedMillis = 0;
+    transientStatusLastLogMillis = 0;
+
+    if (currentState == WIFI_STATE_CONNECTED) {
+      WIFI_LOG("Connection lost! WiFi.status() = %d (%s), logicalState=%s, IP=%s, RSSI=%d",
+               wifiStatus,
+               getWiFiStatusString(wifiStatus).c_str(),
+               getStatusString().c_str(),
+               localIp.toString().c_str(),
+               WiFi.RSSI());
+      transitionToState(WIFI_STATE_DISCONNECTED);
+    } else if (currentState == WIFI_STATE_CONNECTING) {
+      static unsigned long lastStatusLog = 0;
+      if (now - lastStatusLog > 5000) {
+        WIFI_LOG_VERBOSE("Still connecting... WiFi.status() = %d (%s), logicalState=%s, IP=%s, RSSI=%d",
+                         wifiStatus,
+                         getWiFiStatusString(wifiStatus).c_str(),
+                         getStatusString().c_str(),
+                         localIp.toString().c_str(),
+                         WiFi.RSSI());
+        lastStatusLog = now;
+
+        if (!isOtaActive_() && wifiStatus == WL_NO_SSID_AVAIL) {
+          logNoSsidAvailScan_();
+        }
+      }
+    }
+
+    handleReconnection();
   }
 
   // Check auto-reboot condition
@@ -445,7 +564,7 @@ void ConfigManagerWiFi::update() {
   }
 
   // Check smart roaming when connected
-  if (!isOtaActive_() && currentState == WIFI_STATE_CONNECTED) {
+  if (!isOtaActive_() && currentState == WIFI_STATE_CONNECTED && !transientStatusActive) {
     checkSmartRoaming();
   }
 }
@@ -555,7 +674,22 @@ void ConfigManagerWiFi::checkAutoReboot() {
   if (isOtaActive_()) return;
 
   unsigned long now = millis();
-  unsigned long timeSinceLastConnection = now - lastGoodConnectionMillis;
+  const unsigned long referenceMillis = lastGoodConnectionMillis != 0 ? lastGoodConnectionMillis : connectionMonitoringStartedMillis;
+  unsigned long timeSinceLastConnection = now - referenceMillis;
+
+  static unsigned long lastAutoRebootEligibilityLog = 0;
+  if (lastAutoRebootEligibilityLog == 0 || now - lastAutoRebootEligibilityLog >= 5000UL)
+  {
+    lastAutoRebootEligibilityLog = now;
+    WIFI_LOG_VERBOSE("Auto-reboot eligibility: state=%s, wifiStatus=%d (%s), IP=%s, RSSI=%d, sinceHealthy=%lu ms, timeout=%lu ms",
+                     getStatusString().c_str(),
+                     WiFi.status(),
+                     getWiFiStatusString(WiFi.status()).c_str(),
+                     WiFi.localIP().toString().c_str(),
+                     WiFi.RSSI(),
+                     timeSinceLastConnection,
+                     autoRebootTimeoutMs);
+  }
 
   if (timeSinceLastConnection >= autoRebootTimeoutMs) {
     // Time for auto-reboot
@@ -630,17 +764,25 @@ void ConfigManagerWiFi::disconnect() {
   roamingReconnectPending = false;
   roamingTargetBSSID = "";
   connectAfterStackReset = false;
+  transientStatusActive = false;
+  transientStatusCode = WL_IDLE_STATUS;
+  transientStatusStartedMillis = 0;
+  transientStatusLastLogMillis = 0;
   WiFi.disconnect();
   transitionToState(WIFI_STATE_DISCONNECTED);
 }
 
 void ConfigManagerWiFi::reset() {
   currentState = WIFI_STATE_DISCONNECTED;
-  lastGoodConnectionMillis = millis();
+  connectionMonitoringStartedMillis = millis();
   lastReconnectAttempt = 0;
   roamingReconnectPending = false;
   roamingTargetBSSID = "";
   connectAfterStackReset = false;
+  transientStatusActive = false;
+  transientStatusCode = WL_IDLE_STATUS;
+  transientStatusStartedMillis = 0;
+  transientStatusLastLogMillis = 0;
 }
 
 // Status information
