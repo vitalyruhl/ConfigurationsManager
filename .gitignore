@@ -41,3 +41,16 @@ secrets.h
 /webui/dist/index.html
 /tools/_buildlogs
 .pio-home
+
+# Serena local/cache data
+/.cache/
+/.serena/project.local.yml
+/.serena/cache/
+/.serena/logs/
+/.serena/index/
+/.serena/compile_commands.json
+/.serena/memories/local/
+/.serena/memories/tmp/
+/.serena/memories/local_*.md
+/.serena/memories/tmp_*.md
+/compile_commands.json

@@ -1,0 +1,9 @@
+/cache/
+/logs/
+/index/
+/project.local.yml
+/compile_commands.json
+/memories/local/
+/memories/tmp/
+/memories/local_*.md
+/memories/tmp_*.md
