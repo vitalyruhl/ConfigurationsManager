@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "keywords": "esp32, configuration, configurations, config, config-manager, configuration-manager, settings, settings-manager, wifi, wi-fi, web-server, web-ui, ota, nvs, preferences, iot, automation",
   "description": "Robust ESP32 config and configuration manager with web UI, WiFi setup, OTA, and persistent settings via NVS/Preferences.",
   "repository": {
