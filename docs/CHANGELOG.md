@@ -2,6 +2,13 @@
 
 This changelog is a curated overview.
 
+## 4.2.2
+
+- Updated WebUI build dependencies to `esbuild` 0.28.1 and `shell-quote` 1.8.4,
+  resolving their known security advisories.
+- WebUI package version aligned with the ConfigurationsManager package/library
+  version at 4.2.2.
+
 ## 4.2.1
 
 - WiFi connection health handling now bounds `WL_IDLE_STATUS` and
