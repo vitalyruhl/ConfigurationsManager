@@ -2,6 +2,21 @@
 
 This changelog is a curated overview.
 
+## 4.2.3
+
+- Updated WebUI dependencies to `vue` 3.5.38 and `vite` 8.0.16.
+- Updated PlatformIO example dependencies to current compatible releases,
+  including `ArduinoJson` 7.4.3, `ESPAsyncWebServer-esphome` 3.4.0,
+  `Adafruit SSD1306` 2.5.17, and `OneWire` 2.3.8.
+- Updated the BoilerSaver published ConfigurationsManager dependency to the
+  latest registry release, 4.2.2.
+- Excluded `.git` metadata from PlatformIO library exports so local
+  `file://../..` example installs cannot copy transient Git refs.
+- Switched local example library references to relative `symlink://../..`
+  dependencies to avoid copying repository metadata during validation builds.
+- WebUI package version aligned with the ConfigurationsManager package/library
+  version at 4.2.3.
+
 ## 4.2.2
 
 - Updated WebUI build dependencies to `esbuild` 0.28.1 and `shell-quote` 1.8.4,
