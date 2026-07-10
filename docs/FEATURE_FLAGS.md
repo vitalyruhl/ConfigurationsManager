@@ -38,11 +38,13 @@ For real numbers, build your target with and without each flag and compare the f
 - `CM_ENABLE_OTA=0`
   - Flash/RAM: medium savings (removes OTA routes and handler code).
   - Behavior: OTA upload endpoint not available.
+  - Partitioning: use a no-OTA partition table separately when the application should reclaim the second OTA slot (the WT32 example uses `no_ota.csv`).
 
 - `CM_ENABLE_WIFI=0`
   - Flash/RAM: removes ConfigManager WiFi manager, AP, roaming, captive-portal, and WiFi runtime paths.
   - Behavior: the sketch must initialize its network interface and call `ConfigManager.startWebServerOnNetwork()` after it receives an IP address.
   - Framework note: Ethernet event handling in Arduino-ESP32 2.x still uses generic APIs exposed through `WiFi.h`; this does not start the WiFi radio.
+  - Example: see `examples/WT32-ETH01-v1.4` and `docs/ETHERNET.md`.
 
 - `CM_DISABLE_GUI_LOGGING=1`
   - Flash/RAM: small to medium savings (removes GUI log output, buffer, and WS log payload building).
@@ -77,9 +79,9 @@ For real numbers, build your target with and without each flag and compare the f
 
 OTA is convenient but has security implications:
 
-- OTA uses plain HTTP. There is no TLS. Anyone on the same network can observe traffic.
+- WebUI OTA uses plain HTTP. There is no TLS. Anyone on the same network can observe traffic.
 - Use a strong OTA password and do not reuse it elsewhere.
-- Prefer OTA only on trusted LAN/VPN. Avoid open WiFi.
+- Prefer OTA only on a trusted LAN/VPN, whether the device uses WiFi or Ethernet.
 - If you do not need OTA in production, disable it (`CM_ENABLE_OTA=0`).
 - Settings UI password and OTA password are separate; set both if you expose OTA.
 

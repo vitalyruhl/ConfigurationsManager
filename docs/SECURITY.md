@@ -29,13 +29,14 @@ If you need HTTPS/TLS, the recommended approach is to terminate TLS externally (
 ## Recommendations
 
 - Use the UI only on a trusted network.
-- If you need TLS, provide it externally (e.g. VPN, WiFi isolation + trusted clients, or a reverse proxy that terminates HTTPS).
+- If you need TLS, provide it externally (e.g. VPN, network isolation with trusted clients, or a reverse proxy that terminates HTTPS).
 - Treat OTA/MQTT passwords as sensitive and keep them unique per device/project.
 
 ## Related Documentation
 
 - [Settings Configuration](SETTINGS.md)
 - [Feature Flags](FEATURE_FLAGS.md)
+- [Ethernet](ETHERNET.md)
 - [Smart WiFi Roaming](SMART_ROAMING.md)
 
 ## Method overview
