@@ -219,9 +219,9 @@ Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
 
 ```cpp
 void init() {
-    Serial.println("[DEBUG] Initializing YourSettings...");
+    Serial.println("[D] Initializing settings");
     ConfigManager.addSetting(&yourBoolSetting);
-    Serial.println("[DEBUG] YourSettings initialized successfully");
+    Serial.println("[I] Settings initialized");
 }
 ```
 

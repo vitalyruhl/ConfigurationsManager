@@ -1,6 +1,6 @@
 {
   "name": "esp32-config-webui",
-  "version": "4.2.3",
+  "version": "4.4.0",
   "private": true,
   "scripts": {
     "dev": "vite",

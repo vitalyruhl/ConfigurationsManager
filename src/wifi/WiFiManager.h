@@ -1,8 +1,11 @@
 #pragma once
 
+#include "../ConfigManagerConfig.h"
+
+#if CM_ENABLE_WIFI
+
 #include <WiFi.h>
 #include <functional>
-#include "../ConfigManagerConfig.h"
 
 // WiFi connection states
 enum WiFiManagerState {
@@ -163,3 +166,5 @@ public:
   // Compatibility methods for ConfigManager
   bool getStatus() const { return isConnected(); }
 };
+
+#endif // CM_ENABLE_WIFI

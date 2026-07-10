@@ -6,7 +6,9 @@ If you prefer a full working project, open one of the example projects in `examp
 
 ## Examples: PlatformIO setup notes
 
-The examples are set up to use this repo as a local library via `lib_deps = file://../..` and keep build outputs outside the repository using per-example `build_dir` / `libdeps_dir` under `${sysenv.HOME}/.pio-build/...`.
+The examples use this repository as a local library via
+`lib_deps = symlink://../..`. Per-example `build_dir` and `libdeps_dir` values
+under `${sysenv.HOME}/.pio/CM/ex/...` keep build outputs outside the repository.
 
 Avoid using `lib_extra_dirs = ../..` for the workspace library. If a build ever seems to use stale local library code, run:
 
@@ -15,7 +17,8 @@ pio run -t clean
 pio run
 ```
 
-Some examples include a pre-build helper script `tools/pio_force_local_lib_refresh.py` to force PlatformIO to refresh the local `file://../..` library copy automatically. You can disable that behavior by setting `CM_PIO_NO_LIB_REFRESH=1`.
+Some examples include `tools/pio_force_local_lib_refresh.py` to refresh local
+library metadata automatically. Set `CM_PIO_NO_LIB_REFRESH=1` to disable it.
 
 ## Quick start (recommended)
 
@@ -29,6 +32,16 @@ pio run -d examples/minimal -e usb -t upload --upload-port COM5
 ```
 
 > Tip: You can also open `examples/minimal` directly as a PlatformIO project in VS Code.
+
+For a wired WT32-ETH01 project:
+
+```sh
+pio run -d examples/WT32-ETH01-v1.4 -e usb
+pio run -d examples/WT32-ETH01-v1.4 -e usb -t upload
+```
+
+See [Ethernet](ETHERNET.md) for static network settings, OTA, no-OTA builds,
+UART0 wiring, and power requirements.
 
 ## Minimal pattern (ESPAsyncWebServer)
 
@@ -124,13 +137,13 @@ void setup()
 
     if (wifiSettings.wifiSsid.get().length() == 0)
     {
-        Serial.printf("[WARNING] SETUP: SSID is empty! [%s]\n", wifiSettings.wifiSsid.get().c_str());
+        Serial.printf("[W] SSID empty: %s\n", wifiSettings.wifiSsid.get().c_str());
         cfg.startAccessPoint();
     }
 
     if (WiFi.getMode() == WIFI_AP)
     {
-        Serial.println("[INFO] AP Mode");
+        Serial.println("[I] AP mode");
         return;
     }
 
@@ -159,19 +172,17 @@ void setup()
         cfg.setupOTA("esp32", "otapassword123");
     }
 
-    Serial.printf("[INFO] Webserver running at: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[I] Web server: %s\n", WiFi.localIP().toString().c_str());
 }
 
 void loop()
 {
+    cfg.getWiFiManager().update();
     cfg.handleClient();
-    cfg.handleWebsocketPush();
-    cfg.handleOTA();
-    cfg.updateLoopTiming();
 
     if (WiFi.status() != WL_CONNECTED && WiFi.getMode() != WIFI_AP)
     {
-        Serial.println("[WARNING] WiFi lost, reconnecting...");
+        Serial.println("[W] WiFi lost, reconnecting");
         cfg.reconnectWifi();
         delay(1500);
         cfg.setupOTA("esp32", "otapassword123");
@@ -187,6 +198,7 @@ void loop()
 ## Next
 
 - WiFi details and best practices: see `docs/WIFI.md`
+- Ethernet and WT32-ETH01: see `docs/ETHERNET.md`
 - OTA and Web UI flashing: see `docs/OTA.md`
 - GUI runtime (live, styling, theming): see `docs/GUI-Runtime.md`
 - Settings and OptionGroup patterns: see `docs/SETTINGS.md`
@@ -196,6 +208,7 @@ void loop()
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
 | `ConfigManager.startWebServer` | `startWebServer()`<br>`startWebServer(const String& ssid, const String& password)`<br>`startWebServer(const IPAddress& staticIP, const IPAddress& gateway, const IPAddress& subnet, const String& ssid, const String& password, const IPAddress& dns1 = IPAddress(), const IPAddress& dns2 = IPAddress())` | Starts WiFi + web server using settings, DHCP, or static IP. | Core startup method family. |
+| `ConfigManager.startWebServerOnNetwork` | `startWebServerOnNetwork()` | Starts WebUI/runtime/OTA services on an IP interface initialized by the sketch. | Call after Ethernet or another external interface receives an IP address. |
 | `ConfigManager.handleClient` | `handleClient()` | Processes HTTP/WebSocket/runtime events. | Call in `loop()`. |
-| `ConfigManager.setupOTA` | `setupOTA(const String& hostname, const String& password = "")` | Enables OTA update handling after WiFi connect. | Optional for development and field updates. |
+| `ConfigManager.setupOTA` | `setupOTA(const String& hostname, const String& password = "")` | Enables OTA update handling after the active interface receives an IP address. | Works with WiFi or Ethernet. |
 

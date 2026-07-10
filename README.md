@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.2.3
+> Version 4.4.0
 
 ## Preview Before Installing
 
@@ -10,6 +10,7 @@ check the standalone examples in [examples/](examples/).
 Recommended first look:
 
 - [examples/minimal](examples/minimal)
+- [examples/WT32-ETH01-v1.4](examples/WT32-ETH01-v1.4)
 - [examples/Full-GUI-Demo](examples/Full-GUI-Demo)
 - [examples/Full-IO-Demo](examples/Full-IO-Demo)
 
@@ -62,7 +63,8 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - Per-setting styling & theming
 
 ### Device & Connectivity
-- WiFi helpers (DHCP / static / AP fallback)
+- Optional WiFi helpers (DHCP / static / AP fallback)
+- External-network startup for Ethernet-based projects
 - OTA firmware upload via WebUI
 - Optional MQTT module (PubSubClient-based)
 
@@ -80,6 +82,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | ----------------------------------------- | ------------------------------------------------------ |
 | Getting Started (minimal pattern)         | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)     |
 | WiFi (DHCP/static/AP/reconnect)           | [docs/WIFI.md](docs/WIFI.md)                           |
+| Ethernet / external-network startup       | [docs/ETHERNET.md](docs/ETHERNET.md)                   |
 | Settings & OptionGroup                    | [docs/SETTINGS.md](docs/SETTINGS.md)                   |
 | GUI Runtime (Live + Styling + Theming)    | [docs/GUI-Runtime.md](docs/GUI-Runtime.md)             |
 | Logging                                   | [docs/LOGGING.md](docs/LOGGING.md)                     |
@@ -181,6 +184,7 @@ Details: see `docs/SECURITY.md`.
 Each example is a standalone PlatformIO project:
 
 - [examples/minimal](examples/minimal) - minimal demo
+- [examples/WT32-ETH01-v1.4](examples/WT32-ETH01-v1.4) - WT32-ETH01 V1.4 Ethernet demo
 - [examples/BME280-Temp-Sensor](examples/BME280-Temp-Sensor) - BME280 temp sensor
 - [examples/Full-Logging-Demo](examples/Full-Logging-Demo) - logging and runtime log output demo
 - [examples/Full-MQTT-Demo](examples/Full-MQTT-Demo) - MQTT integration demo
@@ -204,20 +208,21 @@ pio run -d examples/BME280-Temp-Sensor -e usb -t upload --upload-port COM5
 
 If you use a fork / local clone of this repo, you can build and upload any example the same way (the `-d examples/<name>` flag points PlatformIO to the example project directory).
 
-If you want to consume the library as a local dependency in your own project, you can also use a local `lib_deps = file://../ConfigurationsManager` setup (see the note about recursive local installs below).
+If you want to consume the library as a local dependency in your own project, use a local `lib_deps = symlink://../ConfigurationsManager` setup.
 
-Note (Windows): these example projects set `[platformio] build_dir` and `libdeps_dir` outside the repo to prevent recursive local installs when using `lib_deps = file://../..`.
+Note (Windows): these example projects set `[platformio] build_dir` and `libdeps_dir` outside the repo to prevent recursive local installs when using `lib_deps = symlink://../..`.
 
 Tips:
 
 - Avoid `lib_extra_dirs = ../..` for the workspace library; it can cause cross-example compilation issues.
-- Some examples include a pre-build helper script `tools/pio_force_local_lib_refresh.py` to force PlatformIO to refresh the local `file://../..` library copy automatically (disable via `CM_PIO_NO_LIB_REFRESH=1`).
+- Some examples include `tools/pio_force_local_lib_refresh.py` to refresh local library metadata before a build (disable via `CM_PIO_NO_LIB_REFRESH=1`).
 - If you see `UnicodeEncodeError: 'charmap' codec can't encode character ...` on Windows, see `docs/TROUBLESHOOTING.md`.
 
 More:
 
 - Getting started (full minimal pattern): `docs/GETTING_STARTED.md`
 - WiFi behavior / best practices: `docs/WIFI.md`
+- Ethernet / WT32-ETH01: `docs/ETHERNET.md`
 - OTA and Web UI flashing: `docs/OTA.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 

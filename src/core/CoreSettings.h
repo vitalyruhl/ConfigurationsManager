@@ -28,6 +28,7 @@ inline constexpr char IO[] = "IO";
 inline constexpr char Ntp[] = "NTP";
 }
 
+#if CM_ENABLE_WIFI
 struct CoreWiFiSettings
 {
     Config<String> wifiSsid{ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = CoreCategories::WiFi, .defaultValue = String(""), .showInWeb = true, .sortOrder = 1}};
@@ -67,6 +68,7 @@ struct CoreWiFiSettings
         { return !useDhcp.get(); };
     }
 };
+#endif
 
 struct CoreSystemSettings
 {
@@ -150,11 +152,14 @@ public:
     // Attach all core settings bundles.
     void attach(ConfigManagerClass &cfg)
     {
+#if CM_ENABLE_WIFI
         attachWiFi(cfg);
+#endif
         attachSystem(cfg);
         attachButtons(cfg);
     }
 
+#if CM_ENABLE_WIFI
     void attachWiFi(ConfigManagerClass &cfg,
                     const char* pageName = CoreCategories::WiFi,
                     const char* groupPretty = "WiFi Settings",
@@ -166,6 +171,7 @@ public:
         wifi.attachTo(cfg);
         wifiAttached = true;
     }
+#endif
 
     void attachSystem(ConfigManagerClass &cfg,
                       const char* pageName = CoreCategories::System,
@@ -201,7 +207,9 @@ public:
         ntpAttached = true;
     }
 
+#if CM_ENABLE_WIFI
     CoreWiFiSettings wifi;
+#endif
     CoreButtonSettings buttons;
     CoreSystemSettings system{String(CONFIGMANAGER_VERSION)};
     CoreNtpSettings ntp;
@@ -209,7 +217,9 @@ public:
 private:
     CoreSettings() = default;
 
+#if CM_ENABLE_WIFI
     bool wifiAttached = false;
+#endif
     bool systemAttached = false;
     bool buttonsAttached = false;
     bool ntpAttached = false;
