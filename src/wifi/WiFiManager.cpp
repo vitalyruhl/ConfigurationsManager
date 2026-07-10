@@ -1,3 +1,7 @@
+#include "../ConfigManagerConfig.h"
+
+#if CM_ENABLE_WIFI
+
 #include "WiFiManager.h"
 #include "../ConfigManager.h"
 #include <ESP.h>
@@ -1320,3 +1324,5 @@ void ConfigManagerWiFi::logNoSsidAvailScan_() {
   noSsidScanStartMillis = now;
   (void)WiFi.scanNetworks(true /*async*/, true /*showHidden*/);
 }
+
+#endif // CM_ENABLE_WIFI

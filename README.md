@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.2.3
+> Version 4.3.0
 
 ## Preview Before Installing
 
@@ -10,6 +10,7 @@ check the standalone examples in [examples/](examples/).
 Recommended first look:
 
 - [examples/minimal](examples/minimal)
+- [examples/WT32-ETH01-v1.4](examples/WT32-ETH01-v1.4)
 - [examples/Full-GUI-Demo](examples/Full-GUI-Demo)
 - [examples/Full-IO-Demo](examples/Full-IO-Demo)
 
@@ -62,7 +63,8 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - Per-setting styling & theming
 
 ### Device & Connectivity
-- WiFi helpers (DHCP / static / AP fallback)
+- Optional WiFi helpers (DHCP / static / AP fallback)
+- External-network startup for Ethernet-based projects
 - OTA firmware upload via WebUI
 - Optional MQTT module (PubSubClient-based)
 
@@ -181,6 +183,7 @@ Details: see `docs/SECURITY.md`.
 Each example is a standalone PlatformIO project:
 
 - [examples/minimal](examples/minimal) - minimal demo
+- [examples/WT32-ETH01-v1.4](examples/WT32-ETH01-v1.4) - WT32-ETH01 V1.4 Ethernet demo
 - [examples/BME280-Temp-Sensor](examples/BME280-Temp-Sensor) - BME280 temp sensor
 - [examples/Full-Logging-Demo](examples/Full-Logging-Demo) - logging and runtime log output demo
 - [examples/Full-MQTT-Demo](examples/Full-MQTT-Demo) - MQTT integration demo

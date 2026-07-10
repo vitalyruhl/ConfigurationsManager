@@ -969,6 +969,7 @@ void ConfigManagerWeb::handleCaptivePortalProbe(AsyncWebServerRequest* request) 
 }
 
 bool ConfigManagerWeb::isCaptivePortalMode() const {
+#if CM_ENABLE_WIFI
     if (configManager && configManager->getWiFiManager().isInAPMode()) {
         return true;
     }
@@ -979,6 +980,9 @@ bool ConfigManagerWeb::isCaptivePortalMode() const {
     }
 
     return mode == WIFI_AP_STA && WiFi.status() != WL_CONNECTED;
+#else
+    return false;
+#endif
 }
 
 bool ConfigManagerWeb::shouldRedirectToPortal(AsyncWebServerRequest* request) const {

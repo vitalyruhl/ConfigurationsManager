@@ -8,7 +8,6 @@
 #include <vector>
 #include <functional>
 #include <memory>
-#include <WiFi.h>
 #include <ArduinoJson.h>
 #include <type_traits>
 #include <AsyncTCP.h>
@@ -24,10 +23,16 @@
 
 #include "ConfigManagerConfig.h"
 
+#if CM_ENABLE_WIFI
+#include <WiFi.h>
+#endif
+
 #include "io/ioDefinitions.h"
 
 // Modular components
+#if CM_ENABLE_WIFI
 #include "wifi/WiFiManager.h"
+#endif
 #include "web/WebServer.h"
 #include "ota/OTAManager.h"
 #include "runtime/RuntimeManager.h"
@@ -44,7 +49,7 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "4.2.3" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.3.0" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1839,7 +1844,9 @@ private:
         }
 
         // Modular components
+#if CM_ENABLE_WIFI
     ConfigManagerWiFi wifiManager;
+#endif
     ConfigManagerWeb webManager;
     ConfigManagerOTA otaManager;
     ConfigManagerRuntime runtimeManager;
@@ -2513,6 +2520,28 @@ public:
         CM_CORE_LOG("[I] Settings password configured");
     }
 
+    // Start ConfigManager services on a network interface initialized by the sketch.
+    // This is used for Ethernet or other IP transports when ConfigManager does not own WiFi.
+    void startWebServerOnNetwork()
+    {
+        webManager.begin(this);
+        otaManager.begin(this);
+        runtimeManager.begin(this);
+        WebSocketPush(true);
+        setPushOnConnect(true);
+
+        if (BaseSetting *otaEnable = findSettingByKeyHint("System", "OTAEn"); otaEnable && otaEnable->getType() == SettingType::BOOL)
+        {
+            otaManager.enable(static_cast<Config<bool> *>(otaEnable)->get());
+        }
+
+        otaManager.setupWebRoutes(webManager.getServer());
+        webManager.defineAllRoutes();
+        CM_CORE_LOG("[I] ConfigManager services started on external network");
+    }
+
+#if CM_ENABLE_WIFI
+
     bool hasValidStationCredentials(const String &ssid, const String &password, const char *context = nullptr)
     {
         const char *ctx = (context && context[0]) ? context : "startWebServer";
@@ -2816,6 +2845,8 @@ public:
         otaManager.setupWebRoutes(webManager.getServer());
     }
 
+#endif // CM_ENABLE_WIFI
+
     // Non-blocking client handling
     void handleClient()
     {
@@ -2824,9 +2855,11 @@ public:
         handleOTA();
     }
 
+#if CM_ENABLE_WIFI
     // WiFi status and control
     bool getWiFiStatus() { return wifiManager.isConnected(); }
     void reconnectWifi() { wifiManager.reconnect(); }
+#endif
 
     // System control
     void reboot()
@@ -3340,11 +3373,14 @@ public:
     void triggerLoggerTest() { CM_CORE_LOG("[I] Logger test message"); }
 
     // Access to modules for advanced usage
+#if CM_ENABLE_WIFI
     ConfigManagerWiFi &getWiFiManager() { return wifiManager; }
+#endif
     ConfigManagerWeb &getWebManager() { return webManager; }
     ConfigManagerOTA &getOTAManager() { return otaManager; }
     ConfigManagerRuntime &getRuntimeManager() { return runtimeManager; }
 
+#if CM_ENABLE_WIFI
     // Smart WiFi Roaming configuration - convenience methods
     void enableSmartRoaming(bool enable = true) { wifiManager.enableSmartRoaming(enable); }
     void setRoamingThreshold(int thresholdDbm = -75) { wifiManager.setRoamingThreshold(thresholdDbm); }
@@ -3362,6 +3398,7 @@ public:
     bool isMacPriorityEnabled() const { return wifiManager.isMacPriorityEnabled(); }
     String getFilterMac() const { return wifiManager.getFilterMac(); }
     String getPriorityMac() const { return wifiManager.getPriorityMac(); }
+#endif
 
 public:
     static LogCallback logger;

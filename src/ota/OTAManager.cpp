@@ -80,11 +80,6 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     otaHostname = hostname;
     otaPassword = password;
 
-    if (WiFi.status() != WL_CONNECTED) {
-        OTA_LOG("WiFi not connected, skipping OTA setup");
-        return;
-    }
-
     if (!otaInitialized) {
         ArduinoOTA.setHostname(otaHostname.c_str());
 

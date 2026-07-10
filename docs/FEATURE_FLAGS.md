@@ -13,6 +13,9 @@ Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*`
   - `CM_ENABLE_VERBOSE_LOGGING` (default: `0`)
   - `CM_DISABLE_GUI_LOGGING` (default: `0`)
   - `CM_LOGGING_LEVEL` (default: `CM_LOG_LEVEL_TRACE`, runtime/project logging cap)
+  - `CM_ENABLE_WIFI` (default: `1`)
+    - `1`: include ConfigManager WiFi connection, AP, and roaming support
+    - `0`: compile out ConfigManager WiFi support for externally managed networks such as Ethernet
   - `CM_ENABLE_OTA` (default: `1`)
   - `CM_ENABLE_SYSTEM_PROVIDER` (default: `1`)
   - `CM_ENABLE_SYSTEM_TIME` (default: `1`)
@@ -35,6 +38,11 @@ For real numbers, build your target with and without each flag and compare the f
 - `CM_ENABLE_OTA=0`
   - Flash/RAM: medium savings (removes OTA routes and handler code).
   - Behavior: OTA upload endpoint not available.
+
+- `CM_ENABLE_WIFI=0`
+  - Flash/RAM: removes ConfigManager WiFi manager, AP, roaming, captive-portal, and WiFi runtime paths.
+  - Behavior: the sketch must initialize its network interface and call `ConfigManager.startWebServerOnNetwork()` after it receives an IP address.
+  - Framework note: Ethernet event handling in Arduino-ESP32 2.x still uses generic APIs exposed through `WiFi.h`; this does not start the WiFi radio.
 
 - `CM_DISABLE_GUI_LOGGING=1`
   - Flash/RAM: small to medium savings (removes GUI log output, buffer, and WS log payload building).
@@ -79,5 +87,5 @@ OTA is convenient but has security implications:
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| _none_ | - | Build-flag reference; no callable API methods in this document. | Compile-time options only. |
+| `startWebServerOnNetwork` | `()` | Starts ConfigManager services on a network interface initialized by the sketch. | Use after Ethernet or another external interface has an IP address. |
 

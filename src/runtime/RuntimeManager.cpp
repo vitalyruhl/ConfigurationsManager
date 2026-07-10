@@ -623,6 +623,7 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
         obj["usedHeap"] = ESP.getHeapSize() - ESP.getFreeHeap();
         obj["heapFragmentation"] = 100 - (ESP.getMaxAllocHeap() * 100) / ESP.getFreeHeap();
 
+#if CM_ENABLE_WIFI
         if (WiFi.status() == WL_CONNECTED) {
             int rssi = WiFi.RSSI();
             obj["rssi"] = rssi;
@@ -642,6 +643,15 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             obj["routerMAC"] = "00:00:00:00:00:00";
             obj["channel"] = 0;
         }
+#else
+        obj["rssi"] = 0;
+        obj["rssiTxt"] = rssiQualityText(-100);
+        obj["wifiConnected"] = false;
+        obj["localIP"] = "0.0.0.0";
+        obj["gateway"] = "0.0.0.0";
+        obj["routerMAC"] = "00:00:00:00:00:00";
+        obj["channel"] = 0;
+#endif
 
         obj["cpuFreqMHz"] = ESP.getCpuFreqMHz();
         obj["flashSize"] = ESP.getFlashChipSize();

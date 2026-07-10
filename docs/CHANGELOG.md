@@ -2,6 +2,19 @@
 
 This changelog is a curated overview.
 
+## 4.3.0
+
+- Added `CM_ENABLE_WIFI=0` to compile out ConfigManager WiFi connection, AP,
+  roaming, captive-portal, and WiFi runtime paths.
+- Added `ConfigManager.startWebServerOnNetwork()` for Ethernet and other
+  externally managed IP interfaces.
+- Removed the WiFi station status requirement from OTA initialization so OTA
+  can operate over Ethernet.
+- Added the `WT32-ETH01-v1.4` example with static Ethernet address
+  `192.168.2.127/24`, COM6 serial upload, Ethernet OTA, and a `noota` build.
+- WebUI package version aligned with the ConfigurationsManager package/library
+  version at 4.3.0.
+
 ## 4.2.3
 
 - Updated WebUI dependencies to `vue` 3.5.38 and `vite` 8.0.16.

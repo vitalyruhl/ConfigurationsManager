@@ -1,10 +1,14 @@
 #pragma once
 
+#include "../ConfigManagerConfig.h"
+
+#if CM_ENABLE_OTA
 #include <ArduinoOTA.h>
 #include <Update.h>
+#endif
+
 #include <ESPAsyncWebServer.h>
 #include <functional>
-#include "../ConfigManagerConfig.h"
 
 // Forward declaration
 class ConfigManagerClass;
