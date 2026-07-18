@@ -2,6 +2,12 @@
 
 This changelog is a curated overview.
 
+## 4.4.1 - 2026-07-18
+
+- Correct Arduino-ESP32 header casing from `ESP.h` to `Esp.h`.
+- Restore Linux and other case-sensitive PlatformIO builds.
+- No public API or runtime behavior changes.
+
 ## 4.4.0
 
 - Added persisted Ethernet IP, subnet, gateway, and DNS settings to the
