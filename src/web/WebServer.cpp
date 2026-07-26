@@ -346,7 +346,7 @@ void ConfigManagerWeb::setupStaticRoutes() {
     }
 
     bool usingBuiltin = false;
-#if defined(CM_DEFAULT_RUNTIME_STYLE_CSS)
+#if CM_ENABLE_THEMING
     if (!css) {
       css = CM_DEFAULT_RUNTIME_STYLE_CSS;
       len = sizeof(CM_DEFAULT_RUNTIME_STYLE_CSS) - 1;
