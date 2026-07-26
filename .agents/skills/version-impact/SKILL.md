@@ -15,7 +15,7 @@ version mirrors.
 1. Classify the change as no bump, patch, minor, or major under canonical
    governance.
 2. Scan `library.json`, `src/ConfigManager.h`, WebUI package files, README,
-   changelog, minimal example references, and all discovered current/target
+   changelog, example references, and all discovered current/target
    version occurrences.
 3. Identify required mirrors, changelog impact, and any pre-existing mismatch.
 
