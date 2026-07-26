@@ -27,7 +27,7 @@ $arguments = @(
     '--suppress=unusedFunction',
     '--std=c++17',
     '--language=c++',
-    "--exclude=$(Join-Path $repoRoot 'src\html_content.h')"
+    '-DPROGMEM='
 ) + $sourceRoots
 
 & cppcheck @arguments
