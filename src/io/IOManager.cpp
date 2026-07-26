@@ -1251,7 +1251,7 @@ void IOManager::addAnalogOutputValueRawToGUI(const char* id, const char* cardNam
   }
 
   (void)cardName;
-  AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+  const AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
   const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
 
   const String key = entry.id + "_dac";
@@ -1270,7 +1270,7 @@ void IOManager::addAnalogOutputValueVoltToGUI(const char* id, const char* cardNa
   }
 
   (void)cardName;
-  AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+  const AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
   const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
 
   const String key = entry.id + "_volts";
