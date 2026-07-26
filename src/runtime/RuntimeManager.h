@@ -31,6 +31,47 @@ struct RuntimeStyleRule {
     bool visible = true;
     String className;
 
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+    RuntimeStyleRule() = default;
+
+    RuntimeStyleRule(const RuntimeStyleRule& other)
+        : target(other.target)
+        , properties(other.properties)
+        , hasVisible(other.hasVisible)
+        , visible(other.visible)
+        , className(other.className) {
+        ++copyCount;
+    }
+
+    RuntimeStyleRule& operator=(const RuntimeStyleRule& other) {
+        if (this != &other) {
+            target = other.target;
+            properties = other.properties;
+            hasVisible = other.hasVisible;
+            visible = other.visible;
+            className = other.className;
+        }
+        ++copyCount;
+        return *this;
+    }
+
+    RuntimeStyleRule(RuntimeStyleRule&&) noexcept = default;
+    RuntimeStyleRule& operator=(RuntimeStyleRule&&) noexcept = default;
+
+    static void resetCopyCount() {
+        copyCount = 0;
+    }
+
+    static size_t getCopyCount() {
+        return copyCount;
+    }
+
+private:
+    inline static size_t copyCount = 0;
+
+public:
+#endif
+
     RuntimeStyleRule& set(const char* property, const char* value) {
         if (!property || !property[0]) {
             return *this;

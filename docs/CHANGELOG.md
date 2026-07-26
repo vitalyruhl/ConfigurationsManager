@@ -2,6 +2,12 @@
 
 This changelog is a curated overview.
 
+## 4.4.2 - 2026-07-26
+
+- Avoid deep copies of runtime metadata while serializing `/runtime_meta.json`.
+- Return a controlled HTTP error when the runtime metadata response cannot be
+  allocated.
+
 ## 4.4.1 - 2026-07-18
 
 - Correct Arduino-ESP32 header casing from `ESP.h` to `Esp.h`.

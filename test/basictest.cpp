@@ -1,5 +1,6 @@
 // Updated tests for new ConfigOptions-based interface
 #include <Arduino.h>
+#include <esp_heap_caps.h>
 #include <unity.h>
 #include <ConfigManager.h>
 
@@ -179,6 +180,164 @@ void test_runtime_string_divider_and_order(){
     TEST_ASSERT_TRUE(alphaPos != -1 && betaPos != -1 && alphaPos < betaPos);
 }
 
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+namespace {
+
+constexpr size_t RUNTIME_META_FIXTURE_ENTRIES = 30;
+constexpr size_t RUNTIME_META_KEY_MAX_LEN = 15;
+const char* const RUNTIME_STYLE_TARGETS[] = {
+    "row", "label", "values", "unit", "state",
+    "stateDotOnTrue", "stateDotOnFalse", "stateDotOnAlarm"
+};
+
+String runtimeMetaText(const char* prefix, size_t index) {
+    // Runtime metadata strings have no API length cap. Keep persistent-style
+    // keys at their documented 15-character limit and use long valid UTF-8
+    // text that exercises JSON escaping in every other text field.
+    String value(prefix);
+    value += " \"\\\n\t\xC3\xA4\xC3\x9F\xE6\xBC\xA2";
+    value += " value ";
+    value += index;
+    return value;
+}
+
+RuntimeFieldMeta makeRuntimeMetaFixtureEntry(size_t index) {
+    RuntimeFieldMeta meta;
+    meta.group = runtimeMetaText("group", index);
+    meta.sourceGroup = runtimeMetaText("source", index);
+    meta.page = runtimeMetaText("page", index);
+    meta.card = runtimeMetaText("card", index);
+    meta.key = String("runtime_key_") + String(index);
+    while (meta.key.length() < RUNTIME_META_KEY_MAX_LEN) {
+        meta.key += "x";
+    }
+    meta.label = runtimeMetaText("label", index);
+    meta.unit = runtimeMetaText("unit", index);
+    meta.staticValue = runtimeMetaText("static", index);
+    meta.onLabel = runtimeMetaText("on", index);
+    meta.offLabel = runtimeMetaText("off", index);
+    meta.precision = static_cast<int>(index % 4);
+    meta.order = static_cast<int>(index);
+    meta.isBool = true;
+    meta.isString = true;
+    meta.isStateButton = true;
+    meta.isIntSlider = true;
+    meta.isFloatSlider = true;
+    meta.isIntInput = true;
+    meta.isFloatInput = true;
+    meta.hasAlarm = true;
+    meta.alarmWhenTrue = true;
+    meta.boolAlarmValue = true;
+    meta.intMin = -100;
+    meta.intMax = 100;
+    meta.intInit = static_cast<int>(index);
+    meta.floatMin = -10.5f;
+    meta.floatMax = 50.5f;
+    meta.floatInit = static_cast<float>(index) / 10.0f;
+    meta.alarmMin = -5.0f;
+    meta.alarmMax = 45.0f;
+    meta.warnMin = 0.0f;
+    meta.warnMax = 40.0f;
+
+    for (const char* target : RUNTIME_STYLE_TARGETS) {
+        RuntimeStyleRule& rule = meta.style.rule(target);
+        rule.setVisible((index % 2) == 0);
+        rule.addCSSClass("style-\"class");
+        rule.set("data-\"value", "\\escaped\n\t\xC3\x9F");
+    }
+    return meta;
+}
+
+void assertRuntimeMetaJson(const String& json, size_t expectedEntries) {
+    DynamicJsonDocument doc(65536);
+    const DeserializationError error = deserializeJson(doc, json);
+    TEST_ASSERT_FALSE(error);
+    JsonArray entries = doc.as<JsonArray>();
+    TEST_ASSERT_EQUAL_UINT32(expectedEntries, entries.size());
+    for (size_t index = 0; index < expectedEntries; ++index) {
+        String expectedKey = String("runtime_key_") + String(index);
+        while (expectedKey.length() < RUNTIME_META_KEY_MAX_LEN) {
+            expectedKey += "x";
+        }
+
+        JsonObject entry;
+        for (JsonObject candidate : entries) {
+            const char* key = candidate["key"].as<const char*>();
+            if (key && expectedKey == key) {
+                entry = candidate;
+                break;
+            }
+        }
+
+        TEST_ASSERT_FALSE(entry.isNull());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("group", index).c_str(), entry["group"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("source", index).c_str(), entry["sourceGroup"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("page", index).c_str(), entry["page"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("card", index).c_str(), entry["card"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("label", index).c_str(), entry["label"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("unit", index).c_str(), entry["unit"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("static", index).c_str(), entry["staticValue"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("on", index).c_str(), entry["onLabel"].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING(runtimeMetaText("off", index).c_str(), entry["offLabel"].as<const char*>());
+
+        JsonObject style = entry["style"].as<JsonObject>();
+        for (const char* target : RUNTIME_STYLE_TARGETS) {
+            TEST_ASSERT_TRUE(style.containsKey(target));
+            JsonObject rule = style[target].as<JsonObject>();
+            TEST_ASSERT_TRUE(rule.containsKey("visible"));
+            TEST_ASSERT_EQUAL_STRING("style-\"class", rule["className"].as<const char*>());
+            TEST_ASSERT_EQUAL_STRING("\\escaped\n\t\xC3\x9F", rule["data-\"value"].as<const char*>());
+        }
+    }
+}
+
+void test_runtime_meta_serialization_avoids_deep_style_copy() {
+    ConfigManagerRuntime emptyRuntime;
+    RuntimeStyleRule::resetCopyCount();
+    const String emptyJson = emptyRuntime.runtimeMetaToJSON();
+    TEST_ASSERT_EQUAL_STRING("[]", emptyJson.c_str());
+    TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
+
+    ConfigManagerRuntime oneRuntime;
+    oneRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(0));
+    RuntimeStyleRule::resetCopyCount();
+    const String oneJson = oneRuntime.runtimeMetaToJSON();
+    assertRuntimeMetaJson(oneJson, 1);
+    TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
+
+    ConfigManagerRuntime runtime;
+    for (size_t index = 0; index < RUNTIME_META_FIXTURE_ENTRIES; ++index) {
+        runtime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(index));
+    }
+
+    const size_t freeBefore = ESP.getFreeHeap();
+    const size_t largestBefore = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    RuntimeStyleRule::resetCopyCount();
+    const String json = runtime.runtimeMetaToJSON();
+    const size_t freeAfter = ESP.getFreeHeap();
+    const size_t largestAfter = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
+    assertRuntimeMetaJson(json, RUNTIME_META_FIXTURE_ENTRIES);
+    TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
+    TEST_ASSERT_TRUE(json.length() > 10000);
+    Serial.printf("[runtime-meta] entries=%u json=%u heap_delta=%d largest_delta=%d style_copies=%u\n",
+                  static_cast<unsigned>(RUNTIME_META_FIXTURE_ENTRIES),
+                  static_cast<unsigned>(json.length()),
+                  static_cast<int>(freeBefore) - static_cast<int>(freeAfter),
+                  static_cast<int>(largestBefore) - static_cast<int>(largestAfter),
+                  static_cast<unsigned>(RuntimeStyleRule::getCopyCount()));
+
+    for (size_t iteration = 0; iteration < 100; ++iteration) {
+        RuntimeStyleRule::resetCopyCount();
+        const String repeatedJson = runtime.runtimeMetaToJSON();
+        TEST_ASSERT_EQUAL_UINT32(json.length(), repeatedJson.length());
+        TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
+    }
+}
+
+} // namespace
+#endif
+
 void setup() {
     delay(1500);
     Serial.begin(115200);
@@ -221,6 +380,10 @@ void setup() {
     RUN_TEST(test_key_length_error_flag);
     RUN_TEST(test_showIf_visibility);
     RUN_TEST(test_runtime_string_divider_and_order);
+
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+    RUN_TEST(test_runtime_meta_serialization_avoids_deep_style_copy);
+#endif
 
     UNITY_END();
 }

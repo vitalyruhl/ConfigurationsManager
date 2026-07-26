@@ -1,11 +1,123 @@
 #include "RuntimeManager.h"
 #include "../ConfigManager.h"
 #include <algorithm>
+#include <limits>
 #include <utility>
 #include <time.h>
 
 // Logging support
 #define RUNTIME_LOG(...) CM_LOG("[Runtime] " __VA_ARGS__)
+
+namespace {
+
+void populateRuntimeMetaJson(JsonObject o, const RuntimeFieldMeta& m) {
+    o["group"] = m.group;
+    if (m.sourceGroup.length()) {
+        o["sourceGroup"] = m.sourceGroup;
+    }
+    if (m.page.length()) {
+        o["page"] = m.page;
+    }
+    if (m.card.length()) {
+        o["card"] = m.card;
+    }
+    o["key"] = m.key;
+    o["label"] = m.label;
+    if (m.unit.length()) {
+        o["unit"] = m.unit;
+    }
+    o["precision"] = m.precision;
+    if (m.isBool) o["isBool"] = true;
+    if (m.isString) o["isString"] = true;
+    if (m.isDivider) o["isDivider"] = true;
+    if (m.isButton) o["isButton"] = true;
+    if (m.isCheckbox) o["isCheckbox"] = true;
+    if (m.isStateButton) o["isStateButton"] = true;
+    if (m.isMomentaryButton) o["isMomentaryButton"] = true;
+    if (m.isIntSlider) {
+        o["isIntSlider"] = true;
+        o["min"] = m.intMin;
+        o["max"] = m.intMax;
+        o["init"] = m.intInit;
+    }
+    if (m.isFloatSlider) {
+        o["isFloatSlider"] = true;
+        o["min"] = m.floatMin;
+        o["max"] = m.floatMax;
+        o["init"] = m.floatInit;
+    }
+    if (m.isIntInput) {
+        o["isIntInput"] = true;
+        o["min"] = m.intMin;
+        o["max"] = m.intMax;
+        o["init"] = m.intInit;
+    }
+    if (m.isFloatInput) {
+        o["isFloatInput"] = true;
+        o["min"] = m.floatMin;
+        o["max"] = m.floatMax;
+        o["init"] = m.floatInit;
+    }
+    if (m.hasAlarm) o["hasAlarm"] = true;
+    if (m.alarmWhenTrue) o["alarmWhenTrue"] = true;
+    if (m.boolAlarmValue) {
+        o["boolAlarmValue"] = m.boolAlarmValue;
+    }
+    if (m.alarmMin != 0.0f || m.alarmMax != 0.0f) {
+        o["alarmMin"] = m.alarmMin;
+        o["alarmMax"] = m.alarmMax;
+    }
+    if (m.warnMin != 0.0f || m.warnMax != 0.0f) {
+        o["warnMin"] = m.warnMin;
+        o["warnMax"] = m.warnMax;
+    }
+    o["order"] = m.order;
+    if (m.staticValue.length()) {
+        o["staticValue"] = m.staticValue;
+    }
+    if (m.onLabel.length()) {
+        o["onLabel"] = m.onLabel;
+    }
+    if (m.offLabel.length()) {
+        o["offLabel"] = m.offLabel;
+    }
+    if (!m.style.empty()) {
+        JsonObject styleObj = o.createNestedObject("style");
+        for (const auto& rule : m.style.rules) {
+            if (!rule.target.length()) {
+                continue;
+            }
+            JsonObject ruleObj = styleObj.createNestedObject(rule.target);
+            if (rule.hasVisible) {
+                ruleObj["visible"] = rule.visible;
+            }
+            if (rule.className.length()) {
+                ruleObj["className"] = rule.className;
+            }
+            for (const auto& prop : rule.properties) {
+                if (prop.key.length()) {
+                    ruleObj[prop.key] = prop.value;
+                }
+            }
+        }
+    }
+}
+
+size_t runtimeMetaJsonSize(const RuntimeFieldMeta& meta) {
+    StaticJsonDocument<1536> entryDoc;
+    populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
+    return measureJson(entryDoc);
+}
+
+bool appendRuntimeMetaJson(String& out, const RuntimeFieldMeta& meta) {
+    StaticJsonDocument<1536> entryDoc;
+    populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
+    const size_t offset = out.length();
+    const size_t written = serializeJson(entryDoc, out);
+    return written != 0 && out.length() == offset + written;
+}
+
+} // namespace
 
 ConfigManagerRuntime::ConfigManagerRuntime()
     : configManager(nullptr)
@@ -320,25 +432,17 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 }
 
 String ConfigManagerRuntime::runtimeMetaToJSON() {
-    // Sort meta by group, then order, then label
-    std::vector<RuntimeFieldMeta> metaSorted;
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+
+    // Keep the stored metadata ordered so serialization can read it directly
+    // while the mutex keeps strings, vectors, and iterators stable.
 #ifdef development
-    {
-        std::lock_guard<std::mutex> lock(runtimeDataMutex);
-        if (runtimeMetaOverrideActive) {
-            metaSorted = runtimeMetaOverride;
-        } else {
-            metaSorted = runtimeMeta;
-        }
-    }
+    std::vector<RuntimeFieldMeta>& meta = runtimeMetaOverrideActive ? runtimeMetaOverride : runtimeMeta;
 #else
-    {
-        std::lock_guard<std::mutex> lock(runtimeDataMutex);
-        metaSorted = runtimeMeta;
-    }
+    std::vector<RuntimeFieldMeta>& meta = runtimeMeta;
 #endif
 
-    std::sort(metaSorted.begin(), metaSorted.end(),
+    std::sort(meta.begin(), meta.end(),
         [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
             if (a.group == b.group) {
                 if (a.order == b.order) return a.label < b.label;
@@ -347,116 +451,46 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
             return a.group < b.group;
         });
 
-    String out;
-    const size_t estimatedPerField = 128;
-    out.reserve((metaSorted.size() * estimatedPerField) + 2);
-    out += "[";
-
-    bool first = true;
-    for (const auto& m : metaSorted) {
-        StaticJsonDocument<1536> entryDoc;
-        JsonObject o = entryDoc.to<JsonObject>();
-        o["group"] = m.group;
-        if (m.sourceGroup.length()) {
-            o["sourceGroup"] = m.sourceGroup;
+    // Determine the exact response size before allocating the one unavoidable
+    // output buffer. Avoiding incremental growth is important on fragmented heaps.
+    size_t outputSize = 2; // '[' and ']'
+    bool firstEntry = true;
+    for (const auto& m : meta) {
+        const size_t entrySize = runtimeMetaJsonSize(m);
+        if (entrySize == 0 || entrySize > std::numeric_limits<size_t>::max() - outputSize) {
+            return String();
         }
-        if (m.page.length()) {
-            o["page"] = m.page;
-        }
-        if (m.card.length()) {
-            o["card"] = m.card;
-        }
-        o["key"] = m.key;
-        o["label"] = m.label;
-        if (m.unit.length()) {
-            o["unit"] = m.unit;
-        }
-        o["precision"] = m.precision;
-        if (m.isBool) o["isBool"] = true;
-        if (m.isString) o["isString"] = true;
-        if (m.isDivider) o["isDivider"] = true;
-        if (m.isButton) o["isButton"] = true;
-        if (m.isCheckbox) o["isCheckbox"] = true;
-        if (m.isStateButton) o["isStateButton"] = true;
-        if (m.isMomentaryButton) o["isMomentaryButton"] = true;
-        if (m.isIntSlider) {
-            o["isIntSlider"] = true;
-            o["min"] = m.intMin;
-            o["max"] = m.intMax;
-            o["init"] = m.intInit;
-        }
-        if (m.isFloatSlider) {
-            o["isFloatSlider"] = true;
-            o["min"] = m.floatMin;
-            o["max"] = m.floatMax;
-            o["init"] = m.floatInit;
-        }
-        if (m.isIntInput) {
-            o["isIntInput"] = true;
-            o["min"] = m.intMin;
-            o["max"] = m.intMax;
-            o["init"] = m.intInit;
-        }
-        if (m.isFloatInput) {
-            o["isFloatInput"] = true;
-            o["min"] = m.floatMin;
-            o["max"] = m.floatMax;
-            o["init"] = m.floatInit;
-        }
-        if (m.hasAlarm) o["hasAlarm"] = true;
-        if (m.alarmWhenTrue) o["alarmWhenTrue"] = true;
-        if (m.boolAlarmValue) {
-            o["boolAlarmValue"] = m.boolAlarmValue;
-        }
-        if (m.alarmMin != 0.0f || m.alarmMax != 0.0f) {
-            o["alarmMin"] = m.alarmMin;
-            o["alarmMax"] = m.alarmMax;
-        }
-        if (m.warnMin != 0.0f || m.warnMax != 0.0f) {
-            o["warnMin"] = m.warnMin;
-            o["warnMax"] = m.warnMax;
-        }
-        o["order"] = m.order;
-        if (m.staticValue.length()) {
-            o["staticValue"] = m.staticValue;
-        }
-        if (m.onLabel.length()) {
-            o["onLabel"] = m.onLabel;
-        }
-        if (m.offLabel.length()) {
-            o["offLabel"] = m.offLabel;
-        }
-        if (!m.style.empty()) {
-            JsonObject styleObj = o.createNestedObject("style");
-            for (const auto& rule : m.style.rules) {
-                if (!rule.target.length()) {
-                    continue;
-                }
-                JsonObject ruleObj = styleObj.createNestedObject(rule.target);
-                if (rule.hasVisible) {
-                    ruleObj["visible"] = rule.visible;
-                }
-                if (rule.className.length()) {
-                    ruleObj["className"] = rule.className;
-                }
-                for (const auto& prop : rule.properties) {
-                    if (prop.key.length()) {
-                        ruleObj[prop.key] = prop.value;
-                    }
-                }
+        outputSize += entrySize;
+        if (!firstEntry) {
+            if (outputSize == std::numeric_limits<size_t>::max()) {
+                return String();
             }
+            ++outputSize;
         }
-
-        if (!first) {
-            out += ",";
-        }
-        first = false;
-        String entry;
-        serializeJson(entryDoc, entry);
-        out += entry;
+        firstEntry = false;
     }
 
-    out += "]";
+    String out;
+    if (!out.reserve(outputSize) || !out.concat('[')) {
+        return String();
+    }
+
+    bool first = true;
+    for (const auto& m : meta) {
+        if (!first) {
+            if (!out.concat(',')) {
+                return String();
+            }
+        }
+        first = false;
+        if (!appendRuntimeMetaJson(out, m)) {
+            return String();
+        }
+    }
+
+    if (!out.concat(']')) {
+        return String();
+    }
     return out;
 }
 

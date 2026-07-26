@@ -1105,7 +1105,15 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (runtimeMetaJsonProvider) {
             String json = runtimeMetaJsonProvider();
+            if (json.length() == 0) {
+                request->send(503, "application/json", "{\"error\":\"runtime_meta_unavailable\"}");
+                return;
+            }
             AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+            if (!response) {
+                request->send(503, "application/json", "{\"error\":\"response_alloc_failed\"}");
+                return;
+            }
             enableCORS(response);
             response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
             response->addHeader("Pragma", "no-cache");
