@@ -156,6 +156,25 @@ If using ripgrep to inspect governance, the agent MUST use `--hidden`, for examp
   workflow or the task explicitly uses project coordination.
 - Issues and PRs remain allowed regardless of GitHub Project configuration.
 
+## Bug-Fix Issue And Project Tracking
+
+Before creating a bug-fix pull request:
+
+- Search open and closed repository issues for a matching defect to avoid duplicates.
+- Reuse a matching issue when one exists; otherwise create an issue with the
+  existing `bug` label. Do not create a near-duplicate label.
+- Add the issue to the repository's configured GitHub Project and set its
+  status to `In Progress` while the fix is being worked on.
+- Ensure the implementation branch and pull request clearly reference the
+  issue number. The pull request body must use `Fixes #<issue>` unless a
+  repository-specific closing syntax supersedes it.
+- Keep the issue open and `In Progress` until the pull request is merged and
+  all required validation gates have passed. A pending hardware HIL keeps the
+  issue open and `In Progress`.
+- Do not silently skip issue or Project assignment. Report an unavailable
+  project, missing permissions, or another tracking blocker before creating
+  the pull request.
+
 ## PlatformIO Workflow
 
 - Use configured and enabled GitHub Actions or checks when they exist.
