@@ -37,6 +37,8 @@ ConfigManagerClass::LayoutPage* ConfigManagerClass::findLayoutPage(std::vector<L
   return nullptr;
 }
 
+// Cppcheck rationale: The returned nested layout card remains mutable for callers.
+// cppcheck-suppress constParameterReference
 ConfigManagerClass::LayoutCard* ConfigManagerClass::findLayoutCard(LayoutPage& page, const String& normalized) {
   for (auto& card : page.cards) {
     // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
@@ -48,6 +50,8 @@ ConfigManagerClass::LayoutCard* ConfigManagerClass::findLayoutCard(LayoutPage& p
   return nullptr;
 }
 
+// Cppcheck rationale: The returned nested layout group remains mutable for callers.
+// cppcheck-suppress constParameterReference
 ConfigManagerClass::LayoutGroup* ConfigManagerClass::findLayoutGroup(LayoutCard& card, const String& normalized) {
   for (auto& group : card.groups) {
     // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.

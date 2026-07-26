@@ -962,7 +962,7 @@ void IOManager::addAnalogOutputToSettingsGroup(const char* id, const char* pageN
     return;
   }
 
-  AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+  const AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
   if (!entry.registerSettings) {
     IO_LOG("[WARNING] addAnalogOutputToSettingsGroup: output '%s' is not persisted", entry.id.c_str());
     return;
@@ -1139,7 +1139,7 @@ IOManager::LiveControlHandleFloat IOManager::addAnalogOutputToLive(const char* i
   const char* effectiveGroupName = (groupName && groupName[0]) ? groupName : ((cardName && cardName[0]) ? cardName : "controls");
   ensureLiveLayout(pageName, cardName, effectiveGroupName, order);
 
-  AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+  const AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
   const String group = String(effectiveGroupName);
   const String label = (labelOverride && labelOverride[0]) ? String(labelOverride) : entry.name;
   const String unitStr = (unit && unit[0]) ? String(unit) : String();
@@ -1231,7 +1231,7 @@ void IOManager::addAnalogOutputValueToGUI(const char* id, const char* cardName, 
   }
 
   (void)cardName;
-  AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
+  const AnalogOutputEntry& entry = analogOutputs[static_cast<size_t>(idx)];
   const String group = (runtimeGroup && runtimeGroup[0]) ? String(runtimeGroup) : String("controls");
 
   const String key = entry.id + "_value";

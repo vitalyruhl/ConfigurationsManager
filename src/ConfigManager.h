@@ -2950,6 +2950,8 @@ public:
       ws = new AsyncWebSocket("/ws");
       // Note: Heartbeat API not available in this ESPAsyncWebServer fork. If needed,
       // we can implement periodic ping/pong via a timer and drop stale clients.
+      // Cppcheck rationale: AsyncWebSocket defines this callback's mutable parameter types.
+      // cppcheck-suppress constParameterPointer
       ws->onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len) {
         switch (type) {
           case WS_EVT_CONNECT:

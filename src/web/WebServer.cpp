@@ -435,6 +435,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
             // Response sent in body handler for POST requests
             if (request->method() != HTTP_POST) {
                 request->send(405, "application/json", "{\"error\":\"method_not_allowed\"}");
+            // Cppcheck rationale: AsyncWebServer defines this body callback's mutable data parameter.
+            // cppcheck-suppress constParameterPointer
             } }, NULL, [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
             String* body = cm::web::appendRequestBodyChunk(request, data, len, index, total);
             if (!body) {

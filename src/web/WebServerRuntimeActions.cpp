@@ -165,6 +165,8 @@ void ConfigManagerWeb::setupRuntimeActionRoutes() {
                        if (!cm::web::initRequestBodyBuffer(request, request->contentLength()))
                        {
                            return;
+                       // Cppcheck rationale: AsyncWebServer defines this body callback's mutable data parameter.
+                       // cppcheck-suppress constParameterPointer
                        } }, nullptr, [this, kind](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
                        String *body = cm::web::appendRequestBodyChunk(request, data, len, index, total);
                        if (!body)
