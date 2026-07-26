@@ -184,7 +184,10 @@ void test_runtime_string_divider_and_order(){
 namespace {
 
 constexpr size_t RUNTIME_META_FIXTURE_ENTRIES = 30;
-constexpr size_t RUNTIME_META_STRESS_FIXTURE_ENTRIES = 48;
+constexpr size_t RUNTIME_META_HIL_FIXTURE_ENTRIES = 48;
+// This deliberately exceeds the observed 10 kB HIL payload by a wide margin.
+// It exercises dynamic sizing rather than a field-count or fixed-buffer limit.
+constexpr size_t RUNTIME_META_STRESS_FIXTURE_ENTRIES = 64;
 constexpr size_t RUNTIME_META_KEY_MAX_LEN = 15;
 const char* const RUNTIME_STYLE_TARGETS[] = {
     "row", "label", "values", "unit", "state",
@@ -348,6 +351,15 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
     }
     TEST_ASSERT_EQUAL_UINT32(1, runtime.getRuntimeMetaSerializationBuildCountForTest());
 
+    ConfigManagerRuntime hilRuntime;
+    for (size_t index = 0; index < RUNTIME_META_HIL_FIXTURE_ENTRIES; ++index) {
+        hilRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(index));
+    }
+    const std::shared_ptr<const String> hilPayload = hilRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(hilPayload.get());
+    assertRuntimeMetaJson(*hilPayload, RUNTIME_META_HIL_FIXTURE_ENTRIES);
+    TEST_ASSERT_TRUE(hilPayload->length() > 10000);
+
     ConfigManagerRuntime stressRuntime;
     for (size_t index = 0; index < RUNTIME_META_STRESS_FIXTURE_ENTRIES; ++index) {
         stressRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(index));
@@ -355,7 +367,7 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
     const std::shared_ptr<const String> stressPayload = stressRuntime.runtimeMetaJsonPayload();
     TEST_ASSERT_NOT_NULL(stressPayload.get());
     assertRuntimeMetaJson(*stressPayload, RUNTIME_META_STRESS_FIXTURE_ENTRIES);
-    TEST_ASSERT_TRUE(stressPayload->length() > 10000);
+    TEST_ASSERT_TRUE(stressPayload->length() > 20000);
     for (size_t request = 0; request < 3; ++request) {
         TEST_ASSERT_EQUAL_PTR(stressPayload.get(), stressRuntime.runtimeMetaJsonPayload().get());
     }

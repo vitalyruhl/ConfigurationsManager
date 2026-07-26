@@ -2,6 +2,11 @@
 
 This changelog is a curated overview.
 
+## 4.4.6 - 2026-07-26
+
+- Verify the measured runtime metadata JSON length before replacing its cache.
+- Cover HIL-sized and larger dynamic runtime metadata payloads in regression tests.
+
 ## 4.4.5 - 2026-07-26
 
 - Cache complete `/runtime_meta.json` payloads and serve them without a second

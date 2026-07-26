@@ -544,6 +544,10 @@ String ConfigManagerRuntime::buildRuntimeMetaJsonLocked() {
         logRuntimeMetaSerializationFailure("close", outputSize, meta.size());
         return String();
     }
+    if (out.length() != outputSize) {
+        logRuntimeMetaSerializationFailure("length", outputSize, meta.size());
+        return String();
+    }
     return out;
 }
 
