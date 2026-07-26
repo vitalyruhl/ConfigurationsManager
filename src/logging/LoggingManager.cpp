@@ -317,7 +317,7 @@ void LoggingManager::logV(Level level, const char* tag, const char* format, va_l
   const unsigned long ts = millis();
   const char* msg = buffer;
   String extractedTag;
-  if (!tag && msg && msg[0] == '[') {
+  if (!tag && msg[0] == '[') {
     const char* end = strchr(msg, ']');
     if (end && end > msg + 1) {
       const size_t tokenLen = static_cast<size_t>(end - msg - 1);
