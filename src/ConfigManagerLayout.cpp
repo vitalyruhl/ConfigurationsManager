@@ -441,7 +441,6 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
       for (const auto& page : livePages) {
         if (normalizeLayoutName(page.name) == wantedNorm) {
           resolvedPage = page.name;
-          found = true;
           break;
         }
       }
@@ -558,8 +557,8 @@ String ConfigManagerClass::buildLiveLayoutJSON() const {
         groupObj["title"] = group->name;
         groupObj["order"] = group->order;
 
-        JsonArray itemsArray = groupObj.createNestedArray("items");
-        collectPlacements(page->name, card->name, group->name, itemsArray);
+        JsonArray groupItemsArray = groupObj.createNestedArray("items");
+        collectPlacements(page->name, card->name, group->name, groupItemsArray);
       }
     }
   }
