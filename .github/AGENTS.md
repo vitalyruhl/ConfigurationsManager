@@ -90,6 +90,14 @@ UI, examples, tests, and support tools. This file is the canonical policy.
   `tools/build/run-full-repository-gate.ps1`. It discovers supported PlatformIO
   targets, runs the repository's automated tests, validates governance
   generation and workflow structure, and never uploads or deletes caches.
+- For GitHub CI, start one exact Run-ID-bound wait through
+  `tools/ci/wait-ci-run.ps1` with the expected full head SHA. Do not poll CI
+  through repeated agent turns, reuse an older commit result, or load successful
+  full logs. On failure, inspect only the compact excerpt first and fetch a
+  specific failed job only when that excerpt is insufficient.
+- A PR gate must additionally re-check the current PR head and its required
+  checks after the exact run passes. A changed PR head is `STALE_HEAD`; require
+  an explicit new Run ID and expected SHA rather than switching automatically.
 
 ## Changelog and Release Documentation
 

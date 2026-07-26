@@ -47,6 +47,12 @@ decisions. Do not change product scope.
 - Load `safe-branch-cleanup` only for explicit cleanup and
   `final-repository-sync` only after an authorized integration or release
   operation. Do not push, merge, release, or delete branches automatically.
+- For CI waiting, invoke `tools/ci/wait-ci-run.ps1` once with an exact Run ID
+  and expected full head SHA. Do not repeatedly poll from agent turns, accept
+  an older commit result, or load successful full logs. On a red result, use the
+  bounded excerpt before a targeted failed-job log. For PR work, require the
+  script's renewed PR-head and required-check verification; stop on
+  `STALE_HEAD` until explicitly given the new run target.
 
 ## Shortcuts
 
