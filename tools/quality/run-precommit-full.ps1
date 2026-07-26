@@ -49,7 +49,7 @@ if (-not $clangFormat) {
 }
 
 if ($sourceFiles.Count -gt 0) {
-    & $clangFormat.Source --dry-run --Werror $sourceFiles.FullName
+    & $clangFormat.Source --style=file --fallback-style=none --dry-run --Werror $sourceFiles.FullName
     exit $LASTEXITCODE
 }
 
