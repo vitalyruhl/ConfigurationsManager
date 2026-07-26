@@ -1059,7 +1059,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
 void ConfigManagerWeb::handleRootRequest(AsyncWebServerRequest* request) {
   if (customHTML && customHTMLLen > 0) {
     // Use custom HTML
-    AsyncWebServerResponse* response = request->beginResponse_P(200, "text/html", (const uint8_t*)customHTML, customHTMLLen);
+    AsyncWebServerResponse* response = request->beginResponse_P(200, "text/html", reinterpret_cast<const uint8_t*>(customHTML), customHTMLLen);
     response->addHeader("Content-Encoding", "gzip");
     request->send(response);
   } else if (embedWebUI) {
