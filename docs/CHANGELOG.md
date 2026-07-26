@@ -2,6 +2,11 @@
 
 This changelog is a curated overview.
 
+## 4.4.7 - 2026-07-26
+
+- Send cached `/runtime_meta.json` payloads directly through AsyncTCP without a
+  per-chunk response allocation and close completed response connections.
+
 ## 4.4.6 - 2026-07-26
 
 - Verify the measured runtime metadata JSON length before replacing its cache.

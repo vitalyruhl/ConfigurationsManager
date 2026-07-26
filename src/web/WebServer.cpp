@@ -15,12 +15,17 @@
 
 namespace {
 
-class RuntimeMetaResponse final : public AsyncAbstractResponse {
+class RuntimeMetaResponse final : public AsyncWebServerResponse {
 public:
-    RuntimeMetaResponse(std::shared_ptr<const String> payload, std::atomic<uint32_t>* activeRequests)
+    RuntimeMetaResponse(std::shared_ptr<const String> payload,
+                        std::atomic<uint32_t>* activeRequests,
+                        ConfigManagerClass* configManager)
         : payload_(std::move(payload))
         , activeRequests_(activeRequests)
-        , offset_(0) {
+        , configManager_(configManager)
+        , headerOffset_(0)
+        , payloadOffset_(0)
+        , sendStallLogged_(false) {
         _code = 200;
         _contentLength = payload_ ? payload_->length() : 0;
         _contentType = "application/json";
@@ -40,22 +45,117 @@ public:
         return hasPayload();
     }
 
-    size_t _fillBuffer(uint8_t* buffer, size_t maxLength) override {
-        if (!buffer || !payload_ || offset_ >= payload_->length()) {
-            return 0;
+    void _respond(AsyncWebServerRequest* request) override {
+        if (!request || !hasPayload()) {
+            _state = RESPONSE_FAILED;
+            if (request && request->client()) {
+                request->client()->close();
+            }
+            return;
         }
 
-        const size_t available = payload_->length() - offset_;
-        const size_t length = available < maxLength ? available : maxLength;
-        memcpy(buffer, payload_->c_str() + offset_, length);
-        offset_ += length;
-        return length;
+        _head = _assembleHead(request->version());
+        if (_head.length() == 0) {
+            _state = RESPONSE_FAILED;
+            request->client()->close();
+            return;
+        }
+
+        _state = RESPONSE_HEADERS;
+        writeAvailable(request);
+    }
+
+    size_t _ack(AsyncWebServerRequest* request, size_t len, uint32_t time) override {
+        (void)time;
+        _ackedLength += len;
+
+        if (_state == RESPONSE_HEADERS || _state == RESPONSE_CONTENT) {
+            return writeAvailable(request);
+        }
+
+        if (_state == RESPONSE_WAIT_ACK && _ackedLength >= _writtenLength) {
+            _state = RESPONSE_END;
+            // The framework does not close completed fixed-length abstract
+            // responses itself. Closing here releases the request, response,
+            // and AsyncTCP PCB after the final acknowledged byte.
+            request->client()->close();
+        }
+        return 0;
     }
 
 private:
+    size_t writeAvailable(AsyncWebServerRequest* request) {
+        if (!request || !request->client() || !hasPayload()) {
+            _state = RESPONSE_FAILED;
+            return 0;
+        }
+
+        size_t written = 0;
+        if (_state == RESPONSE_HEADERS && headerOffset_ < _head.length()) {
+            const size_t space = request->client()->space();
+            if (space == 0) {
+                return 0;
+            }
+            const size_t remaining = _head.length() - headerOffset_;
+            const size_t sent = request->client()->write(_head.c_str() + headerOffset_,
+                                                          remaining < space ? remaining : space);
+            if (sent == 0) {
+                logSendStall("headers");
+                return 0;
+            }
+            headerOffset_ += sent;
+            _writtenLength += sent;
+            written += sent;
+            if (headerOffset_ < _head.length()) {
+                return written;
+            }
+            _state = RESPONSE_CONTENT;
+        }
+
+        if (_state == RESPONSE_CONTENT && payloadOffset_ < _contentLength) {
+            const size_t space = request->client()->space();
+            if (space == 0) {
+                return written;
+            }
+            const size_t remaining = _contentLength - payloadOffset_;
+            const size_t sent = request->client()->write(payload_->c_str() + payloadOffset_,
+                                                          remaining < space ? remaining : space);
+            if (sent == 0) {
+                logSendStall("payload");
+                return written;
+            }
+            payloadOffset_ += sent;
+            _sentLength = payloadOffset_;
+            _writtenLength += sent;
+            written += sent;
+            if (payloadOffset_ == _contentLength) {
+                _state = RESPONSE_WAIT_ACK;
+            }
+        }
+        return written;
+    }
+
+    void logSendStall(const char* phase) {
+        if (sendStallLogged_) {
+            return;
+        }
+        sendStallLogged_ = true;
+        WEB_LOG("[W] Runtime meta TCP stalled: phase=%s payload=%u active=%u ws=%u free=%u largest=%u",
+                phase,
+                static_cast<unsigned>(_contentLength),
+                static_cast<unsigned>(activeRequests_ ? activeRequests_->load() : 0),
+                static_cast<unsigned>(configManager_ ? configManager_->getWebSocketClientCount() : 0),
+                static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+    }
+
     std::shared_ptr<const String> payload_;
     std::atomic<uint32_t>* activeRequests_;
-    size_t offset_;
+    ConfigManagerClass* configManager_;
+    String _head;
+    size_t headerOffset_;
+    size_t payloadOffset_;
+    bool sendStallLogged_;
 };
 
 void logRuntimeMetaResponseFailure(size_t payloadLength, uint32_t activeRequests) {
@@ -1198,7 +1298,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
                 return;
             }
             const size_t payloadLength = payload->length();
-            RuntimeMetaResponse* response = new (std::nothrow) RuntimeMetaResponse(std::move(payload), &runtimeMetaActiveRequests);
+            RuntimeMetaResponse* response = new (std::nothrow) RuntimeMetaResponse(std::move(payload), &runtimeMetaActiveRequests, configManager);
             if (!response || !response->hasPayload()) {
                 delete response;
                 if (!response) {
