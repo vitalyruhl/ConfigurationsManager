@@ -107,9 +107,9 @@ struct RuntimeFieldStyle {
 
   RuntimeStyleRule& rule(const char* targetName) {
     String target = targetName ? String(targetName) : String();
-    for (auto& rule : rules) {
-      if (rule.target == target) {
-        return rule;
+    for (auto& styleRule : rules) {
+      if (styleRule.target == target) {
+        return styleRule;
       }
     }
     RuntimeStyleRule created;
