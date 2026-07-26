@@ -254,6 +254,9 @@ void assertRuntimeMetaJson(const String& json, size_t expectedEntries) {
     TEST_ASSERT_FALSE(error);
     JsonArray entries = doc.as<JsonArray>();
     TEST_ASSERT_EQUAL_UINT32(expectedEntries, entries.size());
+    String normalized;
+    TEST_ASSERT_EQUAL_UINT32(json.length(), serializeJson(doc, normalized));
+    TEST_ASSERT_EQUAL_UINT32(json.length(), normalized.length());
     for (size_t index = 0; index < expectedEntries; ++index) {
         String expectedKey = String("runtime_key_") + String(index);
         while (expectedKey.length() < RUNTIME_META_KEY_MAX_LEN) {
@@ -333,6 +336,12 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
         TEST_ASSERT_EQUAL_UINT32(json.length(), repeatedJson.length());
         TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
     }
+
+    runtime.setRuntimeMetaSerializationFailureForTest(true);
+    TEST_ASSERT_EQUAL_UINT32(0, runtime.runtimeMetaToJSON().length());
+    runtime.setRuntimeMetaSerializationFailureForTest(false);
+    const String recoveredJson = runtime.runtimeMetaToJSON();
+    assertRuntimeMetaJson(recoveredJson, RUNTIME_META_FIXTURE_ENTRIES);
 }
 
 } // namespace

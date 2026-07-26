@@ -265,8 +265,12 @@ private:
     LogCallback logCallback;
     // runtime-safe contract:
     // - registration/mutation methods lock this mutex
-    // - JSON serializers copy snapshots under lock, then serialize unlocked
+    // - JSON serializers hold the lock while traversing mutable runtime data
     mutable std::mutex runtimeDataMutex;
+
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+    bool runtimeMetaSerializationFailureForTest = false;
+#endif
 
     // Runtime data
     std::vector<RuntimeValueProvider> runtimeProviders;
@@ -327,6 +331,12 @@ public:
     // JSON generation
     String runtimeValuesToJSON();
     String runtimeMetaToJSON();
+
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+    void setRuntimeMetaSerializationFailureForTest(bool fail) {
+        runtimeMetaSerializationFailureForTest = fail;
+    }
+#endif
 
     // System provider
 #if CM_ENABLE_SYSTEM_PROVIDER

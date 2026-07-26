@@ -10,6 +10,27 @@
 
 namespace {
 
+class StringAppendPrint : public Print {
+public:
+    explicit StringAppendPrint(String& output)
+        : output(output) {
+    }
+
+    size_t write(uint8_t byte) override {
+        return output.concat(static_cast<char>(byte)) ? 1 : 0;
+    }
+
+    size_t write(const uint8_t* buffer, size_t size) override {
+        if (size > std::numeric_limits<unsigned int>::max()) {
+            return 0;
+        }
+        return output.concat(reinterpret_cast<const char*>(buffer), static_cast<unsigned int>(size)) ? size : 0;
+    }
+
+private:
+    String& output;
+};
+
 void populateRuntimeMetaJson(JsonObject o, const RuntimeFieldMeta& m) {
     o["group"] = m.group;
     if (m.sourceGroup.length()) {
@@ -113,7 +134,8 @@ bool appendRuntimeMetaJson(String& out, const RuntimeFieldMeta& meta) {
     StaticJsonDocument<1536> entryDoc;
     populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
     const size_t offset = out.length();
-    const size_t written = serializeJson(entryDoc, out);
+    StringAppendPrint writer(out);
+    const size_t written = serializeJson(entryDoc, writer);
     return written != 0 && out.length() == offset + written;
 }
 
@@ -440,6 +462,12 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     std::vector<RuntimeFieldMeta>& meta = runtimeMetaOverrideActive ? runtimeMetaOverride : runtimeMeta;
 #else
     std::vector<RuntimeFieldMeta>& meta = runtimeMeta;
+#endif
+
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+    if (runtimeMetaSerializationFailureForTest) {
+        return String();
+    }
 #endif
 
     std::sort(meta.begin(), meta.end(),

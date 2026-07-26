@@ -2,6 +2,10 @@
 
 This changelog is a curated overview.
 
+## 4.4.4 - 2026-07-26
+
+- Restore `/runtime_meta.json` serialization for non-empty metadata.
+
 ## 4.4.3 - 2026-07-26
 
 - Show and retry temporary `/runtime_meta.json` failures without clearing the
