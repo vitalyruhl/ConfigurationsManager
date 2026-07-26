@@ -72,10 +72,10 @@ inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
 template <typename T>
 struct ConfigOptions {
   // Required fields
-  const char* key = nullptr; // Key hint used to derive the hashed storage key (if nullptr, derived from name+category)
-  const char* name;          // Display name in Settings UI (if nullptr, falls back to key or "Default")
-  const char* category;      // Card name in Settings UI (if nullptr, falls back to "Default")
-  T defaultValue;            // Default value
+  const char* key = nullptr;      // Key hint used to derive the hashed storage key (if nullptr, derived from name+category)
+  const char* name = nullptr;     // Display name in Settings UI (if nullptr, falls back to key or "Default")
+  const char* category = nullptr; // Card name in Settings UI (if nullptr, falls back to "Default")
+  T defaultValue{};               // Default value
 
   // Optional fields
   bool showInWeb = true;                     // Show in web interface
@@ -676,7 +676,7 @@ public:
       return false;
     }
 
-    T newValue;
+    T newValue{};
     if constexpr (std::is_same_v<T, String>) {
       if (!jsonValue.is<const char*>()) {
         return false;
@@ -1801,9 +1801,9 @@ public:
       }
       return nullptr;
     }
-    BaseSetting* raw = setting.get();
-    raw->setLogger([](const char* msg) { CM_CORE_LOG("%s", msg); });
     ownedSettings.push_back(std::move(setting));
+    BaseSetting* raw = ownedSettings.back().get();
+    raw->setLogger([](const char* msg) { CM_CORE_LOG("%s", msg); });
     settings.push_back(raw);
     registerSettingPlacement(raw);
     return raw;
