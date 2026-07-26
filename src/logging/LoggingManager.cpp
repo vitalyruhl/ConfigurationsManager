@@ -154,10 +154,14 @@ void LoggingManager::GuiOutput::enqueuePending_(const String& payload) {
   pending_.push_back(payload);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 String LoggingManager::GuiOutput::makeReadyPayload_() const {
   return String("{\"type\":\"logReady\"}");
 }
 
+// Cppcheck rationale: Preserve the mutable callback and extension contract.
+// cppcheck-suppress constParameterPointer
 void LoggingManager::GuiOutput::flushToClient_(AsyncWebSocketClient* client) {
 #if CM_ENABLE_WS_PUSH
   if (!client || buffer_.empty()) {

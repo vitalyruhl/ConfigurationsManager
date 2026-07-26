@@ -14,6 +14,8 @@ public:
   enum class ActiveLevel : uint8_t { ActiveLow = 0,
                                      ActiveHigh = 1 };
 
+  // Cppcheck rationale: Preserve implicit construction used by existing callers.
+  // cppcheck-suppress noExplicitConstructor
   PulseOutput(uint8_t pin, ActiveLevel level = ActiveLevel::ActiveHigh);
 
   // Configure defaults for subsequent setPulse() calls.

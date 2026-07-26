@@ -735,6 +735,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
       if (success) {
         if (configManager) {
+          // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
+          // cppcheck-suppress constVariablePointer
           BaseSetting* setting = configManager->findSetting(category, key);
           if (setting) {
             WEB_LOG_VERBOSE("[D] Saved setting: %s.%s key=%s",
@@ -838,6 +840,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
       return;
     }
 
+    // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
+    // cppcheck-suppress constVariablePointer
     auto* cs = static_cast<Config<String>*>(s);
 
     DynamicJsonDocument out(512);
@@ -1177,6 +1181,8 @@ bool ConfigManagerWeb::shouldRedirectToPortal(AsyncWebServerRequest* request) co
   return true;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void ConfigManagerWeb::redirectToPortalRoot(AsyncWebServerRequest* request) {
   AsyncWebServerResponse* response = request->beginResponse(302, "text/plain", "Redirecting to setup portal");
   response->addHeader("Location", "/");
@@ -1192,6 +1198,8 @@ void ConfigManagerWeb::addCustomRoute(const char* path, WebRequestMethodComposit
   }
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void ConfigManagerWeb::enableCORS(AsyncWebServerResponse* response) {
   if (!response) {
     return;
@@ -1305,6 +1313,8 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
   setupRuntimeActionRoutes();
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 String ConfigManagerWeb::getContentType(const String& path) {
   if (path.endsWith(".html"))
     return "text/html";
@@ -1319,6 +1329,8 @@ String ConfigManagerWeb::getContentType(const String& path) {
   return "text/plain";
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void ConfigManagerWeb::log(const char* format, ...) const {
   char buffer[256];
   va_list args;

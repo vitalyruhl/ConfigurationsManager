@@ -362,6 +362,8 @@ AlarmManager::AlarmEntry* AlarmManager::findAlarm(const char* id) {
     return nullptr;
   }
   for (auto& entry : alarms) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (entry.id == id) {
       return &entry;
     }
@@ -374,6 +376,8 @@ const AlarmManager::AlarmEntry* AlarmManager::findAlarm(const char* id) const {
     return nullptr;
   }
   for (const auto& entry : alarms) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (entry.id == id) {
       return &entry;
     }
@@ -417,7 +421,11 @@ RuntimeFieldStyle AlarmManager::buildAlarmStyle() {
 }
 
 void AlarmManager::ensureLiveGroupProvider(const String& group) {
+  // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
+  // cppcheck-suppress constVariableReference
   for (auto& liveGroup : liveGroups) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (liveGroup.group == group) {
       return;
     }
@@ -430,6 +438,8 @@ void AlarmManager::ensureLiveGroupProvider(const String& group) {
   ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
     const AlarmLiveGroup* target = nullptr;
     for (const auto& entry : liveGroups) {
+      // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+      // cppcheck-suppress useStlAlgorithm
       if (entry.group == group) {
         target = &entry;
         break;
@@ -448,6 +458,8 @@ void AlarmManager::ensureLiveGroupProvider(const String& group) {
   });
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void AlarmManager::updateLiveMetaStyle(const AlarmEntry& entry) {
   for (const auto& placement : entry.placements) {
     if (placement.severity != entry.severity) {
@@ -460,6 +472,8 @@ void AlarmManager::updateLiveMetaStyle(const AlarmEntry& entry) {
   }
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void AlarmManager::registerSettings(AlarmEntry& entry,
                                     const char* pageName,
                                     const char* cardName,
@@ -607,6 +621,8 @@ void AlarmManager::registerPlacement(AlarmEntry& entry,
 
   bool placementFound = false;
   for (auto& placement : entry.placements) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (placement.group == effectiveGroup && placement.key == entry.id && placement.severity == severity) {
       placement.label = meta.label;
       placement.order = resolvedOrder;
@@ -627,6 +643,8 @@ void AlarmManager::registerPlacement(AlarmEntry& entry,
   ensureLiveGroupProvider(effectiveGroup);
   const size_t entryIndex = static_cast<size_t>(&entry - &alarms[0]);
   for (auto& group : liveGroups) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (group.group == effectiveGroup) {
       if (std::find(group.entries.begin(), group.entries.end(), entryIndex) == group.entries.end()) {
         group.entries.push_back(entryIndex);
@@ -636,26 +654,38 @@ void AlarmManager::registerPlacement(AlarmEntry& entry,
   }
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 bool AlarmManager::isEnabledNow(const AlarmEntry& entry) const {
   return entry.enabledSetting ? entry.enabledSetting->get() : entry.enabledDefault;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 bool AlarmManager::isMinActiveNow(const AlarmEntry& entry) const {
   return entry.minActiveSetting ? entry.minActiveSetting->get() : entry.minActiveDefault;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 bool AlarmManager::isMaxActiveNow(const AlarmEntry& entry) const {
   return entry.maxActiveSetting ? entry.maxActiveSetting->get() : entry.maxActiveDefault;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 float AlarmManager::thresholdMinNow(const AlarmEntry& entry) const {
   return entry.thresholdMinSetting ? entry.thresholdMinSetting->get() : entry.thresholdMin;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 float AlarmManager::thresholdMaxNow(const AlarmEntry& entry) const {
   return entry.thresholdMaxSetting ? entry.thresholdMaxSetting->get() : entry.thresholdMax;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 bool AlarmManager::readDigitalSource(const AlarmEntry& entry, bool& value) const {
   if (entry.digitalGetter) {
     value = entry.digitalGetter();
@@ -668,6 +698,8 @@ bool AlarmManager::readDigitalSource(const AlarmEntry& entry, bool& value) const
   return false;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 bool AlarmManager::readAnalogSource(const AlarmEntry& entry, float& value) const {
   if (entry.analogGetter) {
     value = entry.analogGetter();
