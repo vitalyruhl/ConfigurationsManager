@@ -104,6 +104,9 @@
     </div>
 
     <div v-else>
+      <p v-if="runtimeMetaStatus" class="runtime-meta-status" role="status">
+        {{ runtimeMetaStatus }}
+      </p>
       <div v-if="layoutTabs.length" class="runtime-tabs" role="tablist" aria-label="Live pages">
         <button
           v-for="tab in layoutTabs"
@@ -508,6 +511,7 @@ import RuntimeMomentaryButton from "./runtime/RuntimeMomentaryButton.vue";
 import RuntimeNumberInput from "./runtime/RuntimeNumberInput.vue";
 import RuntimeSlider from "./runtime/RuntimeSlider.vue";
 import RuntimeStateButton from "./runtime/RuntimeStateButton.vue";
+import { createRuntimeMetaRetryController } from "../runtimeMetaRetry.mjs";
 
 const props = defineProps({
   config: {
@@ -537,6 +541,7 @@ const fetchStoredPassword = inject("fetchStoredPassword", null);
 
 const runtime = ref({});
 const runtimeMeta = ref([]);
+const runtimeMetaStatus = ref("");
 const runtimeGroups = ref([]);
 const liveLayout = ref(null);
 const activeLivePage = ref("");
@@ -1043,10 +1048,6 @@ let ws = null;
 let wsRetry = 0;
 let wsConnecting = false;
 let wsReconnectTimer = null;
-let runtimeMetaLastAttemptMs = 0;
-let runtimeMetaRequestInFlight = false;
-let runtimeMetaRetryTimer = null;
-
 let checkboxDebounceTimer = null;
 
 const rURIComp = encodeURIComponent;
@@ -1583,33 +1584,37 @@ async function fetchRuntime() {
   }
 }
 
-async function fetchRuntimeMeta() {
-  if (runtimeMetaRequestInFlight) return;
-  const now = Date.now();
-  if (now - runtimeMetaLastAttemptMs < 5000) return;
-  runtimeMetaLastAttemptMs = now;
-  runtimeMetaRequestInFlight = true;
-  if (runtimeMetaRetryTimer) {
-    clearTimeout(runtimeMetaRetryTimer);
-    runtimeMetaRetryTimer = null;
-  }
-  try {
-    const r = await fetchWithTimeout("/runtime_meta.json?ts=" + Date.now(), {}, 5000);
-    if (!r.ok) return;
-    const meta = await r.json();
-    runtimeMeta.value = Array.isArray(meta) ? meta : [];
-    buildRuntimeGroups();
-  } catch (e) {
-    // ignore network/abort; polling will retry
-  } finally {
-    runtimeMetaRequestInFlight = false;
-    if (!runtimeMeta.value.length && !runtimeMetaRetryTimer) {
-      runtimeMetaRetryTimer = setTimeout(() => {
-        runtimeMetaRetryTimer = null;
-        fetchRuntimeMeta();
-      }, 3000);
+async function requestRuntimeMeta() {
+  const response = await fetchWithTimeout("/runtime_meta.json?ts=" + Date.now(), {}, 5000);
+  if (response.ok) {
+    const meta = await response.json();
+    if (Array.isArray(meta)) {
+      return { ok: true, data: meta };
     }
+    return { ok: false, retryable: true, message: "Runtime metadata response was invalid." };
   }
+  if (response.status === 503) {
+    return { ok: false, retryable: true, message: "Runtime data is temporarily unavailable." };
+  }
+  return { ok: false, retryable: false, message: `Runtime metadata request failed (HTTP ${response.status}).` };
+}
+
+const runtimeMetaController = createRuntimeMetaRetryController({
+  request: requestRuntimeMeta,
+  onSuccess: (meta) => {
+    runtimeMeta.value = meta;
+    runtimeMetaStatus.value = "";
+    buildRuntimeGroups();
+  },
+  onFailure: (message, retryable) => {
+    runtimeMetaStatus.value = retryable
+      ? `${message} Retrying in 5 seconds…`
+      : message;
+  },
+});
+
+function fetchRuntimeMeta() {
+  return runtimeMetaController.run();
 }
 
 async function fetchLiveLayout() {
@@ -2582,10 +2587,7 @@ onBeforeUnmount(() => {
     clearTimeout(wsReconnectTimer);
     wsReconnectTimer = null;
   }
-  if (runtimeMetaRetryTimer) {
-    clearTimeout(runtimeMetaRetryTimer);
-    runtimeMetaRetryTimer = null;
-  }
+  runtimeMetaController.cancel();
   if (otaProbeTimer) {
     clearInterval(otaProbeTimer);
     otaProbeTimer = null;
@@ -2604,6 +2606,16 @@ defineExpose({ startFlash });
 <style scoped>
 .live-view {
   padding: 0.75rem 0.5rem 2.5rem;
+}
+
+.runtime-meta-status {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #c77a00;
+  border-radius: 0.4rem;
+  background: #fff5dc;
+  color: #6e4300;
+  font-weight: 600;
 }
 .runtime-tabs {
   display: flex;

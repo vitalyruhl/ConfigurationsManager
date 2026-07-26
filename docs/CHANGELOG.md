@@ -2,6 +2,11 @@
 
 This changelog is a curated overview.
 
+## 4.4.3 - 2026-07-26
+
+- Show and retry temporary `/runtime_meta.json` failures without clearing the
+  existing runtime dashboard.
+
 ## 4.4.2 - 2026-07-26
 
 - Avoid deep copies of runtime metadata while serializing `/runtime_meta.json`.
