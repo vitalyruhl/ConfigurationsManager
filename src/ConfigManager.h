@@ -503,8 +503,7 @@ public:
   // New primary constructor for ConfigOptions
   explicit Config(const ConfigOptions<T>& opts)
       : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type, opts.showInWeb, opts.isPassword, opts.sortOrder, opts.categoryPretty, opts.card, opts.cardPretty, opts.cardOrder),
-        value(opts.defaultValue), defaultValue(opts.defaultValue) {
-    showIfFunc = opts.showIf;
+        value(opts.defaultValue), defaultValue(opts.defaultValue), showIfFunc(opts.showIf) {
     if (opts.callback) {
       callback = opts.callback;
     }
@@ -1747,8 +1746,8 @@ public:
 #endif
 
 public:
-  ConfigManagerClass() {
-    appVersion = String(CONFIGMANAGER_VERSION);
+  ConfigManagerClass()
+      : appVersion(CONFIGMANAGER_VERSION) {
     webManager.setCallbacks(
       [this]() { return toJSON(true); },                            // config JSON - include secrets for web interface
       [this]() { return runtimeManager.runtimeValuesToJSON(); },    // runtime JSON
@@ -2947,8 +2946,8 @@ public:
           case WS_EVT_DATA: {
             // check for application-level pong
             if (arg && data && len) {
-              AwsFrameInfo* info = reinterpret_cast<AwsFrameInfo*>(arg);
-              if (info && info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+              const auto* info = reinterpret_cast<const AwsFrameInfo*>(arg);
+              if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
                 // Small fixed buffer for compare
                 char buf[16];
                 size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
