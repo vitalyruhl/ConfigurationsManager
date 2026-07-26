@@ -6,8 +6,7 @@
 
 #include "CoreSettings.h"
 
-namespace cm
-{
+namespace cm {
 
 // Header-only helper to keep examples smaller.
 //
@@ -22,89 +21,76 @@ namespace cm
 // Notes:
 // - This helper intentionally does NOT log to Serial to keep it reusable.
 // - Only one instance should be used in a sketch (ticker callback uses a static pointer).
-class CoreWiFiServices
-{
+class CoreWiFiServices {
 public:
-    void onConnected(ConfigManagerClass &cfg,
-                     const char *otaHostname,
-                     const CoreSystemSettings &system,
-                     const CoreNtpSettings &ntp)
-    {
-        if (!servicesActive)
-        {
-            if (system.allowOTA.get() && !cfg.getOTAManager().isInitialized())
-            {
-                cfg.setupOTA(otaHostname, system.otaPassword.get().c_str());
-            }
+  void onConnected(ConfigManagerClass& cfg,
+                   const char* otaHostname,
+                   const CoreSystemSettings& system,
+                   const CoreNtpSettings& ntp) {
+    if (!servicesActive) {
+      if (system.allowOTA.get() && !cfg.getOTAManager().isInitialized()) {
+        cfg.setupOTA(otaHostname, system.otaPassword.get().c_str());
+      }
 
-            servicesActive = true;
-        }
-
-        startNtp(ntp);
+      servicesActive = true;
     }
 
-    void onDisconnected()
-    {
-        stopNtp();
-        servicesActive = false;
-    }
+    startNtp(ntp);
+  }
 
-    void onAPMode()
-    {
-        onDisconnected();
-    }
+  void onDisconnected() {
+    stopNtp();
+    servicesActive = false;
+  }
 
-    bool isActive() const
-    {
-        return servicesActive;
-    }
+  void onAPMode() {
+    onDisconnected();
+  }
 
-    void stopNtp()
-    {
-        ntpSyncTicker.detach();
-    }
+  bool isActive() const {
+    return servicesActive;
+  }
+
+  void stopNtp() {
+    ntpSyncTicker.detach();
+  }
 
 private:
-    void startNtp(const CoreNtpSettings &ntp)
-    {
-        activeInstance = this;
-        ntpSettings = &ntp;
+  void startNtp(const CoreNtpSettings& ntp) {
+    activeInstance = this;
+    ntpSettings = &ntp;
 
-        doNtpSync(ntp);
+    doNtpSync(ntp);
 
-        ntpSyncTicker.detach();
+    ntpSyncTicker.detach();
 
-        int intervalSec = ntp.frequencySec.get();
-        if (intervalSec < 60)
-        {
-            intervalSec = 3600;
-        }
-
-        ntpSyncTicker.attach(intervalSec, &CoreWiFiServices::ntpTickerThunk);
+    int intervalSec = ntp.frequencySec.get();
+    if (intervalSec < 60) {
+      intervalSec = 3600;
     }
 
-    static void ntpTickerThunk()
-    {
-        if (activeInstance == nullptr || activeInstance->ntpSettings == nullptr)
-        {
-            return;
-        }
+    ntpSyncTicker.attach(intervalSec, &CoreWiFiServices::ntpTickerThunk);
+  }
 
-        activeInstance->doNtpSync(*activeInstance->ntpSettings);
+  static void ntpTickerThunk() {
+    if (activeInstance == nullptr || activeInstance->ntpSettings == nullptr) {
+      return;
     }
 
-    void doNtpSync(const CoreNtpSettings &ntp)
-    {
-        configTzTime(ntp.tz.get().c_str(), ntp.server1.get().c_str(), ntp.server2.get().c_str());
-    }
+    activeInstance->doNtpSync(*activeInstance->ntpSettings);
+  }
+
+  void doNtpSync(const CoreNtpSettings& ntp) {
+    configTzTime(ntp.tz.get().c_str(), ntp.server1.get().c_str(), ntp.server2.get().c_str());
+  }
 
 private:
-    Ticker ntpSyncTicker;
-    bool servicesActive = false;
+  Ticker ntpSyncTicker;
+  bool servicesActive = false;
 
-    const CoreNtpSettings *ntpSettings = nullptr;
+  const CoreNtpSettings* ntpSettings = nullptr;
 
-    inline static CoreWiFiServices *activeInstance = nullptr;
+  inline static CoreWiFiServices* activeInstance = nullptr;
 };
 
 } // namespace cm

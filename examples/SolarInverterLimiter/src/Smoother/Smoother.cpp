@@ -3,9 +3,8 @@
 #include <new>
 
 Smoother::Smoother(int size)
-  : bufferSize(clampBufferSize(size)),
-    bufferIndex(0)
-{
+    : bufferSize(clampBufferSize(size)),
+      bufferIndex(0) {
   buffer = new (std::nothrow) int[bufferSize];
   fillBufferOnStart(0);
 }

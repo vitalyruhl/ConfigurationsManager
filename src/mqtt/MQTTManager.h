@@ -37,808 +37,812 @@ inline void onMQTTStateChanged(int) {}
 inline void onNewMQTTMessage(const char*, const uint8_t*, unsigned int) {}
 #endif
 
-inline void callOnMQTTConnectedSafe_()
-{
+inline void callOnMQTTConnectedSafe_() {
 #ifdef CM_MQTT_NO_DEFAULT_HOOKS
-    if (onMQTTConnected != nullptr) {
-        onMQTTConnected();
-    }
-#else
+  if (onMQTTConnected != nullptr) {
     onMQTTConnected();
+  }
+#else
+  onMQTTConnected();
 #endif
 }
 
-inline void callOnMQTTDisconnectedSafe_()
-{
+inline void callOnMQTTDisconnectedSafe_() {
 #ifdef CM_MQTT_NO_DEFAULT_HOOKS
-    if (onMQTTDisconnected != nullptr) {
-        onMQTTDisconnected();
-    }
-#else
+  if (onMQTTDisconnected != nullptr) {
     onMQTTDisconnected();
+  }
+#else
+  onMQTTDisconnected();
 #endif
 }
 
-inline void callOnMQTTStateChangedSafe_(int state)
-{
+inline void callOnMQTTStateChangedSafe_(int state) {
 #ifdef CM_MQTT_NO_DEFAULT_HOOKS
-    if (onMQTTStateChanged != nullptr) {
-        onMQTTStateChanged(state);
-    }
-#else
+  if (onMQTTStateChanged != nullptr) {
     onMQTTStateChanged(state);
+  }
+#else
+  onMQTTStateChanged(state);
 #endif
 }
 
-inline void callOnNewMQTTMessageSafe_(const char* topic, const uint8_t* payload, unsigned int length)
-{
+inline void callOnNewMQTTMessageSafe_(const char* topic, const uint8_t* payload, unsigned int length) {
 #ifdef CM_MQTT_NO_DEFAULT_HOOKS
-    if (onNewMQTTMessage != nullptr) {
-        onNewMQTTMessage(topic, payload, length);
-    }
-#else
+  if (onNewMQTTMessage != nullptr) {
     onNewMQTTMessage(topic, payload, length);
+  }
+#else
+  onNewMQTTMessage(topic, payload, length);
 #endif
 }
 
 class MQTTManager {
 public:
-    enum class ConnectionState {
-        Disconnected,
-        Connecting,
-        Connected,
-        Failed,
-    };
+  enum class ConnectionState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Failed,
+  };
 
-    struct MqttMessageView {
-        const char* topic = nullptr;
-        const byte* payload = nullptr;
-        unsigned int length = 0;
-    };
+  struct MqttMessageView {
+    const char* topic = nullptr;
+    const byte* payload = nullptr;
+    unsigned int length = 0;
+  };
 
-    using ConnectedCallback = std::function<void()>;
-    using DisconnectedCallback = std::function<void()>;
-    using MessageCallback = std::function<void(const char* topic, const byte* payload, unsigned int length)>;
-    using NewMessageCallback = std::function<void(const MqttMessageView&)>;
-    using StateChangedCallback = std::function<void(ConnectionState)>;
+  using ConnectedCallback = std::function<void()>;
+  using DisconnectedCallback = std::function<void()>;
+  using MessageCallback = std::function<void(const char* topic, const byte* payload, unsigned int length)>;
+  using NewMessageCallback = std::function<void(const MqttMessageView&)>;
+  using StateChangedCallback = std::function<void(ConnectionState)>;
 
-    // Option A: use the singleton and call attach() from setup().
-    static MQTTManager& instance()
-    {
-        static MQTTManager inst;
-        return inst;
-    }
+  // Option A: use the singleton and call attach() from setup().
+  static MQTTManager& instance() {
+    static MQTTManager inst;
+    return inst;
+  }
 
-    struct Settings {
-        Config<bool> enableMQTT;
-        Config<String> server;
-        Config<int> port;
-        Config<String> username;
-        Config<String> password;
-        Config<String> clientId;
+  struct Settings {
+    Config<bool> enableMQTT;
+    Config<String> server;
+    Config<int> port;
+    Config<String> username;
+    Config<String> password;
+    Config<String> clientId;
 
-        // Topic base (optional; used by helpers in examples)
-        Config<String> publishTopicBase;
+    // Topic base (optional; used by helpers in examples)
+    Config<String> publishTopicBase;
 
-        // Intervals
-        // - Publish interval in seconds. If 0: publish-on-change for send items.
-        Config<float> publishIntervalSec;
-        // - Listen interval in milliseconds. If 0: process MQTT in every loop.
-        Config<int> listenIntervalMs;
+    // Intervals
+    // - Publish interval in seconds. If 0: publish-on-change for send items.
+    Config<float> publishIntervalSec;
+    // - Listen interval in milliseconds. If 0: process MQTT in every loop.
+    Config<int> listenIntervalMs;
 
-        Settings();
-    };
+    Settings();
+  };
 
-    Settings& settings() { return settings_; }
-    const Settings& settings() const { return settings_; }
+  Settings& settings() {
+    return settings_;
+  }
+  const Settings& settings() const {
+    return settings_;
+  }
 
-    // Attach to ConfigManager (layout only; settings are explicit).
-    // This keeps MQTT optional: only projects that include this header and call attach() use it.
-    void attach(ConfigManagerClass& configManager, const char* basePageName = "MQTT");
+  // Attach to ConfigManager (layout only; settings are explicit).
+  // This keeps MQTT optional: only projects that include this header and call attach() use it.
+  void attach(ConfigManagerClass& configManager, const char* basePageName = "MQTT");
 
-    // Baseline MQTT settings (host/user/pass/etc) are explicit.
-    void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
-                                        const char* pageName,
-                                        const char* groupName,
-                                        int order);
-    void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
-                                        const char* pageName,
-                                        const char* cardName,
-                                        const char* groupName,
-                                        int order);
+  // Baseline MQTT settings (host/user/pass/etc) are explicit.
+  void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
+                                      const char* pageName,
+                                      const char* groupName,
+                                      int order);
+  void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
+                                      const char* pageName,
+                                      const char* cardName,
+                                      const char* groupName,
+                                      int order);
 
-    // One-liner helper similar to IOManager GUI helpers.
-    // Registers the MQTT runtime provider (no GUI fields are auto-added).
-    void addMQTTRuntimeProviderToGUI(ConfigManagerClass& configManager,
-                                     const char* runtimeGroup = "mqtt",
-                                     int providerOrder = 2,
-                                     int baseOrder = 10);
-    // Settings placement for receive topics.
-    void addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
-                                     const char* topicId,
-                                     const char* pageName,
-                                     const char* groupName,
-                                     int order);
-    void addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
-                                     const char* topicId,
-                                     const char* pageName,
-                                     const char* cardName,
-                                     const char* groupName,
-                                     int order);
+  // One-liner helper similar to IOManager GUI helpers.
+  // Registers the MQTT runtime provider (no GUI fields are auto-added).
+  void addMQTTRuntimeProviderToGUI(ConfigManagerClass& configManager,
+                                   const char* runtimeGroup = "mqtt",
+                                   int providerOrder = 2,
+                                   int baseOrder = 10);
+  // Settings placement for receive topics.
+  void addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
+                                   const char* topicId,
+                                   const char* pageName,
+                                   const char* groupName,
+                                   int order);
+  void addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
+                                   const char* topicId,
+                                   const char* pageName,
+                                   const char* cardName,
+                                   const char* groupName,
+                                   int order);
 
-    static const char* mqttStateToString(ConnectionState state);
-    String getMqttBaseTopic() const;
+  static const char* mqttStateToString(ConnectionState state);
+  String getMqttBaseTopic() const;
 
-    bool publishTopic(const char* id);
-    bool publishTopic(const char* id, bool retained);
-    bool publishTopic(const char* id, bool retained, uint8_t qos);
-    bool publishTopic(ConfigManagerClass& configManager, const char* id);
-    bool publishTopic(ConfigManagerClass& configManager, const char* id, bool retained);
-    bool publishTopic(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos);
+  bool publishTopic(const char* id);
+  bool publishTopic(const char* id, bool retained);
+  bool publishTopic(const char* id, bool retained, uint8_t qos);
+  bool publishTopic(ConfigManagerClass& configManager, const char* id);
+  bool publishTopic(ConfigManagerClass& configManager, const char* id, bool retained);
+  bool publishTopic(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos);
 
-    bool publishTopicImmediately(const char* id);
-    bool publishTopicImmediately(const char* id, bool retained);
-    bool publishTopicImmediately(const char* id, bool retained, uint8_t qos);
-    bool publishTopicImmediately(ConfigManagerClass& configManager, const char* id);
-    bool publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained);
-    bool publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos);
+  bool publishTopicImmediately(const char* id);
+  bool publishTopicImmediately(const char* id, bool retained);
+  bool publishTopicImmediately(const char* id, bool retained, uint8_t qos);
+  bool publishTopicImmediately(ConfigManagerClass& configManager, const char* id);
+  bool publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained);
+  bool publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos);
 
-    bool publishExtraTopic(const char* id, const char* topic, const String& value);
-    bool publishExtraTopic(const char* id, const char* topic, const String& value, bool retained);
-    bool publishExtraTopic(const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
-    bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value);
-    bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained);
-    bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
+  bool publishExtraTopic(const char* id, const char* topic, const String& value);
+  bool publishExtraTopic(const char* id, const char* topic, const String& value, bool retained);
+  bool publishExtraTopic(const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
+  bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value);
+  bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained);
+  bool publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
 
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
 
-    bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value);
-    bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained);
-    bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
-    bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value);
-    bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained);
-    bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
+  bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value);
+  bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained);
+  bool publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
+  bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value);
+  bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained);
+  bool publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos);
 
-    template <typename PayloadBuilder>
-    bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos);
 
+  // Individual meta helpers (requested):
+  void addLastTopicToGUI(ConfigManagerClass& configManager,
+                         const char* runtimeGroup = "mqtt",
+                         int order = 20,
+                         const char* label = "Last Topic",
+                         const char* card = nullptr);
 
-    // Individual meta helpers (requested):
-    void addLastTopicToGUI(ConfigManagerClass& configManager,
+  void addLastPayloadToGUI(ConfigManagerClass& configManager,
                            const char* runtimeGroup = "mqtt",
-                           int order = 20,
-                           const char* label = "Last Topic",
+                           int order = 21,
+                           const char* label = "Last Payload",
                            const char* card = nullptr);
 
-    void addLastPayloadToGUI(ConfigManagerClass& configManager,
-                             const char* runtimeGroup = "mqtt",
-                             int order = 21,
-                             const char* label = "Last Payload",
-                             const char* card = nullptr);
+  void addLastMessageAgeToGUI(ConfigManagerClass& configManager,
+                              const char* runtimeGroup = "mqtt",
+                              int order = 22,
+                              const char* label = "Last Message Age",
+                              const char* unit = "ms",
+                              const char* card = nullptr);
 
-    void addLastMessageAgeToGUI(ConfigManagerClass& configManager,
-                                const char* runtimeGroup = "mqtt",
-                                int order = 22,
-                                const char* label = "Last Message Age",
-                                const char* unit = "ms",
-                                const char* card = nullptr);
+  // Live placement for receive items.
+  void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
+                               const char* topicId,
+                               const char* pageName,
+                               const char* cardName,
+                               int order);
+  void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
+                               const char* topicId,
+                               const char* pageName,
+                               const char* cardName,
+                               const char* groupName,
+                               int order);
 
-    // Live placement for receive items.
-    void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
-                                 const char* topicId,
-                                 const char* pageName,
-                                 const char* cardName,
-                                 int order);
-    void addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
-                                 const char* topicId,
-                                 const char* pageName,
-                                 const char* cardName,
-                                 const char* groupName,
-                                 int order);
+  // Hooks (names preferred by you). Old onConnected/onDisconnected/onMessage remain available.
+  void onMQTTConnect(ConnectedCallback callback) {
+    onMqttConnect_ = std::move(callback);
+  }
+  void onMQTTDisconnect(DisconnectedCallback callback) {
+    onMqttDisconnect_ = std::move(callback);
+  }
+  void onNewMQTTMessage(NewMessageCallback callback) {
+    onNewMqttMessage_ = std::move(callback);
+  }
+  void onMQTTStateChanged(StateChangedCallback callback) {
+    onStateChanged_ = std::move(callback);
+  }
 
-    // Hooks (names preferred by you). Old onConnected/onDisconnected/onMessage remain available.
-    void onMQTTConnect(ConnectedCallback callback) { onMqttConnect_ = std::move(callback); }
-    void onMQTTDisconnect(DisconnectedCallback callback) { onMqttDisconnect_ = std::move(callback); }
-    void onNewMQTTMessage(NewMessageCallback callback) { onNewMqttMessage_ = std::move(callback); }
-    void onMQTTStateChanged(StateChangedCallback callback) { onStateChanged_ = std::move(callback); }
+  void onConnected(ConnectedCallback callback) {
+    onConnected_ = std::move(callback);
+  }
+  void onDisconnected(DisconnectedCallback callback) {
+    onDisconnected_ = std::move(callback);
+  }
+  void onMessage(MessageCallback callback) {
+    onMessage_ = std::move(callback);
+  }
 
-    void onConnected(ConnectedCallback callback) { onConnected_ = std::move(callback); }
-    void onDisconnected(DisconnectedCallback callback) { onDisconnected_ = std::move(callback); }
-    void onMessage(MessageCallback callback) { onMessage_ = std::move(callback); }
+  // Manual overrides are still available (but usually you use settings + attach()).
+  void setServer(const char* server, uint16_t port = 1883);
+  void setCredentials(const char* username, const char* password);
+  void setClientId(const char* clientId);
+  void setLastWill(const char* topic,
+                   const char* message = "offline",
+                   bool retained = true,
+                   uint8_t qos = 0);
+  void setKeepAlive(uint16_t keepAliveSec = 60);
+  void setMaxRetries(uint8_t maxRetries = 10);
+  void setRetryInterval(unsigned long retryIntervalMs = 5000);
+  void setBufferSize(uint16_t size = 256);
 
-    // Manual overrides are still available (but usually you use settings + attach()).
-    void setServer(const char* server, uint16_t port = 1883);
-    void setCredentials(const char* username, const char* password);
-    void setClientId(const char* clientId);
-    void setLastWill(const char* topic,
-                     const char* message = "offline",
-                     bool retained = true,
-                     uint8_t qos = 0);
-    void setKeepAlive(uint16_t keepAliveSec = 60);
-    void setMaxRetries(uint8_t maxRetries = 10);
-    void setRetryInterval(unsigned long retryIntervalMs = 5000);
-    void setBufferSize(uint16_t size = 256);
+  bool begin();
+  void update();
+  void loop();
+  void disconnect();
 
-    bool begin();
-    void update();
-    void loop();
-    void disconnect();
+  bool isConnected() const;
+  bool isProcessingIncomingMessage() const {
+    return processingIncomingMessage_;
+  }
+  ConnectionState getState() const {
+    return state_;
+  }
+  uint8_t getCurrentRetry() const {
+    return currentRetry_;
+  }
+  unsigned long getLastConnectionAttempt() const {
+    return lastConnectionAttemptMs_;
+  }
+  unsigned long getUptime() const;
+  uint32_t getReconnectCount() const {
+    return reconnectCount_;
+  }
 
-    bool isConnected() const;
-    bool isProcessingIncomingMessage() const { return processingIncomingMessage_; }
-    ConnectionState getState() const { return state_; }
-    uint8_t getCurrentRetry() const { return currentRetry_; }
-    unsigned long getLastConnectionAttempt() const { return lastConnectionAttemptMs_; }
-    unsigned long getUptime() const;
-    uint32_t getReconnectCount() const { return reconnectCount_; }
+  const String& getLastTopic() const {
+    return lastTopic_;
+  }
+  const String& getLastPayload() const {
+    return lastPayload_;
+  }
+  unsigned long getLastMessageAgeMs() const {
+    return lastMessageMs_ > 0 ? (millis() - lastMessageMs_) : 0;
+  }
 
-    const String& getLastTopic() const { return lastTopic_; }
-    const String& getLastPayload() const { return lastPayload_; }
-    unsigned long getLastMessageAgeMs() const { return lastMessageMs_ > 0 ? (millis() - lastMessageMs_) : 0; }
+  struct SystemInfo {
+    uint32_t uptimeMs = 0;
+    uint32_t freeHeap = 0;
+    uint32_t minFreeHeap = 0;
+    uint32_t maxAllocHeap = 0;
+    uint32_t flashSizeBytes = 0;
+    uint32_t cpuFreqMHz = 0;
+    String chipModel;
+    uint32_t chipRevision = 0;
+    String sdkVersion;
 
-    struct SystemInfo {
-        uint32_t uptimeMs = 0;
-        uint32_t freeHeap = 0;
-        uint32_t minFreeHeap = 0;
-        uint32_t maxAllocHeap = 0;
-        uint32_t flashSizeBytes = 0;
-        uint32_t cpuFreqMHz = 0;
-        String chipModel;
-        uint32_t chipRevision = 0;
-        String sdkVersion;
+    String hostname;
+    String ssid;
+    int rssi = 0;
+    String ip;
+    String mac;
+  };
 
-        String hostname;
-        String ssid;
-        int rssi = 0;
-        String ip;
-        String mac;
-    };
+  // System info publishing helper:
+  // Topics: <publishTopicBase>/System-Info/ESP and /WiFi
+  String getSystemInfoTopic() const;
+  SystemInfo collectSystemInfo() const;
+  bool publishSystemInfo(const SystemInfo& info, bool retained = false);
+  bool publishSystemInfoNow(bool retained = false);
+  bool publishAllNow(bool retained = true);
 
-    // System info publishing helper:
-    // Topics: <publishTopicBase>/System-Info/ESP and /WiFi
-    String getSystemInfoTopic() const;
-    SystemInfo collectSystemInfo() const;
-    bool publishSystemInfo(const SystemInfo& info, bool retained = false);
-    bool publishSystemInfoNow(bool retained = false);
-    bool publishAllNow(bool retained = true);
+  bool publish(const char* topic, const char* payload, bool retained = false);
+  bool publish(const char* topic, const String& payload, bool retained = false);
+  bool publishRaw(const char* topic, const char* payload, bool retained = false);
+  bool clearRetain(const char* topic);
+  bool subscribe(const char* topic, uint8_t qos = 0);
+  bool subscribeWildcard(const char* topicFilter, uint8_t qos = 0);
+  bool unsubscribe(const char* topic);
 
-    bool publish(const char* topic, const char* payload, bool retained = false);
-    bool publish(const char* topic, const String& payload, bool retained = false);
-    bool publishRaw(const char* topic, const char* payload, bool retained = false);
-    bool clearRetain(const char* topic);
-    bool subscribe(const char* topic, uint8_t qos = 0);
-    bool subscribeWildcard(const char* topicFilter, uint8_t qos = 0);
-    bool unsubscribe(const char* topic);
-
-    // Topic receive helpers: define receive items (settings/live placement is explicit).
-    // - If jsonKeyPath is empty or "none": payload is interpreted as plain value.
-    // - If payload is JSON and jsonKeyPath is set (example: "E320.Power_in"): value is extracted.
-    void addTopicReceiveFloat(const char* id,
-                              const char* label,
-                              const char* defaultTopic,
-                              float* target,
-                              const char* unit = nullptr,
-                              int precision = 2,
-                              const char* defaultJsonKeyPath = "none");
-
-    void addTopicReceiveInt(const char* id,
+  // Topic receive helpers: define receive items (settings/live placement is explicit).
+  // - If jsonKeyPath is empty or "none": payload is interpreted as plain value.
+  // - If payload is JSON and jsonKeyPath is set (example: "E320.Power_in"): value is extracted.
+  void addTopicReceiveFloat(const char* id,
                             const char* label,
                             const char* defaultTopic,
-                            int* target,
+                            float* target,
                             const char* unit = nullptr,
+                            int precision = 2,
                             const char* defaultJsonKeyPath = "none");
 
-    void addTopicReceiveBool(const char* id,
+  void addTopicReceiveInt(const char* id,
+                          const char* label,
+                          const char* defaultTopic,
+                          int* target,
+                          const char* unit = nullptr,
+                          const char* defaultJsonKeyPath = "none");
+
+  void addTopicReceiveBool(const char* id,
+                           const char* label,
+                           const char* defaultTopic,
+                           bool* target,
+                           const char* defaultJsonKeyPath = "none");
+
+  void addTopicReceiveString(const char* id,
                              const char* label,
                              const char* defaultTopic,
-                             bool* target,
+                             String* target,
                              const char* defaultJsonKeyPath = "none");
 
-    void addTopicReceiveString(const char* id,
-                               const char* label,
-                               const char* defaultTopic,
-                               String* target,
-                               const char* defaultJsonKeyPath = "none");
-
 private:
-    MQTTManager();
-    ~MQTTManager();
+  MQTTManager();
+  ~MQTTManager();
 
-    enum class ValueType {
-        Float,
-        Int,
-        Bool,
-        String,
-    };
+  enum class ValueType {
+    Float,
+    Int,
+    Bool,
+    String,
+  };
 
-    static constexpr const char* DEFAULT_SETTINGS_PAGE = "MQTT";
-    static constexpr const char* DEFAULT_TOPICS_CATEGORY = "MQTT-Topics";
-    static constexpr const char* DEFAULT_SETTINGS_GROUP = "MQTT Settings";
-    static constexpr const char* DEFAULT_TOPICS_GROUP = "MQTT Topics";
-    static constexpr const char* DEFAULT_RUNTIME_GROUP = "mqtt";
-    static constexpr int DEFAULT_SETTINGS_ORDER = 40;
-    static constexpr int DEFAULT_TOPICS_ORDER = 50;
+  static constexpr const char* DEFAULT_SETTINGS_PAGE = "MQTT";
+  static constexpr const char* DEFAULT_TOPICS_CATEGORY = "MQTT-Topics";
+  static constexpr const char* DEFAULT_SETTINGS_GROUP = "MQTT Settings";
+  static constexpr const char* DEFAULT_TOPICS_GROUP = "MQTT Topics";
+  static constexpr const char* DEFAULT_RUNTIME_GROUP = "mqtt";
+  static constexpr int DEFAULT_SETTINGS_ORDER = 40;
+  static constexpr int DEFAULT_TOPICS_ORDER = 50;
 
-    struct ReceiveItem {
-        String id;
-        String label;
-        ValueType type = ValueType::String;
+  struct ReceiveItem {
+    String id;
+    String label;
+    ValueType type = ValueType::String;
 
-        std::unique_ptr<char[]> idKeyC;
-        std::unique_ptr<char[]> labelC;
-        std::unique_ptr<char[]> topicKeyC;
-        std::unique_ptr<char[]> topicNameC;
-        std::unique_ptr<char[]> jsonKeyKeyC;
-        std::unique_ptr<char[]> jsonKeyNameC;
+    std::unique_ptr<char[]> idKeyC;
+    std::unique_ptr<char[]> labelC;
+    std::unique_ptr<char[]> topicKeyC;
+    std::unique_ptr<char[]> topicNameC;
+    std::unique_ptr<char[]> jsonKeyKeyC;
+    std::unique_ptr<char[]> jsonKeyNameC;
 
-        std::unique_ptr<char[]> cardKeyC;
-        std::unique_ptr<char[]> cardPrettyC;
+    std::unique_ptr<char[]> cardKeyC;
+    std::unique_ptr<char[]> cardPrettyC;
 
-        Config<String>* topic = nullptr;
-        Config<String>* jsonKeyPath = nullptr;
-        String topicValue;
-        String jsonKeyPathValue;
-        String lastSubscribedTopic;
-        bool settingsRegistered = false;
-        int settingsCardOrder = 0;
+    Config<String>* topic = nullptr;
+    Config<String>* jsonKeyPath = nullptr;
+    String topicValue;
+    String jsonKeyPathValue;
+    String lastSubscribedTopic;
+    bool settingsRegistered = false;
+    int settingsCardOrder = 0;
 
-        const char* unit = nullptr;
-        int precision = 2;
+    const char* unit = nullptr;
+    int precision = 2;
 
-        void* target = nullptr;
+    void* target = nullptr;
 
-        // Runtime ordering inside the MQTT card.
-        int runtimeOrder = 0;
-    };
+    // Runtime ordering inside the MQTT card.
+    int runtimeOrder = 0;
+  };
 
-    WiFiClient wifiClient_;
-    PubSubClient mqttClient_;
+  WiFiClient wifiClient_;
+  PubSubClient mqttClient_;
 
-    Settings settings_;
-    ConfigManagerClass* configManager_ = nullptr;
-    bool settingsRegistered_ = false;
-    bool runtimeProviderRegistered_ = false;
-    String runtimeGroupName_ = "mqtt";
-    bool systemGuiRegistered_ = false;
+  Settings settings_;
+  ConfigManagerClass* configManager_ = nullptr;
+  bool settingsRegistered_ = false;
+  bool runtimeProviderRegistered_ = false;
+  String runtimeGroupName_ = "mqtt";
+  bool systemGuiRegistered_ = false;
 
-    // Connection behavior
-    uint16_t keepAliveSec_ = 60;
-    uint8_t maxRetries_ = 10;
-    unsigned long retryIntervalMs_ = 5000;
+  // Connection behavior
+  uint16_t keepAliveSec_ = 60;
+  uint8_t maxRetries_ = 10;
+  unsigned long retryIntervalMs_ = 5000;
 
-    ConnectionState state_ = ConnectionState::Disconnected;
-    uint8_t currentRetry_ = 0;
-    unsigned long lastConnectionAttemptMs_ = 0;
-    unsigned long connectionStartMs_ = 0;
-    uint32_t reconnectCount_ = 0;
+  ConnectionState state_ = ConnectionState::Disconnected;
+  uint8_t currentRetry_ = 0;
+  unsigned long lastConnectionAttemptMs_ = 0;
+  unsigned long connectionStartMs_ = 0;
+  uint32_t reconnectCount_ = 0;
 
-    // Throttling
-    unsigned long lastClientLoopMs_ = 0;
-    unsigned long lastPublishMs_ = 0;
-    unsigned long lastSystemInfoPublishMs_ = 0;
+  // Throttling
+  unsigned long lastClientLoopMs_ = 0;
+  unsigned long lastPublishMs_ = 0;
+  unsigned long lastSystemInfoPublishMs_ = 0;
 
-    // Runtime info
-    String lastTopic_;
-    String lastPayload_;
-    unsigned long lastMessageMs_ = 0;
-    bool processingIncomingMessage_ = false;
+  // Runtime info
+  String lastTopic_;
+  String lastPayload_;
+  unsigned long lastMessageMs_ = 0;
+  bool processingIncomingMessage_ = false;
 
-    // Topic registry
-    std::vector<ReceiveItem> receiveItems_;
-    int nextReceiveSortOrder_ = 200; // after baseline settings
-    int nextReceiveRuntimeOrder_ = 200;
+  // Topic registry
+  std::vector<ReceiveItem> receiveItems_;
+  int nextReceiveSortOrder_ = 200; // after baseline settings
+  int nextReceiveRuntimeOrder_ = 200;
 
-    // Callbacks
-    ConnectedCallback onConnected_;
-    DisconnectedCallback onDisconnected_;
-    MessageCallback onMessage_;
+  // Callbacks
+  ConnectedCallback onConnected_;
+  DisconnectedCallback onDisconnected_;
+  MessageCallback onMessage_;
 
-    ConnectedCallback onMqttConnect_;
-    DisconnectedCallback onMqttDisconnect_;
-    NewMessageCallback onNewMqttMessage_;
-    StateChangedCallback onStateChanged_;
+  ConnectedCallback onMqttConnect_;
+  DisconnectedCallback onMqttDisconnect_;
+  NewMessageCallback onNewMqttMessage_;
+  StateChangedCallback onStateChanged_;
 
-    void configureFromSettings_();
-    void applySettingsCallbacks_();
-    void registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName);
-    void registerMqttSettings_(ConfigManagerClass& configManager);
-    void maybePublishSendItems_();
-    void maybePublishSystemInfo_();
-    void resetPublishSchedule_();
-    void maybeClientLoop_();
+  void configureFromSettings_();
+  void applySettingsCallbacks_();
+  void registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName);
+  void registerMqttSettings_(ConfigManagerClass& configManager);
+  void maybePublishSendItems_();
+  void maybePublishSystemInfo_();
+  void resetPublishSchedule_();
+  void maybeClientLoop_();
 
-    void attemptConnection_();
-    void handleConnection_();
-    void handleDisconnection_();
-    void setState_(ConnectionState newState);
+  void attemptConnection_();
+  void handleConnection_();
+  void handleDisconnection_();
+  void setState_(ConnectionState newState);
 
-    void handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length);
-    void handleReceiveItems_(const char* topic, const byte* payload, unsigned int length);
-    void updateReceiveSubscription_(ReceiveItem& item, bool force);
-    ReceiveItem* findReceiveItemById_(const char* id);
-    String getReceiveTopic_(const ReceiveItem& item) const;
-    String getReceiveJsonKeyPath_(const ReceiveItem& item) const;
-    bool buildReceivePayload_(const ReceiveItem& item, String& outPayload) const;
-    void registerReceiveItemSettings_(ReceiveItem& item,
-                                      const char* pageName,
-                                      const char* cardName,
-                                      const char* groupName,
-                                      int order);
+  void handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length);
+  void handleReceiveItems_(const char* topic, const byte* payload, unsigned int length);
+  void updateReceiveSubscription_(ReceiveItem& item, bool force);
+  ReceiveItem* findReceiveItemById_(const char* id);
+  String getReceiveTopic_(const ReceiveItem& item) const;
+  String getReceiveJsonKeyPath_(const ReceiveItem& item) const;
+  bool buildReceivePayload_(const ReceiveItem& item, String& outPayload) const;
+  void registerReceiveItemSettings_(ReceiveItem& item,
+                                    const char* pageName,
+                                    const char* cardName,
+                                    const char* groupName,
+                                    int order);
 
-    static bool isNoneKeyPath_(const String& keyPath);
-    static bool isLikelyNumberString_(const String& value);
-    static bool tryExtractJsonValueAsString_(const String& payload, const String& keyPath, String& outValue);
-    static bool tryParseBool_(const String& value, bool& outBool);
-    static String formatUptimeHuman_(uint32_t uptimeMs);
-    static void ensureSettingsLayout_(ConfigManagerClass& configManager,
-                                      const char* pageName,
-                                      const char* cardName,
-                                      const char* groupName,
-                                      int order);
-    static void ensureLiveLayout_(ConfigManagerClass& configManager,
-                                  const char* pageName,
-                                  const char* cardName,
-                                  const char* groupName,
-                                  int order);
-    static void registerSettingPlacement_(ConfigManagerClass& configManager,
-                                          BaseSetting* setting,
-                                          const char* pageName,
-                                          const char* cardName,
-                                          const char* groupName);
+  static bool isNoneKeyPath_(const String& keyPath);
+  static bool isLikelyNumberString_(const String& value);
+  static bool tryExtractJsonValueAsString_(const String& payload, const String& keyPath, String& outValue);
+  static bool tryParseBool_(const String& value, bool& outBool);
+  static String formatUptimeHuman_(uint32_t uptimeMs);
+  static void ensureSettingsLayout_(ConfigManagerClass& configManager,
+                                    const char* pageName,
+                                    const char* cardName,
+                                    const char* groupName,
+                                    int order);
+  static void ensureLiveLayout_(ConfigManagerClass& configManager,
+                                const char* pageName,
+                                const char* cardName,
+                                const char* groupName,
+                                int order);
+  static void registerSettingPlacement_(ConfigManagerClass& configManager,
+                                        BaseSetting* setting,
+                                        const char* pageName,
+                                        const char* cardName,
+                                        const char* groupName);
 
-    template <typename TInt>
-    static bool tryParseInt_(const String& value, TInt& outInt)
-    {
-        String s = value;
-        s.trim();
-        if (!isLikelyNumberString_(s)) {
-            return false;
-        }
-        outInt = static_cast<TInt>(s.toInt());
-        return true;
+  template <typename TInt>
+  static bool tryParseInt_(const String& value, TInt& outInt) {
+    String s = value;
+    s.trim();
+    if (!isLikelyNumberString_(s)) {
+      return false;
     }
+    outInt = static_cast<TInt>(s.toInt());
+    return true;
+  }
 
-    static bool tryParseFloat_(const String& value, float& outFloat)
-    {
-        String s = value;
-        s.trim();
-        if (!isLikelyNumberString_(s)) {
-            return false;
-        }
-        outFloat = s.toFloat();
-        return true;
+  static bool tryParseFloat_(const String& value, float& outFloat) {
+    String s = value;
+    s.trim();
+    if (!isLikelyNumberString_(s)) {
+      return false;
     }
+    outFloat = s.toFloat();
+    return true;
+  }
 
-    void registerReceiveItemSettings_(ReceiveItem& item);
-    void registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
-                                         ReceiveItem& item,
-                                         const char* runtimeGroup,
-                                         int order,
-                                         const char* page,
-                                         const char* card,
-                                         const char* group);
+  void registerReceiveItemSettings_(ReceiveItem& item);
+  void registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
+                                       ReceiveItem& item,
+                                       const char* runtimeGroup,
+                                       int order,
+                                       const char* page,
+                                       const char* card,
+                                       const char* group);
 
-    struct PublishStamp {
-        String key;
-        unsigned long lastMs = 0;
-    };
-    struct PublishOptions {
-        bool retained = false;
-        uint8_t qos = 0;
-    };
-    std::vector<PublishStamp> publishStamps_;
-    PublishStamp* getPublishStamp_(const String& key);
-    bool allowPublishNow_(const String& key, bool immediate) const;
-    void markPublishedNow_(const String& key);
-    PublishOptions getDefaultPublishOptions_(bool isBool, bool immediate) const;
-    bool publishWithQos_(const char* topic, const char* payload, bool retained, uint8_t qos);
-    String getDefaultWillTopic_() const;
-    String resolveWillTopic_() const;
-    bool publishTopicInternal_(const char* id, bool retained, uint8_t qos, bool immediate);
-    bool publishExtraTopicInternal_(const char* id,
-                                   const char* topic,
-                                   const String& value,
-                                   bool retained,
-                                   uint8_t qos,
-                                   bool immediate);
-    template <typename PayloadBuilder>
-    bool publishExtraTopicLazyInternal_(const char* id,
-                                       const char* topic,
-                                       PayloadBuilder payloadBuilder,
-                                       bool retained,
-                                       uint8_t qos,
-                                       bool immediate);
+  struct PublishStamp {
+    String key;
+    unsigned long lastMs = 0;
+  };
+  struct PublishOptions {
+    bool retained = false;
+    uint8_t qos = 0;
+  };
+  std::vector<PublishStamp> publishStamps_;
+  PublishStamp* getPublishStamp_(const String& key);
+  bool allowPublishNow_(const String& key, bool immediate) const;
+  void markPublishedNow_(const String& key);
+  PublishOptions getDefaultPublishOptions_(bool isBool, bool immediate) const;
+  bool publishWithQos_(const char* topic, const char* payload, bool retained, uint8_t qos);
+  String getDefaultWillTopic_() const;
+  String resolveWillTopic_() const;
+  bool publishTopicInternal_(const char* id, bool retained, uint8_t qos, bool immediate);
+  bool publishExtraTopicInternal_(const char* id,
+                                  const char* topic,
+                                  const String& value,
+                                  bool retained,
+                                  uint8_t qos,
+                                  bool immediate);
+  template <typename PayloadBuilder>
+  bool publishExtraTopicLazyInternal_(const char* id,
+                                      const char* topic,
+                                      PayloadBuilder payloadBuilder,
+                                      bool retained,
+                                      uint8_t qos,
+                                      bool immediate);
 
-    static std::unique_ptr<char[]> makeCString_(const String& value)
-    {
-        const size_t len = value.length();
-        std::unique_ptr<char[]> buf(new char[len + 1]);
-        memcpy(buf.get(), value.c_str(), len + 1);
-        return buf;
+  static std::unique_ptr<char[]> makeCString_(const String& value) {
+    const size_t len = value.length();
+    std::unique_ptr<char[]> buf(new char[len + 1]);
+    memcpy(buf.get(), value.c_str(), len + 1);
+    return buf;
+  }
+
+  static uint32_t hashId_(const String& value) {
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < value.length(); ++i) {
+      hash ^= static_cast<uint8_t>(value[i]);
+      hash *= 16777619u;
     }
+    return hash;
+  }
 
-    static uint32_t hashId_(const String& value)
-    {
-        uint32_t hash = 2166136261u;
-        for (size_t i = 0; i < value.length(); ++i) {
-            hash ^= static_cast<uint8_t>(value[i]);
-            hash *= 16777619u;
-        }
-        return hash;
-    }
+  static String makeReceiveKey_(const char* prefix, const String& id) {
+    char buf[16];
+    const uint32_t hash = hashId_(id);
+    snprintf(buf, sizeof(buf), "%s%08X", prefix, static_cast<unsigned int>(hash));
+    return String(buf);
+  }
 
-    static String makeReceiveKey_(const char* prefix, const String& id)
-    {
-        char buf[16];
-        const uint32_t hash = hashId_(id);
-        snprintf(buf, sizeof(buf), "%s%08X", prefix, static_cast<unsigned int>(hash));
-        return String(buf);
-    }
+  static void mqttCallbackTrampoline_(char* topic, byte* payload, unsigned int length);
+  inline static MQTTManager* instanceForCallback_ = nullptr;
 
-    static void mqttCallbackTrampoline_(char* topic, byte* payload, unsigned int length);
-    inline static MQTTManager* instanceForCallback_ = nullptr;
-
-    String lastWillTopic_;
-    String lastWillMessage_ = "offline";
-    bool lastWillRetain_ = true;
-    uint8_t lastWillQos_ = 0;
-    bool useDefaultLastWillTopic_ = true;
+  String lastWillTopic_;
+  String lastWillMessage_ = "offline";
+  bool lastWillRetain_ = true;
+  uint8_t lastWillQos_ = 0;
+  bool useDefaultLastWillTopic_ = true;
 };
 
 // ------------------------ Implementation (header-only) ------------------------
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder)
-{
-    PublishOptions opts = getDefaultPublishOptions_(false, false);
-    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, opts.retained, opts.qos, false);
+inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder) {
+  PublishOptions opts = getDefaultPublishOptions_(false, false);
+  return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, opts.retained, opts.qos, false);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
-{
-    PublishOptions opts = getDefaultPublishOptions_(false, false);
-    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, opts.qos, false);
+inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained) {
+  PublishOptions opts = getDefaultPublishOptions_(false, false);
+  return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, opts.qos, false);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
-{
-    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, qos, false);
+inline bool MQTTManager::publishExtraTopicLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos) {
+  return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, qos, false);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder)
-{
-    (void)configManager;
-    return publishExtraTopicLazy(id, topic, payloadBuilder);
+inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder) {
+  (void)configManager;
+  return publishExtraTopicLazy(id, topic, payloadBuilder);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
-{
-    (void)configManager;
-    return publishExtraTopicLazy(id, topic, payloadBuilder, retained);
+inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained) {
+  (void)configManager;
+  return publishExtraTopicLazy(id, topic, payloadBuilder, retained);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
-{
-    (void)configManager;
-    return publishExtraTopicLazy(id, topic, payloadBuilder, retained, qos);
+inline bool MQTTManager::publishExtraTopicLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos) {
+  (void)configManager;
+  return publishExtraTopicLazy(id, topic, payloadBuilder, retained, qos);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder)
-{
-    PublishOptions opts = getDefaultPublishOptions_(false, true);
-    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, opts.retained, opts.qos, true);
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder) {
+  PublishOptions opts = getDefaultPublishOptions_(false, true);
+  return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, opts.retained, opts.qos, true);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
-{
-    PublishOptions opts = getDefaultPublishOptions_(false, true);
-    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, opts.qos, true);
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained) {
+  PublishOptions opts = getDefaultPublishOptions_(false, true);
+  return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, opts.qos, true);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
-{
-    return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, qos, true);
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos) {
+  return publishExtraTopicLazyInternal_(id, topic, payloadBuilder, retained, qos, true);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder)
-{
-    (void)configManager;
-    return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder);
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder) {
+  (void)configManager;
+  return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained)
-{
-    (void)configManager;
-    return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder, retained);
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained) {
+  (void)configManager;
+  return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder, retained);
 }
 
 template <typename PayloadBuilder>
-inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos)
-{
-    (void)configManager;
-    return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder, retained, qos);
+inline bool MQTTManager::publishExtraTopicImmediatelyLazy(ConfigManagerClass& configManager, const char* id, const char* topic, PayloadBuilder payloadBuilder, bool retained, uint8_t qos) {
+  (void)configManager;
+  return publishExtraTopicImmediatelyLazy(id, topic, payloadBuilder, retained, qos);
 }
 
 inline MQTTManager::Settings::Settings()
     : enableMQTT(ConfigOptions<bool>{
-          .key = "MQTTEnable",
-          .name = "Enable MQTT",
-          .category = "MQTT",
-          .defaultValue = false,
-          .sortOrder = 1})
-    , server(ConfigOptions<String>{
-          .key = "MQTTHost",
-          .name = "Server",
-          .category = "MQTT",
-          .defaultValue = String(""),
-          .sortOrder = 2})
-    , port(ConfigOptions<int>{
-          .key = "MQTTPort",
-          .name = "Port",
-          .category = "MQTT",
-          .defaultValue = 1883,
-          .sortOrder = 3})
-    , username(ConfigOptions<String>{
-          .key = "MQTTUser",
-          .name = "Username",
-          .category = "MQTT",
-          .defaultValue = String(""),
-          .sortOrder = 4})
-    , password(ConfigOptions<String>{
-          .key = "MQTTPass",
-          .name = "Password",
-          .category = "MQTT",
-          .defaultValue = String(""),
-          .isPassword = true,
-          .sortOrder = 5})
-    , clientId(ConfigOptions<String>{
-          .key = "MQTTClientId",
-          .name = "Client ID",
-          .category = "MQTT",
-          .defaultValue = String(""),
-          .sortOrder = 6})
-    , publishTopicBase(ConfigOptions<String>{
-          .key = "MQTTBaseTopic",
-          .name = "Base Topic",
-          .category = "MQTT",
-          .defaultValue = String("MQTT"),
-          .sortOrder = 10})
-    , publishIntervalSec(ConfigOptions<float>{
-          .key = "MQTTPubPer",
-          .name = "Publish Interval (s)",
-          .category = "MQTT",
-          .defaultValue = 10.0f,
-          .sortOrder = 11})
-    , listenIntervalMs(ConfigOptions<int>{
-          .key = "MQTTListenMs",
-          .name = "Listen Interval (ms)",
-          .category = "MQTT",
-          .defaultValue = 500,
-          .sortOrder = 12})
-{
+        .key = "MQTTEnable",
+        .name = "Enable MQTT",
+        .category = "MQTT",
+        .defaultValue = false,
+        .sortOrder = 1}),
+      server(ConfigOptions<String>{
+        .key = "MQTTHost",
+        .name = "Server",
+        .category = "MQTT",
+        .defaultValue = String(""),
+        .sortOrder = 2}),
+      port(ConfigOptions<int>{
+        .key = "MQTTPort",
+        .name = "Port",
+        .category = "MQTT",
+        .defaultValue = 1883,
+        .sortOrder = 3}),
+      username(ConfigOptions<String>{
+        .key = "MQTTUser",
+        .name = "Username",
+        .category = "MQTT",
+        .defaultValue = String(""),
+        .sortOrder = 4}),
+      password(ConfigOptions<String>{
+        .key = "MQTTPass",
+        .name = "Password",
+        .category = "MQTT",
+        .defaultValue = String(""),
+        .isPassword = true,
+        .sortOrder = 5}),
+      clientId(ConfigOptions<String>{
+        .key = "MQTTClientId",
+        .name = "Client ID",
+        .category = "MQTT",
+        .defaultValue = String(""),
+        .sortOrder = 6}),
+      publishTopicBase(ConfigOptions<String>{
+        .key = "MQTTBaseTopic",
+        .name = "Base Topic",
+        .category = "MQTT",
+        .defaultValue = String("MQTT"),
+        .sortOrder = 10}),
+      publishIntervalSec(ConfigOptions<float>{
+        .key = "MQTTPubPer",
+        .name = "Publish Interval (s)",
+        .category = "MQTT",
+        .defaultValue = 10.0f,
+        .sortOrder = 11}),
+      listenIntervalMs(ConfigOptions<int>{
+        .key = "MQTTListenMs",
+        .name = "Listen Interval (ms)",
+        .category = "MQTT",
+        .defaultValue = 500,
+        .sortOrder = 12}) {
 }
 
 inline MQTTManager::MQTTManager()
-    : mqttClient_(wifiClient_)
-{
-    if (instanceForCallback_ != nullptr && instanceForCallback_ != this) {
-        MQTT_LOG("[WARNING] Multiple instances detected; callbacks will target the last created instance");
-    }
-    instanceForCallback_ = this;
-    const bool bufferOk = mqttClient_.setBufferSize(static_cast<uint16_t>(CM_MQTT_DEFAULT_BUFFER_SIZE));
-    if (!bufferOk) {
-        MQTT_LOG("[W] Failed to set default buffer size to %u",
-                 static_cast<unsigned>(CM_MQTT_DEFAULT_BUFFER_SIZE));
-    } else {
-        CM_LOG_VERBOSE("[MQTT] Default buffer size: %u",
-                       static_cast<unsigned>(mqttClient_.getBufferSize()));
-    }
-    mqttClient_.setCallback(&MQTTManager::mqttCallbackTrampoline_);
+    : mqttClient_(wifiClient_) {
+  if (instanceForCallback_ != nullptr && instanceForCallback_ != this) {
+    MQTT_LOG("[WARNING] Multiple instances detected; callbacks will target the last created instance");
+  }
+  instanceForCallback_ = this;
+  const bool bufferOk = mqttClient_.setBufferSize(static_cast<uint16_t>(CM_MQTT_DEFAULT_BUFFER_SIZE));
+  if (!bufferOk) {
+    MQTT_LOG("[W] Failed to set default buffer size to %u",
+             static_cast<unsigned>(CM_MQTT_DEFAULT_BUFFER_SIZE));
+  } else {
+    CM_LOG_VERBOSE("[MQTT] Default buffer size: %u",
+                   static_cast<unsigned>(mqttClient_.getBufferSize()));
+  }
+  mqttClient_.setCallback(&MQTTManager::mqttCallbackTrampoline_);
 }
 
-inline MQTTManager::~MQTTManager()
-{
-    disconnect();
-    if (instanceForCallback_ == this) {
-        instanceForCallback_ = nullptr;
-    }
+inline MQTTManager::~MQTTManager() {
+  disconnect();
+  if (instanceForCallback_ == this) {
+    instanceForCallback_ = nullptr;
+  }
 }
 
-inline void MQTTManager::attach(ConfigManagerClass& configManager, const char* basePageName)
-{
-    configManager_ = &configManager;
-    registerDefaultLayout_(configManager, basePageName);
-    registerMqttSettings_(configManager);
-    applySettingsCallbacks_();
-    configureFromSettings_();
+inline void MQTTManager::attach(ConfigManagerClass& configManager, const char* basePageName) {
+  configManager_ = &configManager;
+  registerDefaultLayout_(configManager, basePageName);
+  registerMqttSettings_(configManager);
+  applySettingsCallbacks_();
+  configureFromSettings_();
 }
 
-inline void MQTTManager::registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName)
-{
-    const char* resolvedBase = (basePageName && basePageName[0]) ? basePageName : DEFAULT_SETTINGS_PAGE;
-    const String topicsPage = String(resolvedBase) + "-Topics";
+inline void MQTTManager::registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName) {
+  const char* resolvedBase = (basePageName && basePageName[0]) ? basePageName : DEFAULT_SETTINGS_PAGE;
+  const String topicsPage = String(resolvedBase) + "-Topics";
 
-    configManager.setCategoryLayoutOverride(DEFAULT_SETTINGS_PAGE,
-                                            resolvedBase,
-                                            resolvedBase,
-                                            DEFAULT_SETTINGS_GROUP,
-                                            DEFAULT_SETTINGS_ORDER);
-    configManager.setCategoryLayoutOverride(DEFAULT_TOPICS_CATEGORY,
-                                            topicsPage.c_str(),
-                                            topicsPage.c_str(),
-                                            DEFAULT_TOPICS_GROUP,
-                                            DEFAULT_TOPICS_ORDER);
+  configManager.setCategoryLayoutOverride(DEFAULT_SETTINGS_PAGE,
+                                          resolvedBase,
+                                          resolvedBase,
+                                          DEFAULT_SETTINGS_GROUP,
+                                          DEFAULT_SETTINGS_ORDER);
+  configManager.setCategoryLayoutOverride(DEFAULT_TOPICS_CATEGORY,
+                                          topicsPage.c_str(),
+                                          topicsPage.c_str(),
+                                          DEFAULT_TOPICS_GROUP,
+                                          DEFAULT_TOPICS_ORDER);
 
-    configManager.addSettingsPage(resolvedBase, DEFAULT_SETTINGS_ORDER);
-    configManager.addSettingsGroup(resolvedBase, resolvedBase, DEFAULT_SETTINGS_GROUP, DEFAULT_SETTINGS_ORDER);
-    configManager.addSettingsPage(topicsPage.c_str(), DEFAULT_TOPICS_ORDER);
-    configManager.addSettingsGroup(topicsPage.c_str(), topicsPage.c_str(), DEFAULT_TOPICS_GROUP, DEFAULT_TOPICS_ORDER);
+  configManager.addSettingsPage(resolvedBase, DEFAULT_SETTINGS_ORDER);
+  configManager.addSettingsGroup(resolvedBase, resolvedBase, DEFAULT_SETTINGS_GROUP, DEFAULT_SETTINGS_ORDER);
+  configManager.addSettingsPage(topicsPage.c_str(), DEFAULT_TOPICS_ORDER);
+  configManager.addSettingsGroup(topicsPage.c_str(), topicsPage.c_str(), DEFAULT_TOPICS_GROUP, DEFAULT_TOPICS_ORDER);
 }
 
-inline void MQTTManager::registerMqttSettings_(ConfigManagerClass& configManager)
-{
-    if (settingsRegistered_) {
-        return;
-    }
-    configManager.addSetting(&settings_.enableMQTT);
-    configManager.addSetting(&settings_.server);
-    configManager.addSetting(&settings_.port);
-    configManager.addSetting(&settings_.username);
-    configManager.addSetting(&settings_.password);
-    configManager.addSetting(&settings_.clientId);
-    configManager.addSetting(&settings_.publishTopicBase);
-    configManager.addSetting(&settings_.publishIntervalSec);
-    configManager.addSetting(&settings_.listenIntervalMs);
-    settingsRegistered_ = true;
+inline void MQTTManager::registerMqttSettings_(ConfigManagerClass& configManager) {
+  if (settingsRegistered_) {
+    return;
+  }
+  configManager.addSetting(&settings_.enableMQTT);
+  configManager.addSetting(&settings_.server);
+  configManager.addSetting(&settings_.port);
+  configManager.addSetting(&settings_.username);
+  configManager.addSetting(&settings_.password);
+  configManager.addSetting(&settings_.clientId);
+  configManager.addSetting(&settings_.publishTopicBase);
+  configManager.addSetting(&settings_.publishIntervalSec);
+  configManager.addSetting(&settings_.listenIntervalMs);
+  settingsRegistered_ = true;
 }
 
 inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configManager,
                                                      const char* runtimeGroup,
                                                      int providerOrder,
-                                                     int baseOrder)
-{
-    (void)baseOrder;
+                                                     int baseOrder) {
+  (void)baseOrder;
 
-    if (!configManager_) {
-        configManager_ = &configManager;
-    }
+  if (!configManager_) {
+    configManager_ = &configManager;
+  }
 
-    if (!runtimeProviderRegistered_) {
-        const char* resolvedGroup = (runtimeGroup && runtimeGroup[0]) ? runtimeGroup : DEFAULT_RUNTIME_GROUP;
-        runtimeGroupName_ = String(resolvedGroup);
-        // Provider contains runtime values only. GUI fields are opt-in.
-        configManager.getRuntime().addRuntimeProvider(runtimeGroupName_, [this](JsonObject& data) {
+  if (!runtimeProviderRegistered_) {
+    const char* resolvedGroup = (runtimeGroup && runtimeGroup[0]) ? runtimeGroup : DEFAULT_RUNTIME_GROUP;
+    runtimeGroupName_ = String(resolvedGroup);
+    // Provider contains runtime values only. GUI fields are opt-in.
+    configManager.getRuntime().addRuntimeProvider(runtimeGroupName_, [this](JsonObject& data) {
             data["enabled"] = settings_.enableMQTT.get();
             data["wifi"] = WiFi.isConnected();
             data["connected"] = isConnected();
@@ -868,102 +872,97 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
                     data[item.id] = *static_cast<String*>(item.target);
                     break;
                 }
-            }
-        }, providerOrder);
+            } }, providerOrder);
 
-        runtimeProviderRegistered_ = true;
-    } else if (runtimeGroup && runtimeGroup[0] && runtimeGroupName_ != runtimeGroup) {
-        MQTT_LOG("[W] addMQTTRuntimeProviderToGUI: runtime group locked to '%s'", runtimeGroupName_.c_str());
-    }
+    runtimeProviderRegistered_ = true;
+  } else if (runtimeGroup && runtimeGroup[0] && runtimeGroupName_ != runtimeGroup) {
+    MQTT_LOG("[W] addMQTTRuntimeProviderToGUI: runtime group locked to '%s'", runtimeGroupName_.c_str());
+  }
 
-    if (!systemGuiRegistered_) {
-        configManager.getRuntime().addRuntimeProvider("system", [this](JsonObject& data) {
+  if (!systemGuiRegistered_) {
+    configManager.getRuntime().addRuntimeProvider("system", [this](JsonObject& data) {
             data["mqttEnabled"] = settings_.enableMQTT.get();
             data["mqttConnected"] = isConnected();
-            data["mqttReconnects"] = getReconnectCount();
-        }, 1);
+            data["mqttReconnects"] = getReconnectCount(); }, 1);
 
-        auto upsertSystemMeta = [&configManager](const String& key,
-                                                 const String& label,
-                                                 int order,
-                                                 bool isBool,
-                                                 int precision = 0) {
-            const bool updated = configManager.getRuntime().updateRuntimeMeta(
-                "system", key, [&](RuntimeFieldMeta& existing) {
-                    existing.label = label;
-                    existing.order = order;
-                    if (isBool) {
-                        existing.isBool = true;
-                    }
-                    existing.precision = precision;
-                });
-            if (updated) {
-                return;
-            }
-            RuntimeFieldMeta meta;
-            meta.group = "system";
-            meta.key = key;
-            meta.label = label;
-            meta.order = order;
-            meta.isBool = isBool;
-            meta.precision = precision;
-            configManager.getRuntime().addRuntimeMeta(meta);
-        };
+    auto upsertSystemMeta = [&configManager](const String& key,
+                                             const String& label,
+                                             int order,
+                                             bool isBool,
+                                             int precision = 0) {
+      const bool updated = configManager.getRuntime().updateRuntimeMeta(
+        "system", key, [&](RuntimeFieldMeta& existing) {
+          existing.label = label;
+          existing.order = order;
+          if (isBool) {
+            existing.isBool = true;
+          }
+          existing.precision = precision;
+        });
+      if (updated) {
+        return;
+      }
+      RuntimeFieldMeta meta;
+      meta.group = "system";
+      meta.key = key;
+      meta.label = label;
+      meta.order = order;
+      meta.isBool = isBool;
+      meta.precision = precision;
+      configManager.getRuntime().addRuntimeMeta(meta);
+    };
 
-        upsertSystemMeta("mqttEnabled", "MQTT Enabled", 4, true);
-        upsertSystemMeta("mqttConnected", "MQTT Connected", 5, true);
-        upsertSystemMeta("mqttReconnects", "MQTT Reconnect Count", 6, false, 0);
+    upsertSystemMeta("mqttEnabled", "MQTT Enabled", 4, true);
+    upsertSystemMeta("mqttConnected", "MQTT Connected", 5, true);
+    upsertSystemMeta("mqttReconnects", "MQTT Reconnect Count", 6, false, 0);
 
-        systemGuiRegistered_ = true;
-    }
+    systemGuiRegistered_ = true;
+  }
 }
 
 inline void MQTTManager::addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
                                                         const char* pageName,
                                                         const char* groupName,
-                                                        int order)
-{
-    addMqttSettingsToSettingsGroup(configManager, pageName, pageName, groupName, order);
+                                                        int order) {
+  addMqttSettingsToSettingsGroup(configManager, pageName, pageName, groupName, order);
 }
 
 inline void MQTTManager::addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
                                                         const char* pageName,
                                                         const char* cardName,
                                                         const char* groupName,
-                                                        int order)
-{
-    if (!configManager_) {
-        configManager_ = &configManager;
-    }
+                                                        int order) {
+  if (!configManager_) {
+    configManager_ = &configManager;
+  }
 
-    registerDefaultLayout_(configManager, pageName);
-    registerMqttSettings_(configManager);
-    applySettingsCallbacks_();
-    configureFromSettings_();
+  registerDefaultLayout_(configManager, pageName);
+  registerMqttSettings_(configManager);
+  applySettingsCallbacks_();
+  configureFromSettings_();
 
-    const char* effectivePage = (pageName && pageName[0]) ? pageName : DEFAULT_SETTINGS_PAGE;
-    const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
-    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+  const char* effectivePage = (pageName && pageName[0]) ? pageName : DEFAULT_SETTINGS_PAGE;
+  const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
+  const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
 
-    ensureSettingsLayout_(configManager, effectivePage, effectiveCard, effectiveGroup, order);
-    registerSettingPlacement_(configManager, &settings_.enableMQTT, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.server, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.port, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.username, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.password, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.clientId, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.publishTopicBase, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.publishIntervalSec, effectivePage, effectiveCard, effectiveGroup);
-    registerSettingPlacement_(configManager, &settings_.listenIntervalMs, effectivePage, effectiveCard, effectiveGroup);
+  ensureSettingsLayout_(configManager, effectivePage, effectiveCard, effectiveGroup, order);
+  registerSettingPlacement_(configManager, &settings_.enableMQTT, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.server, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.port, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.username, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.password, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.clientId, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.publishTopicBase, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.publishIntervalSec, effectivePage, effectiveCard, effectiveGroup);
+  registerSettingPlacement_(configManager, &settings_.listenIntervalMs, effectivePage, effectiveCard, effectiveGroup);
 }
 
 inline void MQTTManager::addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
                                                      const char* topicId,
                                                      const char* pageName,
                                                      const char* groupName,
-                                                     int order)
-{
-    addMqttTopicToSettingsGroup(configManager, topicId, pageName, pageName, groupName, order);
+                                                     int order) {
+  addMqttTopicToSettingsGroup(configManager, topicId, pageName, pageName, groupName, order);
 }
 
 inline void MQTTManager::addMqttTopicToSettingsGroup(ConfigManagerClass& configManager,
@@ -971,44 +970,42 @@ inline void MQTTManager::addMqttTopicToSettingsGroup(ConfigManagerClass& configM
                                                      const char* pageName,
                                                      const char* cardName,
                                                      const char* groupName,
-                                                     int order)
-{
-    if (!configManager_) {
-        configManager_ = &configManager;
-    }
+                                                     int order) {
+  if (!configManager_) {
+    configManager_ = &configManager;
+  }
 
-    if (!topicId || !topicId[0]) {
-        MQTT_LOG("[W] addMqttTopicToSettingsGroup: id is empty");
-        return;
-    }
+  if (!topicId || !topicId[0]) {
+    MQTT_LOG("[W] addMqttTopicToSettingsGroup: id is empty");
+    return;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(topicId);
-    if (!item) {
-        MQTT_LOG("[W] addMqttTopicToSettingsGroup: id not found: %s", topicId);
-        return;
-    }
+  ReceiveItem* item = findReceiveItemById_(topicId);
+  if (!item) {
+    MQTT_LOG("[W] addMqttTopicToSettingsGroup: id not found: %s", topicId);
+    return;
+  }
 
-    const char* effectivePage = (pageName && pageName[0]) ? pageName : DEFAULT_TOPICS_CATEGORY;
-    const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
-    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+  const char* effectivePage = (pageName && pageName[0]) ? pageName : DEFAULT_TOPICS_CATEGORY;
+  const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
+  const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
 
-    ensureSettingsLayout_(configManager, effectivePage, effectiveCard, effectiveGroup, order);
-    registerReceiveItemSettings_(*item, effectivePage, effectiveCard, effectiveGroup, order);
-    if (item->topic) {
-        registerSettingPlacement_(configManager, item->topic, effectivePage, effectiveCard, effectiveGroup);
-    }
-    if (item->jsonKeyPath) {
-        registerSettingPlacement_(configManager, item->jsonKeyPath, effectivePage, effectiveCard, effectiveGroup);
-    }
+  ensureSettingsLayout_(configManager, effectivePage, effectiveCard, effectiveGroup, order);
+  registerReceiveItemSettings_(*item, effectivePage, effectiveCard, effectiveGroup, order);
+  if (item->topic) {
+    registerSettingPlacement_(configManager, item->topic, effectivePage, effectiveCard, effectiveGroup);
+  }
+  if (item->jsonKeyPath) {
+    registerSettingPlacement_(configManager, item->jsonKeyPath, effectivePage, effectiveCard, effectiveGroup);
+  }
 }
 
 inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
                                                  const char* topicId,
                                                  const char* pageName,
                                                  const char* cardName,
-                                                 int order)
-{
-    addMqttTopicToLiveGroup(configManager, topicId, pageName, cardName, nullptr, order);
+                                                 int order) {
+  addMqttTopicToLiveGroup(configManager, topicId, pageName, cardName, nullptr, order);
 }
 
 inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
@@ -1016,137 +1013,132 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
                                                  const char* pageName,
                                                  const char* cardName,
                                                  const char* groupName,
-                                                 int order)
-{
-    if (!configManager_) {
-        configManager_ = &configManager;
-    }
+                                                 int order) {
+  if (!configManager_) {
+    configManager_ = &configManager;
+  }
 
-    if (!topicId || !topicId[0]) {
-        MQTT_LOG("[W] addMqttTopicToLiveGroup: id is empty");
-        return;
-    }
+  if (!topicId || !topicId[0]) {
+    MQTT_LOG("[W] addMqttTopicToLiveGroup: id is empty");
+    return;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(topicId);
-    if (!item) {
-        MQTT_LOG("[W] addMqttTopicToLiveGroup: id not found: %s", topicId);
-        return;
-    }
+  ReceiveItem* item = findReceiveItemById_(topicId);
+  if (!item) {
+    MQTT_LOG("[W] addMqttTopicToLiveGroup: id not found: %s", topicId);
+    return;
+  }
 
-    if (!runtimeProviderRegistered_) {
-        addMQTTRuntimeProviderToGUI(configManager, runtimeGroupName_.c_str());
-    }
+  if (!runtimeProviderRegistered_) {
+    addMQTTRuntimeProviderToGUI(configManager, runtimeGroupName_.c_str());
+  }
 
-    const int resolvedOrder = (order >= 0) ? order : item->runtimeOrder;
-    const char* effectivePage = (pageName && pageName[0]) ? pageName : ConfigManagerClass::DEFAULT_LAYOUT_NAME;
-    const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
-    const bool hasGroup = (groupName && groupName[0]);
-    const char* effectiveGroup = hasGroup ? groupName : nullptr;
-    const char* runtimeGroup = runtimeGroupName_.length() ? runtimeGroupName_.c_str() : DEFAULT_RUNTIME_GROUP;
+  const int resolvedOrder = (order >= 0) ? order : item->runtimeOrder;
+  const char* effectivePage = (pageName && pageName[0]) ? pageName : ConfigManagerClass::DEFAULT_LAYOUT_NAME;
+  const char* effectiveCard = (cardName && cardName[0]) ? cardName : effectivePage;
+  const bool hasGroup = (groupName && groupName[0]);
+  const char* effectiveGroup = hasGroup ? groupName : nullptr;
+  const char* runtimeGroup = runtimeGroupName_.length() ? runtimeGroupName_.c_str() : DEFAULT_RUNTIME_GROUP;
 
-    const char* itemKey = item->idKeyC ? item->idKeyC.get() : item->id.c_str();
-    registerReceiveItemRuntimeMeta_(configManager,
-                                    *item,
-                                    runtimeGroup,
-                                    resolvedOrder,
-                                    effectivePage,
-                                    effectiveCard,
-                                    effectiveGroup);
-    if (hasGroup) {
-        configManager.addToLiveGroup(itemKey, effectivePage, effectiveCard, effectiveGroup, resolvedOrder);
-    } else {
-        configManager.addToLiveCard(itemKey, effectivePage, effectiveCard, resolvedOrder);
-    }
+  const char* itemKey = item->idKeyC ? item->idKeyC.get() : item->id.c_str();
+  registerReceiveItemRuntimeMeta_(configManager,
+                                  *item,
+                                  runtimeGroup,
+                                  resolvedOrder,
+                                  effectivePage,
+                                  effectiveCard,
+                                  effectiveGroup);
+  if (hasGroup) {
+    configManager.addToLiveGroup(itemKey, effectivePage, effectiveCard, effectiveGroup, resolvedOrder);
+  } else {
+    configManager.addToLiveCard(itemKey, effectivePage, effectiveCard, resolvedOrder);
+  }
 }
 
-inline const char* MQTTManager::mqttStateToString(ConnectionState state)
-{
-    switch (state) {
+inline const char* MQTTManager::mqttStateToString(ConnectionState state) {
+  switch (state) {
     case ConnectionState::Disconnected:
-        return "disconnected";
+      return "disconnected";
     case ConnectionState::Connecting:
-        return "connecting";
+      return "connecting";
     case ConnectionState::Connected:
-        return "connected";
+      return "connected";
     case ConnectionState::Failed:
-        return "failed";
+      return "failed";
     default:
-        return "unknown";
-    }
+      return "unknown";
+  }
 }
 
-inline String MQTTManager::getMqttBaseTopic() const
-{
-    String base = settings_.publishTopicBase.get();
+inline String MQTTManager::getMqttBaseTopic() const {
+  String base = settings_.publishTopicBase.get();
+  base.trim();
+  if (base.isEmpty()) {
+    base = settings_.clientId.get();
     base.trim();
-    if (base.isEmpty()) {
-        base = settings_.clientId.get();
-        base.trim();
-    }
-    while (base.endsWith("/")) {
-        base.remove(base.length() - 1);
-    }
-    return base;
+  }
+  while (base.endsWith("/")) {
+    base.remove(base.length() - 1);
+  }
+  return base;
 }
 
 inline void MQTTManager::addLastTopicToGUI(ConfigManagerClass& configManager,
                                            const char* runtimeGroup,
                                            int order,
                                            const char* label,
-                                           const char* card)
-{
-    const bool updated = configManager.getRuntime().updateRuntimeMeta(
-        runtimeGroup, "lastTopic", [&](RuntimeFieldMeta& existing) {
-            existing.label = label;
-            existing.order = order;
-            if (card && card[0]) {
-                existing.card = card;
-            }
-        });
-    if (updated) {
-        return;
-    }
+                                           const char* card) {
+  const bool updated = configManager.getRuntime().updateRuntimeMeta(
+    runtimeGroup, "lastTopic", [&](RuntimeFieldMeta& existing) {
+      existing.label = label;
+      existing.order = order;
+      if (card && card[0]) {
+        existing.card = card;
+      }
+    });
+  if (updated) {
+    return;
+  }
 
-    RuntimeFieldMeta lastTopicMeta;
-    lastTopicMeta.group = runtimeGroup;
-    lastTopicMeta.key = "lastTopic";
-    lastTopicMeta.label = label;
-    lastTopicMeta.order = order;
-    if (card && card[0]) {
-        lastTopicMeta.card = card;
-    }
-    configManager.getRuntime().addRuntimeMeta(lastTopicMeta);
+  RuntimeFieldMeta lastTopicMeta;
+  lastTopicMeta.group = runtimeGroup;
+  lastTopicMeta.key = "lastTopic";
+  lastTopicMeta.label = label;
+  lastTopicMeta.order = order;
+  if (card && card[0]) {
+    lastTopicMeta.card = card;
+  }
+  configManager.getRuntime().addRuntimeMeta(lastTopicMeta);
 }
 
 inline void MQTTManager::addLastPayloadToGUI(ConfigManagerClass& configManager,
                                              const char* runtimeGroup,
                                              int order,
                                              const char* label,
-                                             const char* card)
-{
-    const bool updated = configManager.getRuntime().updateRuntimeMeta(
-        runtimeGroup, "lastPayload", [&](RuntimeFieldMeta& existing) {
-            existing.label = label;
-            existing.order = order;
-            existing.isString = true;
-            if (card && card[0]) {
-                existing.card = card;
-            }
-        });
-    if (updated) {
-        return;
-    }
+                                             const char* card) {
+  const bool updated = configManager.getRuntime().updateRuntimeMeta(
+    runtimeGroup, "lastPayload", [&](RuntimeFieldMeta& existing) {
+      existing.label = label;
+      existing.order = order;
+      existing.isString = true;
+      if (card && card[0]) {
+        existing.card = card;
+      }
+    });
+  if (updated) {
+    return;
+  }
 
-    RuntimeFieldMeta lastPayloadMeta;
-    lastPayloadMeta.group = runtimeGroup;
-    lastPayloadMeta.key = "lastPayload";
-    lastPayloadMeta.label = label;
-    lastPayloadMeta.order = order;
-    lastPayloadMeta.isString = true;
-    if (card && card[0]) {
-        lastPayloadMeta.card = card;
-    }
-    configManager.getRuntime().addRuntimeMeta(lastPayloadMeta);
+  RuntimeFieldMeta lastPayloadMeta;
+  lastPayloadMeta.group = runtimeGroup;
+  lastPayloadMeta.key = "lastPayload";
+  lastPayloadMeta.label = label;
+  lastPayloadMeta.order = order;
+  lastPayloadMeta.isString = true;
+  if (card && card[0]) {
+    lastPayloadMeta.card = card;
+  }
+  configManager.getRuntime().addRuntimeMeta(lastPayloadMeta);
 }
 
 inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManager,
@@ -1154,680 +1146,631 @@ inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManage
                                                 int order,
                                                 const char* label,
                                                 const char* unit,
-                                                const char* card)
-{
-    const bool updated = configManager.getRuntime().updateRuntimeMeta(
-        runtimeGroup, "lastMsgAgeMs", [&](RuntimeFieldMeta& existing) {
-            existing.label = label;
-            existing.order = order;
-            if (unit && unit[0]) {
-                existing.unit = unit;
-            }
-            existing.precision = 0;
-            if (card && card[0]) {
-                existing.card = card;
-            }
-        });
-    if (updated) {
-        return;
-    }
+                                                const char* card) {
+  const bool updated = configManager.getRuntime().updateRuntimeMeta(
+    runtimeGroup, "lastMsgAgeMs", [&](RuntimeFieldMeta& existing) {
+      existing.label = label;
+      existing.order = order;
+      if (unit && unit[0]) {
+        existing.unit = unit;
+      }
+      existing.precision = 0;
+      if (card && card[0]) {
+        existing.card = card;
+      }
+    });
+  if (updated) {
+    return;
+  }
 
-    RuntimeFieldMeta lastAgeMeta;
-    lastAgeMeta.group = runtimeGroup;
-    lastAgeMeta.key = "lastMsgAgeMs";
-    lastAgeMeta.label = label;
-    lastAgeMeta.unit = unit ? unit : "";
-    lastAgeMeta.precision = 0;
-    lastAgeMeta.order = order;
-    if (card && card[0]) {
-        lastAgeMeta.card = card;
-    }
-    configManager.getRuntime().addRuntimeMeta(lastAgeMeta);
+  RuntimeFieldMeta lastAgeMeta;
+  lastAgeMeta.group = runtimeGroup;
+  lastAgeMeta.key = "lastMsgAgeMs";
+  lastAgeMeta.label = label;
+  lastAgeMeta.unit = unit ? unit : "";
+  lastAgeMeta.precision = 0;
+  lastAgeMeta.order = order;
+  if (card && card[0]) {
+    lastAgeMeta.card = card;
+  }
+  configManager.getRuntime().addRuntimeMeta(lastAgeMeta);
 }
 
-inline bool MQTTManager::publishTopic(const char* id)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] publishTopic: id is empty");
-        return false;
-    }
+inline bool MQTTManager::publishTopic(const char* id) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[WARNING] publishTopic: id is empty");
+    return false;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(id);
-    if (!item) {
-        MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
-        return false;
-    }
+  ReceiveItem* item = findReceiveItemById_(id);
+  if (!item) {
+    MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
+    return false;
+  }
 
-    const bool isBool = (item->type == ValueType::Bool);
-    const PublishOptions opts = getDefaultPublishOptions_(isBool, false);
-    return publishTopicInternal_(id, opts.retained, opts.qos, false);
+  const bool isBool = (item->type == ValueType::Bool);
+  const PublishOptions opts = getDefaultPublishOptions_(isBool, false);
+  return publishTopicInternal_(id, opts.retained, opts.qos, false);
 }
 
-inline bool MQTTManager::publishTopic(const char* id, bool retained)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] publishTopic: id is empty");
-        return false;
-    }
+inline bool MQTTManager::publishTopic(const char* id, bool retained) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[WARNING] publishTopic: id is empty");
+    return false;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(id);
-    if (!item) {
-        MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
-        return false;
-    }
+  ReceiveItem* item = findReceiveItemById_(id);
+  if (!item) {
+    MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
+    return false;
+  }
 
-    const bool isBool = (item->type == ValueType::Bool);
-    const PublishOptions opts = getDefaultPublishOptions_(isBool, false);
-    return publishTopicInternal_(id, retained, opts.qos, false);
+  const bool isBool = (item->type == ValueType::Bool);
+  const PublishOptions opts = getDefaultPublishOptions_(isBool, false);
+  return publishTopicInternal_(id, retained, opts.qos, false);
 }
 
-inline bool MQTTManager::publishTopic(const char* id, bool retained, uint8_t qos)
-{
-    return publishTopicInternal_(id, retained, qos, false);
+inline bool MQTTManager::publishTopic(const char* id, bool retained, uint8_t qos) {
+  return publishTopicInternal_(id, retained, qos, false);
 }
 
-inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const char* id)
-{
-    configManager_ = &configManager;
-    return publishTopic(id);
+inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const char* id) {
+  configManager_ = &configManager;
+  return publishTopic(id);
 }
 
-inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const char* id, bool retained)
-{
-    configManager_ = &configManager;
-    return publishTopic(id, retained);
+inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const char* id, bool retained) {
+  configManager_ = &configManager;
+  return publishTopic(id, retained);
 }
 
-inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos)
-{
-    configManager_ = &configManager;
-    return publishTopic(id, retained, qos);
+inline bool MQTTManager::publishTopic(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos) {
+  configManager_ = &configManager;
+  return publishTopic(id, retained, qos);
 }
 
-inline bool MQTTManager::publishTopicImmediately(const char* id)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] publishTopicImmediately: id is empty");
-        return false;
-    }
+inline bool MQTTManager::publishTopicImmediately(const char* id) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[WARNING] publishTopicImmediately: id is empty");
+    return false;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(id);
-    if (!item) {
-        MQTT_LOG("[WARNING] publishTopicImmediately: id not found: %s", id);
-        return false;
-    }
+  ReceiveItem* item = findReceiveItemById_(id);
+  if (!item) {
+    MQTT_LOG("[WARNING] publishTopicImmediately: id not found: %s", id);
+    return false;
+  }
 
-    const bool isBool = (item->type == ValueType::Bool);
-    const PublishOptions opts = getDefaultPublishOptions_(isBool, true);
-    return publishTopicInternal_(id, opts.retained, opts.qos, true);
+  const bool isBool = (item->type == ValueType::Bool);
+  const PublishOptions opts = getDefaultPublishOptions_(isBool, true);
+  return publishTopicInternal_(id, opts.retained, opts.qos, true);
 }
 
-inline bool MQTTManager::publishTopicImmediately(const char* id, bool retained)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] publishTopicImmediately: id is empty");
-        return false;
-    }
+inline bool MQTTManager::publishTopicImmediately(const char* id, bool retained) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[WARNING] publishTopicImmediately: id is empty");
+    return false;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(id);
-    if (!item) {
-        MQTT_LOG("[WARNING] publishTopicImmediately: id not found: %s", id);
-        return false;
-    }
+  ReceiveItem* item = findReceiveItemById_(id);
+  if (!item) {
+    MQTT_LOG("[WARNING] publishTopicImmediately: id not found: %s", id);
+    return false;
+  }
 
-    const bool isBool = (item->type == ValueType::Bool);
-    const PublishOptions opts = getDefaultPublishOptions_(isBool, true);
-    return publishTopicInternal_(id, retained, opts.qos, true);
+  const bool isBool = (item->type == ValueType::Bool);
+  const PublishOptions opts = getDefaultPublishOptions_(isBool, true);
+  return publishTopicInternal_(id, retained, opts.qos, true);
 }
 
-inline bool MQTTManager::publishTopicImmediately(const char* id, bool retained, uint8_t qos)
-{
-    return publishTopicInternal_(id, retained, qos, true);
+inline bool MQTTManager::publishTopicImmediately(const char* id, bool retained, uint8_t qos) {
+  return publishTopicInternal_(id, retained, qos, true);
 }
 
-inline bool MQTTManager::publishTopicImmediately(ConfigManagerClass& configManager, const char* id)
-{
-    configManager_ = &configManager;
-    return publishTopicImmediately(id);
+inline bool MQTTManager::publishTopicImmediately(ConfigManagerClass& configManager, const char* id) {
+  configManager_ = &configManager;
+  return publishTopicImmediately(id);
 }
 
-inline bool MQTTManager::publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained)
-{
-    configManager_ = &configManager;
-    return publishTopicImmediately(id, retained);
+inline bool MQTTManager::publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained) {
+  configManager_ = &configManager;
+  return publishTopicImmediately(id, retained);
 }
 
-inline bool MQTTManager::publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos)
-{
-    configManager_ = &configManager;
-    return publishTopicImmediately(id, retained, qos);
+inline bool MQTTManager::publishTopicImmediately(ConfigManagerClass& configManager, const char* id, bool retained, uint8_t qos) {
+  configManager_ = &configManager;
+  return publishTopicImmediately(id, retained, qos);
 }
 
-inline bool MQTTManager::publishExtraTopic(const char* id, const char* topic, const String& value)
-{
-    const PublishOptions opts = getDefaultPublishOptions_(false, false);
-    return publishExtraTopicInternal_(id, topic, value, opts.retained, opts.qos, false);
+inline bool MQTTManager::publishExtraTopic(const char* id, const char* topic, const String& value) {
+  const PublishOptions opts = getDefaultPublishOptions_(false, false);
+  return publishExtraTopicInternal_(id, topic, value, opts.retained, opts.qos, false);
 }
 
-inline bool MQTTManager::publishExtraTopic(const char* id, const char* topic, const String& value, bool retained)
-{
-    const PublishOptions opts = getDefaultPublishOptions_(false, false);
-    return publishExtraTopicInternal_(id, topic, value, retained, opts.qos, false);
+inline bool MQTTManager::publishExtraTopic(const char* id, const char* topic, const String& value, bool retained) {
+  const PublishOptions opts = getDefaultPublishOptions_(false, false);
+  return publishExtraTopicInternal_(id, topic, value, retained, opts.qos, false);
 }
 
-inline bool MQTTManager::publishExtraTopic(const char* id, const char* topic, const String& value, bool retained, uint8_t qos)
-{
-    return publishExtraTopicInternal_(id, topic, value, retained, qos, false);
+inline bool MQTTManager::publishExtraTopic(const char* id, const char* topic, const String& value, bool retained, uint8_t qos) {
+  return publishExtraTopicInternal_(id, topic, value, retained, qos, false);
 }
 
-inline bool MQTTManager::publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value)
-{
-    configManager_ = &configManager;
-    return publishExtraTopic(id, topic, value);
+inline bool MQTTManager::publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value) {
+  configManager_ = &configManager;
+  return publishExtraTopic(id, topic, value);
 }
 
-inline bool MQTTManager::publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained)
-{
-    configManager_ = &configManager;
-    return publishExtraTopic(id, topic, value, retained);
+inline bool MQTTManager::publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained) {
+  configManager_ = &configManager;
+  return publishExtraTopic(id, topic, value, retained);
 }
 
-inline bool MQTTManager::publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos)
-{
-    configManager_ = &configManager;
-    return publishExtraTopic(id, topic, value, retained, qos);
+inline bool MQTTManager::publishExtraTopic(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos) {
+  configManager_ = &configManager;
+  return publishExtraTopic(id, topic, value, retained, qos);
 }
 
-inline bool MQTTManager::publishExtraTopicImmediately(const char* id, const char* topic, const String& value)
-{
-    const PublishOptions opts = getDefaultPublishOptions_(false, true);
-    return publishExtraTopicInternal_(id, topic, value, opts.retained, opts.qos, true);
+inline bool MQTTManager::publishExtraTopicImmediately(const char* id, const char* topic, const String& value) {
+  const PublishOptions opts = getDefaultPublishOptions_(false, true);
+  return publishExtraTopicInternal_(id, topic, value, opts.retained, opts.qos, true);
 }
 
-inline bool MQTTManager::publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained)
-{
-    const PublishOptions opts = getDefaultPublishOptions_(false, true);
-    return publishExtraTopicInternal_(id, topic, value, retained, opts.qos, true);
+inline bool MQTTManager::publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained) {
+  const PublishOptions opts = getDefaultPublishOptions_(false, true);
+  return publishExtraTopicInternal_(id, topic, value, retained, opts.qos, true);
 }
 
-inline bool MQTTManager::publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained, uint8_t qos)
-{
-    return publishExtraTopicInternal_(id, topic, value, retained, qos, true);
+inline bool MQTTManager::publishExtraTopicImmediately(const char* id, const char* topic, const String& value, bool retained, uint8_t qos) {
+  return publishExtraTopicInternal_(id, topic, value, retained, qos, true);
 }
 
-inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value)
-{
-    configManager_ = &configManager;
-    return publishExtraTopicImmediately(id, topic, value);
+inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value) {
+  configManager_ = &configManager;
+  return publishExtraTopicImmediately(id, topic, value);
 }
 
-inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained)
-{
-    configManager_ = &configManager;
-    return publishExtraTopicImmediately(id, topic, value, retained);
+inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained) {
+  configManager_ = &configManager;
+  return publishExtraTopicImmediately(id, topic, value, retained);
 }
 
-inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos)
-{
-    configManager_ = &configManager;
-    return publishExtraTopicImmediately(id, topic, value, retained, qos);
+inline bool MQTTManager::publishExtraTopicImmediately(ConfigManagerClass& configManager, const char* id, const char* topic, const String& value, bool retained, uint8_t qos) {
+  configManager_ = &configManager;
+  return publishExtraTopicImmediately(id, topic, value, retained, qos);
 }
 
-inline bool MQTTManager::publishTopicInternal_(const char* id, bool retained, uint8_t qos, bool immediate)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] publishTopic: id is empty");
-        return false;
-    }
+inline bool MQTTManager::publishTopicInternal_(const char* id, bool retained, uint8_t qos, bool immediate) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[WARNING] publishTopic: id is empty");
+    return false;
+  }
 
-    ReceiveItem* item = findReceiveItemById_(id);
-    if (!item) {
-        MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
-        return false;
-    }
+  ReceiveItem* item = findReceiveItemById_(id);
+  if (!item) {
+    MQTT_LOG("[WARNING] publishTopic: id not found: %s", id);
+    return false;
+  }
 
-    const String base = getMqttBaseTopic();
-    if (base.isEmpty()) {
-        return false;
-    }
+  const String base = getMqttBaseTopic();
+  if (base.isEmpty()) {
+    return false;
+  }
 
-    String payload;
-    if (!buildReceivePayload_(*item, payload)) {
-        return false;
-    }
+  String payload;
+  if (!buildReceivePayload_(*item, payload)) {
+    return false;
+  }
 
-    const String key = String("publish:") + id;
-    if (!immediate && !allowPublishNow_(key, false)) {
-        return false;
-    }
+  const String key = String("publish:") + id;
+  if (!immediate && !allowPublishNow_(key, false)) {
+    return false;
+  }
 
-    const String topic = base + "/" + String(id);
-    const bool ok = publishWithQos_(topic.c_str(), payload.c_str(), retained, qos);
-    if (ok && !immediate) {
-        markPublishedNow_(key);
-    }
-    return ok;
+  const String topic = base + "/" + String(id);
+  const bool ok = publishWithQos_(topic.c_str(), payload.c_str(), retained, qos);
+  if (ok && !immediate) {
+    markPublishedNow_(key);
+  }
+  return ok;
 }
 
 inline bool MQTTManager::publishExtraTopicInternal_(const char* id,
-                                                   const char* topic,
-                                                   const String& value,
-                                                   bool retained,
-                                                   uint8_t qos,
-                                                   bool immediate)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[WARNING] publishExtraTopic: id is empty");
-        return false;
-    }
-    if (!topic || !topic[0]) {
-        MQTT_LOG("[WARNING] publishExtraTopic: topic is empty");
-        return false;
-    }
+                                                    const char* topic,
+                                                    const String& value,
+                                                    bool retained,
+                                                    uint8_t qos,
+                                                    bool immediate) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[WARNING] publishExtraTopic: id is empty");
+    return false;
+  }
+  if (!topic || !topic[0]) {
+    MQTT_LOG("[WARNING] publishExtraTopic: topic is empty");
+    return false;
+  }
 
-    const String key = String("extra:") + id;
-    if (!immediate && !allowPublishNow_(key, false)) {
-        return false;
-    }
+  const String key = String("extra:") + id;
+  if (!immediate && !allowPublishNow_(key, false)) {
+    return false;
+  }
 
-    const bool ok = publishWithQos_(topic, value.c_str(), retained, qos);
-    if (ok && !immediate) {
-        markPublishedNow_(key);
-    }
-    return ok;
+  const bool ok = publishWithQos_(topic, value.c_str(), retained, qos);
+  if (ok && !immediate) {
+    markPublishedNow_(key);
+  }
+  return ok;
 }
 
 template <typename PayloadBuilder>
 inline bool MQTTManager::publishExtraTopicLazyInternal_(const char* id,
-                                                       const char* topic,
-                                                       PayloadBuilder payloadBuilder,
-                                                       bool retained,
-                                                       uint8_t qos,
-                                                       bool immediate)
-{
-    if (!id || !id[0]) {
-        MQTT_LOG("[W] publishExtraTopicLazy: id is empty");
-        return false;
-    }
-    if (!topic || !topic[0]) {
-        MQTT_LOG("[W] publishExtraTopicLazy: topic is empty");
-        return false;
-    }
-    if (!isConnected()) {
-        return false;
-    }
+                                                        const char* topic,
+                                                        PayloadBuilder payloadBuilder,
+                                                        bool retained,
+                                                        uint8_t qos,
+                                                        bool immediate) {
+  if (!id || !id[0]) {
+    MQTT_LOG("[W] publishExtraTopicLazy: id is empty");
+    return false;
+  }
+  if (!topic || !topic[0]) {
+    MQTT_LOG("[W] publishExtraTopicLazy: topic is empty");
+    return false;
+  }
+  if (!isConnected()) {
+    return false;
+  }
 
-    const String key = String("extra:") + id;
-    if (!immediate && !allowPublishNow_(key, false)) {
-        return false;
-    }
+  const String key = String("extra:") + id;
+  if (!immediate && !allowPublishNow_(key, false)) {
+    return false;
+  }
 
-    const String value = payloadBuilder();
-    const bool ok = publishWithQos_(topic, value.c_str(), retained, qos);
-    if (ok && !immediate) {
-        markPublishedNow_(key);
-    }
-    return ok;
+  const String value = payloadBuilder();
+  const bool ok = publishWithQos_(topic, value.c_str(), retained, qos);
+  if (ok && !immediate) {
+    markPublishedNow_(key);
+  }
+  return ok;
 }
 
-inline void MQTTManager::setServer(const char* server, uint16_t port)
-{
-    settings_.server.set(server ? String(server) : String());
-    settings_.port.set(static_cast<int>(port));
-    mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+inline void MQTTManager::setServer(const char* server, uint16_t port) {
+  settings_.server.set(server ? String(server) : String());
+  settings_.port.set(static_cast<int>(port));
+  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
 }
 
-inline void MQTTManager::setCredentials(const char* username, const char* password)
-{
-    settings_.username.set(username ? String(username) : String());
-    settings_.password.set(password ? String(password) : String());
+inline void MQTTManager::setCredentials(const char* username, const char* password) {
+  settings_.username.set(username ? String(username) : String());
+  settings_.password.set(password ? String(password) : String());
 }
 
-inline void MQTTManager::setClientId(const char* clientId)
-{
-    settings_.clientId.set(clientId ? String(clientId) : String());
+inline void MQTTManager::setClientId(const char* clientId) {
+  settings_.clientId.set(clientId ? String(clientId) : String());
 }
 
 inline void MQTTManager::setLastWill(const char* topic,
                                      const char* message,
                                      bool retained,
-                                     uint8_t qos)
-{
-    if (!topic || topic[0] == '\0') {
-        lastWillTopic_ = String();
-        useDefaultLastWillTopic_ = false;
-        return;
-    }
-
-    lastWillTopic_ = String(topic);
+                                     uint8_t qos) {
+  if (!topic || topic[0] == '\0') {
+    lastWillTopic_ = String();
     useDefaultLastWillTopic_ = false;
-    lastWillMessage_ = (message && message[0]) ? String(message) : String("offline");
-    lastWillRetain_ = retained;
-    lastWillQos_ = qos;
+    return;
+  }
+
+  lastWillTopic_ = String(topic);
+  useDefaultLastWillTopic_ = false;
+  lastWillMessage_ = (message && message[0]) ? String(message) : String("offline");
+  lastWillRetain_ = retained;
+  lastWillQos_ = qos;
 }
 
-inline void MQTTManager::setKeepAlive(uint16_t keepAliveSec)
-{
-    keepAliveSec_ = keepAliveSec;
-    mqttClient_.setKeepAlive(keepAliveSec_);
+inline void MQTTManager::setKeepAlive(uint16_t keepAliveSec) {
+  keepAliveSec_ = keepAliveSec;
+  mqttClient_.setKeepAlive(keepAliveSec_);
 }
 
-inline void MQTTManager::setMaxRetries(uint8_t maxRetries)
-{
-    maxRetries_ = maxRetries;
+inline void MQTTManager::setMaxRetries(uint8_t maxRetries) {
+  maxRetries_ = maxRetries;
 }
 
-inline void MQTTManager::setRetryInterval(unsigned long retryIntervalMs)
-{
-    retryIntervalMs_ = retryIntervalMs;
+inline void MQTTManager::setRetryInterval(unsigned long retryIntervalMs) {
+  retryIntervalMs_ = retryIntervalMs;
 }
 
-inline void MQTTManager::setBufferSize(uint16_t size)
-{
-    const bool ok = mqttClient_.setBufferSize(size);
-    const uint16_t actual = mqttClient_.getBufferSize();
-    if (ok) {
-        CM_LOG_VERBOSE("[MQTT] Buffer size set to %u (actual=%u)",
-                       static_cast<unsigned>(size),
-                       static_cast<unsigned>(actual));
-    } else {
-        MQTT_LOG("[W] Failed to set buffer size to %u (actual=%u)",
-                 static_cast<unsigned>(size),
-                 static_cast<unsigned>(actual));
-    }
+inline void MQTTManager::setBufferSize(uint16_t size) {
+  const bool ok = mqttClient_.setBufferSize(size);
+  const uint16_t actual = mqttClient_.getBufferSize();
+  if (ok) {
+    CM_LOG_VERBOSE("[MQTT] Buffer size set to %u (actual=%u)",
+                   static_cast<unsigned>(size),
+                   static_cast<unsigned>(actual));
+  } else {
+    MQTT_LOG("[W] Failed to set buffer size to %u (actual=%u)",
+             static_cast<unsigned>(size),
+             static_cast<unsigned>(actual));
+  }
 }
 
-inline bool MQTTManager::begin()
-{
-    if (settings_.server.get().isEmpty()) {
-        MQTT_LOG("[ERROR] begin: server is not set");
-        return false;
-    }
+inline bool MQTTManager::begin() {
+  if (settings_.server.get().isEmpty()) {
+    MQTT_LOG("[ERROR] begin: server is not set");
+    return false;
+  }
 
-    String cid = settings_.clientId.get();
-    cid.trim();
-    if (cid.isEmpty()) {
-        cid = "ESP32_" + String(WiFi.macAddress());
-        cid.replace(":", "");
-        settings_.clientId.set(cid);
-    }
+  String cid = settings_.clientId.get();
+  cid.trim();
+  if (cid.isEmpty()) {
+    cid = "ESP32_" + String(WiFi.macAddress());
+    cid.replace(":", "");
+    settings_.clientId.set(cid);
+  }
 
-    mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
-    setState_(ConnectionState::Disconnected);
-    currentRetry_ = 0;
-    lastConnectionAttemptMs_ = 0;
-    return true;
+  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+  setState_(ConnectionState::Disconnected);
+  currentRetry_ = 0;
+  lastConnectionAttemptMs_ = 0;
+  return true;
 }
 
-inline void MQTTManager::update() { loop(); }
+inline void MQTTManager::update() {
+  loop();
+}
 
-inline void MQTTManager::loop()
-{
-    if (!settings_.enableMQTT.get()) {
-        if (state_ != ConnectionState::Disconnected) {
-            disconnect();
-        }
-        return;
+inline void MQTTManager::loop() {
+  if (!settings_.enableMQTT.get()) {
+    if (state_ != ConnectionState::Disconnected) {
+      disconnect();
     }
+    return;
+  }
 
-    // Avoid connection attempts with an empty broker address (can crash depending on platform/lib).
-    if (settings_.server.get().isEmpty()) {
-        if (state_ != ConnectionState::Disconnected) {
-            disconnect();
-        }
-        return;
+  // Avoid connection attempts with an empty broker address (can crash depending on platform/lib).
+  if (settings_.server.get().isEmpty()) {
+    if (state_ != ConnectionState::Disconnected) {
+      disconnect();
     }
+    return;
+  }
 
-    if (!WiFi.isConnected()) {
-        if (state_ == ConnectionState::Connected) {
-            handleDisconnection_();
-        }
-        return;
+  if (!WiFi.isConnected()) {
+    if (state_ == ConnectionState::Connected) {
+      handleDisconnection_();
     }
+    return;
+  }
 
-    // Connection state machine
-    switch (state_) {
+  // Connection state machine
+  switch (state_) {
     case ConnectionState::Disconnected:
-        if (currentRetry_ < maxRetries_) {
-            if (millis() - lastConnectionAttemptMs_ >= retryIntervalMs_) {
-                attemptConnection_();
-            }
-        } else {
-            setState_(ConnectionState::Failed);
+      if (currentRetry_ < maxRetries_) {
+        if (millis() - lastConnectionAttemptMs_ >= retryIntervalMs_) {
+          attemptConnection_();
         }
-        break;
+      } else {
+        setState_(ConnectionState::Failed);
+      }
+      break;
 
     case ConnectionState::Connecting:
-        if (millis() - lastConnectionAttemptMs_ >= 5000) {
-            currentRetry_++;
-            setState_(ConnectionState::Disconnected);
-        }
-        break;
+      if (millis() - lastConnectionAttemptMs_ >= 5000) {
+        currentRetry_++;
+        setState_(ConnectionState::Disconnected);
+      }
+      break;
 
     case ConnectionState::Connected:
-        if (!mqttClient_.connected()) {
-            handleDisconnection_();
-        } else {
-            maybeClientLoop_();
-            maybePublishSendItems_();
-            maybePublishSystemInfo_();
-        }
-        break;
+      if (!mqttClient_.connected()) {
+        handleDisconnection_();
+      } else {
+        maybeClientLoop_();
+        maybePublishSendItems_();
+        maybePublishSystemInfo_();
+      }
+      break;
 
     case ConnectionState::Failed:
-        if (millis() - lastConnectionAttemptMs_ >= 30000) {
-            currentRetry_ = 0;
-            setState_(ConnectionState::Disconnected);
-        }
-        break;
-    }
+      if (millis() - lastConnectionAttemptMs_ >= 30000) {
+        currentRetry_ = 0;
+        setState_(ConnectionState::Disconnected);
+      }
+      break;
+  }
 }
 
-inline void MQTTManager::disconnect()
-{
-    if (mqttClient_.connected()) {
-        mqttClient_.disconnect();
-    }
-    setState_(ConnectionState::Disconnected);
-    currentRetry_ = 0;
+inline void MQTTManager::disconnect() {
+  if (mqttClient_.connected()) {
+    mqttClient_.disconnect();
+  }
+  setState_(ConnectionState::Disconnected);
+  currentRetry_ = 0;
 }
 
-inline bool MQTTManager::isConnected() const
-{
-    return state_ == ConnectionState::Connected && const_cast<PubSubClient&>(mqttClient_).connected();
+inline bool MQTTManager::isConnected() const {
+  return state_ == ConnectionState::Connected && const_cast<PubSubClient&>(mqttClient_).connected();
 }
 
-inline unsigned long MQTTManager::getUptime() const
-{
-    if (state_ == ConnectionState::Connected && connectionStartMs_ > 0) {
-        return millis() - connectionStartMs_;
-    }
-    return 0;
+inline unsigned long MQTTManager::getUptime() const {
+  if (state_ == ConnectionState::Connected && connectionStartMs_ > 0) {
+    return millis() - connectionStartMs_;
+  }
+  return 0;
 }
 
-inline bool MQTTManager::publish(const char* topic, const char* payload, bool retained)
-{
-    if (!isConnected()) {
-        return false;
+inline bool MQTTManager::publish(const char* topic, const char* payload, bool retained) {
+  if (!isConnected()) {
+    return false;
+  }
+  if (topic && topic[0]) {
+    CM_LOG_VERBOSE("[MQTT][TX] %s", topic);
+  }
+  if (payload && payload[0]) {
+    String payloadPreview(payload);
+    payloadPreview.trim();
+    constexpr size_t kMaxTxPayloadPreview = 200;
+    if (payloadPreview.length() > kMaxTxPayloadPreview) {
+      payloadPreview = payloadPreview.substring(0, kMaxTxPayloadPreview) + "...";
     }
-    if (topic && topic[0]) {
-        CM_LOG_VERBOSE("[MQTT][TX] %s", topic);
-    }
-    if (payload && payload[0]) {
-        String payloadPreview(payload);
-        payloadPreview.trim();
-        constexpr size_t kMaxTxPayloadPreview = 200;
-        if (payloadPreview.length() > kMaxTxPayloadPreview) {
-            payloadPreview = payloadPreview.substring(0, kMaxTxPayloadPreview) + "...";
-        }
-        CM_LOG_VERBOSE("[MQTT][TX][P] %s", payloadPreview.c_str());
-    }
-    return mqttClient_.publish(topic, payload, retained);
+    CM_LOG_VERBOSE("[MQTT][TX][P] %s", payloadPreview.c_str());
+  }
+  return mqttClient_.publish(topic, payload, retained);
 }
 
-inline bool MQTTManager::publish(const char* topic, const String& payload, bool retained)
-{
-    return publish(topic, payload.c_str(), retained);
+inline bool MQTTManager::publish(const char* topic, const String& payload, bool retained) {
+  return publish(topic, payload.c_str(), retained);
 }
 
-inline bool MQTTManager::publishRaw(const char* topic, const char* payload, bool retained)
-{
-    if (!isConnected()) {
-        return false;
-    }
-    return mqttClient_.publish(topic, payload, retained);
+inline bool MQTTManager::publishRaw(const char* topic, const char* payload, bool retained) {
+  if (!isConnected()) {
+    return false;
+  }
+  return mqttClient_.publish(topic, payload, retained);
 }
 
-inline String MQTTManager::getSystemInfoTopic() const
-{
-    const String base = getMqttBaseTopic();
-    if (base.isEmpty()) {
-        return String();
-    }
-    return base + "/System-Info";
+inline String MQTTManager::getSystemInfoTopic() const {
+  const String base = getMqttBaseTopic();
+  if (base.isEmpty()) {
+    return String();
+  }
+  return base + "/System-Info";
 }
 
-inline MQTTManager::SystemInfo MQTTManager::collectSystemInfo() const
-{
-    SystemInfo info;
-    info.uptimeMs = millis();
-    info.freeHeap = static_cast<uint32_t>(ESP.getFreeHeap());
+inline MQTTManager::SystemInfo MQTTManager::collectSystemInfo() const {
+  SystemInfo info;
+  info.uptimeMs = millis();
+  info.freeHeap = static_cast<uint32_t>(ESP.getFreeHeap());
 #if defined(ESP32)
-    info.minFreeHeap = static_cast<uint32_t>(ESP.getMinFreeHeap());
-    info.maxAllocHeap = static_cast<uint32_t>(ESP.getMaxAllocHeap());
+  info.minFreeHeap = static_cast<uint32_t>(ESP.getMinFreeHeap());
+  info.maxAllocHeap = static_cast<uint32_t>(ESP.getMaxAllocHeap());
 #endif
-    info.flashSizeBytes = static_cast<uint32_t>(ESP.getFlashChipSize());
-    info.cpuFreqMHz = static_cast<uint32_t>(ESP.getCpuFreqMHz());
-    info.chipModel = String(ESP.getChipModel());
-    info.chipRevision = static_cast<uint32_t>(ESP.getChipRevision());
-    info.sdkVersion = String(ESP.getSdkVersion());
+  info.flashSizeBytes = static_cast<uint32_t>(ESP.getFlashChipSize());
+  info.cpuFreqMHz = static_cast<uint32_t>(ESP.getCpuFreqMHz());
+  info.chipModel = String(ESP.getChipModel());
+  info.chipRevision = static_cast<uint32_t>(ESP.getChipRevision());
+  info.sdkVersion = String(ESP.getSdkVersion());
 
-    const char* hn = WiFi.getHostname();
-    info.hostname = hn ? String(hn) : String();
-    info.ssid = WiFi.SSID();
-    info.rssi = WiFi.RSSI();
-    info.ip = WiFi.isConnected() ? WiFi.localIP().toString() : String();
-    info.mac = WiFi.macAddress();
+  const char* hn = WiFi.getHostname();
+  info.hostname = hn ? String(hn) : String();
+  info.ssid = WiFi.SSID();
+  info.rssi = WiFi.RSSI();
+  info.ip = WiFi.isConnected() ? WiFi.localIP().toString() : String();
+  info.mac = WiFi.macAddress();
 
-    return info;
+  return info;
 }
 
-inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained)
-{
-    const String baseTopic = getSystemInfoTopic();
-    if (baseTopic.isEmpty()) {
-        return false;
+inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained) {
+  const String baseTopic = getSystemInfoTopic();
+  if (baseTopic.isEmpty()) {
+    return false;
+  }
+
+  const String uptimeHuman = formatUptimeHuman_(info.uptimeMs);
+
+  if (retained) {
+    publish(baseTopic.c_str(), "", true);
+  }
+
+  auto publishPayload = [this, retained](const String& topic, const String& payload) -> bool {
+    // PubSubClient has a fixed internal buffer (default ~256 bytes). System-Info JSON can be bigger.
+    // Grow the buffer on demand to avoid publish failures, but never shrink
+    // it here because RX payload handling depends on the active size too.
+    const size_t required = payload.length() + 1; // include null terminator
+    if (required > 0) {
+      const size_t desired = required + 64; // headroom for topic + overhead
+      const size_t capped = desired > 2048 ? 2048 : desired;
+      const uint16_t current = mqttClient_.getBufferSize();
+      if (capped > static_cast<size_t>(current)) {
+        mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
+      }
     }
+    return publishWithQos_(topic.c_str(), payload.c_str(), retained, 0);
+  };
 
-    const String uptimeHuman = formatUptimeHuman_(info.uptimeMs);
+  StaticJsonDocument<512> espDoc;
+  espDoc["uptimeMs"] = info.uptimeMs;
+  espDoc["uptimeHuman"] = uptimeHuman;
+  espDoc["freeHeap"] = info.freeHeap;
+  if (info.minFreeHeap > 0)
+    espDoc["minFreeHeap"] = info.minFreeHeap;
+  if (info.maxAllocHeap > 0)
+    espDoc["maxAllocHeap"] = info.maxAllocHeap;
+  espDoc["flashSizeBytes"] = info.flashSizeBytes;
+  espDoc["cpuFreqMHz"] = info.cpuFreqMHz;
+  espDoc["chipModel"] = info.chipModel;
+  espDoc["chipRevision"] = info.chipRevision;
+  espDoc["sdkVersion"] = info.sdkVersion;
 
-    if (retained) {
-        publish(baseTopic.c_str(), "", true);
-    }
+  String espPayload;
+  serializeJson(espDoc, espPayload);
+  const String espTopic = baseTopic + "/ESP";
+  const bool okEsp = publishPayload(espTopic, espPayload);
 
-    auto publishPayload = [this, retained](const String& topic, const String& payload) -> bool {
-        // PubSubClient has a fixed internal buffer (default ~256 bytes). System-Info JSON can be bigger.
-        // Grow the buffer on demand to avoid publish failures, but never shrink
-        // it here because RX payload handling depends on the active size too.
-        const size_t required = payload.length() + 1; // include null terminator
-        if (required > 0) {
-            const size_t desired = required + 64; // headroom for topic + overhead
-            const size_t capped = desired > 2048 ? 2048 : desired;
-            const uint16_t current = mqttClient_.getBufferSize();
-            if (capped > static_cast<size_t>(current)) {
-                mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
-            }
-        }
-        return publishWithQos_(topic.c_str(), payload.c_str(), retained, 0);
-    };
+  StaticJsonDocument<512> wifiDoc;
+  wifiDoc["uptimeMs"] = info.uptimeMs;
+  wifiDoc["uptimeHuman"] = uptimeHuman;
+  wifiDoc["hostname"] = info.hostname;
+  wifiDoc["ssid"] = info.ssid;
+  wifiDoc["rssi"] = info.rssi;
+  wifiDoc["ip"] = info.ip;
+  wifiDoc["mac"] = info.mac;
+  wifiDoc["connected"] = WiFi.isConnected();
 
-    StaticJsonDocument<512> espDoc;
-    espDoc["uptimeMs"] = info.uptimeMs;
-    espDoc["uptimeHuman"] = uptimeHuman;
-    espDoc["freeHeap"] = info.freeHeap;
-    if (info.minFreeHeap > 0) espDoc["minFreeHeap"] = info.minFreeHeap;
-    if (info.maxAllocHeap > 0) espDoc["maxAllocHeap"] = info.maxAllocHeap;
-    espDoc["flashSizeBytes"] = info.flashSizeBytes;
-    espDoc["cpuFreqMHz"] = info.cpuFreqMHz;
-    espDoc["chipModel"] = info.chipModel;
-    espDoc["chipRevision"] = info.chipRevision;
-    espDoc["sdkVersion"] = info.sdkVersion;
+  String wifiPayload;
+  serializeJson(wifiDoc, wifiPayload);
+  const String wifiTopic = baseTopic + "/WiFi";
+  const bool okWiFi = publishPayload(wifiTopic, wifiPayload);
 
-    String espPayload;
-    serializeJson(espDoc, espPayload);
-    const String espTopic = baseTopic + "/ESP";
-    const bool okEsp = publishPayload(espTopic, espPayload);
-
-    StaticJsonDocument<512> wifiDoc;
-    wifiDoc["uptimeMs"] = info.uptimeMs;
-    wifiDoc["uptimeHuman"] = uptimeHuman;
-    wifiDoc["hostname"] = info.hostname;
-    wifiDoc["ssid"] = info.ssid;
-    wifiDoc["rssi"] = info.rssi;
-    wifiDoc["ip"] = info.ip;
-    wifiDoc["mac"] = info.mac;
-    wifiDoc["connected"] = WiFi.isConnected();
-
-    String wifiPayload;
-    serializeJson(wifiDoc, wifiPayload);
-    const String wifiTopic = baseTopic + "/WiFi";
-    const bool okWiFi = publishPayload(wifiTopic, wifiPayload);
-
-    return okEsp && okWiFi;
+  return okEsp && okWiFi;
 }
 
-inline bool MQTTManager::publishSystemInfoNow(bool retained)
-{
-    return publishSystemInfo(collectSystemInfo(), retained);
+inline bool MQTTManager::publishSystemInfoNow(bool retained) {
+  return publishSystemInfo(collectSystemInfo(), retained);
 }
 
-inline bool MQTTManager::publishAllNow(bool retained)
-{
-    bool ok = true;
-    ok = publishSystemInfoNow(retained) && ok;
+inline bool MQTTManager::publishAllNow(bool retained) {
+  bool ok = true;
+  ok = publishSystemInfoNow(retained) && ok;
 
-    for (auto& item : receiveItems_) {
-        if (!item.target) {
-            continue;
-        }
-        const bool itemOk = publishTopicInternal_(item.id.c_str(), retained, 0, true);
-        ok = itemOk && ok;
+  for (auto& item : receiveItems_) {
+    if (!item.target) {
+      continue;
     }
-    return ok;
+    const bool itemOk = publishTopicInternal_(item.id.c_str(), retained, 0, true);
+    ok = itemOk && ok;
+  }
+  return ok;
 }
 
-inline bool MQTTManager::clearRetain(const char* topic)
-{
-    if (!topic || !topic[0]) {
-        MQTT_LOG("[WARNING] clearRetain: topic is empty");
-        return false;
-    }
-    return publishWithQos_(topic, "", true, 0);
+inline bool MQTTManager::clearRetain(const char* topic) {
+  if (!topic || !topic[0]) {
+    MQTT_LOG("[WARNING] clearRetain: topic is empty");
+    return false;
+  }
+  return publishWithQos_(topic, "", true, 0);
 }
 
-inline bool MQTTManager::subscribe(const char* topic, uint8_t qos)
-{
-    if (!isConnected()) {
-        return false;
-    }
-    return mqttClient_.subscribe(topic, qos);
+inline bool MQTTManager::subscribe(const char* topic, uint8_t qos) {
+  if (!isConnected()) {
+    return false;
+  }
+  return mqttClient_.subscribe(topic, qos);
 }
 
-inline bool MQTTManager::subscribeWildcard(const char* topicFilter, uint8_t qos)
-{
-    if (!topicFilter || !topicFilter[0]) {
-        MQTT_LOG("[WARNING] subscribeWildcard: topic filter is empty");
-        return false;
-    }
-    return subscribe(topicFilter, qos);
+inline bool MQTTManager::subscribeWildcard(const char* topicFilter, uint8_t qos) {
+  if (!topicFilter || !topicFilter[0]) {
+    MQTT_LOG("[WARNING] subscribeWildcard: topic filter is empty");
+    return false;
+  }
+  return subscribe(topicFilter, qos);
 }
 
-inline bool MQTTManager::unsubscribe(const char* topic)
-{
-    if (!isConnected()) {
-        return false;
-    }
-    return mqttClient_.unsubscribe(topic);
+inline bool MQTTManager::unsubscribe(const char* topic) {
+  if (!isConnected()) {
+    return false;
+  }
+  return mqttClient_.unsubscribe(topic);
 }
 
 inline void MQTTManager::addTopicReceiveFloat(const char* id,
@@ -1836,27 +1779,26 @@ inline void MQTTManager::addTopicReceiveFloat(const char* id,
                                               float* target,
                                               const char* unit,
                                               int precision,
-                                              const char* defaultJsonKeyPath)
-{
-    ReceiveItem item;
-    item.id = id ? String(id) : String();
-    item.label = label ? String(label) : item.id;
-    item.type = ValueType::Float;
-    item.unit = unit;
-    item.precision = precision;
-    item.target = target;
-    item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.topicValue = String(defaultTopic ? defaultTopic : "");
-    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
+                                              const char* defaultJsonKeyPath) {
+  ReceiveItem item;
+  item.id = id ? String(id) : String();
+  item.label = label ? String(label) : item.id;
+  item.type = ValueType::Float;
+  item.unit = unit;
+  item.precision = precision;
+  item.target = target;
+  item.runtimeOrder = nextReceiveRuntimeOrder_++;
+  item.topicValue = String(defaultTopic ? defaultTopic : "");
+  item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
-    item.idKeyC = makeCString_(item.id);
-    item.labelC = makeCString_(item.label);
-    item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
-    item.topicNameC = makeCString_(item.label + String(" Topic"));
-    item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
-    item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
+  item.idKeyC = makeCString_(item.id);
+  item.labelC = makeCString_(item.label);
+  item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
+  item.topicNameC = makeCString_(item.label + String(" Topic"));
+  item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
+  item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    receiveItems_.push_back(std::move(item));
+  receiveItems_.push_back(std::move(item));
 }
 
 inline void MQTTManager::addTopicReceiveInt(const char* id,
@@ -1864,931 +1806,899 @@ inline void MQTTManager::addTopicReceiveInt(const char* id,
                                             const char* defaultTopic,
                                             int* target,
                                             const char* unit,
-                                            const char* defaultJsonKeyPath)
-{
-    ReceiveItem item;
-    item.id = id ? String(id) : String();
-    item.label = label ? String(label) : item.id;
-    item.type = ValueType::Int;
-    item.unit = unit;
-    item.precision = 0;
-    item.target = target;
-    item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.topicValue = String(defaultTopic ? defaultTopic : "");
-    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
+                                            const char* defaultJsonKeyPath) {
+  ReceiveItem item;
+  item.id = id ? String(id) : String();
+  item.label = label ? String(label) : item.id;
+  item.type = ValueType::Int;
+  item.unit = unit;
+  item.precision = 0;
+  item.target = target;
+  item.runtimeOrder = nextReceiveRuntimeOrder_++;
+  item.topicValue = String(defaultTopic ? defaultTopic : "");
+  item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
-    item.idKeyC = makeCString_(item.id);
-    item.labelC = makeCString_(item.label);
-    item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
-    item.topicNameC = makeCString_(item.label + String(" Topic"));
-    item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
-    item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
+  item.idKeyC = makeCString_(item.id);
+  item.labelC = makeCString_(item.label);
+  item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
+  item.topicNameC = makeCString_(item.label + String(" Topic"));
+  item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
+  item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    receiveItems_.push_back(std::move(item));
+  receiveItems_.push_back(std::move(item));
 }
 
 inline void MQTTManager::addTopicReceiveBool(const char* id,
                                              const char* label,
                                              const char* defaultTopic,
                                              bool* target,
-                                             const char* defaultJsonKeyPath)
-{
-    ReceiveItem item;
-    item.id = id ? String(id) : String();
-    item.label = label ? String(label) : item.id;
-    item.type = ValueType::Bool;
-    item.target = target;
-    item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.topicValue = String(defaultTopic ? defaultTopic : "");
-    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
+                                             const char* defaultJsonKeyPath) {
+  ReceiveItem item;
+  item.id = id ? String(id) : String();
+  item.label = label ? String(label) : item.id;
+  item.type = ValueType::Bool;
+  item.target = target;
+  item.runtimeOrder = nextReceiveRuntimeOrder_++;
+  item.topicValue = String(defaultTopic ? defaultTopic : "");
+  item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
-    item.idKeyC = makeCString_(item.id);
-    item.labelC = makeCString_(item.label);
-    item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
-    item.topicNameC = makeCString_(item.label + String(" Topic"));
-    item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
-    item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
+  item.idKeyC = makeCString_(item.id);
+  item.labelC = makeCString_(item.label);
+  item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
+  item.topicNameC = makeCString_(item.label + String(" Topic"));
+  item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
+  item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    receiveItems_.push_back(std::move(item));
+  receiveItems_.push_back(std::move(item));
 }
 
 inline void MQTTManager::addTopicReceiveString(const char* id,
                                                const char* label,
                                                const char* defaultTopic,
                                                String* target,
-                                               const char* defaultJsonKeyPath)
-{
-    ReceiveItem item;
-    item.id = id ? String(id) : String();
-    item.label = label ? String(label) : item.id;
-    item.type = ValueType::String;
-    item.target = target;
-    item.runtimeOrder = nextReceiveRuntimeOrder_++;
-    item.topicValue = String(defaultTopic ? defaultTopic : "");
-    item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
+                                               const char* defaultJsonKeyPath) {
+  ReceiveItem item;
+  item.id = id ? String(id) : String();
+  item.label = label ? String(label) : item.id;
+  item.type = ValueType::String;
+  item.target = target;
+  item.runtimeOrder = nextReceiveRuntimeOrder_++;
+  item.topicValue = String(defaultTopic ? defaultTopic : "");
+  item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
-    item.idKeyC = makeCString_(item.id);
-    item.labelC = makeCString_(item.label);
-    item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
-    item.topicNameC = makeCString_(item.label + String(" Topic"));
-    item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
-    item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
+  item.idKeyC = makeCString_(item.id);
+  item.labelC = makeCString_(item.label);
+  item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
+  item.topicNameC = makeCString_(item.label + String(" Topic"));
+  item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
+  item.jsonKeyNameC = makeCString_(item.label + String(" JSON Key"));
 
-    receiveItems_.push_back(std::move(item));
+  receiveItems_.push_back(std::move(item));
 }
 
-inline void MQTTManager::configureFromSettings_()
-{
-    mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+inline void MQTTManager::configureFromSettings_() {
+  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
 
-    if (!settings_.enableMQTT.get()) {
-        return;
-    }
+  if (!settings_.enableMQTT.get()) {
+    return;
+  }
 
-    if (settings_.server.get().isEmpty()) {
-        disconnect();
-        return;
-    }
+  if (settings_.server.get().isEmpty()) {
+    disconnect();
+    return;
+  }
 
-    // Ensure internal connect state is initialized.
-    begin();
+  // Ensure internal connect state is initialized.
+  begin();
 }
 
-inline void MQTTManager::applySettingsCallbacks_()
-{
-    // Keep this idempotent: callbacks may be assigned multiple times.
-    settings_.enableMQTT.setCallback([this](bool enabled) {
-        if (!enabled) {
-            disconnect();
-            return;
-        }
-
-        // Ensure internal connect state is initialized when MQTT gets enabled via UI.
-        // Without this, clientId/base topic may stay empty until another setting changes.
-        configureFromSettings_();
-    });
-
-    auto reconfigure = [this](auto) { this->configureFromSettings_(); };
-    settings_.server.setCallback(reconfigure);
-    settings_.port.setCallback([this](int) { this->configureFromSettings_(); });
-    settings_.username.setCallback(reconfigure);
-    settings_.password.setCallback(reconfigure);
-    settings_.clientId.setCallback([this](const String&) {
-        this->configureFromSettings_();
-        resetPublishSchedule_();
-        lastSystemInfoPublishMs_ = 0;
-        if (isConnected()) {
-            publishSystemInfoNow(true);
-        }
-    });
-    settings_.publishTopicBase.setCallback([this](const String&) {
-        resetPublishSchedule_();
-        lastSystemInfoPublishMs_ = 0;
-        if (isConnected()) {
-            publishSystemInfoNow(true);
-        }
-    });
-    settings_.publishIntervalSec.setCallback([this](float) {
-        resetPublishSchedule_();
-    });
-    settings_.listenIntervalMs.setCallback([this](int) {
-        lastClientLoopMs_ = 0;
-    });
-}
-
-inline void MQTTManager::maybeClientLoop_()
-{
-    const int listenMs = settings_.listenIntervalMs.get();
-    if (listenMs <= 0) {
-        mqttClient_.loop();
-        return;
+inline void MQTTManager::applySettingsCallbacks_() {
+  // Keep this idempotent: callbacks may be assigned multiple times.
+  settings_.enableMQTT.setCallback([this](bool enabled) {
+    if (!enabled) {
+      disconnect();
+      return;
     }
 
-    const unsigned long now = millis();
-    if (now - lastClientLoopMs_ >= static_cast<unsigned long>(listenMs)) {
-        lastClientLoopMs_ = now;
-        mqttClient_.loop();
-    }
-}
+    // Ensure internal connect state is initialized when MQTT gets enabled via UI.
+    // Without this, clientId/base topic may stay empty until another setting changes.
+    configureFromSettings_();
+  });
 
-inline void MQTTManager::maybePublishSendItems_()
-{
-    const float pubSec = settings_.publishIntervalSec.get();
-    if (pubSec <= 0.0f) {
-        // publish-on-change is implemented in send helpers (future); no periodic publish.
-        return;
-    }
-
-    const unsigned long now = millis();
-    const unsigned long intervalMs = static_cast<unsigned long>(pubSec * 1000.0f);
-    if (intervalMs == 0) {
-        return;
-    }
-
-    if (lastPublishMs_ == 0 || (now - lastPublishMs_ >= intervalMs)) {
-        lastPublishMs_ = now;
-        // Send helpers will be added next (not needed for current receive tests).
-    }
-}
-
-inline void MQTTManager::maybePublishSystemInfo_()
-{
-    if (!isConnected()) {
-        return;
-    }
-
-    const unsigned long now = millis();
-    const unsigned long intervalMs = 60000;
-    if (lastSystemInfoPublishMs_ == 0 || (now - lastSystemInfoPublishMs_ >= intervalMs)) {
-        lastSystemInfoPublishMs_ = now;
-        publishSystemInfoNow(true);
-    }
-}
-
-inline void MQTTManager::resetPublishSchedule_()
-{
-    lastPublishMs_ = 0;
-    for (auto& stamp : publishStamps_) {
-        stamp.lastMs = 0;
-    }
-}
-
-inline void MQTTManager::attemptConnection_()
-{
-    setState_(ConnectionState::Connecting);
-    lastConnectionAttemptMs_ = millis();
-
-    CM_LOG_VERBOSE("[MQTT] Connecting to %s:%d (clientId=%s)",
-                   settings_.server.get().c_str(),
-                   settings_.port.get(),
-                   settings_.clientId.get().c_str());
-
-    bool connected = false;
-    String willTopic = resolveWillTopic_();
-    const bool useWill = !willTopic.isEmpty();
-    const uint8_t willQos = (lastWillQos_ > 2) ? 2 : lastWillQos_;
-
-    if (settings_.username.get().isEmpty()) {
-        if (useWill) {
-            connected = mqttClient_.connect(settings_.clientId.get().c_str(),
-                                            willTopic.c_str(),
-                                            willQos,
-                                            lastWillRetain_,
-                                            lastWillMessage_.c_str());
-        } else {
-            connected = mqttClient_.connect(settings_.clientId.get().c_str());
-        }
-    } else {
-        if (useWill) {
-            connected = mqttClient_.connect(settings_.clientId.get().c_str(),
-                                            settings_.username.get().c_str(),
-                                            settings_.password.get().c_str(),
-                                            willTopic.c_str(),
-                                            willQos,
-                                            lastWillRetain_,
-                                            lastWillMessage_.c_str());
-        } else {
-            connected = mqttClient_.connect(settings_.clientId.get().c_str(),
-                                            settings_.username.get().c_str(),
-                                            settings_.password.get().c_str());
-        }
-    }
-
-    if (connected) {
-        handleConnection_();
-    } else {
-        currentRetry_++;
-        CM_LOG_VERBOSE("[MQTT] Connection failed (retry %u/%u)",
-                       currentRetry_,
-                       maxRetries_);
-        setState_(ConnectionState::Disconnected);
-    }
-}
-
-inline void MQTTManager::handleConnection_()
-{
-    setState_(ConnectionState::Connected);
-    connectionStartMs_ = millis();
-    currentRetry_ = 0;
-    reconnectCount_++;
+  auto reconfigure = [this](auto) { this->configureFromSettings_(); };
+  settings_.server.setCallback(reconfigure);
+  settings_.port.setCallback([this](int) { this->configureFromSettings_(); });
+  settings_.username.setCallback(reconfigure);
+  settings_.password.setCallback(reconfigure);
+  settings_.clientId.setCallback([this](const String&) {
+    this->configureFromSettings_();
+    resetPublishSchedule_();
     lastSystemInfoPublishMs_ = 0;
-
-    const String willTopic = resolveWillTopic_();
-    if (!willTopic.isEmpty()) {
-        const bool ok = publishWithQos_(willTopic.c_str(), "online", true, lastWillQos_);
-        if (!ok) {
-            MQTT_LOG("[WARNING] Failed to publish online status to %s", willTopic.c_str());
-        }
-    }
-
-    // Subscribe all receive topics.
-    for (auto& item : receiveItems_) {
-        const String topic = getReceiveTopic_(item);
-        if (topic.length() > 0) {
-            const bool ok = mqttClient_.subscribe(topic.c_str());
-            CM_LOG_VERBOSE("[MQTT] Subscribe %s -> %s",
-                           topic.c_str(),
-                           ok ? "ok" : "fail");
-            item.lastSubscribedTopic = topic;
-        } else {
-            CM_LOG_VERBOSE("[MQTT] Skip subscribe for '%s': empty topic", item.id.c_str());
-            item.lastSubscribedTopic = String();
-        }
-    }
-
-    if (onMqttConnect_) {
-        onMqttConnect_();
-    }
-    if (onConnected_) {
-        onConnected_();
-    }
-    callOnMQTTConnectedSafe_();
-
-    CM_LOG_VERBOSE("[MQTT] Connected, subscribed to %u receive topics",
-                   static_cast<unsigned int>(receiveItems_.size()));
-}
-
-inline void MQTTManager::handleDisconnection_()
-{
-    if (state_ == ConnectionState::Connected) {
-        if (onMqttDisconnect_) {
-            onMqttDisconnect_();
-        }
-        if (onDisconnected_) {
-            onDisconnected_();
-        }
-        callOnMQTTDisconnectedSafe_();
-    }
-
-    setState_(ConnectionState::Disconnected);
-    currentRetry_ = 0;
-}
-
-inline void MQTTManager::setState_(ConnectionState newState)
-{
-    if (state_ == newState) {
-        return;
-    }
-    state_ = newState;
-    if (onStateChanged_) {
-        onStateChanged_(state_);
-    }
-    callOnMQTTStateChangedSafe_(static_cast<int>(state_));
-}
-
-inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length)
-{
-    processingIncomingMessage_ = true;
-    if (topic && topic[0]) {
-        CM_LOG_VERBOSE("[MQTT][RX] %s", topic);
-    }
-    if (payload && length > 0) {
-        String payloadPreview(reinterpret_cast<const char*>(payload), length);
-        payloadPreview.trim();
-        constexpr size_t kMaxPayloadPreview = 200;
-        if (payloadPreview.length() > kMaxPayloadPreview) {
-            payloadPreview = payloadPreview.substring(0, kMaxPayloadPreview) + "...";
-        }
-        CM_LOG_VERBOSE("[MQTT][RX][P] %s", payloadPreview.c_str());
-    }
-
-    lastTopic_ = topic ? String(topic) : String();
-    lastPayload_ = String(reinterpret_cast<const char*>(payload), length);
-    lastMessageMs_ = millis();
-
-    handleReceiveItems_(topic, payload, length);
-
-    if (onNewMqttMessage_) {
-        MqttMessageView view;
-        view.topic = topic;
-        view.payload = payload;
-        view.length = length;
-        onNewMqttMessage_(view);
-    }
-    if (topic && payload && length > 0) {
-        callOnNewMQTTMessageSafe_(topic, payload, length);
-    }
-
-    if (onMessage_) {
-        onMessage_(topic, payload, length);
-    }
-    processingIncomingMessage_ = false;
-}
-
-inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payload, unsigned int length)
-{
-    if (!topic) {
-        return;
-    }
-
-    String incomingTopic(topic);
-    incomingTopic.trim();
-    const String rawPayload(reinterpret_cast<const char*>(payload), length);
-    String normalizedPayload = rawPayload;
-    normalizedPayload.trim();
-    bool matchedAny = false;
-
-    for (auto& item : receiveItems_) {
-        if (!item.target) {
-            continue;
-        }
-        const String configuredTopic = getReceiveTopic_(item);
-        if (configuredTopic.isEmpty()) {
-            continue;
-        }
-        if (incomingTopic != configuredTopic) {
-            continue;
-        }
-        matchedAny = true;
-
-        String extracted;
-        const String keyPath = getReceiveJsonKeyPath_(item);
-        const bool hasJson = normalizedPayload.startsWith("{") || normalizedPayload.startsWith("[");
-        bool ok = false;
-
-        if (hasJson) {
-            ok = tryExtractJsonValueAsString_(normalizedPayload, keyPath, extracted);
-        } else {
-            if (!isNoneKeyPath_(keyPath)) {
-                ok = false;
-            } else {
-                extracted = normalizedPayload;
-                extracted.trim();
-                ok = true;
-            }
-        }
-
-        if (!ok) {
-            MQTT_LOG("[W] map parse fail: id=%s topic=%s key=%s",
-                     item.id.c_str(),
-                     topic,
-                     keyPath.c_str());
-            continue;
-        }
-
-        switch (item.type) {
-        case ValueType::Float: {
-            float f = 0.0f;
-            if (tryParseFloat_(extracted, f)) {
-                *static_cast<float*>(item.target) = f;
-                CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
-            } else {
-                MQTT_LOG("[W] float parse fail: id=%s value=%s",
-                         item.id.c_str(),
-                         extracted.c_str());
-            }
-            break;
-        }
-        case ValueType::Int: {
-            int v = 0;
-            if (tryParseInt_(extracted, v)) {
-                *static_cast<int*>(item.target) = v;
-                CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
-            } else {
-                MQTT_LOG("[W] int parse fail: id=%s value=%s",
-                         item.id.c_str(),
-                         extracted.c_str());
-            }
-            break;
-        }
-        case ValueType::Bool: {
-            bool b = false;
-            if (tryParseBool_(extracted, b)) {
-                *static_cast<bool*>(item.target) = b;
-                CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
-            } else {
-                MQTT_LOG("[W] bool parse fail: id=%s value=%s",
-                         item.id.c_str(),
-                         extracted.c_str());
-            }
-            break;
-        }
-        case ValueType::String:
-            *static_cast<String*>(item.target) = extracted;
-            CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
-            break;
-        }
-    }
-
-    if (!matchedAny) {
-        CM_LOG_VERBOSE("[MQTT][MAP] no mapping for topic=%s", incomingTopic.c_str());
-    }
-}
-
-inline void MQTTManager::updateReceiveSubscription_(ReceiveItem& item, bool force)
-{
-    const String nextTopic = getReceiveTopic_(item);
-    if (!force && nextTopic == item.lastSubscribedTopic) {
-        return;
-    }
-
     if (isConnected()) {
-        if (item.lastSubscribedTopic.length() > 0 && item.lastSubscribedTopic != nextTopic) {
-            const bool unsubOk = mqttClient_.unsubscribe(item.lastSubscribedTopic.c_str());
-            CM_LOG_VERBOSE("[MQTT] Unsubscribe %s -> %s",
-                           item.lastSubscribedTopic.c_str(),
-                           unsubOk ? "ok" : "fail");
-        }
-        if (nextTopic.length() > 0) {
-            const bool subOk = mqttClient_.subscribe(nextTopic.c_str());
-            CM_LOG_VERBOSE("[MQTT] Subscribe %s -> %s",
-                           nextTopic.c_str(),
-                           subOk ? "ok" : "fail");
-        }
+      publishSystemInfoNow(true);
     }
-
-    item.lastSubscribedTopic = nextTopic;
+  });
+  settings_.publishTopicBase.setCallback([this](const String&) {
+    resetPublishSchedule_();
+    lastSystemInfoPublishMs_ = 0;
+    if (isConnected()) {
+      publishSystemInfoNow(true);
+    }
+  });
+  settings_.publishIntervalSec.setCallback([this](float) {
+    resetPublishSchedule_();
+  });
+  settings_.listenIntervalMs.setCallback([this](int) {
+    lastClientLoopMs_ = 0;
+  });
 }
 
-inline MQTTManager::ReceiveItem* MQTTManager::findReceiveItemById_(const char* id)
-{
-    if (!id || !id[0]) {
-        return nullptr;
-    }
-    for (auto& item : receiveItems_) {
-        if (item.id == id) {
-            return &item;
-        }
-    }
-    return nullptr;
+inline void MQTTManager::maybeClientLoop_() {
+  const int listenMs = settings_.listenIntervalMs.get();
+  if (listenMs <= 0) {
+    mqttClient_.loop();
+    return;
+  }
+
+  const unsigned long now = millis();
+  if (now - lastClientLoopMs_ >= static_cast<unsigned long>(listenMs)) {
+    lastClientLoopMs_ = now;
+    mqttClient_.loop();
+  }
 }
 
-inline String MQTTManager::getReceiveTopic_(const ReceiveItem& item) const
-{
-    String topic;
-    if (item.topic) {
-        topic = item.topic->get();
+inline void MQTTManager::maybePublishSendItems_() {
+  const float pubSec = settings_.publishIntervalSec.get();
+  if (pubSec <= 0.0f) {
+    // publish-on-change is implemented in send helpers (future); no periodic publish.
+    return;
+  }
+
+  const unsigned long now = millis();
+  const unsigned long intervalMs = static_cast<unsigned long>(pubSec * 1000.0f);
+  if (intervalMs == 0) {
+    return;
+  }
+
+  if (lastPublishMs_ == 0 || (now - lastPublishMs_ >= intervalMs)) {
+    lastPublishMs_ = now;
+    // Send helpers will be added next (not needed for current receive tests).
+  }
+}
+
+inline void MQTTManager::maybePublishSystemInfo_() {
+  if (!isConnected()) {
+    return;
+  }
+
+  const unsigned long now = millis();
+  const unsigned long intervalMs = 60000;
+  if (lastSystemInfoPublishMs_ == 0 || (now - lastSystemInfoPublishMs_ >= intervalMs)) {
+    lastSystemInfoPublishMs_ = now;
+    publishSystemInfoNow(true);
+  }
+}
+
+inline void MQTTManager::resetPublishSchedule_() {
+  lastPublishMs_ = 0;
+  for (auto& stamp : publishStamps_) {
+    stamp.lastMs = 0;
+  }
+}
+
+inline void MQTTManager::attemptConnection_() {
+  setState_(ConnectionState::Connecting);
+  lastConnectionAttemptMs_ = millis();
+
+  CM_LOG_VERBOSE("[MQTT] Connecting to %s:%d (clientId=%s)",
+                 settings_.server.get().c_str(),
+                 settings_.port.get(),
+                 settings_.clientId.get().c_str());
+
+  bool connected = false;
+  String willTopic = resolveWillTopic_();
+  const bool useWill = !willTopic.isEmpty();
+  const uint8_t willQos = (lastWillQos_ > 2) ? 2 : lastWillQos_;
+
+  if (settings_.username.get().isEmpty()) {
+    if (useWill) {
+      connected = mqttClient_.connect(settings_.clientId.get().c_str(),
+                                      willTopic.c_str(),
+                                      willQos,
+                                      lastWillRetain_,
+                                      lastWillMessage_.c_str());
     } else {
-        topic = item.topicValue;
+      connected = mqttClient_.connect(settings_.clientId.get().c_str());
     }
-    topic.trim();
-    return topic;
-}
-
-inline String MQTTManager::getReceiveJsonKeyPath_(const ReceiveItem& item) const
-{
-    String keyPath;
-    if (item.jsonKeyPath) {
-        keyPath = item.jsonKeyPath->get();
+  } else {
+    if (useWill) {
+      connected = mqttClient_.connect(settings_.clientId.get().c_str(),
+                                      settings_.username.get().c_str(),
+                                      settings_.password.get().c_str(),
+                                      willTopic.c_str(),
+                                      willQos,
+                                      lastWillRetain_,
+                                      lastWillMessage_.c_str());
     } else {
-        keyPath = item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none");
+      connected = mqttClient_.connect(settings_.clientId.get().c_str(),
+                                      settings_.username.get().c_str(),
+                                      settings_.password.get().c_str());
     }
-    keyPath.trim();
-    return keyPath.length() ? keyPath : String("none");
+  }
+
+  if (connected) {
+    handleConnection_();
+  } else {
+    currentRetry_++;
+    CM_LOG_VERBOSE("[MQTT] Connection failed (retry %u/%u)",
+                   currentRetry_,
+                   maxRetries_);
+    setState_(ConnectionState::Disconnected);
+  }
 }
 
-inline bool MQTTManager::buildReceivePayload_(const ReceiveItem& item, String& outPayload) const
-{
+inline void MQTTManager::handleConnection_() {
+  setState_(ConnectionState::Connected);
+  connectionStartMs_ = millis();
+  currentRetry_ = 0;
+  reconnectCount_++;
+  lastSystemInfoPublishMs_ = 0;
+
+  const String willTopic = resolveWillTopic_();
+  if (!willTopic.isEmpty()) {
+    const bool ok = publishWithQos_(willTopic.c_str(), "online", true, lastWillQos_);
+    if (!ok) {
+      MQTT_LOG("[WARNING] Failed to publish online status to %s", willTopic.c_str());
+    }
+  }
+
+  // Subscribe all receive topics.
+  for (auto& item : receiveItems_) {
+    const String topic = getReceiveTopic_(item);
+    if (topic.length() > 0) {
+      const bool ok = mqttClient_.subscribe(topic.c_str());
+      CM_LOG_VERBOSE("[MQTT] Subscribe %s -> %s",
+                     topic.c_str(),
+                     ok ? "ok" : "fail");
+      item.lastSubscribedTopic = topic;
+    } else {
+      CM_LOG_VERBOSE("[MQTT] Skip subscribe for '%s': empty topic", item.id.c_str());
+      item.lastSubscribedTopic = String();
+    }
+  }
+
+  if (onMqttConnect_) {
+    onMqttConnect_();
+  }
+  if (onConnected_) {
+    onConnected_();
+  }
+  callOnMQTTConnectedSafe_();
+
+  CM_LOG_VERBOSE("[MQTT] Connected, subscribed to %u receive topics",
+                 static_cast<unsigned int>(receiveItems_.size()));
+}
+
+inline void MQTTManager::handleDisconnection_() {
+  if (state_ == ConnectionState::Connected) {
+    if (onMqttDisconnect_) {
+      onMqttDisconnect_();
+    }
+    if (onDisconnected_) {
+      onDisconnected_();
+    }
+    callOnMQTTDisconnectedSafe_();
+  }
+
+  setState_(ConnectionState::Disconnected);
+  currentRetry_ = 0;
+}
+
+inline void MQTTManager::setState_(ConnectionState newState) {
+  if (state_ == newState) {
+    return;
+  }
+  state_ = newState;
+  if (onStateChanged_) {
+    onStateChanged_(state_);
+  }
+  callOnMQTTStateChangedSafe_(static_cast<int>(state_));
+}
+
+inline void MQTTManager::handleIncomingMessage_(const char* topic, const byte* payload, unsigned int length) {
+  processingIncomingMessage_ = true;
+  if (topic && topic[0]) {
+    CM_LOG_VERBOSE("[MQTT][RX] %s", topic);
+  }
+  if (payload && length > 0) {
+    String payloadPreview(reinterpret_cast<const char*>(payload), length);
+    payloadPreview.trim();
+    constexpr size_t kMaxPayloadPreview = 200;
+    if (payloadPreview.length() > kMaxPayloadPreview) {
+      payloadPreview = payloadPreview.substring(0, kMaxPayloadPreview) + "...";
+    }
+    CM_LOG_VERBOSE("[MQTT][RX][P] %s", payloadPreview.c_str());
+  }
+
+  lastTopic_ = topic ? String(topic) : String();
+  lastPayload_ = String(reinterpret_cast<const char*>(payload), length);
+  lastMessageMs_ = millis();
+
+  handleReceiveItems_(topic, payload, length);
+
+  if (onNewMqttMessage_) {
+    MqttMessageView view;
+    view.topic = topic;
+    view.payload = payload;
+    view.length = length;
+    onNewMqttMessage_(view);
+  }
+  if (topic && payload && length > 0) {
+    callOnNewMQTTMessageSafe_(topic, payload, length);
+  }
+
+  if (onMessage_) {
+    onMessage_(topic, payload, length);
+  }
+  processingIncomingMessage_ = false;
+}
+
+inline void MQTTManager::handleReceiveItems_(const char* topic, const byte* payload, unsigned int length) {
+  if (!topic) {
+    return;
+  }
+
+  String incomingTopic(topic);
+  incomingTopic.trim();
+  const String rawPayload(reinterpret_cast<const char*>(payload), length);
+  String normalizedPayload = rawPayload;
+  normalizedPayload.trim();
+  bool matchedAny = false;
+
+  for (auto& item : receiveItems_) {
     if (!item.target) {
-        return false;
+      continue;
+    }
+    const String configuredTopic = getReceiveTopic_(item);
+    if (configuredTopic.isEmpty()) {
+      continue;
+    }
+    if (incomingTopic != configuredTopic) {
+      continue;
+    }
+    matchedAny = true;
+
+    String extracted;
+    const String keyPath = getReceiveJsonKeyPath_(item);
+    const bool hasJson = normalizedPayload.startsWith("{") || normalizedPayload.startsWith("[");
+    bool ok = false;
+
+    if (hasJson) {
+      ok = tryExtractJsonValueAsString_(normalizedPayload, keyPath, extracted);
+    } else {
+      if (!isNoneKeyPath_(keyPath)) {
+        ok = false;
+      } else {
+        extracted = normalizedPayload;
+        extracted.trim();
+        ok = true;
+      }
+    }
+
+    if (!ok) {
+      MQTT_LOG("[W] map parse fail: id=%s topic=%s key=%s",
+               item.id.c_str(),
+               topic,
+               keyPath.c_str());
+      continue;
     }
 
     switch (item.type) {
-    case ValueType::Float: {
-        const float value = *static_cast<float*>(item.target);
-        outPayload = String(value, item.precision);
-        return true;
-    }
-    case ValueType::Int: {
-        const int value = *static_cast<int*>(item.target);
-        outPayload = String(value);
-        return true;
-    }
-    case ValueType::Bool: {
-        const bool value = *static_cast<bool*>(item.target);
-        outPayload = value ? "true" : "false";
-        return true;
-    }
-    case ValueType::String: {
-        const String value = *static_cast<String*>(item.target);
-        outPayload = value;
-        return true;
-    }
-    default:
+      case ValueType::Float: {
+        float f = 0.0f;
+        if (tryParseFloat_(extracted, f)) {
+          *static_cast<float*>(item.target) = f;
+          CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
+        } else {
+          MQTT_LOG("[W] float parse fail: id=%s value=%s",
+                   item.id.c_str(),
+                   extracted.c_str());
+        }
+        break;
+      }
+      case ValueType::Int: {
+        int v = 0;
+        if (tryParseInt_(extracted, v)) {
+          *static_cast<int*>(item.target) = v;
+          CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
+        } else {
+          MQTT_LOG("[W] int parse fail: id=%s value=%s",
+                   item.id.c_str(),
+                   extracted.c_str());
+        }
+        break;
+      }
+      case ValueType::Bool: {
+        bool b = false;
+        if (tryParseBool_(extracted, b)) {
+          *static_cast<bool*>(item.target) = b;
+          CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
+        } else {
+          MQTT_LOG("[W] bool parse fail: id=%s value=%s",
+                   item.id.c_str(),
+                   extracted.c_str());
+        }
+        break;
+      }
+      case ValueType::String:
+        *static_cast<String*>(item.target) = extracted;
+        CM_LOG_VERBOSE("[MQTT][MAP] %s=%s", item.id.c_str(), extracted.c_str());
         break;
     }
+  }
+
+  if (!matchedAny) {
+    CM_LOG_VERBOSE("[MQTT][MAP] no mapping for topic=%s", incomingTopic.c_str());
+  }
+}
+
+inline void MQTTManager::updateReceiveSubscription_(ReceiveItem& item, bool force) {
+  const String nextTopic = getReceiveTopic_(item);
+  if (!force && nextTopic == item.lastSubscribedTopic) {
+    return;
+  }
+
+  if (isConnected()) {
+    if (item.lastSubscribedTopic.length() > 0 && item.lastSubscribedTopic != nextTopic) {
+      const bool unsubOk = mqttClient_.unsubscribe(item.lastSubscribedTopic.c_str());
+      CM_LOG_VERBOSE("[MQTT] Unsubscribe %s -> %s",
+                     item.lastSubscribedTopic.c_str(),
+                     unsubOk ? "ok" : "fail");
+    }
+    if (nextTopic.length() > 0) {
+      const bool subOk = mqttClient_.subscribe(nextTopic.c_str());
+      CM_LOG_VERBOSE("[MQTT] Subscribe %s -> %s",
+                     nextTopic.c_str(),
+                     subOk ? "ok" : "fail");
+    }
+  }
+
+  item.lastSubscribedTopic = nextTopic;
+}
+
+inline MQTTManager::ReceiveItem* MQTTManager::findReceiveItemById_(const char* id) {
+  if (!id || !id[0]) {
+    return nullptr;
+  }
+  for (auto& item : receiveItems_) {
+    if (item.id == id) {
+      return &item;
+    }
+  }
+  return nullptr;
+}
+
+inline String MQTTManager::getReceiveTopic_(const ReceiveItem& item) const {
+  String topic;
+  if (item.topic) {
+    topic = item.topic->get();
+  } else {
+    topic = item.topicValue;
+  }
+  topic.trim();
+  return topic;
+}
+
+inline String MQTTManager::getReceiveJsonKeyPath_(const ReceiveItem& item) const {
+  String keyPath;
+  if (item.jsonKeyPath) {
+    keyPath = item.jsonKeyPath->get();
+  } else {
+    keyPath = item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none");
+  }
+  keyPath.trim();
+  return keyPath.length() ? keyPath : String("none");
+}
+
+inline bool MQTTManager::buildReceivePayload_(const ReceiveItem& item, String& outPayload) const {
+  if (!item.target) {
     return false;
+  }
+
+  switch (item.type) {
+    case ValueType::Float: {
+      const float value = *static_cast<float*>(item.target);
+      outPayload = String(value, item.precision);
+      return true;
+    }
+    case ValueType::Int: {
+      const int value = *static_cast<int*>(item.target);
+      outPayload = String(value);
+      return true;
+    }
+    case ValueType::Bool: {
+      const bool value = *static_cast<bool*>(item.target);
+      outPayload = value ? "true" : "false";
+      return true;
+    }
+    case ValueType::String: {
+      const String value = *static_cast<String*>(item.target);
+      outPayload = value;
+      return true;
+    }
+    default:
+      break;
+  }
+  return false;
 }
 
-inline bool MQTTManager::isNoneKeyPath_(const String& keyPath)
-{
-    if (keyPath.length() == 0) {
-        return true;
-    }
-    return keyPath.equalsIgnoreCase("none");
+inline bool MQTTManager::isNoneKeyPath_(const String& keyPath) {
+  if (keyPath.length() == 0) {
+    return true;
+  }
+  return keyPath.equalsIgnoreCase("none");
 }
 
-inline bool MQTTManager::isLikelyNumberString_(const String& value)
-{
-    if (value.length() == 0) {
-        return false;
-    }
+inline bool MQTTManager::isLikelyNumberString_(const String& value) {
+  if (value.length() == 0) {
+    return false;
+  }
 
-    bool hasDigit = false;
-    for (size_t i = 0; i < value.length(); ++i) {
-        const char ch = value.charAt(i);
-        if ((ch >= '0' && ch <= '9')) {
-            hasDigit = true;
-            continue;
-        }
-        if (ch == '-' || ch == '+' || ch == '.' || ch == 'e' || ch == 'E') {
-            continue;
-        }
-        return false;
+  bool hasDigit = false;
+  for (size_t i = 0; i < value.length(); ++i) {
+    const char ch = value.charAt(i);
+    if ((ch >= '0' && ch <= '9')) {
+      hasDigit = true;
+      continue;
     }
-    return hasDigit;
+    if (ch == '-' || ch == '+' || ch == '.' || ch == 'e' || ch == 'E') {
+      continue;
+    }
+    return false;
+  }
+  return hasDigit;
 }
 
-inline bool MQTTManager::tryExtractJsonValueAsString_(const String& payload, const String& keyPath, String& outValue)
-{
-    if (isNoneKeyPath_(keyPath)) {
-        return false;
+inline bool MQTTManager::tryExtractJsonValueAsString_(const String& payload, const String& keyPath, String& outValue) {
+  if (isNoneKeyPath_(keyPath)) {
+    return false;
+  }
+
+  DynamicJsonDocument doc(2048);
+  const DeserializationError err = deserializeJson(doc, payload);
+  if (err) {
+    return false;
+  }
+
+  JsonVariantConst current = doc.as<JsonVariantConst>();
+  int start = 0;
+  while (start < keyPath.length()) {
+    const int dotPos = keyPath.indexOf('.', start);
+    const String part = (dotPos < 0) ? keyPath.substring(start) : keyPath.substring(start, dotPos);
+    if (part.length() == 0) {
+      return false;
     }
 
-    DynamicJsonDocument doc(2048);
-    const DeserializationError err = deserializeJson(doc, payload);
-    if (err) {
-        return false;
-    }
-
-    JsonVariantConst current = doc.as<JsonVariantConst>();
-    int start = 0;
-    while (start < keyPath.length()) {
-        const int dotPos = keyPath.indexOf('.', start);
-        const String part = (dotPos < 0) ? keyPath.substring(start) : keyPath.substring(start, dotPos);
-        if (part.length() == 0) {
-            return false;
-        }
-
-        current = current[part.c_str()];
-        if (current.isNull()) {
-            return false;
-        }
-
-        if (dotPos < 0) {
-            break;
-        }
-        start = dotPos + 1;
-    }
-
+    current = current[part.c_str()];
     if (current.isNull()) {
-        return false;
+      return false;
     }
 
-    if (current.is<const char*>()) {
-        outValue = String(current.as<const char*>());
-        outValue.trim();
-        return true;
+    if (dotPos < 0) {
+      break;
     }
-    if (current.is<int>() || current.is<long>()) {
-        outValue = String(current.as<long>());
-        return true;
-    }
-    if (current.is<float>() || current.is<double>()) {
-        outValue = String(current.as<double>(), 6);
-        outValue.trim();
-        return true;
-    }
-    if (current.is<bool>()) {
-        outValue = current.as<bool>() ? "true" : "false";
-        return true;
-    }
+    start = dotPos + 1;
+  }
 
-    // Fallback: serialize variant
-    outValue = String();
-    serializeJson(current, outValue);
-    outValue.trim();
-    return outValue.length() > 0;
-}
-
-inline bool MQTTManager::tryParseBool_(const String& value, bool& outBool)
-{
-    String s = value;
-    s.trim();
-    s.toLowerCase();
-
-    if (s == "1" || s == "true" || s == "on" || s == "yes") {
-        outBool = true;
-        return true;
-    }
-    if (s == "0" || s == "false" || s == "off" || s == "no") {
-        outBool = false;
-        return true;
-    }
+  if (current.isNull()) {
     return false;
+  }
+
+  if (current.is<const char*>()) {
+    outValue = String(current.as<const char*>());
+    outValue.trim();
+    return true;
+  }
+  if (current.is<int>() || current.is<long>()) {
+    outValue = String(current.as<long>());
+    return true;
+  }
+  if (current.is<float>() || current.is<double>()) {
+    outValue = String(current.as<double>(), 6);
+    outValue.trim();
+    return true;
+  }
+  if (current.is<bool>()) {
+    outValue = current.as<bool>() ? "true" : "false";
+    return true;
+  }
+
+  // Fallback: serialize variant
+  outValue = String();
+  serializeJson(current, outValue);
+  outValue.trim();
+  return outValue.length() > 0;
 }
 
-inline String MQTTManager::formatUptimeHuman_(uint32_t uptimeMs)
-{
-    unsigned long totalSeconds = uptimeMs / 1000UL;
-    unsigned int years = static_cast<unsigned int>(totalSeconds / 31536000UL);
-    totalSeconds %= 31536000UL;
-    unsigned int months = static_cast<unsigned int>(totalSeconds / 2592000UL);
-    totalSeconds %= 2592000UL;
-    unsigned int days = static_cast<unsigned int>(totalSeconds / 86400UL);
-    totalSeconds %= 86400UL;
-    unsigned int hours = static_cast<unsigned int>(totalSeconds / 3600UL);
-    totalSeconds %= 3600UL;
-    unsigned int minutes = static_cast<unsigned int>(totalSeconds / 60UL);
-    unsigned int seconds = static_cast<unsigned int>(totalSeconds % 60UL);
+inline bool MQTTManager::tryParseBool_(const String& value, bool& outBool) {
+  String s = value;
+  s.trim();
+  s.toLowerCase();
 
-    String out;
-    if (years > 0) out += String(years) + "y ";
-    if (months > 0 || out.length()) out += String(months) + "mo ";
-    if (days > 0 || out.length()) out += String(days) + "d ";
-    if (hours > 0 || out.length()) out += String(hours) + "h ";
-    if (minutes > 0 || out.length()) out += String(minutes) + "m ";
-    out += String(seconds) + "s";
-    out.trim();
-    return out;
+  if (s == "1" || s == "true" || s == "on" || s == "yes") {
+    outBool = true;
+    return true;
+  }
+  if (s == "0" || s == "false" || s == "off" || s == "no") {
+    outBool = false;
+    return true;
+  }
+  return false;
+}
+
+inline String MQTTManager::formatUptimeHuman_(uint32_t uptimeMs) {
+  unsigned long totalSeconds = uptimeMs / 1000UL;
+  unsigned int years = static_cast<unsigned int>(totalSeconds / 31536000UL);
+  totalSeconds %= 31536000UL;
+  unsigned int months = static_cast<unsigned int>(totalSeconds / 2592000UL);
+  totalSeconds %= 2592000UL;
+  unsigned int days = static_cast<unsigned int>(totalSeconds / 86400UL);
+  totalSeconds %= 86400UL;
+  unsigned int hours = static_cast<unsigned int>(totalSeconds / 3600UL);
+  totalSeconds %= 3600UL;
+  unsigned int minutes = static_cast<unsigned int>(totalSeconds / 60UL);
+  unsigned int seconds = static_cast<unsigned int>(totalSeconds % 60UL);
+
+  String out;
+  if (years > 0)
+    out += String(years) + "y ";
+  if (months > 0 || out.length())
+    out += String(months) + "mo ";
+  if (days > 0 || out.length())
+    out += String(days) + "d ";
+  if (hours > 0 || out.length())
+    out += String(hours) + "h ";
+  if (minutes > 0 || out.length())
+    out += String(minutes) + "m ";
+  out += String(seconds) + "s";
+  out.trim();
+  return out;
 }
 
 inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item,
                                                       const char* pageName,
                                                       const char* cardName,
                                                       const char* groupName,
-                                                      int order)
-{
-    if (!configManager_) {
-        return;
-    }
+                                                      int order) {
+  if (!configManager_) {
+    return;
+  }
 
-    if (!item.settingsRegistered) {
-        const String cardKey = (cardName && cardName[0]) ? String(cardName) : String(pageName ? pageName : DEFAULT_TOPICS_CATEGORY);
-        const String cardPretty = (groupName && groupName[0]) ? String(groupName) : cardKey;
-        item.cardKeyC = makeCString_(cardKey);
-        item.cardPrettyC = makeCString_(cardPretty);
-        item.settingsCardOrder = order;
+  if (!item.settingsRegistered) {
+    const String cardKey = (cardName && cardName[0]) ? String(cardName) : String(pageName ? pageName : DEFAULT_TOPICS_CATEGORY);
+    const String cardPretty = (groupName && groupName[0]) ? String(groupName) : cardKey;
+    item.cardKeyC = makeCString_(cardKey);
+    item.cardPrettyC = makeCString_(cardPretty);
+    item.settingsCardOrder = order;
 
-        item.topic = &configManager_->addSettingString(item.topicKeyC.get())
-            .name(item.topicNameC.get())
-            .category(DEFAULT_TOPICS_CATEGORY)
-            .defaultValue(item.topicValue)
-            .showInWeb(true)
-            .sortOrder(nextReceiveSortOrder_++)
-            .categoryPretty(DEFAULT_TOPICS_GROUP)
-            .card(item.cardKeyC.get())
-            .cardPretty(item.cardPrettyC.get())
-            .cardOrder(order)
-            .build();
+    item.topic = &configManager_->addSettingString(item.topicKeyC.get())
+                    .name(item.topicNameC.get())
+                    .category(DEFAULT_TOPICS_CATEGORY)
+                    .defaultValue(item.topicValue)
+                    .showInWeb(true)
+                    .sortOrder(nextReceiveSortOrder_++)
+                    .categoryPretty(DEFAULT_TOPICS_GROUP)
+                    .card(item.cardKeyC.get())
+                    .cardPretty(item.cardPrettyC.get())
+                    .cardOrder(order)
+                    .build();
 
-        item.jsonKeyPath = &configManager_->addSettingString(item.jsonKeyKeyC.get())
-            .name(item.jsonKeyNameC.get())
-            .category(DEFAULT_TOPICS_CATEGORY)
-            .defaultValue(item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none"))
-            .showInWeb(true)
-            .sortOrder(nextReceiveSortOrder_++)
-            .categoryPretty(DEFAULT_TOPICS_GROUP)
-            .card(item.cardKeyC.get())
-            .cardPretty(item.cardPrettyC.get())
-            .cardOrder(order)
-            .build();
+    item.jsonKeyPath = &configManager_->addSettingString(item.jsonKeyKeyC.get())
+                          .name(item.jsonKeyNameC.get())
+                          .category(DEFAULT_TOPICS_CATEGORY)
+                          .defaultValue(item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none"))
+                          .showInWeb(true)
+                          .sortOrder(nextReceiveSortOrder_++)
+                          .categoryPretty(DEFAULT_TOPICS_GROUP)
+                          .card(item.cardKeyC.get())
+                          .cardPretty(item.cardPrettyC.get())
+                          .cardOrder(order)
+                          .build();
 
-        CM_LOG_VERBOSE("[INFO] Registered receive setting keys: %s / %s",
-                       item.topic->getKey(), item.jsonKeyPath->getKey());
-        const String itemId = item.id;
-        item.topic->setCallback([this, itemId](const String&) {
-            ReceiveItem* targetItem = findReceiveItemById_(itemId.c_str());
-            if (targetItem) {
-                updateReceiveSubscription_(*targetItem, true);
-            }
-        });
-        item.settingsRegistered = true;
-    }
+    CM_LOG_VERBOSE("[INFO] Registered receive setting keys: %s / %s",
+                   item.topic->getKey(),
+                   item.jsonKeyPath->getKey());
+    const String itemId = item.id;
+    item.topic->setCallback([this, itemId](const String&) {
+      ReceiveItem* targetItem = findReceiveItemById_(itemId.c_str());
+      if (targetItem) {
+        updateReceiveSubscription_(*targetItem, true);
+      }
+    });
+    item.settingsRegistered = true;
+  }
 }
 
 inline void MQTTManager::ensureSettingsLayout_(ConfigManagerClass& configManager,
                                                const char* pageName,
                                                const char* cardName,
                                                const char* groupName,
-                                               int order)
-{
-    if (!pageName || !pageName[0]) {
-        return;
-    }
-    const char* effectiveCard = (cardName && cardName[0]) ? cardName : pageName;
-    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
-    configManager.addSettingsPage(pageName, order);
-    configManager.addSettingsCard(pageName, effectiveCard, order);
-    configManager.addSettingsGroup(pageName, effectiveCard, effectiveGroup, order);
+                                               int order) {
+  if (!pageName || !pageName[0]) {
+    return;
+  }
+  const char* effectiveCard = (cardName && cardName[0]) ? cardName : pageName;
+  const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+  configManager.addSettingsPage(pageName, order);
+  configManager.addSettingsCard(pageName, effectiveCard, order);
+  configManager.addSettingsGroup(pageName, effectiveCard, effectiveGroup, order);
 }
 
 inline void MQTTManager::ensureLiveLayout_(ConfigManagerClass& configManager,
                                            const char* pageName,
                                            const char* cardName,
                                            const char* groupName,
-                                           int order)
-{
-    if (!pageName || !pageName[0]) {
-        return;
-    }
-    const char* effectiveCard = (cardName && cardName[0]) ? cardName : ConfigManagerClass::DEFAULT_LIVE_CARD_NAME;
-    const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
-    configManager.addLivePage(pageName, order);
-    configManager.addLiveCard(pageName, effectiveCard, order);
-    configManager.addLiveGroup(pageName, effectiveCard, effectiveGroup, order);
+                                           int order) {
+  if (!pageName || !pageName[0]) {
+    return;
+  }
+  const char* effectiveCard = (cardName && cardName[0]) ? cardName : ConfigManagerClass::DEFAULT_LIVE_CARD_NAME;
+  const char* effectiveGroup = (groupName && groupName[0]) ? groupName : effectiveCard;
+  configManager.addLivePage(pageName, order);
+  configManager.addLiveCard(pageName, effectiveCard, order);
+  configManager.addLiveGroup(pageName, effectiveCard, effectiveGroup, order);
 }
 
 inline void MQTTManager::registerSettingPlacement_(ConfigManagerClass& configManager,
                                                    BaseSetting* setting,
                                                    const char* pageName,
                                                    const char* cardName,
-                                                   const char* groupName)
-{
-    if (!setting) {
-        return;
-    }
-    configManager.addToSettingsGroup(setting->getKey(),
-                                     pageName,
-                                     cardName,
-                                     groupName,
-                                     setting->getSortOrder());
+                                                   const char* groupName) {
+  if (!setting) {
+    return;
+  }
+  configManager.addToSettingsGroup(setting->getKey(),
+                                   pageName,
+                                   cardName,
+                                   groupName,
+                                   setting->getSortOrder());
 }
 
 inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
-                                                        ReceiveItem& item,
-                                                        const char* runtimeGroup,
-                                                        int order,
-                                                        const char* page,
-                                                        const char* card,
-                                                        const char* group)
-{
-    const char* key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
-    const bool updated = configManager.getRuntime().updateRuntimeMeta(
-        runtimeGroup, key, [&](RuntimeFieldMeta& existing) {
-            existing.label = item.labelC ? item.labelC.get() : item.label.c_str();
-            existing.order = order;
-            existing.unit = item.unit ? item.unit : "";
-            existing.precision = item.precision;
-            existing.isBool = (item.type == ValueType::Bool);
-            existing.isString = (item.type == ValueType::String);
-            if (runtimeGroup && runtimeGroup[0]) {
-                existing.sourceGroup = runtimeGroup;
-            }
-            if (page && page[0]) {
-                existing.page = page;
-            }
-            if (card && card[0]) {
-                existing.card = card;
-            }
-            if (group && group[0]) {
-                existing.group = group;
-            } else {
-                existing.group = String();
-            }
-        });
-    if (updated) {
-        return;
-    }
+                                                         ReceiveItem& item,
+                                                         const char* runtimeGroup,
+                                                         int order,
+                                                         const char* page,
+                                                         const char* card,
+                                                         const char* group) {
+  const char* key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
+  const bool updated = configManager.getRuntime().updateRuntimeMeta(
+    runtimeGroup, key, [&](RuntimeFieldMeta& existing) {
+      existing.label = item.labelC ? item.labelC.get() : item.label.c_str();
+      existing.order = order;
+      existing.unit = item.unit ? item.unit : "";
+      existing.precision = item.precision;
+      existing.isBool = (item.type == ValueType::Bool);
+      existing.isString = (item.type == ValueType::String);
+      if (runtimeGroup && runtimeGroup[0]) {
+        existing.sourceGroup = runtimeGroup;
+      }
+      if (page && page[0]) {
+        existing.page = page;
+      }
+      if (card && card[0]) {
+        existing.card = card;
+      }
+      if (group && group[0]) {
+        existing.group = group;
+      } else {
+        existing.group = String();
+      }
+    });
+  if (updated) {
+    return;
+  }
 
-    RuntimeFieldMeta meta;
-    meta.group = (group && group[0]) ? group : String();
-    if (runtimeGroup && runtimeGroup[0]) {
-        meta.sourceGroup = runtimeGroup;
-    }
-    meta.key = key;
-    meta.label = item.labelC ? item.labelC.get() : item.label.c_str();
-    meta.order = order;
-    meta.unit = item.unit ? item.unit : "";
-    meta.precision = item.precision;
-    if (item.type == ValueType::Bool) {
-        meta.isBool = true;
-    }
-    if (item.type == ValueType::String) {
-        meta.isString = true;
-    }
-    if (page && page[0]) {
-        meta.page = page;
-    }
-    if (card && card[0]) {
-        meta.card = card;
-    }
-    configManager.getRuntime().addRuntimeMeta(meta);
+  RuntimeFieldMeta meta;
+  meta.group = (group && group[0]) ? group : String();
+  if (runtimeGroup && runtimeGroup[0]) {
+    meta.sourceGroup = runtimeGroup;
+  }
+  meta.key = key;
+  meta.label = item.labelC ? item.labelC.get() : item.label.c_str();
+  meta.order = order;
+  meta.unit = item.unit ? item.unit : "";
+  meta.precision = item.precision;
+  if (item.type == ValueType::Bool) {
+    meta.isBool = true;
+  }
+  if (item.type == ValueType::String) {
+    meta.isString = true;
+  }
+  if (page && page[0]) {
+    meta.page = page;
+  }
+  if (card && card[0]) {
+    meta.card = card;
+  }
+  configManager.getRuntime().addRuntimeMeta(meta);
 }
 
-inline MQTTManager::PublishStamp* MQTTManager::getPublishStamp_(const String& key)
-{
-    for (auto& stamp : publishStamps_) {
-        if (stamp.key == key) {
-            return &stamp;
-        }
+inline MQTTManager::PublishStamp* MQTTManager::getPublishStamp_(const String& key) {
+  for (auto& stamp : publishStamps_) {
+    if (stamp.key == key) {
+      return &stamp;
     }
-    publishStamps_.push_back(PublishStamp{key, 0});
-    return &publishStamps_.back();
+  }
+  publishStamps_.push_back(PublishStamp{key, 0});
+  return &publishStamps_.back();
 }
 
-inline bool MQTTManager::allowPublishNow_(const String& key, bool immediate) const
-{
-    if (immediate) {
-        return true;
-    }
-    const float pubSec = settings_.publishIntervalSec.get();
-    if (pubSec <= 0.0f) {
-        return true;
-    }
-    const unsigned long intervalMs = static_cast<unsigned long>(pubSec * 1000.0f);
-    if (intervalMs == 0) {
-        return true;
-    }
-    const unsigned long now = millis();
-    for (const auto& stamp : publishStamps_) {
-        if (stamp.key == key) {
-            return (stamp.lastMs == 0 || (now - stamp.lastMs >= intervalMs));
-        }
-    }
+inline bool MQTTManager::allowPublishNow_(const String& key, bool immediate) const {
+  if (immediate) {
     return true;
+  }
+  const float pubSec = settings_.publishIntervalSec.get();
+  if (pubSec <= 0.0f) {
+    return true;
+  }
+  const unsigned long intervalMs = static_cast<unsigned long>(pubSec * 1000.0f);
+  if (intervalMs == 0) {
+    return true;
+  }
+  const unsigned long now = millis();
+  for (const auto& stamp : publishStamps_) {
+    if (stamp.key == key) {
+      return (stamp.lastMs == 0 || (now - stamp.lastMs >= intervalMs));
+    }
+  }
+  return true;
 }
 
-inline void MQTTManager::markPublishedNow_(const String& key)
-{
-    const unsigned long now = millis();
-    PublishStamp* stamp = getPublishStamp_(key);
-    if (stamp) {
-        stamp->lastMs = now;
-    }
+inline void MQTTManager::markPublishedNow_(const String& key) {
+  const unsigned long now = millis();
+  PublishStamp* stamp = getPublishStamp_(key);
+  if (stamp) {
+    stamp->lastMs = now;
+  }
 }
 
-inline MQTTManager::PublishOptions MQTTManager::getDefaultPublishOptions_(bool isBool, bool immediate) const
-{
-    PublishOptions opts;
-    opts.retained = !isBool;
-    opts.qos = immediate ? 1 : (isBool ? 1 : 0);
-    return opts;
+inline MQTTManager::PublishOptions MQTTManager::getDefaultPublishOptions_(bool isBool, bool immediate) const {
+  PublishOptions opts;
+  opts.retained = !isBool;
+  opts.qos = immediate ? 1 : (isBool ? 1 : 0);
+  return opts;
 }
 
-inline bool MQTTManager::publishWithQos_(const char* topic, const char* payload, bool retained, uint8_t qos)
-{
-    if (qos != 0) {
-        MQTT_LOG("[WARNING] publish: requested QoS %u but PubSubClient supports QoS 0 only; sending QoS 0", qos);
-    }
-    return publish(topic, payload, retained);
+inline bool MQTTManager::publishWithQos_(const char* topic, const char* payload, bool retained, uint8_t qos) {
+  if (qos != 0) {
+    MQTT_LOG("[WARNING] publish: requested QoS %u but PubSubClient supports QoS 0 only; sending QoS 0", qos);
+  }
+  return publish(topic, payload, retained);
 }
 
-inline String MQTTManager::getDefaultWillTopic_() const
-{
-    const String base = getMqttBaseTopic();
-    if (base.isEmpty()) {
-        return String();
-    }
-    return base + "/System-Info/status";
-}
-
-inline String MQTTManager::resolveWillTopic_() const
-{
-    if (!lastWillTopic_.isEmpty()) {
-        return lastWillTopic_;
-    }
-    if (useDefaultLastWillTopic_) {
-        return getDefaultWillTopic_();
-    }
+inline String MQTTManager::getDefaultWillTopic_() const {
+  const String base = getMqttBaseTopic();
+  if (base.isEmpty()) {
     return String();
+  }
+  return base + "/System-Info/status";
 }
 
-inline void MQTTManager::mqttCallbackTrampoline_(char* topic, byte* payload, unsigned int length)
-{
-    if (instanceForCallback_ != nullptr) {
-        instanceForCallback_->handleIncomingMessage_(topic, payload, length);
-    }
+inline String MQTTManager::resolveWillTopic_() const {
+  if (!lastWillTopic_.isEmpty()) {
+    return lastWillTopic_;
+  }
+  if (useDefaultLastWillTopic_) {
+    return getDefaultWillTopic_();
+  }
+  return String();
+}
+
+inline void MQTTManager::mqttCallbackTrampoline_(char* topic, byte* payload, unsigned int length) {
+  if (instanceForCallback_ != nullptr) {
+    instanceForCallback_->handleIncomingMessage_(topic, payload, length);
+  }
 }
 
 } // namespace cm

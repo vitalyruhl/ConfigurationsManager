@@ -47,17 +47,17 @@ private:
 
   // Smart WiFi Roaming
   bool smartRoamingEnabled;
-  int roamingThreshold;        // dBm threshold for roaming trigger
+  int roamingThreshold;          // dBm threshold for roaming trigger
   unsigned long roamingCooldown; // Minimum time between roaming attempts (ms)
-  int roamingImprovement;      // Minimum signal improvement required (dBm)
+  int roamingImprovement;        // Minimum signal improvement required (dBm)
   unsigned long lastRoamingScanMillis;
   unsigned long lastRoamingAttempt;
 
   // MAC Address Filtering and Priority
-  bool macFilterEnabled;       // If true, only connect to specific MAC
-  bool macPriorityEnabled;     // If true, prefer specific MAC but allow fallback
-  String filterMac;            // MAC address for filtering/priority
-  String priorityMac;          // MAC address for priority (same as filterMac for simplicity)
+  bool macFilterEnabled;   // If true, only connect to specific MAC
+  bool macPriorityEnabled; // If true, prefer specific MAC but allow fallback
+  String filterMac;        // MAC address for filtering/priority
+  String priorityMac;      // MAC address for priority (same as filterMac for simplicity)
 
   // Callback functions
   WiFiConnectedCallback onConnectedCallback;
@@ -93,9 +93,9 @@ private:
   void checkAutoReboot();
   void log(const char* format, ...) const;
   void applyStaticConfig();
-  void checkSmartRoaming();  // Smart roaming check method
-  String findBestBSSID();    // Find best BSSID considering MAC filter/priority
-  void attemptConnect();     // Apply phased connection strategy
+  void checkSmartRoaming(); // Smart roaming check method
+  String findBestBSSID();   // Find best BSSID considering MAC filter/priority
+  void attemptConnect();    // Apply phased connection strategy
   bool isOtaActive_() const;
   void beginWiFiConnection_();
   void startStackReset_();
@@ -151,20 +151,22 @@ public:
   bool isSmartRoamingEnabled() const;
 
   // MAC Address Filtering and Priority
-  void setAccessPointMacFilter(const String& macAddress);     // Only connect to this MAC
-  void setAccessPointMacPriority(const String& macAddress);   // Prefer this MAC, fallback to others
-  void clearMacFilter();                                  // Remove MAC filtering
-  void clearMacPriority();                               // Remove MAC priority
+  void setAccessPointMacFilter(const String& macAddress);   // Only connect to this MAC
+  void setAccessPointMacPriority(const String& macAddress); // Prefer this MAC, fallback to others
+  void clearMacFilter();                                    // Remove MAC filtering
+  void clearMacPriority();                                  // Remove MAC priority
   bool isMacFilterEnabled() const;
   bool isMacPriorityEnabled() const;
   String getFilterMac() const;
   String getPriorityMac() const;
 
   // WiFi Stack Management
-  void performStackReset();                          // Complete WiFi stack reset for connectivity issues
+  void performStackReset(); // Complete WiFi stack reset for connectivity issues
 
   // Compatibility methods for ConfigManager
-  bool getStatus() const { return isConnected(); }
+  bool getStatus() const {
+    return isConnected();
+  }
 };
 
 #endif // CM_ENABLE_WIFI
