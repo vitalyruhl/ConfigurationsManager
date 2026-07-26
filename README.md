@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.4.7
+> Version 4.4.8
 
 ## Preview Before Installing
 

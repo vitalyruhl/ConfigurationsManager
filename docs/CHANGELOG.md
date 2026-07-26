@@ -2,6 +2,10 @@
 
 This changelog is a curated overview.
 
+## 4.4.8 - 2026-07-26
+
+- Close completed `/runtime.json` responses to release their AsyncTCP resources.
+
 ## 4.4.7 - 2026-07-26
 
 - Send cached `/runtime_meta.json` payloads directly through AsyncTCP without a

@@ -158,6 +158,21 @@ private:
     bool sendStallLogged_;
 };
 
+class ClosingBasicResponse final : public AsyncBasicResponse {
+public:
+    using AsyncBasicResponse::AsyncBasicResponse;
+
+    size_t _ack(AsyncWebServerRequest* request, size_t len, uint32_t time) override {
+        const size_t written = AsyncBasicResponse::_ack(request, len, time);
+        if (_finished()) {
+            // AsyncBasicResponse also leaves completed Connection: close
+            // requests open. Close only after all sent bytes were acknowledged.
+            request->client()->close();
+        }
+        return written;
+    }
+};
+
 void logRuntimeMetaResponseFailure(size_t payloadLength, uint32_t activeRequests) {
     WEB_LOG("[W] Runtime meta response unavailable: payload=%u active=%u free=%u min=%u largest=%u",
             static_cast<unsigned>(payloadLength),
@@ -1274,7 +1289,11 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     server->on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (runtimeJsonProvider) {
             String json = runtimeJsonProvider();
-            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+            AsyncWebServerResponse* response = new (std::nothrow) ClosingBasicResponse(200, "application/json", json);
+            if (!response) {
+                request->send(503, "application/json", "{\"error\":\"runtime_unavailable\"}");
+                return;
+            }
             enableCORS(response);
             response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
             response->addHeader("Pragma", "no-cache");
