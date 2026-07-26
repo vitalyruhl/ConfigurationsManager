@@ -1321,7 +1321,7 @@ void IOManager::applyDesiredAnalogOutput(AnalogOutputEntry& entry) {
   const float raw = clampFloat(entry.desiredRawVolts, RAW_MIN_V, RAW_MAX_V);
 
 #if defined(ARDUINO_ARCH_ESP32)
-  const float t = (RAW_MAX_V <= RAW_MIN_V) ? 0.0f : (raw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
+  const float t = (raw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
   int dac = static_cast<int>(lroundf(t * 255.0f));
   if (dac < 0) {
     dac = 0;
@@ -1549,7 +1549,7 @@ int IOManager::getDACValue(const char* id) const {
   }
 
   const float clampedRaw = clampFloat(physicalRaw, RAW_MIN_V, RAW_MAX_V);
-  const float t = (RAW_MAX_V <= RAW_MIN_V) ? 0.0f : (clampedRaw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
+  const float t = (clampedRaw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
   const int code = static_cast<int>(lroundf(t * DAC_MAX));
   return std::max(0, std::min(255, code));
 }

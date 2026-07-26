@@ -108,8 +108,8 @@ String Esp32PinRules::describeConstraints(uint32_t mask) const {
 
   static const struct ConstraintInfo {
     PinConstraint flag;
-    const char* label;
-    const char* hint;
+    const char* label = nullptr;
+    const char* hint = nullptr;
   } entries[] = {
     {PinConstraint::InputOnly, "input-only pins", "GPIO34-39 accept inputs only"},
     {PinConstraint::NoPull, "pins without pull resistors", "internal pull-ups/pull-downs are unavailable"},

@@ -93,8 +93,8 @@ String ArduinoUnoPinRules::describeConstraints(uint32_t mask) const {
 
   static const struct ConstraintInfo {
     PinConstraint flag;
-    const char* label;
-    const char* hint;
+    const char* label = nullptr;
+    const char* hint = nullptr;
   } entries[] = {
     {PinConstraint::Serial, "UART/serial pins", "D0/D1 share the hardware UART"},
   };
