@@ -195,7 +195,8 @@ public:
 
   class ScopedTag {
   public:
-    ScopedTag(LoggingManager* mgr, const char* tag) : mgr_(mgr) {
+    ScopedTag(LoggingManager* mgr, const char* tag)
+        : mgr_(mgr) {
       if (mgr_)
         mgr_->pushTag(tag);
     }
@@ -205,7 +206,8 @@ public:
     }
     ScopedTag(const ScopedTag&) = delete;
     ScopedTag& operator=(const ScopedTag&) = delete;
-    ScopedTag(ScopedTag&& other) noexcept : mgr_(other.mgr_) {
+    ScopedTag(ScopedTag&& other) noexcept
+        : mgr_(other.mgr_) {
       other.mgr_ = nullptr;
     }
     ScopedTag& operator=(ScopedTag&& other) noexcept {
