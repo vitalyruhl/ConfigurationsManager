@@ -70,6 +70,8 @@ private:
 public:
 #endif
 
+  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
+  // cppcheck-suppress-begin useStlAlgorithm
   RuntimeStyleRule& set(const char* property, const char* value) {
     if (!property || !property[0]) {
       return *this;
@@ -83,6 +85,8 @@ public:
     properties.push_back(RuntimeStyleProperty{String(property), value ? String(value) : String()});
     return *this;
   }
+  // Cppcheck rationale: End the local embedded-loop exception.
+  // cppcheck-suppress-end useStlAlgorithm
 
   RuntimeStyleRule& setVisible(bool value) {
     hasVisible = true;
@@ -105,6 +109,8 @@ public:
 struct RuntimeFieldStyle {
   std::vector<RuntimeStyleRule> rules;
 
+  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
+  // cppcheck-suppress-begin useStlAlgorithm
   RuntimeStyleRule& rule(const char* targetName) {
     String target = targetName ? String(targetName) : String();
     for (auto& styleRule : rules) {
@@ -117,6 +123,8 @@ struct RuntimeFieldStyle {
     rules.push_back(std::move(created));
     return rules.back();
   }
+  // Cppcheck rationale: End the local embedded-loop exception.
+  // cppcheck-suppress-end useStlAlgorithm
 
   bool empty() const {
     return rules.empty();
@@ -306,9 +314,6 @@ private:
 #endif
 
   // Helper methods
-  void log(const char* format, ...) const;
-  void sortProviders();
-  void sortMeta();
   String buildRuntimeMetaJsonLocked();
   void markRuntimeMetaJsonCacheDirtyLocked();
   RuntimeAlarm* findAlarm(const String& name);
