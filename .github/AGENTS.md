@@ -16,6 +16,8 @@ UI, examples, tests, and support tools. This file is the canonical policy.
   `architecture-audit` are read-only.
 - If the role or scope is ambiguous, stop and report the candidates. Do not
   substitute a role or duplicate its procedure.
+- If governance rules conflict, apply the stricter rule and report the conflict
+  before continuing.
 
 ## Safety and Language
 
@@ -24,6 +26,12 @@ UI, examples, tests, and support tools. This file is the canonical policy.
   English.
 - User changes are sacred. Analyze before editing; never overwrite, reset,
   clean, stash, or delete without explicit authority.
+- Before any Git mutation, inspect the active branch and working tree. Never
+  stage foreign, pre-existing, or unclear changes, and never use uncontrolled
+  `git add -A`.
+- Do not commit after a failed validation or a validation that changed files.
+  Reuse validation only when commit/source state, working tree, command, and
+  relevant scope are demonstrably unchanged.
 - Work on one side branch. Do not edit `main` or `master`, except an explicitly
   requested docs-only TODO update under `docs/TODO.md` or `docs/todo_*.md`.
 - Upload, monitor, hardware, network, release, merge, tag, and publication
@@ -74,6 +82,7 @@ UI, examples, tests, and support tools. This file is the canonical policy.
 - Before a version change, scan the canonical source and mirrors. Synchronize
   all relevant mirrors from `library.json`, update the changelog for published
   changes, and report mismatches or missing mirrors.
+- A required but missing version bump blocks checkpoints and integration.
 - Product C/C++ changes require at least one relevant PlatformIO build; affected
   tests and examples require focused validation. Governance-only work requires
   governance consistency validation, not a PlatformIO build unless requested.
@@ -81,6 +90,20 @@ UI, examples, tests, and support tools. This file is the canonical policy.
   `tools/build/run-full-repository-gate.ps1`. It discovers supported PlatformIO
   targets, runs the repository's automated tests, validates governance
   generation and workflow structure, and never uploads or deletes caches.
+
+## Changelog and Release Documentation
+
+- During development, separate user-relevant changes may be recorded as clearly
+  unpublished development entries. Governance, agent, workflow, and internal
+  Git changes normally do not belong in the public changelog.
+- Do not rewrite published release history. Before a release, `docs-gate` must
+  identify all unpublished entries since the last release, verify the related
+  product changes and tracked work, and consolidate technical intermediate
+  entries into one user-oriented entry for the actual release version and date.
+- The release gate must remove redundant intermediate headings only from the
+  unpublished range, include issue references when useful, avoid claims based
+  only on commit subjects, and report the changelog diff explicitly before
+  release work continues.
 
 ## Reporting
 

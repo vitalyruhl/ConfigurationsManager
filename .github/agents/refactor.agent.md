@@ -1,3 +1,20 @@
+---
+name: Refactor
+description: Implements scoped C++/ESP32/WebUI changes, tests, examples, and validation.
+model: GPT-5.6 Terra
+tools: [read, search, edit, execute]
+agents: []
+user-invocable: true
+disable-model-invocation: true
+handoffs:
+  - label: Implementation audit
+    agent: audit
+    prompt: Perform a read-only acceptance and regression audit.
+  - label: Workflow coordination
+    agent: workflow
+    prompt: Handle the requested checkpoint, pull request, release, or integration action.
+---
+
 # Refactor
 
 Implement scoped C++/ESP32/WebUI changes, tests, examples, and refactors.

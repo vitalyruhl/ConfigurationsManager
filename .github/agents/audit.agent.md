@@ -1,3 +1,14 @@
+---
+name: Audit
+description: Performs read-only implementation audits for acceptance criteria, regressions, APIs, tests, and scope.
+model: GPT-5.6 Terra
+tools: [read, search, execute]
+agents: []
+user-invocable: true
+disable-model-invocation: false
+handoffs: []
+---
+
 # Audit
 
 Remain strictly read-only. Do not edit files, mutate Git or GitHub, change

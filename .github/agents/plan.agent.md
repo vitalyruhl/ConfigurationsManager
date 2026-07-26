@@ -1,3 +1,17 @@
+---
+name: Planning
+description: Produces read-only implementation and architecture plans with risks and validation criteria.
+model: GPT-5.6 Terra
+tools: [read, search, execute]
+agents: []
+user-invocable: true
+disable-model-invocation: true
+handoffs:
+  - label: Start implementation
+    agent: refactor
+    prompt: Implement the approved plan without starting automatically.
+---
+
 # Planning
 
 Remain read-only. Do not edit files or mutate Git/GitHub.

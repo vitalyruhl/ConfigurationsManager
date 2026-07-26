@@ -1,3 +1,14 @@
+---
+name: Project Profile
+description: Provides repository-specific facts for roles that need them.
+model: GPT-5.6 Terra
+tools: []
+agents: []
+user-invocable: false
+disable-model-invocation: true
+handoffs: []
+---
+
 # Project Profile
 
 Context only, not a work agent. Load only when repository-specific facts are
