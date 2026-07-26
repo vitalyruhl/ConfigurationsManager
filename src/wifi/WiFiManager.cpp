@@ -1002,11 +1002,8 @@ void ConfigManagerWiFi::checkSmartRoaming() {
       } else {
         // Check if this network is significantly better
         if (networkRSSI > bestRSSI + roamingImprovement) {
-          // Only use if no priority MAC was found or this is much better
-          if (preferredBSSID.isEmpty() || networkRSSI > bestRSSI + roamingImprovement) {
-            bestRSSI = networkRSSI;
-            bestNetworkIndex = i;
-          }
+          bestRSSI = networkRSSI;
+          bestNetworkIndex = i;
         }
       }
     }
