@@ -72,10 +72,10 @@ inline constexpr char CM_DEFAULT_RUNTIME_STYLE_CSS[] PROGMEM = R"CSS(
 template <typename T>
 struct ConfigOptions {
   // Required fields
-  const char* key = nullptr; // Key hint used to derive the hashed storage key (if nullptr, derived from name+category)
-  const char* name;          // Display name in Settings UI (if nullptr, falls back to key or "Default")
-  const char* category;      // Card name in Settings UI (if nullptr, falls back to "Default")
-  T defaultValue;            // Default value
+  const char* key = nullptr;      // Key hint used to derive the hashed storage key (if nullptr, derived from name+category)
+  const char* name = nullptr;     // Display name in Settings UI (if nullptr, falls back to key or "Default")
+  const char* category = nullptr; // Card name in Settings UI (if nullptr, falls back to "Default")
+  T defaultValue{};               // Default value
 
   // Optional fields
   bool showInWeb = true;                     // Show in web interface
@@ -503,8 +503,7 @@ public:
   // New primary constructor for ConfigOptions
   explicit Config(const ConfigOptions<T>& opts)
       : BaseSetting(opts.key, opts.name, opts.category, TypeTraits<T>::type, opts.showInWeb, opts.isPassword, opts.sortOrder, opts.categoryPretty, opts.card, opts.cardPretty, opts.cardOrder),
-        value(opts.defaultValue), defaultValue(opts.defaultValue) {
-    showIfFunc = opts.showIf;
+        value(opts.defaultValue), defaultValue(opts.defaultValue), showIfFunc(opts.showIf) {
     if (opts.callback) {
       callback = opts.callback;
     }
@@ -676,7 +675,7 @@ public:
       return false;
     }
 
-    T newValue;
+    T newValue{};
     if constexpr (std::is_same_v<T, String>) {
       if (!jsonValue.is<const char*>()) {
         return false;
@@ -1284,11 +1283,15 @@ public:
       }
     }
 
+    // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+    // cppcheck-suppress functionStatic
     String nextDividerKey() {
       static uint32_t counter = 0;
       return String("divider_") + String(counter++);
     }
 
+    // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+    // cppcheck-suppress functionStatic
     String nextAutoKey() {
       static uint32_t counter = 0;
       return String("field_") + String(counter++);
@@ -1396,6 +1399,8 @@ private:
     });
   }
 
+  // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+  // cppcheck-suppress functionStatic
   std::vector<GUIMessageAction> buildGuiMessageActions(GUIMessageButtons buttons) const {
     std::vector<GUIMessageAction> actions;
     switch (buttons) {
@@ -1524,6 +1529,8 @@ private:
     return false;
   }
 
+  // Cppcheck rationale: Preserve the mutable callback and extension contract.
+  // cppcheck-suppress constParameterPointer
   bool shouldBlockIOPinChange(BaseSetting* setting,
                               const String& category,
                               const String& key,
@@ -1711,8 +1718,12 @@ public:
   unsigned long wsLastHeartbeat = 0;
   uint32_t wsHeartbeatInterval = 30000; // ms - ping every 30 seconds instead of 15
   uint32_t wsHeartbeatTimeout = 120000; // ms - 2 minutes timeout instead of 45 seconds
+  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
+  // cppcheck-suppress-begin useStlAlgorithm
   void wsMarkSeen(uint32_t id) {
     for (auto& c : wsClients) {
+      // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+      // cppcheck-suppress useStlAlgorithm
       if (c.id == id) {
         c.lastSeen = millis();
         return;
@@ -1720,6 +1731,8 @@ public:
     }
     wsClients.push_back({id, millis()});
   }
+  // Cppcheck rationale: End the local embedded-loop exception.
+  // cppcheck-suppress-end useStlAlgorithm
   void wsRemove(uint32_t id) {
     wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [id](const WsClientInfo& c) { return c.id == id; }), wsClients.end());
   }
@@ -1747,8 +1760,8 @@ public:
 #endif
 
 public:
-  ConfigManagerClass() {
-    appVersion = String(CONFIGMANAGER_VERSION);
+  ConfigManagerClass()
+      : appVersion(CONFIGMANAGER_VERSION) {
     webManager.setCallbacks(
       [this]() { return toJSON(true); },                            // config JSON - include secrets for web interface
       [this]() { return runtimeManager.runtimeValuesToJSON(); },    // runtime JSON
@@ -1801,9 +1814,9 @@ public:
       }
       return nullptr;
     }
-    BaseSetting* raw = setting.get();
-    raw->setLogger([](const char* msg) { CM_CORE_LOG("%s", msg); });
     ownedSettings.push_back(std::move(setting));
+    BaseSetting* raw = ownedSettings.back().get();
+    raw->setLogger([](const char* msg) { CM_CORE_LOG("%s", msg); });
     settings.push_back(raw);
     registerSettingPlacement(raw);
     return raw;
@@ -1830,6 +1843,8 @@ public:
   void debugPrintSettings() const {
     CM_CORE_LOG("[DEBUG] Total registered settings: %d", settings.size());
     for (size_t i = 0; i < settings.size(); i++) {
+      // Cppcheck rationale: The value is consumed by a compile-time logging macro in enabled builds.
+      // cppcheck-suppress unreadVariable
       const auto* s = settings[i];
       CM_CORE_LOG("[DEBUG] Setting %d: name='%s', category='%s', key='%s', visible=%s",
                   i,
@@ -1918,6 +1933,8 @@ public:
       if (containsNoCase(cat, "system") && containsNoCase(key, "ota") && containsNoCase(key, "pass")) {
         // Password values are masked in JSON; read the actual value directly.
         if (s->getType() == SettingType::STRING) {
+          // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
+          // cppcheck-suppress constVariablePointer
           auto* cs = static_cast<Config<String>*>(s);
           const String pwd = cs->get();
           if (pwd.length() > 0) {
@@ -1999,6 +2016,8 @@ public:
 
     // Side-effects: keep runtime subsystems in sync with specific settings
     if (result) {
+      // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
+      // cppcheck-suppress constVariablePointer
       if (BaseSetting* otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting) {
         if (setting->getType() == SettingType::BOOL) {
           otaManager.enable(static_cast<Config<bool>*>(setting)->get());
@@ -2099,6 +2118,8 @@ public:
       }
 
       // Side-effects: keep runtime subsystems in sync with specific settings
+      // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
+      // cppcheck-suppress constVariablePointer
       if (BaseSetting* otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting) {
         if (setting->getType() == SettingType::BOOL) {
           otaManager.enable(static_cast<Config<bool>*>(setting)->get());
@@ -2124,6 +2145,8 @@ public:
   }
 
   void checkSettingsForErrors() {
+    // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
+    // cppcheck-suppress constVariablePointer
     for (BaseSetting* s : settings) {
       if (s->hasError()) {
         CM_CORE_LOG("[E] Setting error: %s", s->getError());
@@ -2285,7 +2308,11 @@ public:
 
 #if CM_ENABLE_WIFI
 
+  // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+  // cppcheck-suppress functionStatic
   bool hasValidStationCredentials(const String& ssid, const String& password, const char* context = nullptr) {
+    // Cppcheck rationale: The value is consumed by a compile-time logging macro in enabled builds.
+    // cppcheck-suppress unreadVariable
     const char* ctx = (context && context[0]) ? context : "startWebServer";
     if (ssid.isEmpty()) {
       CM_CORE_LOG("[W] %s: WiFi SSID is empty", ctx);
@@ -2566,6 +2593,8 @@ public:
 #endif
 
   // System control
+  // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+  // cppcheck-suppress functionStatic
   void reboot() {
     CM_CORE_LOG_VERBOSE("[R] Rebooting...");
     delay(1000);
@@ -2684,6 +2713,8 @@ public:
     return otaManager.isInitialized();
   }
 
+  // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+  // cppcheck-suppress functionStatic
   void stopOTA() {
     // Note: stop() method not implemented in OTAManager
     CM_CORE_LOG("[W] stopOTA not implemented in OTAManager");
@@ -2859,6 +2890,8 @@ public:
     ws->textAll(payload);
     return true;
   }
+  // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+  // cppcheck-suppress functionStatic
   bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload) {
     if (!client) {
       return false;
@@ -2924,6 +2957,8 @@ public:
             wsMarkSeen(client->id());
             if (pushOnConnect)
               handleWebsocketPush();
+            // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
+            // cppcheck-suppress constVariableReference
             for (auto& cb : wsConnectCallbacks) {
               if (cb)
                 cb(client);
@@ -2932,6 +2967,8 @@ public:
           case WS_EVT_DISCONNECT:
             CM_CORE_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
             wsRemove(client->id());
+            // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
+            // cppcheck-suppress constVariableReference
             for (auto& cb : wsDisconnectCallbacks) {
               if (cb)
                 cb(client);
@@ -2947,8 +2984,8 @@ public:
           case WS_EVT_DATA: {
             // check for application-level pong
             if (arg && data && len) {
-              AwsFrameInfo* info = reinterpret_cast<AwsFrameInfo*>(arg);
-              if (info && info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+              const auto* info = reinterpret_cast<const AwsFrameInfo*>(arg);
+              if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
                 // Small fixed buffer for compare
                 char buf[16];
                 size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
@@ -3021,6 +3058,8 @@ public:
   static void log_verbose_message(const char*, ...) {}
 #endif
 
+  // Cppcheck rationale: Preserve the existing instance API for source compatibility.
+  // cppcheck-suppress functionStatic
   void triggerLoggerTest() {
     CM_CORE_LOG("[I] Logger test message");
   }

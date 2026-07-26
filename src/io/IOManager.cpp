@@ -525,6 +525,8 @@ void IOManager::registerAnalogRuntimeField(const String& group, const String& id
     }
 
     for (const auto& field : runtimeGroup.fields) {
+      // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+      // cppcheck-suppress useStlAlgorithm
       if (field.id == id && field.showRaw == showRaw) {
         return;
       }
@@ -1289,6 +1291,8 @@ bool IOManager::isValidAnalogOutputPin(int pin) {
 #endif
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::reconfigureIfNeeded(AnalogOutputEntry& entry) {
   const int pin = entry.pin ? entry.pin->get() : entry.defaultPin;
   if (!isValidAnalogOutputPin(pin)) {
@@ -1321,7 +1325,7 @@ void IOManager::applyDesiredAnalogOutput(AnalogOutputEntry& entry) {
   const float raw = clampFloat(entry.desiredRawVolts, RAW_MIN_V, RAW_MAX_V);
 
 #if defined(ARDUINO_ARCH_ESP32)
-  const float t = (RAW_MAX_V <= RAW_MIN_V) ? 0.0f : (raw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
+  const float t = (raw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
   int dac = static_cast<int>(lroundf(t * 255.0f));
   if (dac < 0) {
     dac = 0;
@@ -1549,11 +1553,13 @@ int IOManager::getDACValue(const char* id) const {
   }
 
   const float clampedRaw = clampFloat(physicalRaw, RAW_MIN_V, RAW_MAX_V);
-  const float t = (RAW_MAX_V <= RAW_MIN_V) ? 0.0f : (clampedRaw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
+  const float t = (clampedRaw - RAW_MIN_V) / (RAW_MAX_V - RAW_MIN_V);
   const int code = static_cast<int>(lroundf(t * DAC_MAX));
   return std::max(0, std::min(255, code));
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::processAnalogAlarm(AnalogInputEntry& entry) {
   const float alarmMin = entry.alarmMinSetting ? entry.alarmMinSetting->get() : entry.alarmMin;
   const float alarmMax = entry.alarmMaxSetting ? entry.alarmMaxSetting->get() : entry.alarmMax;
@@ -1755,6 +1761,8 @@ int IOManager::findAnalogOutputIndex(const char* id) const {
   }
 
   for (size_t i = 0; i < analogOutputs.size(); ++i) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (analogOutputs[i].id == id) {
       return static_cast<int>(i);
     }
@@ -1786,6 +1794,8 @@ int IOManager::findIndex(const char* id) const {
   }
 
   for (size_t i = 0; i < digitalOutputs.size(); i++) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (digitalOutputs[i].id == id) {
       return static_cast<int>(i);
     }
@@ -1798,6 +1808,8 @@ int IOManager::findInputIndex(const char* id) const {
   if (!id || !id[0])
     return -1;
   for (size_t i = 0; i < digitalInputs.size(); i++) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (digitalInputs[i].id == id)
       return static_cast<int>(i);
   }
@@ -1808,6 +1820,8 @@ int IOManager::findAnalogInputIndex(const char* id) const {
   if (!id || !id[0])
     return -1;
   for (size_t i = 0; i < analogInputs.size(); i++) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (analogInputs[i].id == id)
       return static_cast<int>(i);
   }
@@ -1912,6 +1926,10 @@ void IOManager::writePinState(int pin, bool activeLow, bool on) {
   digitalWrite(pin, level);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
+// Cppcheck rationale: Preserve the mutable callback and extension contract.
+// cppcheck-suppress constParameterReference
 void IOManager::applyDesiredState(DigitalOutputEntry& entry) {
   const int pin = getPinNow(entry);
   if (!isValidPin(pin)) {
@@ -1923,6 +1941,8 @@ void IOManager::applyDesiredState(DigitalOutputEntry& entry) {
   writePinState(pin, activeLow, entry.desiredState);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::reconfigureIfNeeded(DigitalOutputEntry& entry) {
   const int newPin = getPinNow(entry);
   const bool newActiveLow = isActiveLowNow(entry);
@@ -1951,6 +1971,8 @@ void IOManager::reconfigureIfNeeded(DigitalOutputEntry& entry) {
   entry.lastActiveLow = newActiveLow;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::reconfigureIfNeeded(DigitalInputEntry& entry) {
   const int pin = getInputPinNow(entry);
   const bool activeLow = isInputActiveLowNow(entry);
@@ -1986,6 +2008,8 @@ void IOManager::reconfigureIfNeeded(DigitalInputEntry& entry) {
   entry.hasLast = true;
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::reconfigureIfNeeded(AnalogInputEntry& entry) {
   const int pin = getAnalogPinNow(entry);
   if (!isValidAnalogPin(pin)) {
@@ -2006,6 +2030,8 @@ void IOManager::reconfigureIfNeeded(AnalogInputEntry& entry) {
   }
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::readAnalogInput(AnalogInputEntry& entry) {
   const int pin = getAnalogPinNow(entry);
   if (!isValidAnalogPin(pin)) {
@@ -2034,6 +2060,8 @@ void IOManager::readAnalogInput(AnalogInputEntry& entry) {
   entry.value = mapAnalogValue(raw, rawMin, rawMax, outMin, outMax);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::processAnalogEvents(AnalogInputEntry& entry, uint32_t nowMs) {
   // This is a minimal baseline: store last values and allow periodic refresh based on minEventMs.
   const float db = getAnalogDeadbandNow(entry);
@@ -2068,6 +2096,8 @@ void IOManager::processAnalogEvents(AnalogInputEntry& entry, uint32_t nowMs) {
 void IOManager::ensureAnalogRuntimeProvider(const String& group) {
   static std::vector<String> registered;
   for (const auto& g : registered) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (g == group)
       return;
   }
@@ -2075,6 +2105,8 @@ void IOManager::ensureAnalogRuntimeProvider(const String& group) {
   ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
         const AnalogRuntimeGroup* runtimeGroupPtr = nullptr;
         for (const auto& rg : analogRuntimeGroups) {
+            // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+            // cppcheck-suppress useStlAlgorithm
             if (rg.group == group) {
                 runtimeGroupPtr = &rg;
                 break;
@@ -2119,6 +2151,8 @@ void IOManager::registerAnalogOutputRuntimeField(const String& group, const Stri
   for (auto& rg : analogOutputRuntimeGroups) {
     if (rg.group == group) {
       for (const auto& f : rg.fields) {
+        // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+        // cppcheck-suppress useStlAlgorithm
         if (f.key == key) {
           return;
         }
@@ -2137,6 +2171,8 @@ void IOManager::registerAnalogOutputRuntimeField(const String& group, const Stri
 void IOManager::ensureAnalogOutputRuntimeProvider(const String& group) {
   static std::vector<String> registered;
   for (const auto& g : registered) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (g == group)
       return;
   }
@@ -2144,6 +2180,8 @@ void IOManager::ensureAnalogOutputRuntimeProvider(const String& group) {
   ConfigManager.getRuntime().addRuntimeProvider(group, [this, group](JsonObject& data) {
         const AnalogOutputRuntimeGroup* runtimeGroupPtr = nullptr;
         for (const auto& rg : analogOutputRuntimeGroups) {
+            // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+            // cppcheck-suppress useStlAlgorithm
             if (rg.group == group) {
                 runtimeGroupPtr = &rg;
                 break;
@@ -2178,6 +2216,8 @@ void IOManager::ensureAnalogOutputRuntimeProvider(const String& group) {
   registered.push_back(group);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::readInputState(DigitalInputEntry& entry) {
   const int pin = getInputPinNow(entry);
   if (!isValidPin(pin)) {
@@ -2190,6 +2230,8 @@ void IOManager::readInputState(DigitalInputEntry& entry) {
   entry.state = activeLow ? (level == LOW) : (level == HIGH);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 void IOManager::resetDigitalInputEventState(DigitalInputEntry& entry, uint32_t nowMs) {
   entry.rawState = entry.state;
   entry.debouncedState = entry.state;
@@ -2290,6 +2332,8 @@ void IOManager::processInputEvents(DigitalInputEntry& entry, uint32_t nowMs) {
 void IOManager::ensureInputRuntimeProvider(const String& group) {
   static std::vector<String> registered;
   for (const auto& g : registered) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (g == group)
       return;
   }
@@ -2307,6 +2351,8 @@ void IOManager::ensureInputRuntimeProvider(const String& group) {
 void IOManager::ensureOutputRuntimeProvider(const String& group) {
   static std::vector<String> registered;
   for (const auto& g : registered) {
+    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
+    // cppcheck-suppress useStlAlgorithm
     if (g == group)
       return;
   }

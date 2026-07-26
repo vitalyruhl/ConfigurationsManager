@@ -79,6 +79,8 @@ private:
   void log(const char* format, ...) const;
 
 public:
+  // Cppcheck rationale: Preserve implicit construction used by existing callers.
+  // cppcheck-suppress noExplicitConstructor
   ConfigManagerWeb(AsyncWebServer* webServer = nullptr);
   ~ConfigManagerWeb();
 

@@ -27,7 +27,8 @@ $arguments = @(
     '--suppress=unusedFunction',
     '--std=c++17',
     '--language=c++',
-    '-DPROGMEM='
+    '-DPROGMEM=',
+    '-DARDUINO_ARCH_ESP32'
 ) + $sourceRoots
 
 & cppcheck @arguments

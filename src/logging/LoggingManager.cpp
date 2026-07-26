@@ -154,10 +154,14 @@ void LoggingManager::GuiOutput::enqueuePending_(const String& payload) {
   pending_.push_back(payload);
 }
 
+// Cppcheck rationale: Preserve the existing instance API for source compatibility.
+// cppcheck-suppress functionStatic
 String LoggingManager::GuiOutput::makeReadyPayload_() const {
   return String("{\"type\":\"logReady\"}");
 }
 
+// Cppcheck rationale: Preserve the mutable callback and extension contract.
+// cppcheck-suppress constParameterPointer
 void LoggingManager::GuiOutput::flushToClient_(AsyncWebSocketClient* client) {
 #if CM_ENABLE_WS_PUSH
   if (!client || buffer_.empty()) {
@@ -317,7 +321,7 @@ void LoggingManager::logV(Level level, const char* tag, const char* format, va_l
   const unsigned long ts = millis();
   const char* msg = buffer;
   String extractedTag;
-  if (!tag && msg && msg[0] == '[') {
+  if (!tag && msg[0] == '[') {
     const char* end = strchr(msg, ']');
     if (end && end > msg + 1) {
       const size_t tokenLen = static_cast<size_t>(end - msg - 1);

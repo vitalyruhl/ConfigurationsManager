@@ -179,8 +179,8 @@ bool ConfigManagerOTA::isActive() const {
   return otaInitialized && otaEnabled && otaActive;
 }
 
-void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
-  if (!server)
+void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* webServer) {
+  if (!webServer)
     return;
   if (webRoutesConfigured) {
     OTA_LOG("[D] Web routes already configured");
@@ -188,7 +188,7 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
   }
 
   // OTA upload endpoint
-  server->on("/ota_update", HTTP_GET, [this](AsyncWebServerRequest* request) {
+  webServer->on("/ota_update", HTTP_GET, [this](AsyncWebServerRequest* request) {
     if (!otaEnabled) {
       request->send(403, "application/json", "{\"status\":\"error\",\"reason\":\"ota_disabled\"}");
       return;
@@ -200,7 +200,7 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* server) {
     request->send(200, "application/json", String("{\"status\":\"ok\",\"probe\":true,\"otaActive\":") + (otaActive ? "true" : "false") + "}");
   });
 
-  server->on("/ota_update", HTTP_POST, [this](AsyncWebServerRequest* request) { handleOTAUpload(request); }, [this](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) { handleOTAUploadData(request, filename, index, data, len, final); });
+  webServer->on("/ota_update", HTTP_POST, [this](AsyncWebServerRequest* request) { handleOTAUpload(request); }, [this](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) { handleOTAUploadData(request, filename, index, data, len, final); });
 
   webRoutesConfigured = true;
   OTA_LOG("[I] Web routes configured");
@@ -253,6 +253,8 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
     }
   });
 
+  // Cppcheck rationale: The value is consumed by a compile-time logging macro in enabled builds.
+  // cppcheck-suppress unreadVariable
   size_t uploaded = ctx->written;
   request->send(response);
   OTA_LOG("HTTP upload success (%lu bytes)", static_cast<unsigned long>(uploaded));

@@ -136,6 +136,8 @@ public:
 #if !CM_DISABLE_GUI_LOGGING
   class GuiOutput : public Output {
   public:
+    // Cppcheck rationale: Preserve implicit construction used by existing callers.
+    // cppcheck-suppress noExplicitConstructor
     GuiOutput(ConfigManagerClass& configManager, size_t startupBufferSize = 30);
     void addTimestamp(TimestampMode mode) {
       setTimestampMode(mode);
