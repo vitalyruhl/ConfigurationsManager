@@ -8,7 +8,7 @@ if errorlevel 1 (
     set "exitCode=1"
 ) else (
     pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "%script%" %*
-    set "exitCode=%ERRORLEVEL%"
+    set "exitCode=!ERRORLEVEL!"
     if "!exitCode!"=="0" (
         echo [I] Full repository gate completed successfully.
     ) else (
