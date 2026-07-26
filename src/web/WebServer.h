@@ -2,7 +2,9 @@
 
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <esp_system.h>
 #include "../ConfigManagerConfig.h"
 
@@ -16,6 +18,7 @@ class ConfigManagerWeb {
 public:
     // Callback types for integration with ConfigManager
     typedef std::function<String()> JsonProvider;
+    typedef std::function<std::shared_ptr<const String>()> RuntimeMetaProvider;
     typedef std::function<void()> SimpleCallback;
     typedef std::function<bool(const String&, const String&, const String&)> SettingUpdateCallback;
     typedef std::function<void(AsyncWebServerRequest*)> RequestHandler;
@@ -30,7 +33,8 @@ private:
     // Callbacks for ConfigManager integration
     JsonProvider configJsonProvider;
     JsonProvider runtimeJsonProvider;
-    JsonProvider runtimeMetaJsonProvider;
+    RuntimeMetaProvider runtimeMetaJsonProvider;
+    std::atomic<uint32_t> runtimeMetaActiveRequests{0};
     SimpleCallback rebootCallback;
     SimpleCallback resetCallback;
     SettingUpdateCallback settingUpdateCallback;
@@ -80,6 +84,15 @@ public:
 
     // Initialization
     void begin(ConfigManagerClass* cm);
+    void setCallbacks(
+        JsonProvider configJson,
+        JsonProvider runtimeJson,
+        RuntimeMetaProvider runtimeMetaJson,
+        SimpleCallback reboot,
+        SimpleCallback reset,
+        SettingUpdateCallback settingUpdate,
+        SettingUpdateCallback settingApply
+    );
     void setCallbacks(
         JsonProvider configJson,
         JsonProvider runtimeJson,

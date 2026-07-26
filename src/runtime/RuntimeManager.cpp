@@ -1,6 +1,7 @@
 #include "RuntimeManager.h"
 #include "../ConfigManager.h"
 #include <algorithm>
+#include <esp_heap_caps.h>
 #include <limits>
 #include <utility>
 #include <time.h>
@@ -30,6 +31,16 @@ public:
 private:
     String& output;
 };
+
+void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes, size_t fieldCount) {
+    RUNTIME_LOG("[W] Runtime meta unavailable: %s need=%u free=%u min=%u largest=%u fields=%u",
+                reason,
+                static_cast<unsigned>(requiredBytes),
+                static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(ESP.getMinFreeHeap()),
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+                static_cast<unsigned>(fieldCount));
+}
 
 void populateRuntimeMetaJson(JsonObject o, const RuntimeFieldMeta& m) {
     o["group"] = m.group;
@@ -197,8 +208,10 @@ void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
         }
     }
     {
-        std::lock_guard<std::mutex> lock(runtimeDataMutex);
+        std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+        std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
         runtimeMeta.push_back(normalized);
+        markRuntimeMetaJsonCacheDirtyLocked();
     }
     const String& logGroup = normalized.sourceGroup.length() ? normalized.sourceGroup : normalized.group;
     RUNTIME_LOG("Added meta: %s.%s", logGroup.c_str(), normalized.key.c_str());
@@ -212,10 +225,12 @@ bool ConfigManagerRuntime::updateRuntimeMeta(const String& group, const String& 
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
     for (auto& meta : runtimeMeta) {
         if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
             updater(meta);
+            markRuntimeMetaJsonCacheDirtyLocked();
             return true;
         }
     }
@@ -259,7 +274,8 @@ void ConfigManagerRuntime::sortProviders() {
 }
 
 void ConfigManagerRuntime::sortMeta() {
-    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
     std::sort(runtimeMeta.begin(), runtimeMeta.end(),
         [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
             if (a.group == b.group) {
@@ -268,6 +284,7 @@ void ConfigManagerRuntime::sortMeta() {
             }
             return a.group < b.group;
         });
+    markRuntimeMetaJsonCacheDirtyLocked();
 }
 
 String ConfigManagerRuntime::runtimeValuesToJSON() {
@@ -453,9 +470,7 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
     return out;
 }
 
-String ConfigManagerRuntime::runtimeMetaToJSON() {
-    std::lock_guard<std::mutex> lock(runtimeDataMutex);
-
+String ConfigManagerRuntime::buildRuntimeMetaJsonLocked() {
     // Keep the stored metadata ordered so serialization can read it directly
     // while the mutex keeps strings, vectors, and iterators stable.
 #ifdef development
@@ -486,11 +501,13 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     for (const auto& m : meta) {
         const size_t entrySize = runtimeMetaJsonSize(m);
         if (entrySize == 0 || entrySize > std::numeric_limits<size_t>::max() - outputSize) {
+            logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
             return String();
         }
         outputSize += entrySize;
         if (!firstEntry) {
             if (outputSize == std::numeric_limits<size_t>::max()) {
+                logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
                 return String();
             }
             ++outputSize;
@@ -499,7 +516,12 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     }
 
     String out;
-    if (!out.reserve(outputSize) || !out.concat('[')) {
+    if (!out.reserve(outputSize)) {
+        logRuntimeMetaSerializationFailure("reserve", outputSize, meta.size());
+        return String();
+    }
+    if (!out.concat('[')) {
+        logRuntimeMetaSerializationFailure("open", outputSize, meta.size());
         return String();
     }
 
@@ -507,19 +529,78 @@ String ConfigManagerRuntime::runtimeMetaToJSON() {
     for (const auto& m : meta) {
         if (!first) {
             if (!out.concat(',')) {
+                logRuntimeMetaSerializationFailure("separator", outputSize, meta.size());
                 return String();
             }
         }
         first = false;
         if (!appendRuntimeMetaJson(out, m)) {
+            logRuntimeMetaSerializationFailure("serialize", outputSize, meta.size());
             return String();
         }
     }
 
     if (!out.concat(']')) {
+        logRuntimeMetaSerializationFailure("close", outputSize, meta.size());
         return String();
     }
     return out;
+}
+
+void ConfigManagerRuntime::markRuntimeMetaJsonCacheDirtyLocked() {
+    runtimeMetaJsonCacheDirty = true;
+    ++runtimeMetaRevision;
+}
+
+std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() {
+    // A cache rebuild is single-flight. Other callers keep using the last valid
+    // snapshot immediately instead of queueing behind a large serialization.
+    {
+        std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+        if (runtimeMetaJsonCache && !runtimeMetaJsonCacheDirty) {
+            return runtimeMetaJsonCache;
+        }
+        if (runtimeMetaJsonCacheBuildInProgress) {
+            return runtimeMetaJsonCache;
+        }
+        runtimeMetaJsonCacheBuildInProgress = true;
+    }
+
+    uint32_t builtRevision = 0;
+    String candidate;
+    {
+        std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
+#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+        ++runtimeMetaSerializationBuildCount;
+#endif
+        candidate = buildRuntimeMetaJsonLocked();
+        builtRevision = runtimeMetaRevision.load();
+    }
+
+    std::shared_ptr<const String> replacement;
+    if (candidate.length() != 0) {
+        replacement = std::make_shared<String>(std::move(candidate));
+    }
+
+    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+    runtimeMetaJsonCacheBuildInProgress = false;
+    if (replacement && replacement->length() != 0) {
+        if (runtimeMetaRevision.load() == builtRevision) {
+            runtimeMetaJsonCache = replacement;
+            runtimeMetaJsonCacheDirty = false;
+        } else if (!runtimeMetaJsonCache) {
+            // The candidate is complete JSON for the most recent stable state
+            // seen by this build. Keep it as a temporary fallback, but rebuild
+            // again before treating it as current metadata.
+            runtimeMetaJsonCache = replacement;
+        }
+    }
+    return runtimeMetaJsonCache;
+}
+
+String ConfigManagerRuntime::runtimeMetaToJSON() {
+    const std::shared_ptr<const String> payload = runtimeMetaJsonPayload();
+    return payload ? *payload : String();
 }
 
 void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const String& key, const String& label,
@@ -1050,16 +1131,20 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
 #ifdef development
 
 void ConfigManagerRuntime::setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override) {
-    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
     runtimeMetaOverride = override;
     runtimeMetaOverrideActive = true;
+    markRuntimeMetaJsonCacheDirtyLocked();
     RUNTIME_LOG("Meta override set (%d entries)", override.size());
 }
 
 void ConfigManagerRuntime::clearRuntimeMetaOverride() {
-    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
     runtimeMetaOverride.clear();
     runtimeMetaOverrideActive = false;
+    markRuntimeMetaJsonCacheDirtyLocked();
     RUNTIME_LOG("Meta override cleared");
 }
 

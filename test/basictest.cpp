@@ -184,6 +184,7 @@ void test_runtime_string_divider_and_order(){
 namespace {
 
 constexpr size_t RUNTIME_META_FIXTURE_ENTRIES = 30;
+constexpr size_t RUNTIME_META_STRESS_FIXTURE_ENTRIES = 48;
 constexpr size_t RUNTIME_META_KEY_MAX_LEN = 15;
 const char* const RUNTIME_STYLE_TARGETS[] = {
     "row", "label", "values", "unit", "state",
@@ -323,6 +324,10 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
     assertRuntimeMetaJson(json, RUNTIME_META_FIXTURE_ENTRIES);
     TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
     TEST_ASSERT_TRUE(json.length() > 10000);
+    const std::shared_ptr<const String> cachedPayload = runtime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(cachedPayload.get());
+    TEST_ASSERT_EQUAL_UINT32(json.length(), cachedPayload->length());
+    TEST_ASSERT_EQUAL_UINT32(1, runtime.getRuntimeMetaSerializationBuildCountForTest());
     Serial.printf("[runtime-meta] entries=%u json=%u heap_delta=%d largest_delta=%d style_copies=%u\n",
                   static_cast<unsigned>(RUNTIME_META_FIXTURE_ENTRIES),
                   static_cast<unsigned>(json.length()),
@@ -337,8 +342,55 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
         TEST_ASSERT_EQUAL_UINT32(0, RuntimeStyleRule::getCopyCount());
     }
 
+    for (size_t request = 0; request < 3; ++request) {
+        const std::shared_ptr<const String> repeatedPayload = runtime.runtimeMetaJsonPayload();
+        TEST_ASSERT_EQUAL_PTR(cachedPayload.get(), repeatedPayload.get());
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, runtime.getRuntimeMetaSerializationBuildCountForTest());
+
+    ConfigManagerRuntime stressRuntime;
+    for (size_t index = 0; index < RUNTIME_META_STRESS_FIXTURE_ENTRIES; ++index) {
+        stressRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(index));
+    }
+    const std::shared_ptr<const String> stressPayload = stressRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(stressPayload.get());
+    assertRuntimeMetaJson(*stressPayload, RUNTIME_META_STRESS_FIXTURE_ENTRIES);
+    TEST_ASSERT_TRUE(stressPayload->length() > 10000);
+    for (size_t request = 0; request < 3; ++request) {
+        TEST_ASSERT_EQUAL_PTR(stressPayload.get(), stressRuntime.runtimeMetaJsonPayload().get());
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, stressRuntime.getRuntimeMetaSerializationBuildCountForTest());
+
+    ConfigManagerRuntime cacheRuntime;
+    cacheRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(0));
+    const std::shared_ptr<const String> initialCache = cacheRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(initialCache.get());
+    String cacheKey("runtime_key_0");
+    while (cacheKey.length() < RUNTIME_META_KEY_MAX_LEN) {
+        cacheKey += "x";
+    }
+    TEST_ASSERT_TRUE(cacheRuntime.updateRuntimeMeta(runtimeMetaText("group", 0),
+                                                     cacheKey,
+                                                     [](RuntimeFieldMeta& meta) { meta.label = "updated"; }));
+    const std::shared_ptr<const String> updatedCache = cacheRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(updatedCache.get());
+    TEST_ASSERT_TRUE(initialCache.get() != updatedCache.get());
+    TEST_ASSERT_NOT_EQUAL(-1, updatedCache->indexOf("updated"));
+
+    cacheRuntime.setRuntimeMetaSerializationFailureForTest(true);
+    const std::shared_ptr<const String> preservedCache = cacheRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_EQUAL_PTR(updatedCache.get(), preservedCache.get());
+    cacheRuntime.setRuntimeMetaSerializationFailureForTest(false);
+    const std::shared_ptr<const String> recoveredCache = cacheRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(recoveredCache.get());
+
+    ConfigManagerRuntime failingRuntime;
+    failingRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(0));
+    failingRuntime.setRuntimeMetaSerializationFailureForTest(true);
+    TEST_ASSERT_NULL(failingRuntime.runtimeMetaJsonPayload().get());
+
     runtime.setRuntimeMetaSerializationFailureForTest(true);
-    TEST_ASSERT_EQUAL_UINT32(0, runtime.runtimeMetaToJSON().length());
+    TEST_ASSERT_EQUAL_UINT32(json.length(), runtime.runtimeMetaToJSON().length());
     runtime.setRuntimeMetaSerializationFailureForTest(false);
     const String recoveredJson = runtime.runtimeMetaToJSON();
     assertRuntimeMetaJson(recoveredJson, RUNTIME_META_FIXTURE_ENTRIES);

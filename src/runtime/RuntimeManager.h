@@ -1,7 +1,9 @@
 #pragma once
 
 #include <ArduinoJson.h>
+#include <atomic>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <vector>
 #include "../ConfigManagerConfig.h"
@@ -263,13 +265,19 @@ public:
 private:
     ConfigManagerClass* configManager;
     LogCallback logCallback;
-    // runtime-safe contract:
-    // - registration/mutation methods lock this mutex
-    // - JSON serializers hold the lock while traversing mutable runtime data
+    // Metadata mutations take cacheMutex before this mutex; cache rebuilds only
+    // hold this mutex while traversing mutable metadata.
     mutable std::mutex runtimeDataMutex;
+    mutable std::mutex runtimeMetaCacheMutex;
+
+    std::shared_ptr<const String> runtimeMetaJsonCache;
+    bool runtimeMetaJsonCacheDirty = true;
+    bool runtimeMetaJsonCacheBuildInProgress = false;
+    std::atomic<uint32_t> runtimeMetaRevision{0};
 
 #ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
     bool runtimeMetaSerializationFailureForTest = false;
+    std::atomic<size_t> runtimeMetaSerializationBuildCount{0};
 #endif
 
     // Runtime data
@@ -305,6 +313,8 @@ private:
     void log(const char* format, ...) const;
     void sortProviders();
     void sortMeta();
+    String buildRuntimeMetaJsonLocked();
+    void markRuntimeMetaJsonCacheDirtyLocked();
     RuntimeAlarm* findAlarm(const String& name);
     const RuntimeAlarm* findAlarm(const String& name) const;
 
@@ -331,10 +341,19 @@ public:
     // JSON generation
     String runtimeValuesToJSON();
     String runtimeMetaToJSON();
+    std::shared_ptr<const String> runtimeMetaJsonPayload();
 
 #ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
     void setRuntimeMetaSerializationFailureForTest(bool fail) {
+        std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+        std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
         runtimeMetaSerializationFailureForTest = fail;
+        markRuntimeMetaJsonCacheDirtyLocked();
+    }
+
+    size_t getRuntimeMetaSerializationBuildCountForTest() const {
+        std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
+        return runtimeMetaSerializationBuildCount.load();
     }
 #endif
 

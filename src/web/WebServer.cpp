@@ -4,10 +4,70 @@
 #include "WebRequestBodyBuffer.h"
 
 #include <AsyncJson.h>
+#include <cstring>
+#include <esp_heap_caps.h>
+#include <new>
+#include <utility>
 
 // Logging support
 #define WEB_LOG(...) CM_LOG("[Web] " __VA_ARGS__)
 #define WEB_LOG_VERBOSE(...) CM_LOG_VERBOSE("[Web] " __VA_ARGS__)
+
+namespace {
+
+class RuntimeMetaResponse final : public AsyncAbstractResponse {
+public:
+    RuntimeMetaResponse(std::shared_ptr<const String> payload, std::atomic<uint32_t>* activeRequests)
+        : payload_(std::move(payload))
+        , activeRequests_(activeRequests)
+        , offset_(0) {
+        _code = 200;
+        _contentLength = payload_ ? payload_->length() : 0;
+        _contentType = "application/json";
+    }
+
+    ~RuntimeMetaResponse() override {
+        if (activeRequests_) {
+            --(*activeRequests_);
+        }
+    }
+
+    bool hasPayload() const {
+        return payload_ && _contentLength != 0 && payload_->length() == _contentLength;
+    }
+
+    bool _sourceValid() const override {
+        return hasPayload();
+    }
+
+    size_t _fillBuffer(uint8_t* buffer, size_t maxLength) override {
+        if (!buffer || !payload_ || offset_ >= payload_->length()) {
+            return 0;
+        }
+
+        const size_t available = payload_->length() - offset_;
+        const size_t length = available < maxLength ? available : maxLength;
+        memcpy(buffer, payload_->c_str() + offset_, length);
+        offset_ += length;
+        return length;
+    }
+
+private:
+    std::shared_ptr<const String> payload_;
+    std::atomic<uint32_t>* activeRequests_;
+    size_t offset_;
+};
+
+void logRuntimeMetaResponseFailure(size_t payloadLength, uint32_t activeRequests) {
+    WEB_LOG("[W] Runtime meta response unavailable: payload=%u active=%u free=%u min=%u largest=%u",
+            static_cast<unsigned>(payloadLength),
+            static_cast<unsigned>(activeRequests),
+            static_cast<unsigned>(ESP.getFreeHeap()),
+            static_cast<unsigned>(ESP.getMinFreeHeap()),
+            static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+}
+
+} // namespace
 
 ConfigManagerWeb::ConfigManagerWeb(AsyncWebServer* webServer)
     : server(webServer)
@@ -92,7 +152,7 @@ void ConfigManagerWeb::begin(ConfigManagerClass* cm) {
 void ConfigManagerWeb::setCallbacks(
     JsonProvider configJson,
     JsonProvider runtimeJson,
-    JsonProvider runtimeMetaJson,
+    RuntimeMetaProvider runtimeMetaJson,
     SimpleCallback reboot,
     SimpleCallback reset,
     SettingUpdateCallback settingUpdate,
@@ -105,6 +165,31 @@ void ConfigManagerWeb::setCallbacks(
     resetCallback = reset;
     settingUpdateCallback = settingUpdate;
     settingApplyCallback = settingApply;
+}
+
+void ConfigManagerWeb::setCallbacks(
+    JsonProvider configJson,
+    JsonProvider runtimeJson,
+    JsonProvider runtimeMetaJson,
+    SimpleCallback reboot,
+    SimpleCallback reset,
+    SettingUpdateCallback settingUpdate,
+    SettingUpdateCallback settingApply
+) {
+    setCallbacks(
+        std::move(configJson),
+        std::move(runtimeJson),
+        [runtimeMetaJson = std::move(runtimeMetaJson)]() mutable -> std::shared_ptr<const String> {
+            String json = runtimeMetaJson ? runtimeMetaJson() : String();
+            if (json.length() == 0) {
+                return nullptr;
+            }
+            return std::make_shared<String>(std::move(json));
+        },
+        std::move(reboot),
+        std::move(reset),
+        std::move(settingUpdate),
+        std::move(settingApply));
 }
 
 void ConfigManagerWeb::setEmbedWebUI(bool embed) {
@@ -1104,14 +1189,23 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     // Runtime metadata endpoint
     server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (runtimeMetaJsonProvider) {
-            String json = runtimeMetaJsonProvider();
-            if (json.length() == 0) {
+            const uint32_t activeRequests = ++runtimeMetaActiveRequests;
+            std::shared_ptr<const String> payload = runtimeMetaJsonProvider();
+            if (!payload || payload->length() == 0) {
+                --runtimeMetaActiveRequests;
+                logRuntimeMetaResponseFailure(0, activeRequests);
                 request->send(503, "application/json", "{\"error\":\"runtime_meta_unavailable\"}");
                 return;
             }
-            AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
-            if (!response) {
-                request->send(503, "application/json", "{\"error\":\"response_alloc_failed\"}");
+            const size_t payloadLength = payload->length();
+            RuntimeMetaResponse* response = new (std::nothrow) RuntimeMetaResponse(std::move(payload), &runtimeMetaActiveRequests);
+            if (!response || !response->hasPayload()) {
+                delete response;
+                if (!response) {
+                    --runtimeMetaActiveRequests;
+                }
+                logRuntimeMetaResponseFailure(payloadLength, activeRequests);
+                request->send(503, "application/json", "{\"error\":\"runtime_meta_unavailable\"}");
                 return;
             }
             enableCORS(response);

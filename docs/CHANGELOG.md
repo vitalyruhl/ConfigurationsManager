@@ -2,6 +2,11 @@
 
 This changelog is a curated overview.
 
+## 4.4.5 - 2026-07-26
+
+- Cache complete `/runtime_meta.json` payloads and serve them without a second
+  full-size response copy.
+
 ## 4.4.4 - 2026-07-26
 
 - Restore `/runtime_meta.json` serialization for non-empty metadata.
