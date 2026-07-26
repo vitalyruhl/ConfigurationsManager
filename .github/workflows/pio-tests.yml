@@ -9,7 +9,8 @@ on:
 
 jobs:
   full-repository-gate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -30,6 +31,21 @@ jobs:
       - name: Install PlatformIO Core
         run: python -m pip install --upgrade platformio
 
+      - name: Install static analysis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18 cppcheck
+          clang-format-18 --version
+          cppcheck --version
+
       - name: Run full repository gate
         shell: pwsh
-        run: ./tools/build/run-full-repository-gate.ps1 -FailFast
+        run: ./tools/build/run-full-repository-gate.ps1 -FailFast -LogRoot $env:RUNNER_TEMP
+
+      - name: Upload repository gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-gate-logs-${{ github.run_id }}
+          path: ${{ runner.temp }}/ConfigurationsManager-full-gate-*
+          if-no-files-found: warn
