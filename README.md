@@ -231,21 +231,21 @@ More:
 ### The embedded Web UI automatically adapts to desktop and mobile devices.
 
 >Current UI snapshots
->![alt text](examples/screenshots/V4.0.0-GUI-STD.jpg)
->![alt text](examples/screenshots/V4.0.0-GUI-Dark.jpg)
+>![alt text](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/V4.0.0-GUI-STD.jpg)
+>![alt text](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/V4.0.0-GUI-Dark.jpg)
 
 > Example on Monitor HD
-> ![Example on Monitor HD](examples/screenshots/test-hd.jpg)
+> ![Example on Monitor HD](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/test-hd.jpg)
 > Example on mobile
-> ![Example on mobile](examples/screenshots/test-mobile.jpg)
+> ![Example on mobile](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/test-mobile.jpg)
 > Settings on HD
-> ![Settings on HD 1](examples/screenshots/test-settings-HD.jpg)
-> ![Settings on HD 2](examples/screenshots/test-settings2-HD.jpg)
+> ![Settings on HD 1](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/test-settings-HD.jpg)
+> ![Settings on HD 2](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/test-settings2-HD.jpg)
 > Settings on mobile
-> ![Settings on mobile 1](examples/screenshots/test-settings-mobile.jpg)
-> ![Settings on mobile 2](examples/screenshots/test-settings-mobile2.jpg)
+> ![Settings on mobile 1](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/test-settings-mobile.jpg)
+> ![Settings on mobile 2](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/test-settings-mobile2.jpg)
 > Darkmode
-> ![Darkmode](examples/screenshots/cm-full-io-demo-gui-darkmode.jpg)
+> ![Darkmode](https://raw.githubusercontent.com/vitalyruhl/ConfigurationsManager/main/examples/screenshots/cm-full-io-demo-gui-darkmode.jpg)
 
 ## Version History
 
