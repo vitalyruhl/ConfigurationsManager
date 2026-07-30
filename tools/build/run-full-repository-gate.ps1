@@ -196,13 +196,13 @@ try {
         $embeddedTestTargets = @($matrix | Where-Object HasEmbeddedTests)
         $webUiTests = @(Get-ChildItem -Path (Join-Path $repoRoot 'webui\test') -Filter '*.test.mjs' -File -ErrorAction SilentlyContinue | Sort-Object FullName)
         Add-Plan @('Format and precommit checks', 'Cppcheck', 'Working tree after static checks', 'Temporary content policy', 'PowerShell syntax', 'Agent governance generator', 'Serena memory generator', 'Workflow structure')
-        foreach ($target in $matrix) {
-            $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
-            Add-Plan "PlatformIO build $relativeDirectory [$($target.Environment)]"
-        }
         foreach ($target in $embeddedTestTargets) {
             $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
             Add-Plan "PlatformIO test compile $relativeDirectory [$($target.Environment)]"
+        }
+        foreach ($target in $matrix) {
+            $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
+            Add-Plan "PlatformIO build $relativeDirectory [$($target.Environment)]"
         }
         if (Test-Path -LiteralPath (Join-Path $repoRoot 'webui\package.json')) {
             Add-Plan 'WebUI production build'
@@ -233,15 +233,15 @@ try {
             }
             if ($gateExitCode -eq 0) {
                 if (-not (Get-Command pio -ErrorAction SilentlyContinue)) { throw 'PlatformIO CLI `pio` is required for the full repository gate.' }
-                foreach ($target in $matrix) {
-                    $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
-                    if (-not (Run-RequiredCheck -Name "PlatformIO build $relativeDirectory [$($target.Environment)]" -Action { pio run -d $target.ProjectDirectory -e $target.Environment })) { break }
-                }
-            }
-            if ($gateExitCode -eq 0) {
                 foreach ($target in $embeddedTestTargets) {
                     $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
                     if (-not (Run-RequiredCheck -Name "PlatformIO test compile $relativeDirectory [$($target.Environment)]" -Action { pio test -d $target.ProjectDirectory -e $target.Environment --without-uploading --without-testing })) { break }
+                }
+            }
+            if ($gateExitCode -eq 0) {
+                foreach ($target in $matrix) {
+                    $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
+                    if (-not (Run-RequiredCheck -Name "PlatformIO build $relativeDirectory [$($target.Environment)]" -Action { pio run -d $target.ProjectDirectory -e $target.Environment })) { break }
                 }
             }
             if ($gateExitCode -eq 0 -and (Test-Path -LiteralPath (Join-Path $repoRoot 'webui\package.json'))) {
