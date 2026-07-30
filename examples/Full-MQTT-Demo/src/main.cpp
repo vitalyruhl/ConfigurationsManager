@@ -96,6 +96,8 @@ void Initial_logging();
 static void setupNetworkDefaults();
 void setupGUI();
 void publishImediatelyButtonState();
+void publishNonImediateMQTTToppcs();
+void sendAllMQTTLog(unsigned long now, unsigned long& lastLoopLogMs);
 void applySubscriptionDemo();
 
 namespace cm {
