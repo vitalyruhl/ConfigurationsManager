@@ -1,6 +1,7 @@
 import os
 import subprocess
 import gzip
+import shutil
 
 from pathlib import Path
 
@@ -11,9 +12,16 @@ try:
 except Exception:
 	env = None
 
-# Absolute path to npm and node
-npm_cmd = r'C:\Program Files\nodejs\npm.cmd'
-node_exe = r'C:\Program Files\nodejs\node.exe'
+def _find_executable(*names: str) -> str:
+	for name in names:
+		path = shutil.which(name)
+		if path:
+			return path
+	raise RuntimeError(f"Required executable not found on PATH: {', '.join(names)}")
+
+
+npm_cmd = _find_executable('npm.cmd', 'npm')
+node_exe = _find_executable('node.exe', 'node')
 
 def _resolve_repo_root() -> Path:
 	"""Resolve repository root in a PlatformIO/SCons-friendly way.
