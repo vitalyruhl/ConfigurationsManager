@@ -1,40 +1,21 @@
 # Root Agent Instructions
 
-This root file exists for tools that load repository-root `AGENTS.md` before
-repository-specific governance.
+This file is the universal entry point. Repository policy is canonical in
+`.github/AGENTS.md`.
 
-## Canonical Governance
+## Required Reading
 
-- `.github/AGENTS.md` is the canonical repository governance file.
-- Before repository work, read `.github/AGENTS.md` and the applicable
-  `.github/agents/*.agent.md` file directly.
-- Do not rely on repository-wide search to discover governance files; read known
-  governance paths directly.
+- Read `.github/AGENTS.md` and exactly the role file needed for the current
+  action under `.github/agents/` before acting.
+- Read `.github/agents/project.agent.md` only when project-specific facts are
+  needed. Read a skill only when its trigger applies.
+- Read known governance paths directly. Governance discovery with `rg` or `fd`
+  must include hidden paths.
+
+## Baseline
+
+- Use informal German in chat. Keep every repository artifact in English.
+- Never overwrite user changes or perform Git, upload, monitor, destructive,
+  network, release, merge, or publication actions without explicit authority.
+- Never mark an issue as solved or fixed until the user confirms it works.
 - If this file conflicts with `.github/AGENTS.md`, follow `.github/AGENTS.md`.
-- Defer to `.github/AGENTS.md` for repository workflow, branch, pull request,
-  merge, release, validation, version, tool, and agent-routing rules.
-
-## Communication
-
-- Use informal German ("du") in normal chat with the user.
-- Keep user-facing summaries brief unless detailed explanation is requested.
-- Repository artifacts, code comments, commit messages, issue text, pull request
-  text, and generated governance text follow the language rules in
-  `.github/AGENTS.md`.
-
-## Safety Baseline
-
-- User changes are sacred. Never revert or overwrite user edits without explicit
-  request.
-- Do not stage, commit, push, merge, rebase, reset, clean, stash, switch
-  branches, or update release branches unless the user explicitly requests it or
-  a named workflow in `.github/AGENTS.md` requires it.
-- Do not work directly on `main` or `master` except for the narrow exceptions
-  defined in `.github/AGENTS.md`.
-- Do not run upload, monitor, destructive, or hardware/network-affecting
-  commands unless explicitly requested.
-
-## Final Rule
-
-- Never mark an issue as solved or fixed until the user explicitly confirms it
-  works.

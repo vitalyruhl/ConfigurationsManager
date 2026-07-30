@@ -13,18 +13,30 @@
 
 static const char* resetReasonToStr(esp_reset_reason_t r) {
   switch (r) {
-    case ESP_RST_UNKNOWN:   return "UNKNOWN";
-    case ESP_RST_POWERON:   return "POWERON";
-    case ESP_RST_EXT:       return "EXT (external pin reset)";
-    case ESP_RST_SW:        return "SW (software reset)";
-    case ESP_RST_PANIC:     return "PANIC";
-    case ESP_RST_INT_WDT:   return "INT_WDT";
-    case ESP_RST_TASK_WDT:  return "TASK_WDT";
-    case ESP_RST_WDT:       return "WDT (other)";
-    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
-    case ESP_RST_BROWNOUT:  return "BROWNOUT";
-    case ESP_RST_SDIO:      return "SDIO";
-    default:                return "???";
+    case ESP_RST_UNKNOWN:
+      return "UNKNOWN";
+    case ESP_RST_POWERON:
+      return "POWERON";
+    case ESP_RST_EXT:
+      return "EXT (external pin reset)";
+    case ESP_RST_SW:
+      return "SW (software reset)";
+    case ESP_RST_PANIC:
+      return "PANIC";
+    case ESP_RST_INT_WDT:
+      return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+      return "TASK_WDT";
+    case ESP_RST_WDT:
+      return "WDT (other)";
+    case ESP_RST_DEEPSLEEP:
+      return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+      return "BROWNOUT";
+    case ESP_RST_SDIO:
+      return "SDIO";
+    default:
+      return "???";
   }
 }
 
@@ -32,7 +44,13 @@ static void printMac(const char* label, esp_mac_type_t type) {
   uint8_t mac[6] = {0};
   if (esp_read_mac(mac, type) == ESP_OK) { // reads MACs for WiFi/BT etc. :contentReference[oaicite:1]{index=1}
     Serial.printf("[MAC ] %-12s %02X:%02X:%02X:%02X:%02X:%02X\n",
-                  label, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                  label,
+                  mac[0],
+                  mac[1],
+                  mac[2],
+                  mac[3],
+                  mac[4],
+                  mac[5]);
   } else {
     Serial.printf("[MAC ] %-12s (not available)\n", label);
   }
@@ -40,9 +58,12 @@ static void printMac(const char* label, esp_mac_type_t type) {
 
 static const char* partTypeToStr(esp_partition_type_t t) {
   switch (t) {
-    case ESP_PARTITION_TYPE_APP:  return "APP";
-    case ESP_PARTITION_TYPE_DATA: return "DATA";
-    default:                      return "OTHER";
+    case ESP_PARTITION_TYPE_APP:
+      return "APP";
+    case ESP_PARTITION_TYPE_DATA:
+      return "DATA";
+    default:
+      return "OTHER";
   }
 }
 
@@ -69,10 +90,14 @@ static void printChipDumpOnce() {
   Serial.printf("[CHIP ] SDK: %s\n", ESP.getSdkVersion());
 
   Serial.print("[CHIP ] Features:");
-  if (chipInfo.features & CHIP_FEATURE_WIFI_BGN) Serial.print(" WiFi");
-  if (chipInfo.features & CHIP_FEATURE_BT)       Serial.print(" BT");
-  if (chipInfo.features & CHIP_FEATURE_BLE)      Serial.print(" BLE");
-  if (chipInfo.features & CHIP_FEATURE_EMB_FLASH)Serial.print(" EmbeddedFlash");
+  if (chipInfo.features & CHIP_FEATURE_WIFI_BGN)
+    Serial.print(" WiFi");
+  if (chipInfo.features & CHIP_FEATURE_BT)
+    Serial.print(" BT");
+  if (chipInfo.features & CHIP_FEATURE_BLE)
+    Serial.print(" BLE");
+  if (chipInfo.features & CHIP_FEATURE_EMB_FLASH)
+    Serial.print(" EmbeddedFlash");
   Serial.println();
 
   // Reset reason
@@ -114,9 +139,9 @@ static void printChipDumpOnce() {
     Serial.printf("[MAC ] eFuse MAC: %04X%08X\n", (uint16_t)(mac >> 32), (uint32_t)mac);
   }
   printMac("WiFi STA", ESP_MAC_WIFI_STA);
-  printMac("WiFi AP",  ESP_MAC_WIFI_SOFTAP);
-  printMac("BT",       ESP_MAC_BT);
-  printMac("ETH",      ESP_MAC_ETH);
+  printMac("WiFi AP", ESP_MAC_WIFI_SOFTAP);
+  printMac("BT", ESP_MAC_BT);
+  printMac("ETH", ESP_MAC_ETH);
 
   // OTA / running partition info (IDF OTA APIs) :contentReference[oaicite:4]{index=4}
   const esp_partition_t* running = esp_ota_get_running_partition();
@@ -134,7 +159,9 @@ static void printChipDumpOnce() {
   const esp_partition_t* boot = esp_ota_get_boot_partition();
   if (boot) {
     Serial.printf("[OTA  ] Boot partition:    label=%s addr=0x%08lX size=%lu\n",
-                  boot->label, (unsigned long)boot->address, (unsigned long)boot->size);
+                  boot->label,
+                  (unsigned long)boot->address,
+                  (unsigned long)boot->size);
   }
 
   // Partition table dump (lists all partitions) :contentReference[oaicite:5]{index=5}

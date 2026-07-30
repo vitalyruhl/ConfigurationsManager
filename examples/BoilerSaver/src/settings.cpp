@@ -10,9 +10,9 @@ WiFiUiSettings wifiUiSettings;
 // Function to register all settings with ConfigManager
 // This solves the static initialization order problem
 void initializeAllSettings() {
-    i2cSettings.create();
-    boilerSettings.create();
-    displaySettings.create();
-    tempSensorSettings.create();
-    wifiUiSettings.create();
+  i2cSettings.create();
+  boilerSettings.create();
+  displaySettings.create();
+  tempSensorSettings.create();
+  wifiUiSettings.create();
 }

@@ -12,7 +12,6 @@
 #define CM_HAS_WIFI_SECRETS 0
 #endif
 
-
 #define VERSION CONFIGMANAGER_VERSION
 #ifndef APP_NAME
 #define APP_NAME "CM-Minimal-Demo"
@@ -23,7 +22,7 @@ void onWiFiDisconnected();
 void onWiFiAPMode();
 static void setupNetworkDefaults();
 
-extern ConfigManagerClass ConfigManager;  // Use extern to reference the instance from ConfigManager.cpp
+extern ConfigManagerClass ConfigManager; // Use extern to reference the instance from ConfigManager.cpp
 
 #ifndef SETTINGS_PASSWORD
 #define SETTINGS_PASSWORD ""
@@ -34,109 +33,100 @@ extern ConfigManagerClass ConfigManager;  // Use extern to reference the instanc
 #endif
 
 // Built-in core settings templates (WiFi/System/NTP).
-static cm::CoreSettings &coreSettings = cm::CoreSettings::instance();
-static cm::CoreSystemSettings &systemSettings = coreSettings.system;
-static cm::CoreWiFiSettings &wifiSettings = coreSettings.wifi;
-static cm::CoreNtpSettings &ntpSettings = coreSettings.ntp;
+static cm::CoreSettings& coreSettings = cm::CoreSettings::instance();
+static cm::CoreSystemSettings& systemSettings = coreSettings.system;
+static cm::CoreWiFiSettings& wifiSettings = coreSettings.wifi;
+static cm::CoreNtpSettings& ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 
-void setup()
-{
-    Serial.begin(115200);
+void setup() {
+  Serial.begin(115200);
 
-    ConfigManagerClass::setLogger([](const char *msg)
-        {
-            Serial.print("[CM] ");
-            Serial.println(msg);
-        });
+  ConfigManagerClass::setLogger([](const char* msg) {
+    Serial.print("[CM] ");
+    Serial.println(msg);
+  });
 
-    ConfigManager.setAppName(APP_NAME); // Set an application name, used for SSID in AP mode and as a prefix for the hostname
-    ConfigManager.setAppTitle(APP_NAME); // Set an application title, used for web UI display
-    ConfigManager.setVersion(VERSION); // Set the application version for web UI display
-    ConfigManager.enableBuiltinSystemProvider(); // you dont need it for minimal functions, but it helpfull
-    ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
+  ConfigManager.setAppName(APP_NAME);          // Set an application name, used for SSID in AP mode and as a prefix for the hostname
+  ConfigManager.setAppTitle(APP_NAME);         // Set an application title, used for web UI display
+  ConfigManager.setVersion(VERSION);           // Set the application version for web UI display
+  ConfigManager.enableBuiltinSystemProvider(); // you dont need it for minimal functions, but it helpfull
+  ConfigManager.setSettingsPassword(SETTINGS_PASSWORD);
 
-    coreSettings.attachWiFi(ConfigManager, "WLAN", "WLAN-Einstellungen", 10);
-    coreSettings.attachSystem(ConfigManager);
-    // coreSettings.attachNtp(ConfigManager); // you dont need it for this minimal example, but you can easily add it back if you want to use the NTP features
-    ConfigManager.loadAll();
+  coreSettings.attachWiFi(ConfigManager, "WLAN", "WLAN-Einstellungen", 10);
+  coreSettings.attachSystem(ConfigManager);
+  // coreSettings.attachNtp(ConfigManager); // you dont need it for this minimal example, but you can easily add it back if you want to use the NTP features
+  ConfigManager.loadAll();
 
-    setupNetworkDefaults(); // you dont need it for minimal functions, but it helpfull - look at secrets.example.h for details
+  setupNetworkDefaults(); // you dont need it for minimal functions, but it helpfull - look at secrets.example.h for details
 
 #if defined(WIFI_FILTER_MAC_PRIORITY)
-    ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
+  ConfigManager.setAccessPointMacPriority(WIFI_FILTER_MAC_PRIORITY);
 #endif
 
-    ConfigManager.startWebServer();
+  ConfigManager.startWebServer();
 }
 
-void loop()
-{
-    ConfigManager.getWiFiManager().update();
-    ConfigManager.handleClient();
+void loop() {
+  ConfigManager.getWiFiManager().update();
+  ConfigManager.handleClient();
 }
 
-void onWiFiConnected()
-{
-    wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
-    Serial.printf("[INFO] Station Mode: http://%s\n", WiFi.localIP().toString().c_str());
+void onWiFiConnected() {
+  wifiServices.onConnected(ConfigManager, APP_NAME, systemSettings, ntpSettings);
+  Serial.printf("[INFO] Station Mode: http://%s\n", WiFi.localIP().toString().c_str());
 }
 
 // These hooks are invoked internally by ConfigManager's WiFi manager on state transitions.
 // If you don't provide them, the library provides weak no-op defaults (see src/default_hooks.cpp).
 
-void onWiFiDisconnected()
-{
-    wifiServices.onDisconnected();
-    Serial.println("[ERROR] WiFi disconnected");
+void onWiFiDisconnected() {
+  wifiServices.onDisconnected();
+  Serial.println("[ERROR] WiFi disconnected");
 }
 
-void onWiFiAPMode()
-{
-    wifiServices.onAPMode();
-    Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
+void onWiFiAPMode() {
+  wifiServices.onAPMode();
+  Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
 }
 
-static void setupNetworkDefaults()
-{
-    if (wifiSettings.wifiSsid.get().isEmpty())
-    {
+static void setupNetworkDefaults() {
+  if (wifiSettings.wifiSsid.get().isEmpty()) {
 #if CM_HAS_WIFI_SECRETS
-        Serial.println("-------------------------------------------------------------");
-        Serial.println("SETUP: *** SSID is empty, setting My values *** ");
-        Serial.println("-------------------------------------------------------------");
-        wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-        wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
+    Serial.println("-------------------------------------------------------------");
+    Serial.println("SETUP: *** SSID is empty, setting My values *** ");
+    Serial.println("-------------------------------------------------------------");
+    wifiSettings.wifiSsid.set(MY_WIFI_SSID);
+    wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
 
-        // Optional secret fields (not present in every example).
+    // Optional secret fields (not present in every example).
 #ifdef MY_WIFI_IP
-        wifiSettings.staticIp.set(MY_WIFI_IP);
+    wifiSettings.staticIp.set(MY_WIFI_IP);
 #endif
 #ifdef MY_USE_DHCP
-        wifiSettings.useDhcp.set(MY_USE_DHCP);
+    wifiSettings.useDhcp.set(MY_USE_DHCP);
 #endif
 #ifdef MY_GATEWAY_IP
-        wifiSettings.gateway.set(MY_GATEWAY_IP);
+    wifiSettings.gateway.set(MY_GATEWAY_IP);
 #endif
 #ifdef MY_SUBNET_MASK
-        wifiSettings.subnet.set(MY_SUBNET_MASK);
+    wifiSettings.subnet.set(MY_SUBNET_MASK);
 #endif
 #ifdef MY_DNS_IP
-        wifiSettings.dnsPrimary.set(MY_DNS_IP);
+    wifiSettings.dnsPrimary.set(MY_DNS_IP);
 #endif
-        ConfigManager.saveAll();
-        Serial.println("-------------------------------------------------------------");
-        Serial.println("Restarting ESP, after auto setting WiFi credentials");
-        Serial.println("-------------------------------------------------------------");
-        delay(500);
-        ESP.restart();
+    ConfigManager.saveAll();
+    Serial.println("-------------------------------------------------------------");
+    Serial.println("Restarting ESP, after auto setting WiFi credentials");
+    Serial.println("-------------------------------------------------------------");
+    delay(500);
+    ESP.restart();
 #else
-        Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
+    Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
 #endif
-    }
+  }
 
-    if (systemSettings.otaPassword.get() != OTA_PASSWORD) {
-        systemSettings.otaPassword.save(OTA_PASSWORD);
-    }
-
+  if (systemSettings.otaPassword.get() != OTA_PASSWORD) {
+    systemSettings.otaPassword.save(OTA_PASSWORD);
+  }
 }

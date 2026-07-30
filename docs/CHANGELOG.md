@@ -4,37 +4,11 @@ This changelog is a curated overview.
 
 ## 4.4.8 - 2026-07-26
 
-- Close completed `/runtime.json` responses to release their AsyncTCP resources.
-
-## 4.4.7 - 2026-07-26
-
-- Send cached `/runtime_meta.json` payloads directly through AsyncTCP without a
-  per-chunk response allocation and close completed response connections.
-
-## 4.4.6 - 2026-07-26
-
-- Verify the measured runtime metadata JSON length before replacing its cache.
-- Cover HIL-sized and larger dynamic runtime metadata payloads in regression tests.
-
-## 4.4.5 - 2026-07-26
-
-- Cache complete `/runtime_meta.json` payloads and serve them without a second
-  full-size response copy.
-
-## 4.4.4 - 2026-07-26
-
-- Restore `/runtime_meta.json` serialization for non-empty metadata.
-
-## 4.4.3 - 2026-07-26
-
-- Show and retry temporary `/runtime_meta.json` failures without clearing the
-  existing runtime dashboard.
-
-## 4.4.2 - 2026-07-26
-
-- Avoid deep copies of runtime metadata while serializing `/runtime_meta.json`.
-- Return a controlled HTTP error when the runtime metadata response cannot be
-  allocated.
+- Improve runtime dashboard reliability during frequent browser reloads (#71).
+- Ensure dynamically sized runtime metadata is delivered as complete JSON and
+  release completed runtime response connections promptly.
+- Keep the existing dashboard visible while recovering from a temporary runtime
+  metadata response failure.
 
 ## 4.4.1 - 2026-07-18
 

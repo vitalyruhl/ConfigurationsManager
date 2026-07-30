@@ -16,134 +16,129 @@
 extern ConfigManagerClass ConfigManager;
 
 struct I2CSettings {
-    Config<int> *sdaPin = nullptr;
-    Config<int> *sclPin = nullptr;
-    Config<int> *busFreq = nullptr;
-    Config<int> *displayAddr = nullptr;
+  Config<int>* sdaPin = nullptr;
+  Config<int>* sclPin = nullptr;
+  Config<int>* busFreq = nullptr;
+  Config<int>* displayAddr = nullptr;
 
-    void create()
-    {
-        sdaPin = &ConfigManager.addSettingInt("I2CSDA")
-                      .name("I2C SDA Pin")
-                      .category("I2C")
-                      .defaultValue(21)
-                      .build();
-        sclPin = &ConfigManager.addSettingInt("I2CSCL")
-                      .name("I2C SCL Pin")
-                      .category("I2C")
-                      .defaultValue(22)
-                      .build();
-        busFreq = &ConfigManager.addSettingInt("I2CFreq")
-                      .name("I2C Bus Freq")
-                      .category("I2C")
-                      .defaultValue(400000)
-                      .build();
-        displayAddr = &ConfigManager.addSettingInt("DispAddr")
-                          .name("Display I2C Address")
-                          .category("I2C")
-                          .defaultValue(0x3C)
-                          .build();
-    }
+  void create() {
+    sdaPin = &ConfigManager.addSettingInt("I2CSDA")
+                .name("I2C SDA Pin")
+                .category("I2C")
+                .defaultValue(21)
+                .build();
+    sclPin = &ConfigManager.addSettingInt("I2CSCL")
+                .name("I2C SCL Pin")
+                .category("I2C")
+                .defaultValue(22)
+                .build();
+    busFreq = &ConfigManager.addSettingInt("I2CFreq")
+                 .name("I2C Bus Freq")
+                 .category("I2C")
+                 .defaultValue(400000)
+                 .build();
+    displayAddr = &ConfigManager.addSettingInt("DispAddr")
+                     .name("Display I2C Address")
+                     .category("I2C")
+                     .defaultValue(0x3C)
+                     .build();
+  }
 };
 
 struct BoilerSettings {
-    Config<bool> *enabled = nullptr;       // enable/disable boiler control
-    Config<float> *onThreshold = nullptr;  // temperature to turn boiler on
-    Config<float> *offThreshold = nullptr; // temperature to turn boiler off
-    Config<int> *boilerTimeMin = nullptr;  // max time boiler is allowed to heat
-    Config<bool> *stopTimerOnTarget = nullptr; // stop timer when off-threshold reached
-    Config<bool> *onlyOncePerPeriod = nullptr; // publish '1' only once per period
+  Config<bool>* enabled = nullptr;           // enable/disable boiler control
+  Config<float>* onThreshold = nullptr;      // temperature to turn boiler on
+  Config<float>* offThreshold = nullptr;     // temperature to turn boiler off
+  Config<int>* boilerTimeMin = nullptr;      // max time boiler is allowed to heat
+  Config<bool>* stopTimerOnTarget = nullptr; // stop timer when off-threshold reached
+  Config<bool>* onlyOncePerPeriod = nullptr; // publish '1' only once per period
 
-    void create()
-    {
-        enabled = &ConfigManager.addSettingBool("BoI_En")
-                       .name("Enable Boiler Control")
+  void create() {
+    enabled = &ConfigManager.addSettingBool("BoI_En")
+                 .name("Enable Boiler Control")
+                 .category("Boiler")
+                 .defaultValue(true)
+                 .build();
+    onThreshold = &ConfigManager.addSettingFloat("BoI_OnT")
+                     .name("Alarm Under Temperature")
+                     .category("Boiler")
+                     .defaultValue(60.0f)
+                     .build();
+    offThreshold = &ConfigManager.addSettingFloat("BoI_OffT")
+                      .name("You can shower now temperature")
+                      .category("Boiler")
+                      .defaultValue(78.0f)
+                      .build();
+    boilerTimeMin = &ConfigManager.addSettingInt("BoI_Time")
+                       .name("Boiler Max Heating Time (min)")
                        .category("Boiler")
-                       .defaultValue(true)
+                       .defaultValue(120)
                        .build();
-        onThreshold = &ConfigManager.addSettingFloat("BoI_OnT")
-                          .name("Alarm Under Temperature")
-                          .category("Boiler")
-                          .defaultValue(60.0f)
-                          .build();
-        offThreshold = &ConfigManager.addSettingFloat("BoI_OffT")
-                           .name("You can shower now temperature")
+    stopTimerOnTarget = &ConfigManager.addSettingBool("BoI_StopOnT")
+                           .name("Stop timer when target reached")
                            .category("Boiler")
-                           .defaultValue(78.0f)
+                           .defaultValue(false)
                            .build();
-        boilerTimeMin = &ConfigManager.addSettingInt("BoI_Time")
-                             .name("Boiler Max Heating Time (min)")
-                             .category("Boiler")
-                             .defaultValue(120)
-                             .build();
-        stopTimerOnTarget = &ConfigManager.addSettingBool("BoI_StopOnT")
-                                 .name("Stop timer when target reached")
-                                 .category("Boiler")
-                                 .defaultValue(false)
-                                 .build();
-        onlyOncePerPeriod = &ConfigManager.addSettingBool("YSNOnce")
-                                 .name("Notify once per period")
-                                 .category("Boiler")
-                                 .defaultValue(true)
-                                 .build();
-    }
+    onlyOncePerPeriod = &ConfigManager.addSettingBool("YSNOnce")
+                           .name("Notify once per period")
+                           .category("Boiler")
+                           .defaultValue(true)
+                           .build();
+  }
 };
 
 struct DisplaySettings {
-    Config<bool> *turnDisplayOff = nullptr;
-    Config<int> *onTimeSec = nullptr;
+  Config<bool>* turnDisplayOff = nullptr;
+  Config<int>* onTimeSec = nullptr;
 
-    void create()
-    {
-        turnDisplayOff = &ConfigManager.addSettingBool()
-                               .name("Turn Display Off")
-                               .category("Display")
-                               .defaultValue(true)
-                               .build();
-        onTimeSec = &ConfigManager.addSettingInt()
-                         .name("Display On-Time (s)")
-                         .category("Display")
-                         .defaultValue(60)
-                         .build();
-    }
+  void create() {
+    turnDisplayOff = &ConfigManager.addSettingBool()
+                        .name("Turn Display Off")
+                        .category("Display")
+                        .defaultValue(true)
+                        .build();
+    onTimeSec = &ConfigManager.addSettingInt()
+                   .name("Display On-Time (s)")
+                   .category("Display")
+                   .defaultValue(60)
+                   .build();
+  }
 };
 
 struct TempSensorSettings {
-    Config<int> *gpioPin = nullptr;      // DS18B20 data pin
-    Config<float> *corrOffset = nullptr;   // correction offset in °C
-    Config<int> *readInterval = nullptr; // seconds
+  Config<int>* gpioPin = nullptr;      // DS18B20 data pin
+  Config<float>* corrOffset = nullptr; // correction offset in °C
+  Config<int>* readInterval = nullptr; // seconds
 
-    void create()
-    {
-        gpioPin = &ConfigManager.addSettingInt("TsPin")
-                       .name("GPIO Pin")
-                       .category("Temp Sensor")
-                       .defaultValue(26)
-                       .build();
-        corrOffset = &ConfigManager.addSettingFloat("TsOfs")
-                          .name("Correction Offset")
-                          .category("Temp Sensor")
-                          .defaultValue(15.0f)
-                          .build();
-        readInterval = &ConfigManager.addSettingInt("TsInt")
-                             .name("Read Interval (s)")
-                             .category("Temp Sensor")
-                             .defaultValue(10)
-                             .build();
-    }
+  void create() {
+    gpioPin = &ConfigManager.addSettingInt("TsPin")
+                 .name("GPIO Pin")
+                 .category("Temp Sensor")
+                 .defaultValue(26)
+                 .build();
+    corrOffset = &ConfigManager.addSettingFloat("TsOfs")
+                    .name("Correction Offset")
+                    .category("Temp Sensor")
+                    .defaultValue(15.0f)
+                    .build();
+    readInterval = &ConfigManager.addSettingInt("TsInt")
+                      .name("Read Interval (s)")
+                      .category("Temp Sensor")
+                      .defaultValue(10)
+                      .build();
+  }
 };
 
 struct WiFiUiSettings {
-    Config<String> *apMacPriority = nullptr;
+  Config<String>* apMacPriority = nullptr;
 
-    void create()
-    {
-        apMacPriority = &ConfigManager.addSettingString("WiFiMacPr")
-                             .name("Preferred AP MAC (optional)")
-                             .category("WiFi")
-                             .defaultValue(String(""))
-                             .build();
-    }
+  void create() {
+    apMacPriority = &ConfigManager.addSettingString("WiFiMacPr")
+                       .name("Preferred AP MAC (optional)")
+                       .category("WiFi")
+                       .defaultValue(String(""))
+                       .build();
+  }
 };
 
 extern I2CSettings i2cSettings;

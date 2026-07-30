@@ -54,3 +54,5 @@ secrets.h
 /.serena/memories/local_*.md
 /.serena/memories/tmp_*.md
 /compile_commands.json
+/.Temp/
+/.Temp

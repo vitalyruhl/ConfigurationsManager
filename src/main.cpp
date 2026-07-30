@@ -2,10 +2,8 @@
 #include "ConfigManager.h"
 
 #ifndef PIO_UNIT_TESTING
-void setup(){
-
+void setup() {
 }
-void loop(){
-
+void loop() {
 }
 #endif

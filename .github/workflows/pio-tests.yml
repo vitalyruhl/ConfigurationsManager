@@ -1,14 +1,16 @@
-name: PlatformIO Linux Build
+name: Full Repository Gate
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  full-repository-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -17,13 +19,33 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: '3.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
 
       - name: Install PlatformIO Core
         run: python -m pip install --upgrade platformio
 
-      - name: Compile embedded Unity test suite
-        run: pio test -e usb --without-uploading --without-testing
+      - name: Install static analysis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18 cppcheck
+          clang-format-18 --version
+          cppcheck --version
 
-      - name: Build ESP32 Arduino project
-        run: pio run -e usb
+      - name: Run full repository gate
+        shell: pwsh
+        run: ./tools/build/run-full-repository-gate.ps1 -FailFast -LogRoot $env:RUNNER_TEMP
+
+      - name: Upload repository gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-gate-logs-${{ github.run_id }}
+          path: ${{ runner.temp }}/ConfigurationsManager-full-gate-*
+          if-no-files-found: warn
