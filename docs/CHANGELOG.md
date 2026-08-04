@@ -2,6 +2,20 @@
 
 This changelog is a curated overview.
 
+## 4.4.9 - 2026-08-04
+
+- Updated WebUI dependencies to `vue` 3.5.40, `vite` 8.2.0, and
+  `@vitejs/plugin-vue` 6.0.8.
+- Applied `npm audit fix` for WebUI development dependencies; audit now reports
+  no known vulnerabilities.
+- Pinned CI toolchain to Python 3.11 and PlatformIO Core 6.1.19 for reproducible
+  dependency resolution.
+- Switched embedded WebUI precompile install step from `npm install` to
+  deterministic `npm ci`.
+- Standardized root and example PlatformIO environments to
+  `platformio/espressif32@7.0.1` and aligned key dependency ranges with
+  `library.json`.
+
 ## 4.4.8 - 2026-07-26
 
 - Improve runtime dashboard reliability during frequent browser reloads (#71).

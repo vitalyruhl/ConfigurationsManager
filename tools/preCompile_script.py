@@ -81,7 +81,7 @@ EMBED_WEBUI = True
 
 if EMBED_WEBUI:
 	# Ensure node modules present only when embedding
-	subprocess.run([npm_cmd, 'install'], cwd=str(WEBUI_DIR), check=True)
+	subprocess.run([npm_cmd, 'ci'], cwd=str(WEBUI_DIR), check=True)
 
 	# Prepare environment
 	env_vars = os.environ.copy()

@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.4.8
+> Version 4.4.9
 
 ## Preview Before Installing
 
@@ -101,7 +101,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 
 - **ESP32 development board** (ESP32, ESP32-S2, ESP32-S3, ESP32-C3)
 - **PlatformIO** (preferred) or Arduino IDE (Arduino IDE not tested!)
-- **Node.js 18.0.0+** (only if you want to rebuild the WebUI)
+- **Node.js 22.12.0+** (only if you want to rebuild the WebUI)
 - **Python 3.8+** (optional; only used by legacy tooling)
 - Add `-std=gnu++17` (and remove default gnu++11) in `platformio.ini`
 
