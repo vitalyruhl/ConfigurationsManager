@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $gateScript = Join-Path $PSScriptRoot 'run-full-repository-gate.ps1'
 $gateStarter = Join-Path $PSScriptRoot 'run-full-repository-gate.cmd'
-$testRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path (Join-Path $repoRoot 'tools\_buildlogs') ('regression-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+$testRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path (Join-Path $repoRoot '.Temp\buildlogs') ('regression-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 
 function Assert-Condition {
     param([bool]$Condition, [string]$Message)

@@ -16,7 +16,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$temporaryRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path $repoRoot 'tools\_buildlogs' }
+$temporaryRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path $repoRoot '.Temp\buildlogs' }
+$env:PYTHONPYCACHEPREFIX = Join-Path $repoRoot '.Temp\pycache'
 $logDirectory = Join-Path $temporaryRoot ("ConfigurationsManager-full-gate-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $results = [System.Collections.Generic.List[object]]::new()
 $plannedChecks = [System.Collections.Generic.List[string]]::new()

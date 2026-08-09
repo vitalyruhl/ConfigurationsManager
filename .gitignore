@@ -21,6 +21,11 @@ ZZ_Ideas/
 node_modules/
 .vite/
 
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

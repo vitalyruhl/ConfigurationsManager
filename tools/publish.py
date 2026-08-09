@@ -13,7 +13,24 @@ import json
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
+
+
+CONSUMER_REQUIRED_PACKAGE_FILES = (
+    "tools/pio_force_local_lib_refresh.py",
+    "tools/preCompile_script.py",
+    "tools/precompile_wrapper.py",
+    "tools/webui_to_header.js",
+)
+FORBIDDEN_PACKAGE_PREFIXES = (
+    "tools/_buildlogs/",
+)
+FORBIDDEN_PACKAGE_SUFFIXES = (
+    ".pyc",
+    ".pyo",
+)
 
 
 def run_command(cmd, check=True, capture_output=False):
@@ -89,6 +106,58 @@ def check_git_status():
     return bool(result)
 
 
+def verify_package_content():
+    """Pack once and verify consumer tools and excluded generated artifacts."""
+    print("[INFO] Verifying PlatformIO package content...")
+    with tempfile.TemporaryDirectory(prefix="configmanager-package-gate-") as temp_dir:
+        archive_path = Path(temp_dir) / "configmanager-package.tar.gz"
+        result = subprocess.run(
+            ["pio", "pkg", "pack", ".", "--output", str(archive_path)],
+            check=False,
+        )
+        if result.returncode != 0:
+            print("[ERROR] PlatformIO package packing failed!")
+            return False
+        if not archive_path.is_file():
+            print(f"[ERROR] Expected package archive was not created: {archive_path}")
+            return False
+
+        try:
+            with tarfile.open(archive_path, "r:*") as archive:
+                package_paths = {
+                    member.name.lstrip("./").replace("\\", "/")
+                    for member in archive.getmembers()
+                }
+        except tarfile.TarError as exc:
+            print(f"[ERROR] Could not inspect package archive: {exc}")
+            return False
+
+    missing = [path for path in CONSUMER_REQUIRED_PACKAGE_FILES if path not in package_paths]
+    forbidden = [path for path in package_paths if _is_forbidden_package_path(path)]
+    if missing:
+        print("[ERROR] Consumer-required package files are missing:")
+        for path in missing:
+            print(f"  - {path}")
+        return False
+    if forbidden:
+        print("[ERROR] Generated build artifacts are present in the package:")
+        for path in sorted(forbidden):
+            print(f"  - {path}")
+        return False
+
+    print("[SUCCESS] PlatformIO package content is valid.")
+    return True
+
+
+def _is_forbidden_package_path(path):
+    path_parts = path.split("/")
+    return (
+        any(path.startswith(prefix) for prefix in FORBIDDEN_PACKAGE_PREFIXES)
+        or "__pycache__" in path_parts
+        or path.endswith(FORBIDDEN_PACKAGE_SUFFIXES)
+    )
+
+
 def main():
     print("=" * 80)
     print("ESP32 Configuration Manager - Automated Publish Script")
@@ -148,7 +217,10 @@ def main():
     if response.lower() != 'y':
         print("[ERROR] Aborted by user")
         sys.exit(1)
-    
+
+    if not verify_package_content():
+        sys.exit(1)
+
     print()
     print("=" * 80)
     print("Starting publish process...")
