@@ -1,8 +1,10 @@
 [CmdletBinding()]
 param(
     [switch]$DiscoverOnly,
+    [switch]$FullMatrix,
     [switch]$FailFast,
     [string]$LogRoot,
+    [string]$MatrixRoot,
     [ValidateSet('Pass', 'Fail', 'Throw')]
     [string]$SelfTest
 )
@@ -16,6 +18,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$platformIoRoot = if ($MatrixRoot) { (Resolve-Path -LiteralPath $MatrixRoot).Path } else { $repoRoot }
 $temporaryRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path $repoRoot '.Temp\buildlogs' }
 $env:PYTHONPYCACHEPREFIX = Join-Path $repoRoot '.Temp\pycache'
 $logDirectory = Join-Path $temporaryRoot ("ConfigurationsManager-full-gate-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -106,16 +109,30 @@ function Write-Summary {
 
 function Get-PlatformIoMatrix {
     $excludedSegment = '[\\/](?:\.git|\.pio|\.Temp|node_modules|dist|libdeps)[\\/]'
-    $projects = Get-ChildItem -Path $repoRoot -Filter 'platformio.ini' -File -Recurse |
-        Where-Object { $_.FullName -notmatch $excludedSegment } |
+    $projects = Get-ChildItem -Path $platformIoRoot -Filter 'platformio.ini' -File -Recurse |
+        Where-Object { $MatrixRoot -or $_.FullName -notmatch $excludedSegment } |
         Sort-Object FullName
     $matrix = foreach ($project in $projects) {
-        $environments = Select-String -Path $project.FullName -Pattern '^\[env:([^\]]+)\]' |
-            ForEach-Object { $_.Matches[0].Groups[1].Value }
-        foreach ($environment in $environments) {
+        $environments = @(Select-String -Path $project.FullName -Pattern '^\s*\[env:([^\]]+)\]' |
+                ForEach-Object { $_.Matches[0].Groups[1].Value })
+        if ($environments.Count -eq 0) { continue }
+        $selectedEnvironments = if ($FullMatrix) {
+            $environments | ForEach-Object { [PSCustomObject]@{ Environment = $_; SelectionReason = 'full matrix mode' } }
+        }
+        elseif ($environments -contains 'ota') {
+            @([PSCustomObject]@{ Environment = ($environments | Where-Object { $_ -eq 'ota' } | Select-Object -First 1); SelectionReason = 'preferred' })
+        }
+        elseif ($environments -contains 'usb') {
+            @([PSCustomObject]@{ Environment = ($environments | Where-Object { $_ -eq 'usb' } | Select-Object -First 1); SelectionReason = 'fallback' })
+        }
+        else {
+            @([PSCustomObject]@{ Environment = $environments[0]; SelectionReason = 'first declared environment' })
+        }
+        foreach ($selection in $selectedEnvironments) {
             [PSCustomObject]@{
                 ProjectDirectory = $project.Directory.FullName
-                Environment = $environment
+                Environment = $selection.Environment
+                SelectionReason = $selection.SelectionReason
                 HasEmbeddedTests = Test-Path -LiteralPath (Join-Path $project.Directory.FullName 'test')
             }
         }
@@ -176,6 +193,7 @@ function Run-RequiredCheck {
 
 try {
     if ($DiscoverOnly -and $SelfTest) { throw '-DiscoverOnly and -SelfTest cannot be combined.' }
+    if ($MatrixRoot -and -not $DiscoverOnly) { throw '-MatrixRoot is only supported with -DiscoverOnly.' }
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     Push-Location $repoRoot
@@ -211,7 +229,16 @@ try {
         }
 
         Write-Output 'Discovered PlatformIO build matrix:'
-        $matrix | ForEach-Object { Write-Output "  $([IO.Path]::GetRelativePath($repoRoot, $_.ProjectDirectory).Replace('\', '/')) [$($_.Environment)]" }
+        $matrix | ForEach-Object {
+            $relativeDirectory = [IO.Path]::GetRelativePath($platformIoRoot, $_.ProjectDirectory).Replace('\', '/')
+            if ($relativeDirectory -like 'examples/*') {
+                $targetName = "Example $($relativeDirectory.Substring('examples/'.Length))"
+            }
+            else {
+                $targetName = "Project $relativeDirectory"
+            }
+            Write-Output "${targetName}: selected environment $($_.Environment) ($($_.SelectionReason))"
+        }
         Write-Output "Discovered embedded test targets: $($embeddedTestTargets.Count)"
         Write-Output "Discovered WebUI tests: $($webUiTests.Count)"
         Write-Output "Full repository gate logs: $logDirectory"
