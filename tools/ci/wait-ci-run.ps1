@@ -157,18 +157,21 @@ function Test-RequiredPullRequestChecks {
     if (-not $PullRequest) {
         return
     }
-    $pullRequest = Invoke-GhJson -Arguments @('pr', 'view', $PullRequest, '-R', $script:Repository, '--json', 'headRefOid,url')
-    if ($pullRequest.headRefOid -ne $ExpectedHeadSha) {
+    $pullRequestInfo = Invoke-GhJson -Arguments @('pr', 'view', $PullRequest, '-R', $script:Repository, '--json', 'headRefOid,url')
+    if ($pullRequestInfo.headRefOid -ne $ExpectedHeadSha) {
         Write-Output 'CI RESULT: STALE_HEAD'
         Write-Output "Expected PR head: $ExpectedHeadSha"
-        Write-Output "Actual PR head: $($pullRequest.headRefOid)"
-        Exit-WithResult -Result 'STALE_HEAD' -ExitCode $exitTargetMismatch -Details @{ pullRequest = $PullRequest; pullRequestUrl = $pullRequest.url }
+        Write-Output "Actual PR head: $($pullRequestInfo.headRefOid)"
+        Exit-WithResult -Result 'STALE_HEAD' -ExitCode $exitTargetMismatch -Details @{ pullRequest = $PullRequest; pullRequestUrl = $pullRequestInfo.url }
     }
 
-    $checksOutput = & gh pr checks $PullRequest -R $script:Repository --required --json name,state,bucket,link 2>&1
+    $checksOutput = & gh pr checks $PullRequest -R $script:Repository --required --json name,state,bucket,link 2>$null
     $checksExitCode = $LASTEXITCODE
     $checksText = (($checksOutput | ForEach-Object { $_.ToString() }) -join "`n")
-    $checks = if ($checksText) { $checksText | ConvertFrom-Json } else { @() }
+    $checks = @()
+    if ($checksText) {
+        $checks += @($checksText | ConvertFrom-Json)
+    }
     if ($checks.Count -eq 0) {
         Write-Output 'CI RESULT: INCOMPLETE'
         Write-Output 'Required PR checks are not configured or not available for this PR head.'
