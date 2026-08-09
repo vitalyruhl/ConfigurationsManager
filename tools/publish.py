@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Automated publish script for ESP32 Configuration Manager
-Reads version and changelog from library.json and README.md, then:
+Reads version and changelog from library.json and docs/CHANGELOG.md, then:
 1. Git add all changes
 2. Git commit with version changelog message
 3. Create git tag
@@ -67,36 +67,25 @@ def get_library_version():
 
 
 def get_latest_changelog():
-    """Extract the latest version changelog from README.md"""
-    readme = Path("README.md")
-    if not readme.exists():
-        print("[ERROR] README.md not found!")
+    """Extract the latest version entry from docs/CHANGELOG.md."""
+    changelog_file = Path("docs/CHANGELOG.md")
+    if not changelog_file.exists():
+        print("[ERROR] docs/CHANGELOG.md not found!")
         sys.exit(1)
-    
-    with open(readme, 'r', encoding='utf-8') as f:
+
+    with open(changelog_file, 'r', encoding='utf-8') as f:
         content = f.read()
-    
-    # Find the Version History section
-    version_section = re.search(r'## Version History\n\n(.+?)(?=\n##|\Z)', content, re.DOTALL)
-    if not version_section:
-        print("[ERROR] Version History section not found in README.md!")
+
+    entry = re.search(
+        r'^##[ \t]+(\d+\.\d+\.\d+)(?:[ \t]+-[ \t]+[^\r\n]+)?[ \t]*\r?\n+(.*?)(?=^##[ \t]|\Z)',
+        content,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not entry:
+        print("[ERROR] No version entries found in docs/CHANGELOG.md!")
         sys.exit(1)
-    
-    history_text = version_section.group(1)
-    
-    # Find ALL version entries
-    # Pattern: - **X.X.X**: changelog text
-    all_entries = re.findall(r'^- \*\*(\d+\.\d+\.\d+)\*\*:\s*(.+?)(?=\n- \*\*\d+\.\d+\.\d+\*\*:|\n\n##|\Z)', 
-                            history_text, re.MULTILINE | re.DOTALL)
-    
-    if not all_entries:
-        print("[ERROR] No version entries found in Version History!")
-        sys.exit(1)
-    
-    # The LAST entry in the list is the most recent (newest at bottom of list in README)
-    version, changelog = all_entries[-1]
-    changelog = changelog.strip()
-    
+
+    version, changelog = entry.group(1), entry.group(2).strip()
     return version, changelog
 
 
@@ -170,7 +159,7 @@ def main():
     
     # Get latest changelog from README
     readme_version, changelog = get_latest_changelog()
-    print(f"[INFO] README latest version: {readme_version}")
+    print(f"[INFO] Changelog latest version: {readme_version}")
     print(f"[INFO] Changelog: {changelog[:100]}..." if len(changelog) > 100 else f"[INFO] Changelog: {changelog}")
     print()
     
