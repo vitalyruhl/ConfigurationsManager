@@ -2,6 +2,15 @@
 
 This changelog is a curated overview.
 
+## 4.4.10 - 2026-08-09
+
+- Stop shipping generated full-gate and build logs in the PlatformIO package,
+  preventing Windows `WinError 206` failures on deep consumer project paths.
+- Preserve the consumer-side precompile toolchain and WebUI regeneration based
+  on ConfigManager feature and space-saving flags.
+- Add a package-content regression check that rejects generated build-log trees
+  while requiring the consumer precompile files.
+
 ## 4.4.9 - 2026-08-04
 
 - Updated WebUI dependencies to `vue` 3.5.40, `vite` 8.2.0, and

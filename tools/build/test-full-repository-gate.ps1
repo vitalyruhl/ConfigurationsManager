@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $gateScript = Join-Path $PSScriptRoot 'run-full-repository-gate.ps1'
 $gateStarter = Join-Path $PSScriptRoot 'run-full-repository-gate.cmd'
-$testRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path (Join-Path $repoRoot 'tools\_buildlogs') ('regression-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+$testRoot = if ($LogRoot) { [IO.Path]::GetFullPath($LogRoot) } else { Join-Path (Join-Path $repoRoot '.Temp\buildlogs') ('regression-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 
 function Assert-Condition {
     param([bool]$Condition, [string]$Message)
@@ -32,7 +32,26 @@ function Invoke-GateSelfTest {
     return $output
 }
 
+function Write-MatrixFixture {
+    param([string]$Name, [string[]]$Environments)
+
+    $fixtureDirectory = Join-Path (Join-Path $matrixRoot 'examples') $Name
+    New-Item -ItemType Directory -Path $fixtureDirectory -Force | Out-Null
+    $content = $Environments | ForEach-Object { "[env:$_]" }
+    Set-Content -LiteralPath (Join-Path $fixtureDirectory 'platformio.ini') -Value $content -Encoding utf8
+}
+
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+
+$matrixRoot = Join-Path $testRoot 'matrix-fixtures'
+Write-MatrixFixture -Name 'ota-preferred' -Environments @('usb', 'ota', 'eth')
+Write-MatrixFixture -Name 'usb-fallback' -Environments @('eth', 'usb')
+Write-MatrixFixture -Name 'first-declared' -Environments @('eth', 'wifi')
+$matrixOutput = & pwsh.exe -NoProfile -File $gateScript -DiscoverOnly -MatrixRoot $matrixRoot -LogRoot (Join-Path $testRoot 'matrix-discovery') 2>&1 | Out-String
+Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "Matrix discovery failed. Output: $matrixOutput"
+Assert-Condition -Condition ($matrixOutput -match 'Example ota-preferred: selected environment ota \(preferred\)') -Message 'The gate did not prefer ota.'
+Assert-Condition -Condition ($matrixOutput -match 'Example usb-fallback: selected environment usb \(fallback\)') -Message 'The gate did not select usb when ota was absent.'
+Assert-Condition -Condition ($matrixOutput -match 'Example first-declared: selected environment eth \(first declared environment\)') -Message 'The gate did not select the first declared environment.'
 
 $passOutput = Invoke-GateSelfTest -Mode Pass -ExpectedExitCode 0
 Assert-Condition -Condition ($passOutput -match 'Full repository gate result: PASS') -Message 'Successful self-test did not report PASS.'
