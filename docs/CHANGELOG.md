@@ -5,11 +5,17 @@ This changelog is a curated overview.
 ## 4.4.10 - 2026-08-09
 
 - Stop shipping generated full-gate and build logs in the PlatformIO package,
-  preventing Windows `WinError 206` failures on deep consumer project paths.
+  move gate logs to `.Temp`, and exclude Python, temporary, and dependency
+  cache artifacts defensively, preventing Windows `WinError 206` failures on
+  deep consumer project paths.
 - Preserve the consumer-side precompile toolchain and WebUI regeneration based
   on ConfigManager feature and space-saving flags.
 - Add a package-content regression check that rejects generated build-log trees
   while requiring the consumer precompile files.
+- Build one deterministic representative environment per example in the normal
+  full gate (`ota`, then `usb`, then the first declared environment), while
+  retaining `-FullMatrix` for the complete matrix.
+- Fix required-check parsing in the CI wait helper.
 
 ## 4.4.9 - 2026-08-04
 
