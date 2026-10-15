@@ -1,3 +1,4 @@
+#include "bluetooth/detail/BleWrite.h"
 #include "bluetooth/detail/BluetoothScheduler.h"
 #include "bluetooth/detail/BoundedBleQueue.h"
 #include "ota/detail/OtaLifecycleState.h"
@@ -146,5 +147,17 @@ int main(){
  assert(dispatch.beginDelivery(q2,queries.queryId(),queries.queryPending()));
  assert(dispatch.makeCompletion(queries.generation(),complete));
  assert(queries.completeQuery(complete.queryId,complete.generation));dispatch.endDelivery();
+ // [MOCKED!] Characteristic properties exercise the production write selector.
+ struct Characteristic {bool acknowledged,unacknowledged,response=false;int calls=0;
+  bool canWrite()const{return acknowledged;}bool canWriteNoResponse()const{return unacknowledged;}
+  bool writeValue(const uint8_t*,size_t,bool r){response=r;++calls;return true;}};
+ Characteristic ack{true,false},noAck{false,true},neither{false,false};
+ assert(detail::writeCharacteristic(&ack,bytes,2)&&ack.response);
+ assert(detail::writeCharacteristic(&noAck,bytes,2)&&!noAck.response);
+ assert(!detail::writeCharacteristic(&neither,bytes,2)&&!neither.calls);
+ assert(!detail::writeCharacteristic<Characteristic>(nullptr,bytes,2));
+ // Removing GATT preserves advertisement scanning and forbids reconnect.
+ queries.configure(true,true,false,50);queries.tick(51);assert(queries.scanning());
+ assert(!queries.requestConnect(52)&&!queries.connected());
  std::cout<<"Bluetooth transport checks passed\n";
 }

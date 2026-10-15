@@ -1,6 +1,7 @@
 #pragma once
 #include "ConfigManager.h"
 #include "BluetoothTypes.h"
+#include "detail/BleWrite.h"
 #include "detail/BoundedBleQueue.h"
 #include "detail/BluetoothScheduler.h"
 #include "detail/BluetoothDispatch.h"
@@ -77,6 +78,9 @@ public:
     desired_.gatt=address; desired_.service=service; desired_.notify=notify; desired_.write=writeUuid; desired_.hasGatt=true;
     return !worker_ || queueConfiguration();
   }
+  // Remove only this source; the other peer remains configured.
+  bool clearAdvertisementPeer() { desired_.hasAdvertisement=false;return !worker_ || queueConfiguration(); }
+  bool clearGattPeer() { desired_.hasGatt=false;return !worker_ || queueConfiguration(); }
   bool requestConnect() {
     if (!worker_ || !enabledCached_ || !desired_.hasGatt || isPaused()) return false;
     detail::BleCommand cmd{};cmd.type=detail::BleCommandType::Connect;cmd.generation=generation();
@@ -200,6 +204,7 @@ private:
     writeCharacteristic_=service?service->getCharacteristic(NimBLEUUID(workerConfig_.write)):nullptr;
     const auto epoch=linkGeneration_.load();
     if(!scheduler_.accepts(epoch) || !notify || !notify->canNotify() || !writeCharacteristic_ ||
+       (!writeCharacteristic_->canWrite() && !writeCharacteristic_->canWriteNoResponse()) ||
        !notify->subscribe(true,[this,epoch](NimBLERemoteCharacteristic*,uint8_t* data,size_t size,bool) {
          emit(BleEventType::Notification,data,size,epoch);
        })) {cancel();return false;}
@@ -211,7 +216,7 @@ private:
     radioConnected_=false;
   }
   bool write(const uint8_t* data,size_t size) {
-    return writeCharacteristic_ && writeCharacteristic_->writeValue(data,size,true);
+    return detail::writeCharacteristic(writeCharacteristic_,data,size);
   }
   static void workerEntry(void* value) {static_cast<BluetoothManager*>(value)->run();}
   void run() {

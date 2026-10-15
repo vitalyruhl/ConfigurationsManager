@@ -285,3 +285,8 @@ This changelog is a curated overview.
 |---|---|---|---|
 | _none_ | - | Changelog only; no dedicated public API in this document. | See topic docs for API details. |
 
+
+### Additional unreleased 4.6.0 BLE support
+
+- Remove an individual advertisement or GATT peer without disabling the other source.
+- Select an acknowledged or unacknowledged GATT write according to characteristic properties; reject non-writable targets.
