@@ -131,11 +131,11 @@ public:
     return settings_;
   }
 
-  // Attach to ConfigManager (layout only; settings are explicit).
+  // Attach to ConfigManager and register baseline settings once plus the default layout.
   // This keeps MQTT optional: only projects that include this header and call attach() use it.
   void attach(ConfigManagerClass& configManager, const char* basePageName = "MQTT");
 
-  // Baseline MQTT settings (host/user/pass/etc) are explicit.
+  // Optional placement of the already registered baseline MQTT settings.
   void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
                                       const char* pageName,
                                       const char* groupName,

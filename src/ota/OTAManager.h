@@ -9,12 +9,17 @@
 
 #include <ESPAsyncWebServer.h>
 #include <functional>
+#include <mutex>
+#include <atomic>
+#include "detail/OtaLifecycleState.h"
+#include "detail/OtaUploadGate.h"
 
 // Forward declaration
 class ConfigManagerClass;
 
 #if CM_ENABLE_OTA
 struct OtaUploadContext {
+  uint32_t sessionId = 0;
   bool hasError = false;
   bool authorized = false;
   bool began = false;
@@ -34,14 +39,20 @@ public:
 private:
   static constexpr uint32_t OTA_STALE_TIMEOUT_MS = 120000UL;
 
-  bool otaEnabled;
-  bool otaInitialized;
-  bool otaActive;
+  std::atomic<bool> otaEnabled;
+  std::atomic<bool> otaInitialized;
+  std::atomic<bool> otaActive;
   bool webRoutesConfigured;
-  uint32_t otaLastActivityMs;
+  std::atomic<uint32_t> otaLastActivityMs;
   String otaPassword;
   String otaHostname;
   ConfigManagerClass* configManager;
+
+  cm::detail::OtaLifecycleState lifecycle;
+  cm::detail::OtaUploadGate uploadGate{lifecycle};
+  uint32_t arduinoSessionId = 0;
+  std::atomic<uint32_t> pendingAbortSession{0};
+  std::atomic<bool> disablePending{false};
 
   // Callbacks
   RebootCallback rebootCallback;
@@ -54,6 +65,9 @@ private:
   void setActive(bool active);
   void notifyActivityState();
   void checkStaleUpload();
+#if CM_ENABLE_OTA
+  void sendHttpSuccess(AsyncWebServerRequest* request, OtaUploadContext* context);
+#endif
 
 public:
   ConfigManagerOTA();
@@ -62,6 +76,10 @@ public:
   // Initialization
   void begin(ConfigManagerClass* cm);
   void setCallbacks(RebootCallback reboot, LogCallback logger);
+  // Register before uploads; preserved across setup() and setCallbacks().
+  void setLifecycleObserver(std::function<void(const OtaLifecycleEvent&)> observer) {
+    lifecycle.setObserver(std::move(observer));
+  }
 
 #if CM_ENABLE_OTA
   // OTA setup and management

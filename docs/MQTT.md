@@ -5,7 +5,7 @@ This repository provides an **optional** MQTT helper module.
 - Module header: `src/mqtt/MQTTManager.h`
 - You must explicitly include it from your sketch.
 - You must add `PubSubClient` to your project dependencies.
-- The recommended init pattern is **Option A**: call `mqtt.attach(ConfigManager)` from `setup()` and register settings explicitly.
+- The recommended init pattern is **Option A**: call `mqtt.attach(ConfigManager)` from `setup()` before `loadAll()`. Attach registers baseline settings once and creates the default layout; custom placement and runtime fields remain explicit.
 
 ## Minimal Usage
 

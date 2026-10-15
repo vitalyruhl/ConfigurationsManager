@@ -2,6 +2,17 @@
 
 This changelog is a curated overview.
 
+## 4.5.0 - Unreleased
+
+- Add an opt-in BLE transport module with settings, runtime diagnostics, bounded
+  queues, and a dedicated worker. Applications explicitly supply NimBLE;
+  applications without Bluetooth keep their existing dependency set.
+- Add independent OTA lifecycle observation for Arduino and HTTP uploads,
+  including session ownership and failure recovery, so optional transports can
+  pause during updates without replacing existing reboot or logging callbacks.
+- Add a Bluetooth example and focused host checks for lifecycle and transport
+  behavior. Physical BLE coexistence and OTA acceptance remain pending.
+
 ## 4.4.10 - 2026-08-09
 
 - Stop shipping generated full-gate and build logs in the PlatformIO package,

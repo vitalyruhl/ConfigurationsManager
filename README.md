@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.4.10
+> Version 4.5.0
 
 ## Preview Before Installing
 
@@ -67,6 +67,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - External-network startup for Ethernet-based projects
 - OTA firmware upload via WebUI
 - Optional MQTT module (PubSubClient-based)
+- Optional BLE transport (consumer-supplied NimBLE, bounded worker and queues)
 
 ### Logging
 - Optional logging module (Serial, GUI log tab, MQTT output)
@@ -93,6 +94,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | OTA + Web UI flashing                     | [docs/OTA.md](docs/OTA.md)                             |
 | Security Notes (password transport)       | [docs/SECURITY.md](docs/SECURITY.md)                   |
 | Troubleshooting                           | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)     |
+| Bluetooth Module                          | [docs/BLUETOOTH.md](docs/BLUETOOTH.md)                 |
 | MQTT Module                               | [docs/MQTT.md](docs/MQTT.md)                           |
 | Changelog                                 | [docs/CHANGELOG.md](docs/CHANGELOG.md)                 |
 | Build Options / Feature Flags             | [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)         |
