@@ -7,6 +7,7 @@
 #include <mutex>
 #include <vector>
 #include "../ConfigManagerConfig.h"
+#include "detail/RuntimeSnapshot.h"
 
 // Forward declaration
 class ConfigManagerClass;
@@ -274,7 +275,8 @@ private:
   mutable std::mutex runtimeDataMutex;
   mutable std::mutex runtimeMetaCacheMutex;
 
-  std::shared_ptr<const String> runtimeMetaJsonCache;
+  // Reuse metadata only while a response/caller still owns the complete snapshot.
+  std::weak_ptr<const String> runtimeMetaJsonCache;
   bool runtimeMetaJsonCacheDirty = true;
   bool runtimeMetaJsonCacheBuildInProgress = false;
   std::atomic<uint32_t> runtimeMetaRevision{0};
@@ -314,7 +316,7 @@ private:
 #endif
 
   // Helper methods
-  String buildRuntimeMetaJsonLocked();
+  String buildRuntimeMetaJsonLocked(const std::function<bool(const RuntimeFieldMeta&)>& include = {});
   void markRuntimeMetaJsonCacheDirtyLocked();
   RuntimeAlarm* findAlarm(const String& name);
   const RuntimeAlarm* findAlarm(const String& name) const;
@@ -341,7 +343,11 @@ public:
 
   // JSON generation
   String runtimeValuesToJSON();
+  String runtimeValuesToJSON(const cm::RuntimeSelection& selection);
+  void fillRuntimeSnapshot(JsonObject root, const cm::RuntimeSelection& selection);
   String runtimeMetaToJSON();
+  String runtimeMetaToJSON(const std::function<bool(const RuntimeFieldMeta&)>& include);
+  bool hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>& include = {}) const;
   std::shared_ptr<const String> runtimeMetaJsonPayload();
 
 #ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION

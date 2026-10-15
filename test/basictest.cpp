@@ -396,6 +396,22 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
   const std::shared_ptr<const String> recoveredCache = cacheRuntime.runtimeMetaJsonPayload();
   TEST_ASSERT_NOT_NULL(recoveredCache.get());
 
+  ConfigManagerRuntime expiringRuntime;
+  expiringRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(0));
+  std::weak_ptr<const String> expiredSnapshot;
+  {
+    const auto firstOwner = expiringRuntime.runtimeMetaJsonPayload();
+    const auto secondOwner = expiringRuntime.runtimeMetaJsonPayload();
+    TEST_ASSERT_NOT_NULL(firstOwner.get());
+    TEST_ASSERT_EQUAL_PTR(firstOwner.get(), secondOwner.get());
+    expiredSnapshot = firstOwner;
+    TEST_ASSERT_EQUAL_UINT32(1, expiringRuntime.getRuntimeMetaSerializationBuildCountForTest());
+  }
+  TEST_ASSERT_TRUE(expiredSnapshot.expired());
+  const auto rebuiltAfterRelease = expiringRuntime.runtimeMetaJsonPayload();
+  TEST_ASSERT_NOT_NULL(rebuiltAfterRelease.get());
+  TEST_ASSERT_EQUAL_UINT32(2, expiringRuntime.getRuntimeMetaSerializationBuildCountForTest());
+
   ConfigManagerRuntime failingRuntime;
   failingRuntime.addRuntimeMeta(makeRuntimeMetaFixtureEntry(0));
   failingRuntime.setRuntimeMetaSerializationFailureForTest(true);

@@ -2,6 +2,9 @@
 #include "../ConfigManager.h"
 #include "../settings.h"
 #include "WebRequestBodyBuffer.h"
+#include "StaticGzipResponse.h"
+#include "BoundedResponse.h"
+#include "../runtime/detail/LivePageSelection.h"
 
 #include <AsyncJson.h>
 #include <cstring>
@@ -15,158 +18,21 @@
 
 namespace {
 
-class RuntimeMetaResponse final : public AsyncWebServerResponse {
-public:
-  RuntimeMetaResponse(std::shared_ptr<const String> payload,
-                      std::atomic<uint32_t>* activeRequests,
-                      ConfigManagerClass* configManager)
-      : payload_(std::move(payload)), activeRequests_(activeRequests), configManager_(configManager), headerOffset_(0), payloadOffset_(0), sendStallLogged_(false) {
-    _code = 200;
-    _contentLength = payload_ ? payload_->length() : 0;
-    _contentType = "application/json";
+bool readLivePageSelection(AsyncWebServerRequest* request, ConfigManagerClass* manager, String& pageKey, bool& selected) {
+  selected = request->hasParam("page");
+  if (!selected) return true;
+  const String& value = request->getParam("page")->value();
+  if (!cm::validLivePageSelector(value.c_str(), value.length())) {
+    request->send(400, "application/json", "{\"error\":\"invalid_page\"}");
+    return false;
   }
-
-  ~RuntimeMetaResponse() override {
-    if (activeRequests_) {
-      --(*activeRequests_);
-    }
+  if (!manager || !manager->hasLivePageKey(value)) {
+    request->send(404, "application/json", "{\"error\":\"unknown_page\"}");
+    return false;
   }
-
-  bool hasPayload() const {
-    return payload_ && _contentLength != 0 && payload_->length() == _contentLength;
-  }
-
-  bool _sourceValid() const override {
-    return hasPayload();
-  }
-
-  void _respond(AsyncWebServerRequest* request) override {
-    if (!request || !hasPayload()) {
-      _state = RESPONSE_FAILED;
-      if (request && request->client()) {
-        request->client()->close();
-      }
-      return;
-    }
-
-    _head = _assembleHead(request->version());
-    if (_head.length() == 0) {
-      _state = RESPONSE_FAILED;
-      request->client()->close();
-      return;
-    }
-
-    _state = RESPONSE_HEADERS;
-    writeAvailable(request);
-  }
-
-  size_t _ack(AsyncWebServerRequest* request, size_t len, uint32_t time) override {
-    (void)time;
-    _ackedLength += len;
-
-    if (_state == RESPONSE_HEADERS || _state == RESPONSE_CONTENT) {
-      return writeAvailable(request);
-    }
-
-    if (_state == RESPONSE_WAIT_ACK && _ackedLength >= _writtenLength) {
-      _state = RESPONSE_END;
-      // The framework does not close completed fixed-length abstract
-      // responses itself. Closing here releases the request, response,
-      // and AsyncTCP PCB after the final acknowledged byte.
-      request->client()->close();
-    }
-    return 0;
-  }
-
-private:
-  size_t writeAvailable(AsyncWebServerRequest* request) {
-    if (!request || !request->client() || !hasPayload()) {
-      _state = RESPONSE_FAILED;
-      return 0;
-    }
-
-    size_t written = 0;
-    if (_state == RESPONSE_HEADERS && headerOffset_ < _head.length()) {
-      const size_t space = request->client()->space();
-      if (space == 0) {
-        return 0;
-      }
-      const size_t remaining = _head.length() - headerOffset_;
-      const size_t sent = request->client()->write(_head.c_str() + headerOffset_,
-                                                   remaining < space ? remaining : space);
-      if (sent == 0) {
-        logSendStall("headers");
-        return 0;
-      }
-      headerOffset_ += sent;
-      _writtenLength += sent;
-      written += sent;
-      if (headerOffset_ < _head.length()) {
-        return written;
-      }
-      _state = RESPONSE_CONTENT;
-    }
-
-    if (_state == RESPONSE_CONTENT && payloadOffset_ < _contentLength) {
-      const size_t space = request->client()->space();
-      if (space == 0) {
-        return written;
-      }
-      const size_t remaining = _contentLength - payloadOffset_;
-      const size_t sent = request->client()->write(payload_->c_str() + payloadOffset_,
-                                                   remaining < space ? remaining : space);
-      if (sent == 0) {
-        logSendStall("payload");
-        return written;
-      }
-      payloadOffset_ += sent;
-      _sentLength = payloadOffset_;
-      _writtenLength += sent;
-      written += sent;
-      if (payloadOffset_ == _contentLength) {
-        _state = RESPONSE_WAIT_ACK;
-      }
-    }
-    return written;
-  }
-
-  void logSendStall(const char* phase) {
-    if (sendStallLogged_) {
-      return;
-    }
-    sendStallLogged_ = true;
-    WEB_LOG("[W] Runtime meta TCP stalled: phase=%s payload=%u active=%u ws=%u free=%u largest=%u",
-            phase,
-            static_cast<unsigned>(_contentLength),
-            static_cast<unsigned>(activeRequests_ ? activeRequests_->load() : 0),
-            static_cast<unsigned>(configManager_ ? configManager_->getWebSocketClientCount() : 0),
-            static_cast<unsigned>(ESP.getFreeHeap()),
-            static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-  }
-
-  std::shared_ptr<const String> payload_;
-  std::atomic<uint32_t>* activeRequests_;
-  ConfigManagerClass* configManager_;
-  String _head;
-  size_t headerOffset_;
-  size_t payloadOffset_;
-  bool sendStallLogged_;
-};
-
-class ClosingBasicResponse final : public AsyncBasicResponse {
-public:
-  using AsyncBasicResponse::AsyncBasicResponse;
-
-  size_t _ack(AsyncWebServerRequest* request, size_t len, uint32_t time) override {
-    const size_t written = AsyncBasicResponse::_ack(request, len, time);
-    if (_finished()) {
-      // AsyncBasicResponse also leaves completed Connection: close
-      // requests open. Close only after all sent bytes were acknowledged.
-      request->client()->close();
-    }
-    return written;
-  }
-};
+  pageKey = value;
+  return true;
+}
 
 void logRuntimeMetaResponseFailure(size_t payloadLength, uint32_t activeRequests) {
   WEB_LOG("[W] Runtime meta response unavailable: payload=%u active=%u free=%u min=%u largest=%u",
@@ -505,49 +371,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
         // Log the JSON size for debugging
         WEB_LOG_VERBOSE("config.json size=%u", (unsigned)jsonSize);
 
-        // Check if JSON is empty or too large
+        // Reject an empty provider result.
         if (jsonSize == 0) {
           WEB_LOG("Error: Generated JSON is empty!");
           request->send(500, "application/json", "{\"error\":\"empty_json\"}");
           return;
         }
 
-        if (jsonSize > 4096) { // Prefer chunked mode early to reduce heap pressure/fragmentation.
-          WEB_LOG_VERBOSE("config.json chunked response (%u)", (unsigned)jsonSize);
-          auto jsonShared = std::make_shared<String>(std::move(json));
-
-          AsyncWebServerResponse* response = request->beginChunkedResponse("application/json",
-                                                                           [jsonShared](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
-                                                                             if (!jsonShared || index >= jsonShared->length()) {
-                                                                               return 0;
-                                                                             }
-
-                                                                             size_t remaining = jsonShared->length() - index;
-                                                                             if (remaining == 0)
-                                                                               return 0; // End of data
-
-                                                                             size_t chunkSize = min(maxLen, remaining);
-                                                                             memcpy(buffer, jsonShared->c_str() + index, chunkSize);
-                                                                             return chunkSize;
-                                                                           });
-          if (!response) {
-            WEB_LOG("Error: beginChunkedResponse failed for config.json");
-            request->send(500, "application/json", "{\"error\":\"response_alloc_failed\"}");
-            return;
-          }
-          enableCORS(response);
-          request->send(response);
-        } else {
-          // Normal response for smaller JSON
-          AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
-          if (!response) {
-            WEB_LOG("Error: beginResponse failed for config.json");
-            request->send(500, "application/json", "{\"error\":\"response_alloc_failed\"}");
-            return;
-          }
-          enableCORS(response);
-          request->send(response);
+        AsyncWebServerResponse* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
+        if (!response) {
+          WEB_LOG("Error: Response allocation failed for config.json");
+          request->send(500, "application/json", "{\"error\":\"response_alloc_failed\"}");
+          return;
         }
+        enableCORS(response);
+        request->send(response);
 
         WEB_LOG_VERBOSE("config.json sent (%u)", (unsigned)jsonSize);
       } catch (const std::exception& e) {
@@ -562,13 +400,35 @@ void ConfigManagerWeb::setupAPIRoutes() {
     }
   });
 
+  server->on("/live_pages.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
+    if (!configManager) { request->send(404, "application/json", "{\"error\":\"no_config\"}"); return; }
+    String json = configManager->buildLivePageIndexJSON();
+    if (!json.length()) { request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}"); return; }
+    auto* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
+    if (!response) { request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}"); return; }
+    enableCORS(response);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    request->send(response);
+  });
+
   server->on("/live_layout.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
     if (!configManager) {
       request->send(500, "application/json", "{\"error\":\"no_config\"}");
       return;
     }
-    String json = configManager->buildLiveLayoutJSON();
-    AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+    String pageKey;
+    bool selected = false;
+    if (!readLivePageSelection(request, configManager, pageKey, selected)) return;
+    String json = selected ? configManager->buildLiveLayoutJSON(pageKey) : configManager->buildLiveLayoutJSON();
+    if (json.length() == 0) {
+      request->send(503, "application/json", "{\"error\":\"layout_unavailable\"}");
+      return;
+    }
+    AsyncWebServerResponse* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
+    if (!response) {
+      request->send(500, "application/json", "{\"error\":\"response_alloc_failed\"}");
+      return;
+    }
     enableCORS(response);
     request->send(response);
   });
@@ -1063,26 +923,30 @@ void ConfigManagerWeb::setupAPIRoutes() {
 }
 
 void ConfigManagerWeb::handleRootRequest(AsyncWebServerRequest* request) {
+  const uint8_t* content = nullptr;
+  size_t length = 0;
   if (customHTML && customHTMLLen > 0) {
-    // Use custom HTML
-    AsyncWebServerResponse* response = request->beginResponse_P(200, "text/html", reinterpret_cast<const uint8_t*>(customHTML), customHTMLLen);
-    response->addHeader("Content-Encoding", "gzip");
-    request->send(response);
+    content = reinterpret_cast<const uint8_t*>(customHTML);
+    length = customHTMLLen;
   } else if (embedWebUI) {
 #if CM_EMBED_WEBUI
-    // Use embedded WebUI
     WebHTML webhtml;
-    const uint8_t* html = webhtml.getWebHTMLGz();
-    size_t len = webhtml.getWebHTMLGzLen();
-    AsyncWebServerResponse* response = request->beginResponse_P(200, "text/html", html, len);
-    response->addHeader("Content-Encoding", "gzip");
-    request->send(response);
+    content = webhtml.getWebHTMLGz();
+    length = webhtml.getWebHTMLGzLen();
 #else
     request->send(404, "text/html", "<h1>WebUI not embedded</h1><p>This firmware was built with CM_EMBED_WEBUI=0</p>");
+    return;
 #endif
   } else {
     request->send(404, "text/html", "<h1>No WebUI configured</h1>");
+    return;
   }
+  auto* response = new (std::nothrow) cm::StaticGzipResponse(content, length);
+  if (!response) {
+    request->send(503, "text/plain", "WebUI temporarily unavailable");
+    return;
+  }
+  request->send(response);
 }
 
 void ConfigManagerWeb::handleCSSRequest(AsyncWebServerRequest* request) {
@@ -1249,9 +1113,19 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
 
   // Runtime JSON endpoint
   server->on("/runtime.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
-    if (runtimeJsonProvider) {
-      String json = runtimeJsonProvider();
-      AsyncWebServerResponse* response = new (std::nothrow) ClosingBasicResponse(200, "application/json", json);
+    cm::RuntimeSelection selection = cm::RuntimeSelection::everything();
+    const bool selected = request->hasParam("groups");
+    if (selected) {
+      const String& value = request->getParam("groups")->value();
+      if (value.length() > cm::RuntimeSelection::maxPayloadBytes || !cm::parseRuntimeSelection(value.c_str(), selection)) {
+        request->send(400, "application/json", "{\"error\":\"invalid_runtime_selection\"}");
+        return;
+      }
+    }
+    if (runtimeJsonProvider || (selected && selectedRuntimeJsonProvider)) {
+      // A standalone legacy callback has no selective interface and retains full semantics.
+      String json = selected && selectedRuntimeJsonProvider ? selectedRuntimeJsonProvider(selection) : runtimeJsonProvider();
+      AsyncWebServerResponse* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
       if (!response) {
         request->send(503, "application/json", "{\"error\":\"runtime_unavailable\"}");
         return;
@@ -1260,7 +1134,6 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
       response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       response->addHeader("Pragma", "no-cache");
       response->addHeader("Expires", "0");
-      response->addHeader("Connection", "close");
       request->send(response);
     } else {
       request->send(500, "application/json", "{\"error\":\"no_provider\"}");
@@ -1269,9 +1142,18 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
 
   // Runtime metadata endpoint
   server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
-    if (runtimeMetaJsonProvider) {
+    String pageKey;
+    bool selected = false;
+    if (!readLivePageSelection(request, configManager, pageKey, selected)) return;
+    if (runtimeMetaJsonProvider || selected) {
       const uint32_t activeRequests = ++runtimeMetaActiveRequests;
-      std::shared_ptr<const String> payload = runtimeMetaJsonProvider();
+      std::shared_ptr<const String> payload;
+      if (selected) {
+        String json = configManager->buildLivePageMetadataJSON(pageKey);
+        if (json.length()) payload = std::make_shared<String>(std::move(json));
+      } else {
+        payload = runtimeMetaJsonProvider();
+      }
       if (!payload || payload->length() == 0) {
         --runtimeMetaActiveRequests;
         logRuntimeMetaResponseFailure(0, activeRequests);
@@ -1279,7 +1161,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
         return;
       }
       const size_t payloadLength = payload->length();
-      RuntimeMetaResponse* response = new (std::nothrow) RuntimeMetaResponse(std::move(payload), &runtimeMetaActiveRequests, configManager);
+      cm::RuntimeMetaResponse* response = new (std::nothrow) cm::RuntimeMetaResponse(std::move(payload), &runtimeMetaActiveRequests);
       if (!response || !response->hasPayload()) {
         delete response;
         if (!response) {
@@ -1293,7 +1175,6 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
       response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       response->addHeader("Pragma", "no-cache");
       response->addHeader("Expires", "0");
-      response->addHeader("Connection", "close");
       request->send(response);
     } else {
       request->send(500, "application/json", "{\"error\":\"no_provider\"}");

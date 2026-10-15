@@ -310,7 +310,7 @@ bool ConfigManagerWiFi::advanceStackReset_() {
       return false;
     case 4:
       // Set additional WiFi parameters for stability
-      WiFi.setSleep(false);                // Disable WiFi sleep
+      WiFi.setSleep(WIFI_PS_MIN_MODEM);     // Required for WiFi/Bluetooth coexistence
       WiFi.setAutoReconnect(true);         // Enable auto-reconnect
       WiFi.persistent(true);               // Store WiFi configuration in flash
       WiFi.setTxPower(WIFI_POWER_19_5dBm); // Set specific power level
@@ -854,7 +854,7 @@ void ConfigManagerWiFi::attemptConnect() {
   if (phase == 0) {
     WIFI_LOG_VERBOSE("Attempt 1: normal connect (no stack reset)");
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
+    WiFi.setSleep(WIFI_PS_MIN_MODEM); // Required even if Bluetooth starts later.
     WiFi.setAutoReconnect(true);
     WiFi.persistent(true);
   } else if (phase == 1) {
@@ -896,7 +896,7 @@ void ConfigManagerWiFi::attemptConnect() {
     } else {
       // Ensure WiFi is in a sane STA config before calling begin() again.
       WiFi.mode(WIFI_STA);
-      WiFi.setSleep(false);
+      WiFi.setSleep(WIFI_PS_MIN_MODEM); // Required even if Bluetooth starts later.
       WiFi.setAutoReconnect(true);
       WiFi.persistent(true);
     }

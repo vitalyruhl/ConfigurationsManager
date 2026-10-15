@@ -1,0 +1,74 @@
+#pragma once
+// [MOCKED!] Minimal pinned-platform shell; the production response subclass is unchanged.
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
+using String = std::string;
+constexpr uint8_t ASYNC_WRITE_FLAG_COPY = 1;
+enum WebResponseState { RESPONSE_SETUP, RESPONSE_HEADERS, RESPONSE_CONTENT, RESPONSE_WAIT_ACK, RESPONSE_END, RESPONSE_FAILED };
+class AsyncClient {
+public:
+  size_t available = 16384, outstanding = 0, maximumOutstanding = 0, maximumOffer = 0, sends = 0;
+  std::deque<size_t> acceptLimits;
+  std::deque<bool> flushResults;
+  std::string accepted;
+  std::vector<const char*> offeredPointers;
+  bool closed = false;
+  std::function<void()> onClose;
+  size_t space() const { return available; }
+  size_t add(const char* data, size_t length, uint8_t flags) {
+    assert(flags == ASYNC_WRITE_FLAG_COPY);
+    maximumOffer = std::max(maximumOffer, length);
+    offeredPointers.push_back(data);
+    size_t count = std::min(length, available);
+    if (!acceptLimits.empty()) { count = std::min(count, acceptLimits.front()); acceptLimits.pop_front(); }
+    accepted.append(data, count);
+    outstanding += count;
+    maximumOutstanding = std::max(maximumOutstanding, outstanding);
+    return count;
+  }
+  bool send() {
+    ++sends;
+    if (flushResults.empty()) return true;
+    bool result = flushResults.front(); flushResults.pop_front(); return result;
+  }
+  void close() { closed = true; if (onClose) onClose(); }
+};
+class AsyncWebServerRequest {
+  AsyncClient* client_;
+public:
+  explicit AsyncWebServerRequest(AsyncClient* client) : client_(client) {}
+  AsyncClient* client() { return client_; }
+  uint8_t version() const { return 1; }
+};
+class AsyncWebServerResponse {
+protected:
+  int _code = 0;
+  String _contentType;
+  size_t _contentLength = 0, _headLength = 0, _sentLength = 0, _ackedLength = 0, _writtenLength = 0;
+  bool _sendContentLength = true, _chunked = false;
+  WebResponseState _state = RESPONSE_SETUP;
+  std::vector<std::pair<String,String>> headers_;
+public:
+  virtual ~AsyncWebServerResponse() = default;
+  void addHeader(const String& name, const String& value) { headers_.push_back({name,value}); }
+  String _assembleHead(uint8_t) {
+    String header = "HTTP/1.1 " + std::to_string(_code) + " OK\r\nContent-Length: " + std::to_string(_contentLength) + "\r\nContent-Type: " + _contentType + "\r\n";
+    for (const auto& field : headers_) header += field.first + ": " + field.second + "\r\n";
+    header += "\r\n"; _headLength = header.length(); return header;
+  }
+  virtual bool _sourceValid() const { return false; }
+  virtual void _respond(AsyncWebServerRequest*) {}
+  virtual size_t _ack(AsyncWebServerRequest*, size_t, uint32_t) { return 0; }
+  bool _finished() const { return _state > RESPONSE_WAIT_ACK; }
+  size_t bodyAccepted() const { return _sentLength; }
+  size_t totalAccepted() const { return _writtenLength; }
+  size_t totalAcknowledged() const { return _ackedLength; }
+  WebResponseState state() const { return _state; }
+};

@@ -2,6 +2,50 @@
 
 This changelog is a curated overview.
 
+## 4.6.0 - Unreleased
+
+- Add a lightweight live page index and optional page selection for layout and
+  metadata. Existing unfiltered endpoints retain their full schemas. Load active
+  page layout then metadata sequentially and cache successful results in the
+  browser; defer configuration loading until Settings opens.
+- Preserve exact page keys and source identity when different pages expose the
+  same field key. Keep navigation during empty/error states and retry active
+  timeouts without applying cancelled page results. OTA safety remains available
+  independently of optional System telemetry.
+
+- Release metadata snapshots after their final caller/response owner while still
+  sharing concurrent responses. Preserve revision invalidation and single-flight
+  rebuilds; later requests rebuild expired snapshots.
+- Use safe character appends for JSON numeric slices in layout and metadata
+  serialization, avoiding the pinned String pointer-concat source over-read.
+- Assemble layout output from one page or placement fragment at a time,
+  preserving JSON escaping, ordering and duplicate-key behavior without retaining
+  the complete JSON document beside the output buffer.
+- Validate complete layout serialization, including document overflow, output
+  reservation and every append. Return 503 instead of a partial layout JSON 200
+  when allocation or serialization fails.
+
+- Bound static root WebUI gzip responses to 512 accepted-but-unacknowledged
+  bytes, preserving headers and payload across zero/short TCP admission and
+  failed flushes. Functional hardware acceptance passed for the final root and
+  scoped JSON flow; general Wi-Fi/startup recovery remains outside this fix.
+- Apply the same bounded sender to successful config, runtime, runtime metadata
+  and live layout JSON responses. Move generated payloads into the response and
+  retain shared metadata until final ACK or disconnect, without another complete
+  payload copy. Preserve schemas, CORS, runtime cache headers and metadata request
+  accounting; large config responses now use Content-Length instead of chunked
+  framing. Provider allocation peaks and OTA routes remain outside this change.
+
+- Evaluate runtime providers and controls only for the active dashboard page,
+  using bounded HTTP/WebSocket group selections and one shared snapshot per
+  push tick. Existing full-runtime consumers retain their complete data.
+- Reuse successful runtime metadata/layout loads, pause ordinary runtime groups
+  in hidden views, and retain GUI/log traffic and the small OTA safety state.
+- Abort timed-out response bodies, serialize fallback requests and ignore stale
+  page responses. Four-page hardware/browser acceptance passed; an initial
+  Wi-Fi/startup refusal episode still required a USB reset. See the page-scoped
+  dashboard plan for artifact identities, payload sizes and measured build deltas.
+
 ## 4.5.0 - Unreleased
 
 - Add an opt-in BLE transport module with settings, runtime diagnostics, bounded

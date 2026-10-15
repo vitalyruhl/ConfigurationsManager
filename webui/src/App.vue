@@ -191,6 +191,7 @@
 <script setup>
 import { ref, onBeforeUnmount, onMounted, provide, nextTick, computed, watch } from "vue";
 import Category from "./components/Category.vue";
+import { readJson, loadRuntimeMeta, loadRuntimeDiscovery, loadLivePages } from "./runtimeDataClient.mjs";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
 
 function isUnsetPasswordValue(value) {
@@ -935,7 +936,7 @@ function buildGuiActionBody(context) {
 function initGuiWebSocket() {
   if (typeof window === "undefined") return;
   const proto = window.location.protocol === "https:" ? "wss://" : "ws://";
-  const url = proto + window.location.host + "/ws";
+  const url = proto + window.location.host + "/ws?runtime=none";
   connectGuiWebSocket(url);
 }
 
@@ -1053,127 +1054,54 @@ function dismissHttpOnlyHint() {
   }
 }
 
-async function loadSettings() {
-  try {
-    //console.log("[Frontend] Starting loadSettings...");
-    
-    // Firefox-compatible timeout implementation
-    const fetchPromise = fetch("/config.json");
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), 10000)
-    );
-    
-    const r = await Promise.race([fetchPromise, timeoutPromise]);
-    
-    //console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
-    //console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
-    
-    if (!r.ok) {
-      throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-    }
-    
-    // Check content-length header vs actual response
-    // Check content-length header vs actual response (compare bytes, not JS string length)
-    const contentLength = r.headers.get('content-length');
-    //console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
-
-    const text = await r.text();
-    if (contentLength) {
-      const headerBytes = parseInt(contentLength, 10);
-      const actualBytes = (typeof TextEncoder !== 'undefined')
-        ? new TextEncoder().encode(text).length
-        : text.length;
-      if (Number.isFinite(headerBytes) && headerBytes !== actualBytes) {
-        console.warn(`[Frontend] Content-Length mismatch (bytes)! Header: ${headerBytes}, Actual: ${actualBytes}`);
-      }
-    }
-    
-    // Clean the response text from potential control characters
-    const cleanedText = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-    
-    const data = JSON.parse(cleanedText);
-    config.value = data.config || data;
-    refreshKey.value++;
-    
-    //console.log("[Frontend] config.json loaded successfully");
-    // Re-evaluate live content availability after config loads
-    checkLiveContent();
-  } catch (e) {
-    console.error("[Frontend] loadSettings error:", e);
-    if (e.name === 'AbortError') {
-      notify("Connection timeout: Could not load settings", "error", 8000);
-    } else if (e.message.includes('Content-Length')) {
-      notify("Server response error: Data transmission interrupted", "error", 8000);
-    } else if (e instanceof SyntaxError && e.message.includes('JSON')) {
-      // JSON parsing error - provide more helpful message
-      notify("JSON parsing error. Please check if password contains special characters.", "error", 10000);
-      console.error("[Frontend] JSON parsing failed. Response preview:", text.substring(0, 500));
-    } else {
-      notify("Fehler: " + e.message, "error", 8000);
-    }
-  }
-}
-
-// Helper: fetch with timeout (Firefox-friendly)
-async function fetchWithTimeout(resource, options = {}, timeoutMs = 5000) {
-  if (typeof AbortController !== 'undefined') {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
+let settingsLoad = null;
+function loadSettings() {
+  if (settingsLoad) return settingsLoad;
+  settingsLoad = (async () => {
     try {
-      const res = await fetch(resource, { ...options, signal: controller.signal });
-      return res;
+      const data = await readJson("/config.json", {}, 10000);
+      config.value = data.config || data;
+      refreshKey.value++;
+    } catch (error) {
+      // Configuration responses can contain credentials; never log their text or parser excerpt.
+      console.error("[Frontend] Settings load failed:", error.name);
+      notify(error.name === "AbortError"
+        ? "Connection timeout: Could not load settings"
+        : "Could not load settings. Please retry.", "error", 8000);
     } finally {
-      clearTimeout(id);
+      settingsLoad = null;
     }
-  }
-  return Promise.race([
-    fetch(resource, options),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), timeoutMs))
-  ]);
+  })();
+  return settingsLoad;
 }
 
 async function checkLiveContent() {
   try {
-    // 1) Prefer explicit runtime meta definition
-    const m = await fetchWithTimeout(`/runtime_meta.json?ts=${Date.now()}`, {}, 4000);
-    if (m && m.ok) {
-      const meta = await m.json().catch(() => []);
-      if (Array.isArray(meta) && meta.length > 0) {
-        hasLiveContent.value = true;
-        return;
-      }
+    let index;
+    try { index = await loadLivePages(); }
+    catch (error) { if (error.status !== 404) throw error; }
+    if (index?.pageScoped) {
+      hasLiveContent.value = index.hasLiveContent;
+      if (!hasLiveContent.value && activeTab.value === "live") await switchToSettings();
+      return;
     }
-  } catch (_) { /* ignore */ }
-
-  // 2) Fallback: check runtime data has any groups with values
-  try {
-    const r = await fetchWithTimeout(`/runtime.json?ts=${Date.now()}`, {}, 4000);
-    if (r && r.ok) {
-      const rt = await r.json().catch(() => ({}));
-      // Consider there is live content only if there is at least one non-empty group
-      const groups = Object.keys(rt || {});
-      const hasContent = groups.some(g => {
-        const o = rt[g];
-        if (!o || typeof o !== 'object') return false;
-        return Object.keys(o).length > 0;
-      });
-      hasLiveContent.value = !!hasContent;
-    } else {
-      hasLiveContent.value = false;
-    }
-  } catch (_) {
-    hasLiveContent.value = false;
-  }
-
-  // If no live content, switch to settings automatically
-  if (!hasLiveContent.value) {
-    if (activeTab.value === 'live') {
-      // Auto-switch to settings; auto-auth if no password
+    let meta;
+    try { meta = await loadRuntimeMeta(); }
+    catch (error) { if (error.status !== 404) throw error; meta = []; }
+    if (meta.length) { hasLiveContent.value = true; return; }
+    const runtime = await loadRuntimeDiscovery();
+    hasLiveContent.value = Object.entries(runtime || {}).some(([name, value]) =>
+      name !== "uptime" && value && typeof value === "object" &&
+      Object.keys(value).some(key => name !== "system" || !["otaActive", "otaHasPassword"].includes(key)));
+    if (!hasLiveContent.value && activeTab.value === "live") {
       await switchToSettings();
       notify("No live dashboard defined – opening Settings", "info");
     }
+  } catch {
+    // Transient discovery failure is not evidence of an empty dashboard. The dashboard retries.
   }
 }
+
 async function switchToSettings() {
   if (activeTab.value !== "settings" && blockIfExternalOtaActive()) return;
 
@@ -1593,7 +1521,6 @@ onMounted(() => {
     showHttpOnlyHint.value = true;
   }
   loadUserTheme();
-  loadSettings();
   injectVersion();
   checkLiveContent();
   initGuiWebSocket();

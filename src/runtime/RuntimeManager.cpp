@@ -22,10 +22,11 @@ public:
   }
 
   size_t write(const uint8_t* buffer, size_t size) override {
-    if (size > std::numeric_limits<unsigned int>::max()) {
-      return 0;
-    }
-    return output.concat(reinterpret_cast<const char*>(buffer), static_cast<unsigned int>(size)) ? size : 0;
+    // Arduino String::concat(ptr, size) reads size+1 bytes, but JSON numeric
+    // slices can end at the buffer boundary without a terminator.
+    size_t written = 0;
+    while (written < size && write(buffer[written])) ++written;
+    return written;
   }
 
 private:
@@ -281,192 +282,59 @@ const RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) const {
 }
 
 String ConfigManagerRuntime::runtimeValuesToJSON() {
-  // Must stay small enough for frequent WS pushes, but large enough for typical runtime payloads.
-  DynamicJsonDocument d(4096);
-  JsonObject root = d.to<JsonObject>();
-  root["uptime"] = millis();
-
-  std::vector<RuntimeValueProvider> providersSnapshot;
-  std::vector<RuntimeCheckbox> checkboxesSnapshot;
-  std::vector<RuntimeStateButton> stateButtonsSnapshot;
-  std::vector<RuntimeIntSlider> intSlidersSnapshot;
-  std::vector<RuntimeFloatSlider> floatSlidersSnapshot;
-  std::vector<RuntimeIntInput> intInputsSnapshot;
-  std::vector<RuntimeFloatInput> floatInputsSnapshot;
-  std::vector<RuntimeAlarm> alarmsSnapshot;
-  {
-    std::lock_guard<std::mutex> lock(runtimeDataMutex);
-    providersSnapshot = runtimeProviders;
-    checkboxesSnapshot = runtimeCheckboxes;
-    stateButtonsSnapshot = runtimeStateButtons;
-    intSlidersSnapshot = runtimeIntSliders;
-    floatSlidersSnapshot = runtimeFloatSliders;
-    intInputsSnapshot = runtimeIntInputs;
-    floatInputsSnapshot = runtimeFloatInputs;
-    alarmsSnapshot = runtimeAlarms;
-  }
-
-  // Do not sort runtimeProviders in-place here: runtimeValuesToJSON() can be called from
-  // multiple contexts (WS push + HTTP handlers). In-place std::sort would introduce data races.
-  std::vector<const RuntimeValueProvider*> providers;
-  providers.reserve(providersSnapshot.size());
-  for (const auto& prov : providersSnapshot) {
-    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-    // cppcheck-suppress useStlAlgorithm
-    providers.push_back(&prov);
-  }
-  std::sort(providers.begin(), providers.end(), [](const RuntimeValueProvider* a, const RuntimeValueProvider* b) {
-    return a->order < b->order;
-  });
-
-  for (const auto* provPtr : providers) {
-    if (!provPtr) {
-      continue;
-    }
-    const auto& prov = *provPtr;
-    JsonObject slot;
-    JsonVariant existing = root[prov.name];
-    if (existing.isNull()) {
-      slot = root.createNestedObject(prov.name);
-    } else if (existing.is<JsonObject>()) {
-      slot = existing.as<JsonObject>();
-    } else {
-      root.remove(prov.name);
-      slot = root.createNestedObject(prov.name);
-    }
-    if (prov.fill) {
-      prov.fill(slot);
-    }
-
-    // Add interactive control states for this provider/group
-    for (auto& checkbox : checkboxesSnapshot) {
-      if (checkbox.group == prov.name && checkbox.getter) {
-        slot[checkbox.key] = checkbox.getter();
-      }
-    }
-
-    for (auto& button : stateButtonsSnapshot) {
-      if (button.group == prov.name && button.getter) {
-        slot[button.key] = button.getter();
-      }
-    }
-
-    for (auto& slider : intSlidersSnapshot) {
-      if (slider.group == prov.name && slider.getter) {
-        slot[slider.key] = slider.getter();
-      }
-    }
-
-    for (auto& slider : floatSlidersSnapshot) {
-      if (slider.group == prov.name && slider.getter) {
-        slot[slider.key] = slider.getter();
-      }
-    }
-
-    for (auto& input : intInputsSnapshot) {
-      if (input.group == prov.name && input.getter) {
-        slot[input.key] = input.getter();
-      }
-    }
-
-    for (auto& input : floatInputsSnapshot) {
-      if (input.group == prov.name && input.getter) {
-        slot[input.key] = input.getter();
-      }
-    }
-  }
-
-  // Ensure interactive controls are present even when no runtime provider exists for their group.
-  // Otherwise the frontend cannot retrieve the latest values after refresh and may snap back
-  // to defaults (e.g. sliders to 0).
-  auto getOrCreateSlot = [&](const String& groupName) -> JsonObject {
-    JsonObject slot;
-    JsonVariant existing = root[groupName];
-    if (existing.isNull()) {
-      slot = root.createNestedObject(groupName);
-    } else if (existing.is<JsonObject>()) {
-      slot = existing.as<JsonObject>();
-    } else {
-      root.remove(groupName);
-      slot = root.createNestedObject(groupName);
-    }
-    return slot;
-  };
-
-  for (auto& checkbox : checkboxesSnapshot) {
-    if (checkbox.getter) {
-      JsonObject slot = getOrCreateSlot(checkbox.group);
-      slot[checkbox.key] = checkbox.getter();
-    }
-  }
-
-  for (auto& button : stateButtonsSnapshot) {
-    if (button.getter) {
-      JsonObject slot = getOrCreateSlot(button.group);
-      slot[button.key] = button.getter();
-    }
-  }
-
-  for (auto& slider : intSlidersSnapshot) {
-    if (slider.getter) {
-      JsonObject slot = getOrCreateSlot(slider.group);
-      slot[slider.key] = slider.getter();
-    }
-  }
-
-  for (auto& slider : floatSlidersSnapshot) {
-    if (slider.getter) {
-      JsonObject slot = getOrCreateSlot(slider.group);
-      slot[slider.key] = slider.getter();
-    }
-  }
-
-  for (auto& input : intInputsSnapshot) {
-    if (input.getter) {
-      JsonObject slot = getOrCreateSlot(input.group);
-      slot[input.key] = input.getter();
-    }
-  }
-
-  for (auto& input : floatInputsSnapshot) {
-    if (input.getter) {
-      JsonObject slot = getOrCreateSlot(input.group);
-      slot[input.key] = input.getter();
-    }
-  }
-
-  if (!alarmsSnapshot.empty()) {
-    JsonObject alarms = root.createNestedObject("alarms");
-    // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
-    // cppcheck-suppress constVariableReference
-    for (auto& a : alarmsSnapshot) {
-      alarms[a.name] = a.active;
-    }
-  }
-
-  String out;
-  size_t estimatedBytes = 512;
-  estimatedBytes += providersSnapshot.size() * 96;
-  estimatedBytes += checkboxesSnapshot.size() * 24;
-  estimatedBytes += stateButtonsSnapshot.size() * 24;
-  estimatedBytes += intSlidersSnapshot.size() * 28;
-  estimatedBytes += floatSlidersSnapshot.size() * 28;
-  estimatedBytes += intInputsSnapshot.size() * 28;
-  estimatedBytes += floatInputsSnapshot.size() * 28;
-  estimatedBytes += alarmsSnapshot.size() * 16;
-  if (estimatedBytes > 8192) {
-    estimatedBytes = 8192;
-  }
-  out.reserve(estimatedBytes);
-  const size_t written = serializeJson(d, out);
-  if (written == 0 || out.length() == 0 || out[0] != '{') {
-    // Never return an empty/invalid frame; the WebUI expects a JSON object.
-    return "{}";
-  }
-  return out;
+  return runtimeValuesToJSON(cm::RuntimeSelection::everything());
 }
 
-String ConfigManagerRuntime::buildRuntimeMetaJsonLocked() {
+String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection& selection) {
+  JsonDocument document;
+  fillRuntimeSnapshot(document.to<JsonObject>(), selection);
+  String out;
+  serializeJson(document, out);
+  return out.length() ? out : "{}";
+}
+
+void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::RuntimeSelection& selection) {
+  root["uptime"] = millis();
+  std::vector<RuntimeValueProvider> providers;
+  std::vector<RuntimeCheckbox> checkboxes;
+  std::vector<RuntimeStateButton> buttons;
+  std::vector<RuntimeIntSlider> intSliders;
+  std::vector<RuntimeFloatSlider> floatSliders;
+  std::vector<RuntimeIntInput> intInputs;
+  std::vector<RuntimeFloatInput> floatInputs;
+  std::vector<RuntimeAlarm> alarms;
+  {
+    std::lock_guard<std::mutex> lock(runtimeDataMutex);
+    const auto group = [](const auto& control) { return control.group.c_str(); };
+    providers = cm::selectRuntimeEntries(runtimeProviders, selection, [](const auto& provider) { return provider.name.c_str(); });
+    checkboxes = cm::selectRuntimeEntries(runtimeCheckboxes, selection, group);
+    buttons = cm::selectRuntimeEntries(runtimeStateButtons, selection, group);
+    intSliders = cm::selectRuntimeEntries(runtimeIntSliders, selection, group);
+    floatSliders = cm::selectRuntimeEntries(runtimeFloatSliders, selection, group);
+    intInputs = cm::selectRuntimeEntries(runtimeIntInputs, selection, group);
+    floatInputs = cm::selectRuntimeEntries(runtimeFloatInputs, selection, group);
+    if (selection.contains("alarms")) alarms = runtimeAlarms;
+  }
+  // User callbacks run outside the registry mutex and only for selected groups.
+  cm::fillRuntimeProviders(root, providers);
+  cm::fillRuntimeControls(root, checkboxes);
+  cm::fillRuntimeControls(root, buttons);
+  cm::fillRuntimeControls(root, intSliders);
+  cm::fillRuntimeControls(root, floatSliders);
+  cm::fillRuntimeControls(root, intInputs);
+  cm::fillRuntimeControls(root, floatInputs);
+  if (!alarms.empty()) {
+    JsonObject slot = root["alarms"].to<JsonObject>();
+    for (const auto& alarm : alarms) slot[alarm.name] = alarm.active;
+  }
+  if (configManager) {
+    auto& ota = configManager->getOTAManager();
+    root["system"]["otaActive"] = ota.isActive();
+    root["system"]["otaHasPassword"] = ota.hasPassword();
+  }
+}
+
+String ConfigManagerRuntime::buildRuntimeMetaJsonLocked(const std::function<bool(const RuntimeFieldMeta&)>& include) {
   // Keep the stored metadata ordered so serialization can read it directly
   // while the mutex keeps strings, vectors, and iterators stable.
 #ifdef development
@@ -495,6 +363,7 @@ String ConfigManagerRuntime::buildRuntimeMetaJsonLocked() {
   size_t outputSize = 2; // '[' and ']'
   bool firstEntry = true;
   for (const auto& m : meta) {
+    if (include && !include(m)) continue;
     const size_t entrySize = runtimeMetaJsonSize(m);
     if (entrySize == 0 || entrySize > std::numeric_limits<size_t>::max() - outputSize) {
       logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
@@ -523,6 +392,7 @@ String ConfigManagerRuntime::buildRuntimeMetaJsonLocked() {
 
   bool first = true;
   for (const auto& m : meta) {
+    if (include && !include(m)) continue;
     if (!first) {
       if (!out.concat(',')) {
         logRuntimeMetaSerializationFailure("separator", outputSize, meta.size());
@@ -557,11 +427,12 @@ std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() {
   // snapshot immediately instead of queueing behind a large serialization.
   {
     std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-    if (runtimeMetaJsonCache && !runtimeMetaJsonCacheDirty) {
-      return runtimeMetaJsonCache;
+    const auto cached = runtimeMetaJsonCache.lock();
+    if (cached && !runtimeMetaJsonCacheDirty) {
+      return cached;
     }
     if (runtimeMetaJsonCacheBuildInProgress) {
-      return runtimeMetaJsonCache;
+      return cached;
     }
     runtimeMetaJsonCacheBuildInProgress = true;
   }
@@ -584,18 +455,37 @@ std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() {
 
   std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
   runtimeMetaJsonCacheBuildInProgress = false;
+  auto cached = runtimeMetaJsonCache.lock();
   if (replacement && replacement->length() != 0) {
     if (runtimeMetaRevision.load() == builtRevision) {
       runtimeMetaJsonCache = replacement;
       runtimeMetaJsonCacheDirty = false;
-    } else if (!runtimeMetaJsonCache) {
+      cached = replacement;
+    } else if (!cached) {
       // The candidate is complete JSON for the most recent stable state
       // seen by this build. Keep it as a temporary fallback, but rebuild
       // again before treating it as current metadata.
       runtimeMetaJsonCache = replacement;
+      cached = replacement;
     }
   }
-  return runtimeMetaJsonCache;
+  return cached;
+}
+
+bool ConfigManagerRuntime::hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>& include) const {
+  std::lock_guard<std::mutex> lock(runtimeDataMutex);
+#ifdef development
+  const auto& entries = runtimeMetaOverrideActive ? runtimeMetaOverride : runtimeMeta;
+#else
+  const auto& entries = runtimeMeta;
+#endif
+  for (const auto& entry : entries) if (!include || include(entry)) return true;
+  return false;
+}
+
+String ConfigManagerRuntime::runtimeMetaToJSON(const std::function<bool(const RuntimeFieldMeta&)>& include) {
+  std::lock_guard<std::mutex> lock(runtimeDataMutex);
+  return buildRuntimeMetaJsonLocked(include);
 }
 
 String ConfigManagerRuntime::runtimeMetaToJSON() {

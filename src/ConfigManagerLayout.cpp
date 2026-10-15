@@ -1,4 +1,6 @@
 #include "ConfigManager.h"
+#include "web/FragmentedJson.h"
+#include "runtime/detail/LivePageSelection.h"
 
 namespace {
 String resolveLayoutLabel(const char* provided, const String& fallback) {
@@ -275,6 +277,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
     return;
   }
 
+  const String identitySource = meta.sourceGroup.length() ? meta.sourceGroup : meta.group;
   String pageName = meta.page;
   String cardName = meta.card;
   String groupName = meta.group;
@@ -299,7 +302,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
     for (auto& placement : livePlacements) {
       // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
       // cppcheck-suppress useStlAlgorithm
-      if (placement.id == meta.key) {
+      if (cm::sameLiveField(placement, meta.key.c_str(), identitySource.c_str())) {
         placement.page = resolvedPage;
         placement.card = resolvedCard;
         placement.group = resolvedGroup;
@@ -307,7 +310,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
         return;
       }
     }
-    livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order});
+    livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order, identitySource});
     return;
   }
 
@@ -366,7 +369,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
   for (auto& placement : livePlacements) {
     // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
     // cppcheck-suppress useStlAlgorithm
-    if (placement.id == meta.key) {
+    if (cm::sameLiveField(placement, meta.key.c_str(), identitySource.c_str())) {
       placement.page = resolvedPage;
       placement.card = resolvedCard;
       placement.group = resolvedGroup;
@@ -375,7 +378,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
     }
   }
 
-  livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order});
+  livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order, identitySource});
 }
 
 // Cppcheck rationale: Retain the established runtime-group terminology in this API.
@@ -495,26 +498,74 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
   livePlacements.push_back({key, resolvedPage, resolvedCard, resolvedLayoutGroup, order});
 }
 
-String ConfigManagerClass::buildLiveLayoutJSON() const {
-  DynamicJsonDocument doc(16384);
-  JsonObject root = doc.to<JsonObject>();
-  JsonArray pagesArray = root.createNestedArray("pages");
-  if (!liveLayoutEnabled) {
-    JsonObject placementsObj = root.createNestedObject("placements");
-    for (const auto& placement : livePlacements) {
-      JsonObject placementObj = placementsObj.createNestedObject(placement.id);
-      placementObj["page"] = placement.page;
-      placementObj["card"] = placement.card;
-      placementObj["group"] = placement.group;
-      placementObj["order"] = placement.order;
-    }
-    root["defaultPage"] = String();
-
-    String output;
-    serializeJson(doc, output);
-    return output;
+bool ConfigManagerClass::supportsLivePageSelection() const {
+  if (!liveLayoutEnabled) return false;
+  for (const auto& page : livePages) {
+    const String key = normalizeLayoutName(page.name);
+    if (!key.length() || key.length() > 256 || key == "__unassigned__") return false;
   }
+  return true;
+}
 
+String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const String& sourceGroup) const {
+  const UiPlacement* selected = cm::findLivePlacement(livePlacements, fieldKey.c_str(), sourceGroup.c_str());
+  if (selected) {
+    const String key = normalizeLayoutName(selected->page);
+    for (const auto& page : livePages) if (normalizeLayoutName(page.name) == key) return key;
+  }
+  return "__unassigned__";
+}
+
+bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
+  if (!supportsLivePageSelection()) return false;
+  for (const auto& page : livePages) if (normalizeLayoutName(page.name) == pageKey) return true;
+  return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMeta([&](const RuntimeFieldMeta& meta) {
+    return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
+  });
+}
+
+String ConfigManagerClass::buildLivePageIndexJSON() const {
+  JsonDocument document;
+  const bool scoped = supportsLivePageSelection();
+  document["pageScoped"] = scoped;
+  document["hasLiveContent"] = !livePages.empty() || runtimeManager.hasRuntimeMeta();
+  JsonArray pages = document["pages"].to<JsonArray>();
+  std::vector<const LayoutPage*> ordered;
+  for (const auto& page : livePages) ordered.push_back(&page);
+  std::sort(ordered.begin(), ordered.end(), [](const LayoutPage* a, const LayoutPage* b) {
+    return a->order == b->order ? a->name < b->name : a->order < b->order;
+  });
+  if (scoped) for (const auto* page : ordered) {
+    JsonObject entry = pages.add<JsonObject>();
+    entry["key"] = normalizeLayoutName(page->name);
+    entry["name"] = page->name;
+    entry["title"] = page->name;
+    entry["order"] = page->order;
+  }
+  if (scoped && hasLivePageKey("__unassigned__")) {
+    JsonObject entry = pages.add<JsonObject>();
+    entry["key"] = "__unassigned__";
+    entry["name"] = "Other";
+    entry["title"] = "Other";
+    entry["order"] = 2147483647;
+  }
+  document["defaultPage"] = scoped && !ordered.empty() ? normalizeLayoutName(ordered.front()->name)
+      : (pages.size() ? String("__unassigned__") : String());
+  String output;
+  if (!cm::serializeJsonChecked(document, output)) return String();
+  return output;
+}
+
+String ConfigManagerClass::buildLivePageMetadataJSON(const String& pageKey) {
+  return runtimeManager.runtimeMetaToJSON([&](const RuntimeFieldMeta& meta) {
+    return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
+  });
+}
+
+String ConfigManagerClass::buildLiveLayoutJSON() const { return buildLiveLayoutJSONImpl(nullptr); }
+String ConfigManagerClass::buildLiveLayoutJSON(const String& pageKey) const { return buildLiveLayoutJSONImpl(&pageKey); }
+
+String ConfigManagerClass::buildLiveLayoutJSONImpl(const String* pageKey) const {
   const auto normalizeToken = [this](const String& value) -> String {
     return normalizeLayoutName(value);
   };
@@ -564,51 +615,96 @@ String ConfigManagerClass::buildLiveLayoutJSON() const {
     return result;
   };
 
-  const auto sortedPages = makeSortedPointers(livePages);
-  for (const auto* page : sortedPages) {
-    JsonObject pageObj = pagesArray.createNestedObject();
-    pageObj["name"] = page->name;
-    pageObj["title"] = page->name;
-    pageObj["order"] = page->order;
-    pageObj["key"] = normalizeToken(page->name);
+  const auto emitLayout = [&](auto& sink) -> bool {
+    if (!sink.raw("{\"pages\":[")) return false;
+    const auto sortedPages = makeSortedPointers(livePages);
+    bool firstPage = true;
+    if (liveLayoutEnabled) for (const auto* page : sortedPages) {
+      if (pageKey && normalizeToken(page->name) != *pageKey) continue;
+      if (!firstPage && !sink.raw(",")) return false;
+      firstPage = false;
+      JsonDocument fragment;
+      JsonObject pageObj = fragment.to<JsonObject>();
+      pageObj["name"] = page->name;
+      pageObj["title"] = page->name;
+      pageObj["order"] = page->order;
+      pageObj["key"] = normalizeToken(page->name);
 
-    JsonArray cardsArray = pageObj.createNestedArray("cards");
-    const auto sortedCards = makeSortedPointers(page->cards);
-    for (const auto* card : sortedCards) {
-      JsonObject cardObj = cardsArray.createNestedObject();
-      cardObj["name"] = card->name;
-      cardObj["title"] = card->name;
-      cardObj["order"] = card->order;
+      JsonArray cardsArray = pageObj.createNestedArray("cards");
+      const auto sortedCards = makeSortedPointers(page->cards);
+      for (const auto* card : sortedCards) {
+        JsonObject cardObj = cardsArray.createNestedObject();
+        cardObj["name"] = card->name;
+        cardObj["title"] = card->name;
+        cardObj["order"] = card->order;
 
-      JsonArray itemsArray = cardObj.createNestedArray("items");
-      collectPlacements(page->name, card->name, String(), itemsArray);
+        JsonArray itemsArray = cardObj.createNestedArray("items");
+        collectPlacements(page->name, card->name, String(), itemsArray);
 
-      JsonArray groupsArray = cardObj.createNestedArray("groups");
-      const auto sortedGroups = makeSortedPointers(card->groups);
-      for (const auto* group : sortedGroups) {
-        JsonObject groupObj = groupsArray.createNestedObject();
-        groupObj["name"] = group->name;
-        groupObj["title"] = group->name;
-        groupObj["order"] = group->order;
+        JsonArray groupsArray = cardObj.createNestedArray("groups");
+        const auto sortedGroups = makeSortedPointers(card->groups);
+        for (const auto* group : sortedGroups) {
+          JsonObject groupObj = groupsArray.createNestedObject();
+          groupObj["name"] = group->name;
+          groupObj["title"] = group->name;
+          groupObj["order"] = group->order;
 
-        JsonArray groupItemsArray = groupObj.createNestedArray("items");
-        collectPlacements(page->name, card->name, group->name, groupItemsArray);
+          JsonArray groupItemsArray = groupObj.createNestedArray("items");
+          collectPlacements(page->name, card->name, group->name, groupItemsArray);
+        }
       }
+      if (!sink.json(fragment)) return false;
     }
-  }
-
-  JsonObject placementsObj = root.createNestedObject("placements");
-  for (const auto& placement : livePlacements) {
-    JsonObject placementObj = placementsObj.createNestedObject(placement.id);
-    placementObj["page"] = placement.page;
-    placementObj["card"] = placement.card;
-    placementObj["group"] = placement.group;
-    placementObj["order"] = placement.order;
-  }
-
-  root["defaultPage"] = sortedPages.empty() ? String() : sortedPages.front()->name;
-
+    if (!sink.raw("],\"placements\":{")) return false;
+    bool firstPlacement = true;
+    const auto selectedPlacement = [&](const UiPlacement& placement) {
+      if (!pageKey) return true;
+      if (*pageKey != "__unassigned__") return normalizeToken(placement.page) == *pageKey;
+      for (const auto& page : livePages) if (normalizeToken(page.name) == normalizeToken(placement.page)) return false;
+      return true;
+    };
+    for (size_t index = 0; index < livePlacements.size(); ++index) {
+      // Match JSON object insertion semantics within the selected page.
+      if (!selectedPlacement(livePlacements[index])) continue;
+      bool alreadyEmitted = false;
+      for (size_t earlier = 0; earlier < index; ++earlier) {
+        if (selectedPlacement(livePlacements[earlier]) && livePlacements[earlier].id == livePlacements[index].id) { alreadyEmitted = true; break; }
+      }
+      if (alreadyEmitted) continue;
+      const UiPlacement* placement = &livePlacements[index];
+      for (size_t later = index + 1; later < livePlacements.size(); ++later) {
+        if (selectedPlacement(livePlacements[later]) && livePlacements[later].id == placement->id) placement = &livePlacements[later];
+      }
+      if (!firstPlacement && !sink.raw(",")) return false;
+      firstPlacement = false;
+      {
+        JsonDocument key;
+        key.set(placement->id);
+        if (!sink.json(key)) return false;
+      }
+      if (!sink.raw(":")) return false;
+      JsonDocument fragment;
+      JsonObject placementObj = fragment.to<JsonObject>();
+      placementObj["page"] = placement->page;
+      placementObj["card"] = placement->card;
+      placementObj["group"] = placement->group;
+      placementObj["order"] = placement->order;
+      if (!sink.json(fragment)) return false;
+    }
+    if (!sink.raw("},\"defaultPage\":")) return false;
+    {
+      JsonDocument value;
+      String defaultPage = !liveLayoutEnabled || sortedPages.empty() ? String() : sortedPages.front()->name;
+      if (pageKey) {
+        defaultPage = String();
+        for (const auto* page : sortedPages) if (normalizeToken(page->name) == *pageKey) { defaultPage = page->name; break; }
+      }
+      value.set(defaultPage);
+      if (!sink.json(value)) return false;
+    }
+    return sink.raw("}");
+  };
   String output;
-  serializeJson(doc, output);
+  if (!cm::buildFragmentedJson(emitLayout, output)) return String();
   return output;
 }

@@ -52,7 +52,9 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "4.5.0" // Synced to library.json
+#include "runtime/detail/RuntimeSubscriptions.h"
+
+#define CONFIGMANAGER_VERSION "4.6.0" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1709,52 +1711,36 @@ public:
   std::function<String()> customPayloadBuilder;
   std::vector<std::function<void(AsyncWebSocketClient*)>> wsConnectCallbacks;
   std::vector<std::function<void(AsyncWebSocketClient*)>> wsDisconnectCallbacks;
-  // Manual heartbeat tracking
-  struct WsClientInfo {
-    uint32_t id;
-    unsigned long lastSeen;
-  };
-  std::vector<WsClientInfo> wsClients;
+  mutable std::mutex wsClientsMutex;
+  cm::RuntimeSubscriptions wsSubscriptions;
   unsigned long wsLastHeartbeat = 0;
-  uint32_t wsHeartbeatInterval = 30000; // ms - ping every 30 seconds instead of 15
-  uint32_t wsHeartbeatTimeout = 120000; // ms - 2 minutes timeout instead of 45 seconds
-  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
-  // cppcheck-suppress-begin useStlAlgorithm
+  uint32_t wsHeartbeatInterval = 30000;
+  uint32_t wsHeartbeatTimeout = 120000;
   void wsMarkSeen(uint32_t id) {
-    for (auto& c : wsClients) {
-      // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-      // cppcheck-suppress useStlAlgorithm
-      if (c.id == id) {
-        c.lastSeen = millis();
-        return;
-      }
-    }
-    wsClients.push_back({id, millis()});
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    wsSubscriptions.seen(id, millis());
   }
-  // Cppcheck rationale: End the local embedded-loop exception.
-  // cppcheck-suppress-end useStlAlgorithm
   void wsRemove(uint32_t id) {
-    wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [id](const WsClientInfo& c) { return c.id == id; }), wsClients.end());
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    wsSubscriptions.remove(id);
   }
   void wsHeartbeatMaintenance() {
-    if (!wsEnabled || !ws)
-      return;
+    if (!wsEnabled || !ws) return;
     const unsigned long now = millis();
     if (now - wsLastHeartbeat >= wsHeartbeatInterval) {
       wsLastHeartbeat = now;
-      if (ws->availableForWriteAll()) {
-        ws->textAll("__ping"); // application-level ping
-      }
+      if (ws->availableForWriteAll()) ws->textAll("__ping");
     }
-    // Drop stale clients
-    for (const auto& c : wsClients) {
-      if (now - c.lastSeen > wsHeartbeatTimeout) {
-        if (auto* cl = ws->client(c.id))
-          cl->close();
-      }
+    std::vector<cm::RuntimeClient> clients;
+    {
+      std::lock_guard<std::mutex> lock(wsClientsMutex);
+      clients = wsSubscriptions.clients;
     }
-    // cleanup removed
-    wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [this](const WsClientInfo& c) { return ws->client(c.id) == nullptr; }), wsClients.end());
+    for (const auto& client : clients) {
+      auto* connection = ws->client(client.id);
+      if (!connection) wsRemove(client.id);
+      else if (now - client.lastSeen > wsHeartbeatTimeout) connection->close();
+    }
     ws->cleanupClients();
   }
 #endif
@@ -1762,6 +1748,9 @@ public:
 public:
   ConfigManagerClass()
       : appVersion(CONFIGMANAGER_VERSION) {
+    webManager.setSelectedRuntimeJsonProvider([this](const cm::RuntimeSelection& selection) {
+      return runtimeManager.runtimeValuesToJSON(selection);
+    });
     webManager.setCallbacks(
       [this]() { return toJSON(true); },                            // config JSON - include secrets for web interface
       [this]() { return runtimeManager.runtimeValuesToJSON(); },    // runtime JSON
@@ -1870,6 +1859,7 @@ public:
     String card;
     String group;
     int order = DEFAULT_LAYOUT_ORDER;
+    String sourceGroup; // Optional internal identity; empty preserves explicit global overrides.
   };
 
   std::vector<UiPlacement> settingsPlacements;
@@ -2829,6 +2819,13 @@ public:
   }
 
   String buildLiveLayoutJSON() const;
+  String buildLiveLayoutJSON(const String& pageKey) const;
+  String buildLiveLayoutJSONImpl(const String* pageKey) const;
+  String buildLivePageIndexJSON() const;
+  String buildLivePageMetadataJSON(const String& pageKey);
+  bool supportsLivePageSelection() const;
+  bool hasLivePageKey(const String& pageKey) const;
+  String livePageKeyForField(const String& fieldKey, const String& sourceGroup = String()) const;
 
   // Runtime providers
   void addRuntimeProvider(const RuntimeValueProvider& provider) {
@@ -2903,7 +2900,8 @@ public:
     return true;
   }
   size_t getWebSocketClientCount() const {
-    return wsClients.size();
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    return wsSubscriptions.clients.size();
   }
 
   static uint32_t clampWebSocketInterval_(uint32_t intervalMs) {
@@ -2911,38 +2909,55 @@ public:
   }
 
   void handleWebsocketPush() {
-    if (!wsEnabled || !ws)
-      return;
+    if (!wsEnabled || !ws) return;
     wsHeartbeatMaintenance();
-    if (wsClients.empty())
-      return;
-
-    unsigned long now = millis();
-    if (now - wsLastPush < wsInterval)
-      return;
-    wsLastPush = now;
-
-    String payload;
-    if (customPayloadBuilder) {
-      payload = customPayloadBuilder();
-    } else {
-      payload = runtimeManager.runtimeValuesToJSON();
-    }
-
-    sendWebSocketText(payload);
+    if (millis() - wsLastPush < wsInterval) return;
+    pushRuntimeSnapshot();
   }
 
   bool pushRuntimeSnapshot() {
-    if (!wsEnabled || !ws)
-      return false;
-    String payload;
-    if (customPayloadBuilder) {
-      payload = customPayloadBuilder();
-    } else {
-      payload = runtimeManager.runtimeValuesToJSON();
+    if (!wsEnabled || !ws) return false;
+    cm::RuntimeSubscriptions subscriptions;
+    {
+      std::lock_guard<std::mutex> lock(wsClientsMutex);
+      subscriptions = wsSubscriptions;
+    }
+    bool hasRuntimeClient = false;
+    for (const auto& client : subscriptions.clients) {
+      if (client.mode != cm::RuntimeMode::Events) hasRuntimeClient = true;
     }
     wsLastPush = millis();
-    return sendWebSocketText(payload);
+    if (!hasRuntimeClient) return false;
+    bool sent = false;
+    // Custom builders retain their complete opaque payload contract, once per tick.
+    if (customPayloadBuilder) {
+      const String payload = customPayloadBuilder();
+      for (const auto& client : subscriptions.clients) {
+        if (client.mode != cm::RuntimeMode::Events) sent = sendWebSocketText(ws->client(client.id), payload) || sent;
+      }
+      return sent;
+    }
+    JsonDocument snapshot;
+    runtimeManager.fillRuntimeSnapshot(snapshot.to<JsonObject>(), subscriptions.unionSelection());
+    String fullPayload;
+    for (const auto& client : subscriptions.clients) {
+      if (client.mode == cm::RuntimeMode::Events) continue;
+      auto* connection = ws->client(client.id);
+      if (!connection || connection->queueIsFull()) continue;
+      if (client.mode == cm::RuntimeMode::Legacy) {
+        if (!fullPayload.length()) serializeJson(snapshot, fullPayload);
+        sent = sendWebSocketText(connection, fullPayload) || sent;
+      } else {
+        JsonDocument projected;
+        cm::filterRuntimeSnapshot(projected.to<JsonObject>(), snapshot.as<JsonObjectConst>(), client.selection);
+        JsonArray groups = projected["_runtimeGroups"].to<JsonArray>();
+        for (const auto& group : client.selection.groups) groups.add(group);
+        String payload;
+        serializeJson(projected, payload);
+        sent = sendWebSocketText(connection, payload) || sent;
+      }
+    }
+    return sent;
   }
 
   void enableWebSocketPush(uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {
@@ -2954,11 +2969,22 @@ public:
       // cppcheck-suppress constParameterPointer
       ws->onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len) {
         switch (type) {
-          case WS_EVT_CONNECT:
+          case WS_EVT_CONNECT: {
+            // ESPAsyncWebServer 3.4 passes the live HTTP request as the connect argument.
+            auto* request = static_cast<AsyncWebServerRequest*>(arg);
+            String mode;
+            if (request && request->hasParam("runtime")) {
+              mode = request->getParam("runtime")->value();
+              if (!mode.length()) { client->close(); break; }
+            }
+            bool accepted;
+            {
+              std::lock_guard<std::mutex> lock(wsClientsMutex);
+              accepted = wsSubscriptions.connect(client->id(), mode.c_str(), millis());
+            }
+            if (!accepted) { client->close(); break; }
             CM_CORE_LOG_VERBOSE("[WS] Client connect %u", client->id());
-            wsMarkSeen(client->id());
-            if (pushOnConnect)
-              handleWebsocketPush();
+            if (pushOnConnect && !mode.length()) handleWebsocketPush();
             // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
             // cppcheck-suppress constVariableReference
             for (auto& cb : wsConnectCallbacks) {
@@ -2966,6 +2992,7 @@ public:
                 cb(client);
             }
             break;
+          }
           case WS_EVT_DISCONNECT:
             CM_CORE_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
             wsRemove(client->id());
@@ -2988,13 +3015,11 @@ public:
             if (arg && data && len) {
               const auto* info = reinterpret_cast<const AwsFrameInfo*>(arg);
               if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-                // Small fixed buffer for compare
-                char buf[16];
-                size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
-                memcpy(buf, data, n);
-                buf[n] = '\0';
-                if (strcmp(buf, "__pong") == 0) {
+                if (len == 6 && memcmp(data, "__pong", 6) == 0) {
                   wsMarkSeen(client->id());
+                } else if (len <= cm::RuntimeSelection::maxPayloadBytes + 64) {
+                  std::lock_guard<std::mutex> lock(wsClientsMutex);
+                  wsSubscriptions.subscribe(client->id(), reinterpret_cast<const char*>(data), len, millis());
                 }
               }
             }
