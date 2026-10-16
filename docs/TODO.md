@@ -12,6 +12,10 @@
   - LiveCard = card container inside a live page
   - LiveGroup = if we want a second nesting level like Settings
 
+## High Priority (Prio 1) - Runtime stability
+
+- [ ] Investigate truncated HTTP responses, metadata 503 and the earlier unexplained panic. See [the deferred investigation handoff](todo_http_delivery_panic.md) for the 2026-10-16 evidence, exact baselines, hypotheses and acceptance gates. Keep the current CM feature work off main until resolved, as requested by the owner.
+
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
 - Add new stability check:
@@ -70,4 +74,4 @@
 
 ## Status Notes
 
-- stable
+- Runtime stability remains under investigation; see the open HTTP delivery/panic item above.
