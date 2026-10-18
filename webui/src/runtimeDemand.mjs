@@ -37,6 +37,13 @@ export function createLatestRuntimeRequest({ request, onData, onError = () => {}
     controller?.abort();
     return run();
   }
-  function cancel() { disposed = true; generation++; queued = false; controller?.abort(); }
-  return { run, select, cancel };
+  function suspend() {
+    generation++;
+    queued = false;
+    groups = null;
+    key = null;
+    controller?.abort();
+  }
+  function cancel() { disposed = true; suspend(); }
+  return { run, select, suspend, cancel };
 }

@@ -8,20 +8,39 @@ const assert=require('node:assert/strict');
  const page=await browser.newPage();const errors=[],requests=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{
-  const NativeSocket=window.WebSocket;window.__subscriptions=[];window.__sockets=[];
+  const NativeSocket=window.WebSocket;window.__subscriptions=[];window.__sockets=[];window.__startupEvents=[];window.__startupSafety=[];
   class Socket {
    static CONNECTING=0;static OPEN=1;static CLOSED=3;
-   constructor(url,protocol){if(protocol==='vite-hmr')return new NativeSocket(url,protocol);this.url=url;this.readyState=0;window.__sockets.push(this);setTimeout(()=>{this.readyState=1;this.onopen?.({});},10);}
+   constructor(url,protocol){if(protocol==='vite-hmr')return new NativeSocket(url,protocol);this.url=url;this.readyState=0;window.__sockets.push(this);window.__startupEvents.push("socket:"+url.split("runtime=")[1]);window.__startupSafety.push({url,settingsDisabled:Array.from(document.querySelectorAll("button")).find(button=>button.textContent.trim()==="Settings")?.disabled,otaOverlay:!!document.querySelector(".ota-active-overlay")});setTimeout(()=>{this.readyState=1;this.onopen?.({});window.__startupEvents.push("socket-open:"+url.split("runtime=")[1]);},10);}
    send(text){if(text==='__pong')return;const frame=JSON.parse(text);window.__subscriptions.push(frame.groups);const payload={uptime:123,system:{otaActive:false,otaHasPassword:true},_runtimeGroups:frame.groups};if(frame.groups.includes('bms'))payload.bms={reason:'adapter_missing',availability:'offline'};if(frame.groups.includes('victron'))payload.victron={reason:'waiting_for_advertisement',availability:'online'};setTimeout(()=>this.onmessage?.({data:JSON.stringify(payload)}),5);}
    close(){this.readyState=3;this.onclose?.({});}
   }
   window.WebSocket=Socket;
-  const originalFetch=window.fetch;window.__retryMetadataCalls=0;
+  const originalFetch=window.fetch;window.__retryMetadataCalls=0;window.__runtimeSafetyReads=0;
   window.fetch=(resource,options)=>{
-   if(String(resource).includes('/runtime_meta.json?page=retry') && ++window.__retryMetadataCalls===1) return Promise.resolve({ok:true,json:()=>new Promise(()=>{})});
-   return originalFetch(resource,options);
+   if(String(resource).includes('/runtime_meta.json?page=retry')) {
+    window.__retryMetadataCalls++;
+    if(window.__retryMetadataCalls===1) return Promise.resolve({ok:true,json:()=>new Promise(()=>{})});
+    if(window.__retryMetadataCalls===2) {
+     window.__retrySafetyBefore=window.__runtimeSafetyReads;
+     return Promise.resolve({ok:false,status:503});
+    }
+   }
+   if(String(resource).startsWith('/runtime.json?groups=%5B%5D'))window.__runtimeSafetyReads++;
+   const path=new URL(String(resource),location.href).pathname;
+   window.__startupEvents.push(path+":start");
+   return originalFetch(resource,options).then(response=>{
+    for(const kind of ["json","text"]){const read=response[kind].bind(response);response[kind]=async()=>{
+     // Headers alone are insufficient: each startup stage must await its body.
+     if(path==='/user_theme.css') await new Promise(resolve=>{window.__releaseInitialTheme=resolve;});
+     await new Promise(resolve=>setTimeout(resolve,60));
+     const value=await read();window.__startupEvents.push(path+":end");return value;
+    };}
+    return response;
+   });
   };
  });
+ let firstRuntime=true;
  const entries=[{key:'bms',name:'BMS',title:'BMS',order:1},{key:'victron page!',name:'Victron',title:'Victron',order:2},{key:'empty',name:'Empty',title:'Empty',order:3},{key:'slow',name:'Slow',title:'Slow',order:4},{key:'retry',name:'Retry',title:'Retry',order:5}];
  await page.route(`${testUrl}/**`,async route=>{
   const u=new URL(route.request().url());
@@ -41,16 +60,35 @@ const assert=require('node:assert/strict');
   }
   if(u.pathname==='/runtime.json'){
    const groups=JSON.parse(u.searchParams.get('groups')||'null');assert.ok(groups,'full runtime forbidden');
-   const data={uptime:123,system:{otaActive:false,otaHasPassword:true}};if(groups.includes('bms'))data.bms={reason:'adapter_missing',availability:'offline'};if(groups.includes('victron'))data.victron={reason:'waiting_for_advertisement',availability:'online'};return json(data);
+   const data={uptime:123,system:{otaActive:firstRuntime,otaHasPassword:true}};firstRuntime=false;if(groups.includes('bms'))data.bms={reason:'adapter_missing',availability:'offline'};if(groups.includes('victron'))data.victron={reason:'waiting_for_advertisement',availability:'online'};return json(data);
   }
   if(u.pathname==='/config/auth')return json({status:'ok',token:'mock-token',ttlSec:3600});
   if(u.pathname==='/config.json')return json({config:{System:{Version:{value:'mock',displayName:'Version',showIf:true}}}});
+  if(u.pathname==='/appinfo')return json({appName:'Test',appTitle:'Test',version:'1.0.0',guiLogging:false});
   if(u.pathname==='/user_theme.css')return route.fulfill({contentType:'text/css',body:''});
   if(u.pathname==='/ota_update')return route.fulfill({status:403,body:''});
   return json({});
  });
  await page.goto(`${testUrl}/`);
+ await page.waitForFunction(()=>typeof window.__releaseInitialTheme==='function');
+ assert.equal(await page.getByRole('button',{name:'Settings',exact:true}).isDisabled(),true,'Settings must wait for bounded bootstrap/OTA status');
+ assert.equal(await page.getByRole('button',{name:'Flash',exact:true}).isDisabled(),true);
+ await page.evaluate(()=>window.__releaseInitialTheme());
  await page.getByText('adapter_missing',{exact:true}).waitFor();
+ await page.waitForFunction(()=>window.__sockets.some(socket=>socket.url.includes('runtime=none')));
+ const startup=await page.evaluate(()=>window.__startupEvents);
+ const before=(first,last)=>assert.ok(startup.indexOf(first)>=0 && startup.indexOf(first)<startup.indexOf(last), `${first} must finish before ${last}: ${JSON.stringify(startup)}`);
+ before('/user_theme.css:end','/appinfo:start');
+ before('/appinfo:end','/live_pages.json:start');
+ before('/live_pages.json:end','/live_layout.json:start');
+ before('/live_layout.json:end','/runtime_meta.json:start');
+ before('/runtime_meta.json:end','/ota_update:start');
+ before('/ota_update:end','/runtime.json:start');
+ before('/runtime.json:end','socket:selected');
+ before('socket-open:selected','socket:none');
+ const startupSafety=await page.evaluate(()=>window.__startupSafety.find(item=>item.url.includes('runtime=selected')));
+ assert.equal(startupSafety.settingsDisabled,true,'initial OTA-active snapshot must guard Settings before sockets');
+ assert.equal(startupSafety.otaOverlay,true);
  assert.equal(requests.filter(x=>x==='/config.json').length,0);
  for(const entry of entries)await page.getByRole('button',{name:entry.title,exact:true}).waitFor();
  await page.getByRole('button',{name:'Victron',exact:true}).click();
@@ -78,8 +116,10 @@ const assert=require('node:assert/strict');
  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
  await page.waitForFunction(()=>JSON.stringify(window.__subscriptions.at(-1))==='["bms"]');
  await page.getByRole('button',{name:'Retry',exact:true}).click();
- await page.getByText('waiting_for_advertisement',{exact:true}).waitFor({timeout:16000});
- assert.equal(await page.evaluate(()=>window.__retryMetadataCalls),2,'active body timeout must retry');
+ await page.waitForFunction(()=>window.__retryMetadataCalls>=2,{},{timeout:16000});
+ await page.waitForFunction(()=>window.__runtimeSafetyReads>window.__retrySafetyBefore,{},{timeout:3000});
+ await page.getByText('waiting_for_advertisement',{exact:true}).waitFor({timeout:10000});
+ assert.equal(await page.evaluate(()=>window.__retryMetadataCalls),3,'body timeout and repeated unavailable schema must retry while safety remains active');
  assert.equal(requests.filter(x=>x==='/live_pages.json').length,1);
  assert.equal(requests.filter(x=>x==='/live_layout.json?page=bms').length,1);
  assert.equal(requests.filter(x=>x==='/runtime_meta.json?page=bms').length,1);

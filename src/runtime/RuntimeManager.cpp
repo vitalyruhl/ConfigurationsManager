@@ -1,4 +1,5 @@
 #include "RuntimeManager.h"
+#include "detail/RuntimeMetaJson.h"
 #include "../ConfigManager.h"
 #include <algorithm>
 #include <esp_heap_caps.h>
@@ -11,28 +12,6 @@
 
 namespace {
 
-class StringAppendPrint : public Print {
-public:
-  explicit StringAppendPrint(String& output)
-      : output(output) {
-  }
-
-  size_t write(uint8_t byte) override {
-    return output.concat(static_cast<char>(byte)) ? 1 : 0;
-  }
-
-  size_t write(const uint8_t* buffer, size_t size) override {
-    // Arduino String::concat(ptr, size) reads size+1 bytes, but JSON numeric
-    // slices can end at the buffer boundary without a terminator.
-    size_t written = 0;
-    while (written < size && write(buffer[written])) ++written;
-    return written;
-  }
-
-private:
-  String& output;
-};
-
 void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes, size_t fieldCount) {
   RUNTIME_LOG("[W] Runtime meta unavailable: %s need=%u free=%u min=%u largest=%u fields=%u",
               reason,
@@ -43,122 +22,6 @@ void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes
               static_cast<unsigned>(fieldCount));
 }
 
-void populateRuntimeMetaJson(JsonObject o, const RuntimeFieldMeta& m) {
-  o["group"] = m.group;
-  if (m.sourceGroup.length()) {
-    o["sourceGroup"] = m.sourceGroup;
-  }
-  if (m.page.length()) {
-    o["page"] = m.page;
-  }
-  if (m.card.length()) {
-    o["card"] = m.card;
-  }
-  o["key"] = m.key;
-  o["label"] = m.label;
-  if (m.unit.length()) {
-    o["unit"] = m.unit;
-  }
-  o["precision"] = m.precision;
-  if (m.isBool)
-    o["isBool"] = true;
-  if (m.isString)
-    o["isString"] = true;
-  if (m.isDivider)
-    o["isDivider"] = true;
-  if (m.isButton)
-    o["isButton"] = true;
-  if (m.isCheckbox)
-    o["isCheckbox"] = true;
-  if (m.isStateButton)
-    o["isStateButton"] = true;
-  if (m.isMomentaryButton)
-    o["isMomentaryButton"] = true;
-  if (m.isIntSlider) {
-    o["isIntSlider"] = true;
-    o["min"] = m.intMin;
-    o["max"] = m.intMax;
-    o["init"] = m.intInit;
-  }
-  if (m.isFloatSlider) {
-    o["isFloatSlider"] = true;
-    o["min"] = m.floatMin;
-    o["max"] = m.floatMax;
-    o["init"] = m.floatInit;
-  }
-  if (m.isIntInput) {
-    o["isIntInput"] = true;
-    o["min"] = m.intMin;
-    o["max"] = m.intMax;
-    o["init"] = m.intInit;
-  }
-  if (m.isFloatInput) {
-    o["isFloatInput"] = true;
-    o["min"] = m.floatMin;
-    o["max"] = m.floatMax;
-    o["init"] = m.floatInit;
-  }
-  if (m.hasAlarm)
-    o["hasAlarm"] = true;
-  if (m.alarmWhenTrue)
-    o["alarmWhenTrue"] = true;
-  if (m.boolAlarmValue) {
-    o["boolAlarmValue"] = m.boolAlarmValue;
-  }
-  if (m.alarmMin != 0.0f || m.alarmMax != 0.0f) {
-    o["alarmMin"] = m.alarmMin;
-    o["alarmMax"] = m.alarmMax;
-  }
-  if (m.warnMin != 0.0f || m.warnMax != 0.0f) {
-    o["warnMin"] = m.warnMin;
-    o["warnMax"] = m.warnMax;
-  }
-  o["order"] = m.order;
-  if (m.staticValue.length()) {
-    o["staticValue"] = m.staticValue;
-  }
-  if (m.onLabel.length()) {
-    o["onLabel"] = m.onLabel;
-  }
-  if (m.offLabel.length()) {
-    o["offLabel"] = m.offLabel;
-  }
-  if (!m.style.empty()) {
-    JsonObject styleObj = o.createNestedObject("style");
-    for (const auto& rule : m.style.rules) {
-      if (!rule.target.length()) {
-        continue;
-      }
-      JsonObject ruleObj = styleObj.createNestedObject(rule.target);
-      if (rule.hasVisible) {
-        ruleObj["visible"] = rule.visible;
-      }
-      if (rule.className.length()) {
-        ruleObj["className"] = rule.className;
-      }
-      for (const auto& prop : rule.properties) {
-        if (prop.key.length()) {
-          ruleObj[prop.key] = prop.value;
-        }
-      }
-    }
-  }
-}
-
-size_t runtimeMetaJsonSize(const RuntimeFieldMeta& meta) {
-  StaticJsonDocument<1536> entryDoc;
-  populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
-  return measureJson(entryDoc);
-}
-
-bool appendRuntimeMetaJson(String& out, const RuntimeFieldMeta& meta) {
-  StaticJsonDocument<1536> entryDoc;
-  populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
-  const size_t offset = out.length();
-  StringAppendPrint writer(out);
-  const size_t written = serializeJson(entryDoc, writer);
-  return written != 0 && out.length() == offset + written;
-}
 
 } // namespace
 
@@ -358,60 +221,37 @@ String ConfigManagerRuntime::buildRuntimeMetaJsonLocked(const std::function<bool
     return a.group < b.group;
   });
 
-  // Determine the exact response size before allocating the one unavoidable
-  // output buffer. Avoiding incremental growth is important on fragmented heaps.
-  size_t outputSize = 2; // '[' and ']'
-  bool firstEntry = true;
-  for (const auto& m : meta) {
-    if (include && !include(m)) continue;
-    const size_t entrySize = runtimeMetaJsonSize(m);
-    if (entrySize == 0 || entrySize > std::numeric_limits<size_t>::max() - outputSize) {
-      logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
-      return String();
+  // Serialize the same locked metadata twice without temporary JSON trees:
+  // first count bytes, then write into one exactly reserved output buffer.
+  const auto emit = [&](auto& sink) {
+    if (!sink.raw("[")) return false;
+    bool first = true;
+    for (const auto& field : meta) {
+      if (include && !include(field)) continue;
+      if (!first && !sink.raw(",")) return false;
+      first = false;
+      if (!cm::writeRuntimeMeta(sink, field)) return false;
     }
-    outputSize += entrySize;
-    if (!firstEntry) {
-      if (outputSize == std::numeric_limits<size_t>::max()) {
-        logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
-        return String();
-      }
-      ++outputSize;
-    }
-    firstEntry = false;
+    return sink.raw("]");
+  };
+  // Preserve the required-size and failure-stage diagnostics for heap analysis.
+  cm::JsonOutput<String> count(nullptr, std::numeric_limits<unsigned int>::max() - size_t(1));
+  if (!emit(count) || !count.good()) {
+    logRuntimeMetaSerializationFailure("size", count.size(), meta.size());
+    return String();
   }
-
   String out;
-  if (!out.reserve(outputSize)) {
-    logRuntimeMetaSerializationFailure("reserve", outputSize, meta.size());
+  if (!out.reserve(static_cast<unsigned int>(count.size()))) {
+    logRuntimeMetaSerializationFailure("reserve", count.size(), meta.size());
     return String();
   }
-  if (!out.concat('[')) {
-    logRuntimeMetaSerializationFailure("open", outputSize, meta.size());
+  cm::JsonOutput<String> writer(&out, count.size());
+  if (!emit(writer) || !writer.good()) {
+    logRuntimeMetaSerializationFailure("serialize", count.size(), meta.size());
     return String();
   }
-
-  bool first = true;
-  for (const auto& m : meta) {
-    if (include && !include(m)) continue;
-    if (!first) {
-      if (!out.concat(',')) {
-        logRuntimeMetaSerializationFailure("separator", outputSize, meta.size());
-        return String();
-      }
-    }
-    first = false;
-    if (!appendRuntimeMetaJson(out, m)) {
-      logRuntimeMetaSerializationFailure("serialize", outputSize, meta.size());
-      return String();
-    }
-  }
-
-  if (!out.concat(']')) {
-    logRuntimeMetaSerializationFailure("close", outputSize, meta.size());
-    return String();
-  }
-  if (out.length() != outputSize) {
-    logRuntimeMetaSerializationFailure("length", outputSize, meta.size());
+  if (writer.size() != count.size() || out.length() != count.size()) {
+    logRuntimeMetaSerializationFailure("length", count.size(), meta.size());
     return String();
   }
   return out;

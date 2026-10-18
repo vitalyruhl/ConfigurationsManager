@@ -2,6 +2,30 @@
 
 This changelog is a curated overview.
 
+## 4.6.1 - Unreleased
+
+- Stagger WebUI startup body reads, schema loading and socket handshakes to
+  reduce overlapping network/JSON allocation peaks. Keep bounded retry and OTA
+  status recovery active after initial schema failures.
+- Send built-in theme CSS from immutable static data and snapshot custom CSS
+  once for the bounded sender, avoiding the response stream's default buffer.
+- Generate app-info JSON without a temporary document tree and move its buffer
+  into the response. Under verbose logging, report heap/default-allocation
+  snapshots and integrity at app-info/page-index response boundaries using ROM
+  output. These diagnostics are compiled out when verbose logging is disabled.
+- Recover the WebUI application name after interrupted app-info requests: use
+  the legacy version endpoint for transport/JSON failures, retry with bounded
+  delays, and retain an already loaded identity during temporary outages.
+  Cancel pending identity requests on unmount and refresh after GUI reconnect.
+- Serialize CM-owned live page indexes, layouts and runtime metadata directly
+  into a bounded output buffer, without temporary ArduinoJson document trees.
+  Preserve page selection, ordering, duplicate-key behavior and provider/parser
+  APIs. Escape all JSON control bytes and reject incomplete output on failure.
+- Retain ArduinoJson numeric formatting through an allocation-free adapter to
+  preserve floating-point wire values. The complete response buffer and existing
+  layout sorting/normalization still require memory; hardware panic acceptance
+  and HTTP delivery timing remain open.
+
 ## 4.6.0 - Unreleased
 
 - Add a lightweight live page index and optional page selection for layout and

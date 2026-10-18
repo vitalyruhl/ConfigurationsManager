@@ -77,7 +77,7 @@ private:
   String getContentType(const String& path);
   void sendWebUI(AsyncWebServerRequest* request);
   void redirectToPortalRoot(AsyncWebServerRequest* request);
-  void enableCORS(AsyncWebServerResponse* response);
+  void enableCORS(AsyncWebServerResponse* response, const char* diagnosticRoute = nullptr);
   void log(const char* format, ...) const;
 
 public:

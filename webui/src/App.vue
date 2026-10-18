@@ -12,12 +12,12 @@
       </button>
       <button
         :class="{ active: activeTab === 'settings' }"
-        :disabled="externalOtaActive"
+        :disabled="externalOtaActive || !startupComplete"
         @click="switchToSettings()"
       >
         Settings
       </button>
-      <button class="flash-btn" @click="startFlash" :disabled="!canFlash || externalOtaActive">
+      <button class="flash-btn" @click="startFlash" :disabled="!canFlash || externalOtaActive || !startupComplete">
         Flash
       </button>
       <button
@@ -130,13 +130,14 @@
     </div>
 
     <RuntimeDashboard
-      v-if="hasLiveContent"
+      v-if="hasLiveContent && startupReady"
       v-show="activeTab !== 'settings'"
       ref="runtimeDashboard"
       :config="config"
       :view="activeTab"
       @can-flash-change="handleCanFlashChange"
       @ota-active-change="handleOtaActiveChange"
+      @bootstrap-complete="handleDashboardBootstrap"
     />
     <section v-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
       <div class="category-tabs" role="tablist" aria-label="Settings categories">
@@ -193,6 +194,8 @@ import { ref, onBeforeUnmount, onMounted, provide, nextTick, computed, watch } f
 import Category from "./components/Category.vue";
 import { readJson, loadRuntimeMeta, loadRuntimeDiscovery, loadLivePages } from "./runtimeDataClient.mjs";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
+import { createAppInfoRecovery } from "./appInfoClient.mjs";
+import { readTextResponse } from "./startupHttp.mjs";
 
 function isUnsetPasswordValue(value) {
   return value === undefined || value === null || value === '' || value === '***';
@@ -515,6 +518,10 @@ const HTTP_ONLY_HINT_STORAGE_KEY = 'cm.dismiss.httpOnlyHint.v1';
 
 // Detect if there is any live UI content available
 const hasLiveContent = ref(true);
+const startupReady = ref(false);
+const startupComplete = ref(false);
+let startupDisposed = false;
+const startupController = new AbortController();
 
 const guiPopup = ref(null);
 const guiPopupQueue = [];
@@ -941,6 +948,7 @@ function initGuiWebSocket() {
 }
 
 function connectGuiWebSocket(url) {
+  if (startupDisposed) return;
   closeGuiWebSocket();
   let connectionTimeout = null;
   try {
@@ -963,6 +971,9 @@ function connectGuiWebSocket(url) {
   guiWebSocket.onopen = () => {
     clearTimeout(connectionTimeout);
     guiWsRetry = 0;
+    // The first connection already has the mount request; later opens can follow a reboot.
+    if (guiHasConnected) injectVersion();
+    guiHasConnected = true;
   };
   guiWebSocket.onclose = () => {
     clearTimeout(connectionTimeout);
@@ -976,7 +987,7 @@ function connectGuiWebSocket(url) {
 }
 
 function scheduleGuiReconnect(url) {
-  if (guiWsReconnectTimer) return;
+  if (startupDisposed || guiWsReconnectTimer) return;
   const delay = Math.min(10000, 1000 + guiWsRetry * 700);
   guiWsRetry = Math.min(10, guiWsRetry + 1);
   guiWsReconnectTimer = setTimeout(() => {
@@ -1166,47 +1177,35 @@ function cancelSettingsAuth() {
   pendingFlashStart.value = false; // Clear any pending flash start
   activeTab.value = "live"; // Stay on live tab
 }
-async function injectVersion() {
-  try {
-    // Preferred: structured app info
-    const r = await fetch("/appinfo");
-    if (r.ok) {
-      const info = await r.json().catch(() => ({}));
-      appName.value = info && typeof info.appName === 'string' ? info.appName.trim() : "";
-      appTitle.value = info && typeof info.appTitle === 'string' ? info.appTitle.trim() : "";
-      version.value = info && typeof info.version === 'string' ? info.version.trim() : "";
-      guiLoggingEnabled.value = !!(info && info.guiLogging);
-
-      const tabBase = (appTitle.value && appTitle.value.length)
-        ? appTitle.value
-        : ((appName.value && appName.value.length) ? appName.value : "ESP32 Configuration");
-      document.title = (version.value && version.value.length) ? `${tabBase} ${version.value}` : tabBase;
-      return;
-    }
-
-    // Fallback: legacy /version (plain text "<name> <semver>")
-    const r2 = await fetch("/version");
-    if (!r2.ok) throw new Error("Version fetch failed");
-    const raw = String(await r2.text()).trim();
-    const m = raw.match(/^(.*)\s+(\d+\.\d+\.\d+(?:[-+].*)?)$/);
-    const legacyName = (m && m[1]) ? String(m[1]).trim() : raw;
-    const legacyVer = (m && m[2]) ? String(m[2]).trim() : "";
-    appName.value = legacyName;
-    version.value = legacyVer;
-    document.title = (legacyVer && legacyVer.length) ? `${legacyName} ${legacyVer}` : legacyName;
-  } catch (e) {
-    appName.value = "";
-    appTitle.value = "";
-    version.value = "";
-    guiLoggingEnabled.value = false;
-    document.title = "ESP32 Configuration";
-  }
+const appInfoRecovery = createAppInfoRecovery({
+  onUpdate(info) {
+    appName.value = info.appName;
+    appTitle.value = info.appTitle;
+    version.value = info.version;
+    guiLoggingEnabled.value = info.guiLogging;
+    const tabBase = info.appTitle || info.appName || "ESP32 Configuration";
+    document.title = info.version ? `${tabBase} ${info.version}` : tabBase;
+  },
+});
+// Keep identity retry timers from competing with initial dashboard schema loads.
+appInfoRecovery.pauseRetries();
+function handleDashboardBootstrap() {
+  if (startupDisposed) return;
+  startupComplete.value = true;
+  appInfoRecovery.resumeRetries();
+  initGuiWebSocket();
+}
+let guiHasConnected = false;
+function injectVersion() {
+  return appInfoRecovery.run();
 }
 async function loadUserTheme() {
   try {
-    const css = await fetch(`/user_theme.css?ts=${Date.now()}`)
-      .then((r) => (r.status === 200 ? r.text() : ""))
-      .catch(() => "");
+    const response = await readTextResponse(`/user_theme.css?ts=${Date.now()}`, {
+      signal: startupController.signal,
+    });
+    if (startupDisposed) return;
+    const css = response.status === 200 ? response.body : "";
     if (css && css.trim().length) {
       const existing = document.getElementById("user-theme-css");
       if (existing) existing.remove();
@@ -1514,18 +1513,25 @@ watch(externalOtaActive, (active) => {
   }
 });
 
-onMounted(() => {
+onMounted(async () => {
   applyTheme(themeMode.value);
   if (shouldShowHttpOnlyHint()) {
     httpOnlyHintUrl.value = `http://${window.location.host}/`;
     showHttpOnlyHint.value = true;
   }
-  loadUserTheme();
-  injectVersion();
-  checkLiveContent();
-  initGuiWebSocket();
+  await loadUserTheme();
+  if (startupDisposed) return;
+  await injectVersion();
+  if (startupDisposed) return;
+  await checkLiveContent();
+  if (startupDisposed) return;
+  startupReady.value = true;
+  if (!hasLiveContent.value) handleDashboardBootstrap();
 });
 onBeforeUnmount(() => {
+  startupDisposed = true;
+  startupController.abort();
+  appInfoRecovery.stop();
   if (typeof window !== "undefined") {
     window.removeEventListener("beforeunload", preventNavigationDuringExternalOta);
   }

@@ -48,3 +48,28 @@ test('metadata defines page structure before any provider values arrive', () => 
   assert.deepEqual(runtimeLayoutGroups(groups,true,()=>false),groups);
   assert.deepEqual(runtimeLayoutGroups(groups,false,()=>false),[]);
 });
+
+
+test('page suspension aborts stale demand but permits a later schema selection', async () => {
+  const calls = [], applied = [];
+  let release, oldSignal;
+  const client = createLatestRuntimeRequest({
+    request: (groups, signal) => {
+      calls.push(groups);
+      if (calls.length === 1) { oldSignal = signal; return new Promise(resolve => { release = resolve; }); }
+      return Promise.resolve('new page');
+    },
+    onData: value => applied.push(value),
+  });
+  const first = client.select(['old']);
+  client.suspend();
+  assert.equal(oldSignal.aborted, true);
+  release('stale');
+  await first;
+  await client.run();
+  assert.equal(calls.length, 1);
+  await client.select(['new']);
+  assert.deepEqual(calls, [['old'], ['new']]);
+  assert.deepEqual(applied, ['new page']);
+  client.cancel();
+});

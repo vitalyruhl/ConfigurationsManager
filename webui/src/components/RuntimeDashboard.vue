@@ -514,6 +514,7 @@ import RuntimeStateButton from "./runtime/RuntimeStateButton.vue";
 import { createRuntimeMetaRetryController } from "../runtimeMetaRetry.mjs";
 import { runtimeSources, runtimeLayoutGroups, createLatestRuntimeRequest } from "../runtimeDemand.mjs";
 import { readJson, loadRuntimeMeta, loadLiveLayout, loadRuntimeDiscovery, loadLivePages, livePageData } from "../runtimeDataClient.mjs";
+import { readTextResponse } from "../startupHttp.mjs";
 
 const props = defineProps({
   config: {
@@ -526,7 +527,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["can-flash-change", "ota-active-change"]);
+const emit = defineEmits(["can-flash-change", "ota-active-change", "bootstrap-complete"]);
 
 const LOG_MAX_ENTRIES = 1000;
 
@@ -1201,6 +1202,9 @@ let pageGeneration = 0;
 let pageController = null;
 let pageRetryTimer = null;
 let contentInitialization = null;
+let schemaInitializing = false;
+let liveTransportStarted = false;
+const bootstrapController = new AbortController();
 
 const layoutPages = computed(() => buildLiveLayoutPages(sortedRuntimeGroups.value, liveLayout.value));
 const layoutTabs = computed(() => (pageIndex.value?.pages || layoutPages.value).map((page) => ({ key: page.key, title: page.title || page.name })));
@@ -1432,8 +1436,8 @@ function initLive() {
   const url =
     proto + (typeof location !== "undefined" ? location.host : "") + "/ws?runtime=selected";
   
-  // Start WebSocket attempt
-  startWebSocket(url);
+  // Settle the first bounded socket attempt before the parent opens its GUI socket.
+  const initialAttempt = new Promise(resolve => startWebSocket(url, resolve));
   
   // Also start a backup polling mechanism with a delay to ensure we have data flow
   startupPollTimer = setTimeout(() => {
@@ -1442,17 +1446,19 @@ function initLive() {
       fallbackPolling();
     }
   }, 3000); // Give WebSocket 3 seconds to connect
+  return initialAttempt;
 }
 
-function startWebSocket(url) {
-  if (disposed) return;
+function startWebSocket(url, initialAttemptDone = () => {}) {
+  if (disposed) { initialAttemptDone(); return; }
   try {
     if (ws) {
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        initialAttemptDone();
         return;
       }
     }
-    if (wsConnecting) return; // avoid racing connections
+    if (wsConnecting) { initialAttemptDone(); return; } // avoid racing connections
     wsConnecting = true;
     ws = new WebSocket(url);
     
@@ -1467,6 +1473,7 @@ function startWebSocket(url) {
         wsConnected.value = false;
         wsConnecting = false;
         // Don't retry if WebSocket is not available (likely disabled on server)
+        initialAttemptDone();
         if (wsRetry === 0) {
           //console.log("WebSocket not available, using polling mode");
           if (!pollTimer) {
@@ -1492,15 +1499,19 @@ function startWebSocket(url) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
-      updateRuntimeDemand();
+      // The initial HTTP snapshot has already completed. Subscribe without a duplicate read.
+      updateRuntimeDemand(false);
+      initialAttemptDone();
     };
     ws.onclose = () => {
+      initialAttemptDone();
       clearTimeout(connectionTimeout);
       wsConnected.value = false;
       wsConnecting = false;
       scheduleWsReconnect(url);
     };
     ws.onerror = () => {
+      initialAttemptDone();
       clearTimeout(connectionTimeout);
       wsConnected.value = false;
       wsConnecting = false;
@@ -1542,6 +1553,7 @@ function startWebSocket(url) {
       }
     };
   } catch (e) {
+    initialAttemptDone();
     scheduleWsReconnect(url);
   }
 }
@@ -1593,13 +1605,16 @@ const runtimeRequest = createLatestRuntimeRequest({
 });
 function fetchRuntime() { return runtimeRequest.run(); }
 
-function updateRuntimeDemand() {
-  if (disposed) return;
+function updateRuntimeDemand(requestSnapshot = true) {
+  if (disposed || !liveTransportStarted) return Promise.resolve();
   const groups = selectedRuntimeGroups.value;
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "runtimeSubscribe", groups }));
   }
-  void runtimeRequest.select(groups);
+  // Page refresh suspends HTTP demand while its schema request is active. Its
+  // finally path restores [] safety demand after an empty/failed bounded attempt.
+  if (!runtimeReady.value && pageMode.value === "scoped") return Promise.resolve();
+  return requestSnapshot === false ? Promise.resolve() : runtimeRequest.select(groups);
 }
 
 function onDocumentVisibility() { documentVisible.value = !document.hidden; }
@@ -2545,12 +2560,11 @@ async function performOtaUpdate(file, password) {
 let otaProbeTimer = null;
 async function probeOtaEndpoint() {
   try {
-    const r = await fetch("/ota_update", {
-      method: "GET",
-      headers: {
-        "X-OTA-PROBE": "1",
-      },
+    const r = await readTextResponse("/ota_update", {
+      signal: bootstrapController.signal,
+      options: { method: "GET", headers: { "X-OTA-PROBE": "1" } },
     });
+    if (disposed) return;
     //console.log('[OTA Probe] Status:', r.status, 'Current state:', otaEndpointAvailable.value);
     // Only enable if we get a successful response (200-299)
     if (r.ok && r.status >= 200 && r.status < 300) {
@@ -2593,36 +2607,47 @@ async function refreshPageContent() {
   clearTimeout(pageRetryTimer);
   pageRetryTimer = null;
   runtimeReady.value = false;
-  runtimeRequest.cancel();
-  updateRuntimeDemand();
-  if (disposed || pageMode.value !== "scoped" || props.view !== "live" || !documentVisible.value) return;
-  runtimeMeta.value = [];
-  runtimeGroups.value = [];
-  liveLayout.value = null;
-  const key = activeLivePage.value;
-  if (!key) { runtimeReady.value = true; return; }
-  const controller = new AbortController();
-  pageController = controller;
+  runtimeRequest.suspend();
+  // Keep the socket safety-only while the page schema is incomplete.
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "runtimeSubscribe", groups: [] }));
   try {
-    const data = await livePageData.load(key, controller.signal);
-    if (disposed || generation !== pageGeneration || key !== activeLivePage.value) return;
-    runtimeMeta.value = data.metadata;
-    liveLayout.value = data.layout;
-    runtimeMetaStatus.value = "";
-    buildRuntimeGroups();
-    runtimeReady.value = true;
-  } catch (error) {
-    // readJson also uses AbortError for its own timeout. Only our page controller
-    // proves a navigation/visibility cancellation; an active timeout must retry.
-    if (disposed || generation !== pageGeneration || controller.signal.aborted) return;
-    runtimeMetaStatus.value = "This page is temporarily unavailable. Retrying in 5 seconds…";
-    pageRetryTimer = setTimeout(() => { pageRetryTimer = null; void refreshPageContent(); }, 5000);
+    if (disposed || pageMode.value !== "scoped" || props.view !== "live" || !documentVisible.value) return;
+    runtimeMeta.value = [];
+    runtimeGroups.value = [];
+    liveLayout.value = null;
+    const key = activeLivePage.value;
+    if (!key) { runtimeReady.value = true; return; }
+    const controller = new AbortController();
+    pageController = controller;
+    try {
+      const data = await livePageData.load(key, controller.signal);
+      if (disposed || generation !== pageGeneration || key !== activeLivePage.value) return;
+      runtimeMeta.value = data.metadata;
+      liveLayout.value = data.layout;
+      runtimeMetaStatus.value = "";
+      buildRuntimeGroups();
+      runtimeReady.value = true;
+    } catch (error) {
+      // readJson also uses AbortError for its own timeout. Only our page controller
+      // proves a navigation/visibility cancellation; an active timeout must retry.
+      if (disposed || generation !== pageGeneration || controller.signal.aborted) return;
+      runtimeMetaStatus.value = "This page is temporarily unavailable. Retrying in 5 seconds…";
+      pageRetryTimer = setTimeout(() => { pageRetryTimer = null; void refreshPageContent(); }, 5000);
+    }
+  } finally {
+    // Repeated failures, hidden/settings views and empty pages can all keep the
+    // computed groups at [], so no watcher runs to resume OTA safety polling.
+    if (!disposed && liveTransportStarted && generation === pageGeneration &&
+        selectedRuntimeGroups.value.length === 0) {
+      void runtimeRequest.select([]);
+    }
   }
 }
 
 function initializeDashboardContent() {
   if (contentInitialization) return contentInitialization;
   if (disposed || props.view !== "live" || !documentVisible.value) return Promise.resolve();
+  schemaInitializing = true;
   contentInitialization = (async () => {
     let index;
     try { index = await loadLivePages(); }
@@ -2642,16 +2667,22 @@ function initializeDashboardContent() {
         activeLivePage.value = index.pages.some(page => page.key === index.defaultPage)
           ? index.defaultPage : (index.pages[0]?.key || "");
       }
+      // Flush the page-selection watcher while initialization owns the first load.
+      await nextTick();
+      // Subsequent user page/visibility changes must retain generation cancellation.
+      schemaInitializing = false;
+      if (!disposed) await refreshPageContent();
     } else {
       pageMode.value = "legacy";
       await fetchRuntimeMeta();
       if (!disposed) await fetchLiveLayout();
     }
-  })().finally(() => { contentInitialization = null; });
+  })().finally(() => { contentInitialization = null; schemaInitializing = false; });
   return contentInitialization;
 }
 
 watch([pageIndex, activeLivePage, () => props.view, documentVisible], () => {
+  if (schemaInitializing) return;
   if (pageMode.value === "scoped") void refreshPageContent();
   else if (pageMode.value === "pending") void initializeDashboardContent();
 });
@@ -2659,11 +2690,17 @@ watch([pageIndex, activeLivePage, () => props.view, documentVisible], () => {
 onMounted(async () => {
   loadInitialPreferences();
   document.addEventListener("visibilitychange", onDocumentVisibility);
-  initLive();
-  updateRuntimeDemand();
   await initializeDashboardContent();
   if (disposed) return;
-  probeOtaEndpoint();
+  await probeOtaEndpoint();
+  if (disposed) return;
+  liveTransportStarted = true;
+  // The bounded schema attempt has settled, even when it returned no fields.
+  await runtimeRequest.select(selectedRuntimeGroups.value);
+  if (disposed) return;
+  await initLive();
+  if (disposed) return;
+  emit("bootstrap-complete");
   otaProbeTimer = setInterval(probeOtaEndpoint, 20000);
   // Emit initial can-flash state early so parent can render the button correctly
   emit("can-flash-change", canFlash.value);
@@ -2671,6 +2708,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true;
+  bootstrapController.abort();
   runtimeRequest.cancel();
   ++pageGeneration;
   pageController?.abort();

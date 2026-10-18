@@ -4,6 +4,9 @@
 #include "WebRequestBodyBuffer.h"
 #include "StaticGzipResponse.h"
 #include "BoundedResponse.h"
+#include "AppInfoJson.h"
+#include "ThemeCssSnapshot.h"
+#include "HttpHeapDiagnostics.h"
 #include "../runtime/detail/LivePageSelection.h"
 
 #include <AsyncJson.h>
@@ -202,8 +205,8 @@ void ConfigManagerWeb::setupStaticRoutes() {
 
   // Optional user theme CSS injection
   server->on("/user_theme.css", HTTP_GET, [this](AsyncWebServerRequest* request) {
-    // Serve custom CSS if provided by the app via ConfigManager.setCustomCss().
-    // If not provided, fall back to built-in default CSS (if compiled), else return empty.
+    CM_HTTP_HEAP_TRACE("/user_theme.css", "start");
+    // Custom CSS belongs to the app. Built-in CSS is immutable static storage.
     const char* css = nullptr;
     size_t len = 0;
     if (configManager) {
@@ -219,18 +222,31 @@ void ConfigManagerWeb::setupStaticRoutes() {
       usingBuiltin = true;
     }
 #endif
-
-    auto* response = request->beginResponseStream("text/css");
+    // Preserve the stream's zero-length/empty behavior and built-in fallback.
+    const size_t bodyLength = css ? (len ? len : (usingBuiltin ? std::strlen(css) : 0)) : 0;
+    String ownedCss;
+    if (!usingBuiltin && !cm::snapshotThemeCss(css, bodyLength, ownedCss)) {
+      CM_HTTP_HEAP_TRACE("/user_theme.css", "body-failed");
+      if (request->client()) request->client()->close();
+      return;
+    }
+    CM_HTTP_HEAP_TRACE("/user_theme.css", "body-ready");
+    // Avoid the response stream's default 1460-byte buffer. Borrow only static
+    // data; move the custom snapshot so later app changes cannot alter the body.
+    // nothrow does not protect allocations inside the constructor or headers.
+    cm::BoundedResponse* response = usingBuiltin
+        ? new (std::nothrow) cm::BoundedResponse(reinterpret_cast<const uint8_t*>(css), bodyLength, "text/css")
+        : new (std::nothrow) cm::BoundedResponse(std::move(ownedCss), "text/css");
+    if (!response) {
+      CM_HTTP_HEAP_TRACE("/user_theme.css", "response-failed");
+      if (request->client()) request->client()->close();
+      return;
+    }
+    CM_HTTP_HEAP_TRACE("/user_theme.css", "response-ready");
     response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     response->addHeader("Pragma", "no-cache");
     response->addHeader("Expires", "0");
-    if (css && (len > 0 || (usingBuiltin && css[0] != '\0'))) {
-      if (len) {
-        response->write(reinterpret_cast<const uint8_t*>(css), len);
-      } else {
-        response->print(css);
-      }
-    }
+    CM_HTTP_HEAP_TRACE("/user_theme.css", "send");
     request->send(response);
   });
 
@@ -284,16 +300,33 @@ void ConfigManagerWeb::setupAPIRoutes() {
   // App info endpoint (JSON) consumed by the WebUI.
   // Allows separate H1 (appName) and browser tab title (appTitle).
   server->on("/appinfo", HTTP_GET, [this](AsyncWebServerRequest* request) {
-    DynamicJsonDocument out(256);
-    out["appName"] = (configManager && configManager->getAppName().length()) ? configManager->getAppName() : String("");
-    out["appTitle"] = (configManager && configManager->getAppTitle().length()) ? configManager->getAppTitle() : String("");
-    out["version"] = (configManager && configManager->getVersion().length()) ? configManager->getVersion() : String("");
-    out["guiLogging"] = (configManager && configManager->isGuiLoggingEnabled()) ? true : false;
-    String resp;
-    serializeJson(out, resp);
+    CM_HTTP_HEAP_TRACE("/appinfo", "start");
+    const String empty;
+    // Getters return references. The app metadata must remain stable during the
+    // two immediate serialization passes, as with the existing getter API.
+    const String& appName = (configManager && configManager->getAppName().length()) ? configManager->getAppName() : empty;
+    const String& appTitle = (configManager && configManager->getAppTitle().length()) ? configManager->getAppTitle() : empty;
+    const String& version = (configManager && configManager->getVersion().length()) ? configManager->getVersion() : empty;
+    const bool guiLogging = configManager && configManager->isGuiLoggingEnabled();
+    String payload;
+    if (!cm::buildAppInfoJson(appName, appTitle, version, guiLogging, payload)) {
+      CM_HTTP_HEAP_TRACE("/appinfo", "json-failed");
+      // An allocation failure must not trigger another allocating error response.
+      if (request->client()) request->client()->close();
+      return;
+    }
 
-    AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
-    enableCORS(response);
+    CM_HTTP_HEAP_TRACE("/appinfo", "json-ready");
+    // nothrow covers the response object only. Constructor/header allocations
+    // still depend on the underlying web server's allocation behavior.
+    auto* response = new (std::nothrow) cm::BoundedResponse(std::move(payload), "application/json");
+    if (!response) {
+      if (request->client()) request->client()->close();
+      return;
+    }
+    CM_HTTP_HEAP_TRACE("/appinfo", "response-ready");
+    enableCORS(response, "/appinfo");
+    CM_HTTP_HEAP_TRACE("/appinfo", "send");
     request->send(response);
   });
   // Debug route to catch any config requests with body handling
@@ -401,13 +434,17 @@ void ConfigManagerWeb::setupAPIRoutes() {
   });
 
   server->on("/live_pages.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
+    CM_HTTP_HEAP_TRACE("/live_pages.json", "start");
     if (!configManager) { request->send(404, "application/json", "{\"error\":\"no_config\"}"); return; }
     String json = configManager->buildLivePageIndexJSON();
+    CM_HTTP_HEAP_TRACE("/live_pages.json", "json-ready");
     if (!json.length()) { request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}"); return; }
     auto* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
     if (!response) { request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}"); return; }
-    enableCORS(response);
+    CM_HTTP_HEAP_TRACE("/live_pages.json", "response-ready");
+    enableCORS(response, "/live_pages.json");
     response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    CM_HTTP_HEAP_TRACE("/live_pages.json", "send");
     request->send(response);
   });
 
@@ -1066,12 +1103,15 @@ void ConfigManagerWeb::addCustomRoute(const char* path, WebRequestMethodComposit
 
 // Cppcheck rationale: Preserve the existing instance API for source compatibility.
 // cppcheck-suppress functionStatic
-void ConfigManagerWeb::enableCORS(AsyncWebServerResponse* response) {
+void ConfigManagerWeb::enableCORS(AsyncWebServerResponse* response, const char* diagnosticRoute) {
   if (!response) {
     return;
   }
+  if (diagnosticRoute) { CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-origin"); }
   response->addHeader("Access-Control-Allow-Origin", "*");
+  if (diagnosticRoute) { CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-methods"); }
   response->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  if (diagnosticRoute) { CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-headers"); }
   response->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Settings-Token");
 }
 
