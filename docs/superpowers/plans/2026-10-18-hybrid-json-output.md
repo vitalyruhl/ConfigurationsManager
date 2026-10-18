@@ -91,3 +91,44 @@ The subsequent owner logs established real DEFAULT-heap shortage and fragmentati
 31 WebUI unit tests, the mounted order/retry/OTA regression, the actual embedded-page recovery browser test, and both affected firmware compiles pass. Embedded gzip content was verified inside the final isolated SBT ELF. Hardware heap/panic acceptance remains pending; no deployment or Git publication occurred. The separately requested heap inventory and redesign estimates are documentation only.
 
 Requested inventory: [Heap memory inventory and refactoring options](../../heap-memory-inventory.md). It distinguishes retained storage, transient peaks, effective feature switches and conditional redesign estimates; no redesign is authorized or implemented by that documentation request.
+
+### Owner-authorized MQTT System-Info lifetime follow-up
+
+On 2026-10-18 the owner requested a local CM intermediate commit followed by
+the MQTT lifetime refactor. Checkpoint `e578c9184b9d7146df005a5e953e63b550262bd1`
+preserves the reviewed hybrid/output/startup candidate on
+`feature/hybrid-json-output`; no push was requested for this checkpoint.
+
+The bounded follow-up creates and publishes the ESP and WiFi System-Info
+payloads sequentially, releasing each ArduinoJson document before network
+publication where practical. It preserves JSON schemas/order/formatting,
+topics, optional fields, retained cleanup, QoS, both publication attempts,
+combined success and existing grow-only MQTT buffer behavior. It adds no
+feature switch, direct-writer redesign or buffer-size reduction. The metadata
+storage redesign remains explanatory only. Compatible unpublished patch 4.6.1
+is retained.
+
+Validation: a focused regression must exercise production serialization and
+lifetime/allocation behavior with real ArduinoJson, including output parity
+and failed-first-publication behavior, followed by a relevant ESP32 build.
+Independent review checks the narrow delta against this contract. Host savings
+must be labeled separately from device measurements. No final commit, push,
+upload, monitor or device acceptance is authorized by this follow-up.
+
+MQTT follow-up result: implementation and independent scoped review pass.
+The focused host runner passes five fixtures; baseline extraction failed 20
+lifetime checks before the scoped fix. Exact output and continuation after the
+first publication fails are covered. ArduinoJson-only host64 allocation peaks
+fall from 8401 to 4227 bytes (long-text fixture 8994 to 4820), with allocation
+count unchanged at 10. Both publish callbacks see zero live document allocation
+bytes. These host results exclude payload storage and TCP and are not target
+heap measurements.
+
+The actual SBT consumer build passes (exit 0, 31.77 seconds) with the real
+Arduino String instantiation: static RAM 85,248 bytes, flash 1,386,369 bytes.
+No full matrix or unchanged UI test suites were rerun. The metadata compile-only
+probe confirms String=16 bytes, RuntimeFieldMeta=244, style-vector handle=12;
+the ESP32 default ArduinoJson variant pool is 1,024 bytes rather than the host64
+4,096. The heap inventory records this correction and keeps metadata redesign
+as a proposal. Hardware heap/panic acceptance and broker delivery are pending.
+Final SBT ELF SHA256: `D62E6CF34ADA803C1CE10710C163C0EB15E8B29989F8B99E7311C1356799E0CF`. No final commit or push performed.

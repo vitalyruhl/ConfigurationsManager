@@ -4,6 +4,10 @@ This changelog is a curated overview.
 
 ## 4.6.1 - Unreleased
 
+- Release each MQTT System-Info JSON document before publishing its payload,
+  and release ESP payload/topic storage before generating WiFi information.
+  Preserve topics, JSON output, retained behavior and MQTT buffer sizing.
+
 - Stagger WebUI startup body reads, schema loading and socket handshakes to
   reduce overlapping network/JSON allocation peaks. Keep bounded retry and OTA
   status recovery active after initial schema failures.
