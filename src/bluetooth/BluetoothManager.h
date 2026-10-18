@@ -87,9 +87,9 @@ public:
     return enqueue(cmd);
   }
   bool writeCommand(const uint8_t* data, size_t size) {
-    if (!worker_ || !data || !size || size>272 || !scheduler_.connected() || isPaused()) return false;
-    detail::BleCommand cmd{};cmd.type=detail::BleCommandType::Write;cmd.generation=generation();cmd.size=size;
-    memcpy(cmd.data,data,size);return enqueue(cmd);
+    if (!worker_ || !data || !size || size>CM_BLE_TX_MAX_BYTES || !scheduler_.connected() || isPaused()) return false;
+    detail::BleCommand cmd{};
+    return detail::makeWriteCommand(cmd,data,size,generation()) && enqueue(cmd);
   }
   // Acknowledge only a fully validated response, never a partial notification.
   bool completeQuery() {
@@ -150,9 +150,9 @@ private:
     overflow_=true; return false;
   }
   bool queueConfiguration() {
-    auto cmd=desired_;cmd.type=detail::BleCommandType::Configure;
-    cmd.generation=scheduler_.invalidate();cmd.enabled=enabledCached_;
-    dispatch_.submitConfiguration(cmd);return true;
+    auto config=desired_;config.enabled=enabledCached_;
+    scheduler_.invalidate();
+    dispatch_.submitConfiguration(config);return true;
   }
   void emit(BleEventType type,const uint8_t* data,size_t size,uint32_t epoch,int error=0,int8_t rssi=0,bool advertisement=false) {
     if (!scheduler_.accepts(epoch)) {++lateEvents_;return;}
@@ -230,7 +230,7 @@ private:
         scheduler_.disconnected(now);
       }
       if(observed!=generation()){scheduler_.cancel();scheduler_.disconnected(now);observed=generation();}
-      auto applyConfiguration=[this](const detail::BleCommand& config) {
+      auto applyConfiguration=[this](const detail::BleConfiguration& config) {
         std::lock_guard<std::mutex> lock(peerMutex_);workerConfig_=config;
       };
       dispatch_.dispatchConfiguration(scheduler_,now,applyConfiguration);
@@ -271,7 +271,7 @@ private:
   detail::BluetoothScheduler<BluetoothManager> scheduler_;
   detail::BoundedBleQueue<BleEvent,16> events_;
   detail::BoundedBleQueue<detail::BleCommand,8> commands_;
-  detail::BleCommand desired_{},workerConfig_{};
+  detail::BleConfiguration desired_{},workerConfig_{};
   std::mutex peerMutex_;
   ScanCallbacks scanCallbacks_;ClientCallbacks clientCallbacks_;
   NimBLEClient* client_=nullptr;

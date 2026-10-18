@@ -4,6 +4,10 @@ This changelog is a curated overview.
 
 ## 4.7.0 - Unreleased
 
+- Separate BLE peer configuration from outgoing IO slots and add the consumer
+  `CM_BLE_TX_MAX_BYTES` limit (default 272 bytes). Preserve full 272-byte receive
+  events, queue depths, configuration revisions and query completion safeguards.
+
 - Store built-in System live-field descriptions as compact Int/Bool/Text metadata.
   Preserve JSON output, existing units/styles/alarms and saved settings.
 

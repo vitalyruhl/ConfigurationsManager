@@ -56,10 +56,28 @@ The task stack budget is 8192 bytes. ESP-IDF's `xTaskCreate` stack depth and
 ports using words). Physical stack/heap stability remains an acceptance gate.
 
 Event queue: 16 owned `BleEvent` slots with at most 272 data bytes each. Command
-queue: 8 owned slots with at most 272 command bytes each. Callback producers use
+queue: 8 owned IO slots, with a default maximum of 272 outgoing bytes each.
+Peer configuration is stored separately in three small snapshots; it never
+reserves command payload storage. Callback producers use
 nonblocking queue admission. Capacity/contention/oversize loss invalidates the
 query and generation, cancels the link in the worker, and exposes an error.
 There is no growing event vector or stored scan-result list.
+
+Consumers with a smaller verified outgoing protocol can set
+`-DCM_BLE_TX_MAX_BYTES=9` in their application build flags. The allowed range is
+1 through 272; omitting it preserves the existing 272-byte write capacity. Define
+the same value for **every translation unit** that includes BLE headers, including
+consumer/library builds, because it changes the header-only manager's layout.
+`writeCommand()` rejects a payload above that bound before copying or queueing
+anything. Incoming advertisements and notifications retain the full 272-byte
+capacity, and the 8-command/16-event queue depths remain unchanged.
+
+With the ESP32 Xtensa ABI, peer configuration occupies 48 bytes and an IO command
+occupies 288 bytes at the default limit or 24 bytes with a 9-byte limit. Replacing
+the previous shared 336-byte configuration/command structure saves 1248 retained
+bytes at the default limit, or 3360 bytes with the 9-byte limit, across three
+configuration snapshots and eight command slots. These are compiler-verified
+layout differences, not a measurement of free heap or worker stack use on hardware.
 
 Advertisements carry manufacturer bytes **including the two company-ID bytes**,
 not a full AD element. Empty/non-manufacturer advertisements are ignored.

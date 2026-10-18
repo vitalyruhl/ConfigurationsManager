@@ -97,13 +97,13 @@ int main(){
  // The production handoff survives disposable event-generation changes.
  detail::BluetoothDispatch dispatch;
  Backend controlBackend;detail::BluetoothScheduler<Backend> control(controlBackend);
- detail::BleCommand configuration{};configuration.enabled=true;configuration.hasGatt=true;
- configuration.gatt.text[0]='A';configuration.generation=control.invalidate();dispatch.submitConfiguration(configuration);
- auto apply=[&](const detail::BleCommand& value){configuration=value;};
+ detail::BleConfiguration configuration{};configuration.enabled=true;configuration.hasGatt=true;
+ configuration.gatt.text[0]='A';control.invalidate();dispatch.submitConfiguration(configuration);
+ auto apply=[&](const detail::BleConfiguration& value){configuration=value;};
  assert(dispatch.dispatchConfiguration(control,0,apply));
  assert(!dispatch.configurationPending());
  for(bool enabled : {false,true}) {
-   auto next=configuration;next.enabled=enabled;next.gatt.text[0]=enabled?'C':'B';next.generation=control.invalidate();
+   auto next=configuration;next.enabled=enabled;next.gatt.text[0]=enabled?'C':'B';control.invalidate();
    dispatch.submitConfiguration(next);control.requestPause(BlePauseReason::Ota);control.tick(10);
    assert(dispatch.dispatchConfiguration(control,10,apply));
    control.requestResume(BlePauseReason::Ota);control.tick(20);
@@ -113,7 +113,7 @@ int main(){
  }
  auto older=configuration;older.gatt.text[0]='D';dispatch.submitConfiguration(older);
  auto newer=configuration;newer.gatt.text[0]='E';
- dispatch.dispatchConfiguration(control,30,[&](const detail::BleCommand& value){
+ dispatch.dispatchConfiguration(control,30,[&](const detail::BleConfiguration& value){
    configuration=value;dispatch.submitConfiguration(newer);
  });
  assert(dispatch.configurationPending());

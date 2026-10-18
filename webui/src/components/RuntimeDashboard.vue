@@ -2022,7 +2022,7 @@ async function onRuntimeCheckbox(group, key, value) {
         notifySafe(`Toggle failed: ${group}/${key}`, "error");
         return;
       }
-      notifySafe(`${key}: ${value ? "ON" : "OFF"}`, "info", 1200);
+      notifySafe(`Request sent: ${key}`, "info", 1200);
       fetchRuntime();
     } catch (e) {
       notifySafe(`Toggle error ${key}: ${e.message}`, "error");

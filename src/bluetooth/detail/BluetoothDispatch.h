@@ -8,7 +8,7 @@ class BluetoothDispatch {
 public:
   void setEnabled(bool value) { enabled_.store(value); }
   bool enabled() const { return enabled_.load(); }
-  void submitConfiguration(const BleCommand& command) {
+  void submitConfiguration(const BleConfiguration& command) {
     std::lock_guard<std::mutex> lock(mutex_);
     desired_=command;
     if(++revision_==0)++revision_;
@@ -21,7 +21,7 @@ public:
     if(revision_)applied_=revision_-1;
   }
   template<class Scheduler,class Apply> bool dispatchConfiguration(Scheduler& scheduler,uint32_t now,Apply apply) {
-    BleCommand command{};uint32_t revision=0;
+    BleConfiguration command{};uint32_t revision=0;
     {
       std::lock_guard<std::mutex> lock(mutex_);
       if(revision_==applied_)return false;
@@ -51,7 +51,7 @@ public:
   }
 private:
   mutable std::mutex mutex_;
-  BleCommand desired_{};
+  BleConfiguration desired_{};
   uint32_t revision_=0,applied_=0;
   std::atomic<bool> enabled_{false};
   uint32_t deliveredEpoch_=0,deliveredQuery_=0;

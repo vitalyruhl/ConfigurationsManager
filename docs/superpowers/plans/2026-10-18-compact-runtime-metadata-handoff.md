@@ -402,3 +402,36 @@ Checkpoint validation: `pio test -e runtime-meta-test --without-uploading
 --without-testing` exited 0 after 58.56 seconds. Its build stage completed;
 PlatformIO reports the execution stage as SKIPPED, with zero device test cases
 run. Both host suites exited 0. Product sources were unchanged after these checks.
+## Approved BLE memory / SBT GUI follow-up (2026-10-18)
+
+CM on feature/ble-compact-runtime now has an uncommitted payload-free BLE
+configuration / bounded IO split and optional CM_BLE_TX_MAX_BYTES (default272).
+ESP32 layout/host contracts verify config48, IO288/default or24/TX9, RX320;
+SBT's TX9 saves3360 retained bytes without changing RX272 or queue8/16. The
+checkbox request acknowledgment toast is neutral with five execution tests;
+all36 WebUI Node tests passed. The generated HTML asset was deliberately rebuilt.
+CM version4.7.0 Unreleased remains synchronized; no commit/push/main integration.
+
+SBT1.1.0 has50 GUI fields/24 telemetry channels and recovers4768 staticRAM bytes
+in the normal USB build. Its installed diagnostic image passed180.1s of Chrome
+reload/page navigation with zero panic/NULL/allocator-failure markers after a
+previous240.1s clean first revision. BMS/Victron sources were unavailable on this
+test ESP: do not infer real-acquisition/long-run acceptance or a proven BLE cause.
+The exact final SBT ELF/firmware hashes and all validation/owner scope are in
+SolarBatteryTelemetry/docs/plans/2026-10-18-compact-runtime-metadata.md. No NVS
+readback or device control was performed. Original crash investigation stays open.
+## Owner-authorized intermediate commit and test-target update
+
+The owner explicitly requested an intermediate commit of the reviewed GUI/heap
+work. This checkpoint commits the CM follow-up above on the existing shared
+branch; prior uncommitted statements describe the earlier development stage.
+All recorded source/build/test results still apply: no product code changed
+since the successful final builds and device checks. No additional hardware
+operation is needed for this Git checkpoint. No push or main merge is authorized.
+
+The owner now reports an OTA update of the remote SBT at192.168.2.21, removal of
+COM7, and an already authenticated MQTT Explorer available for further tests.
+Treat the remote installation as owner-reported until verified; do not use COM7
+or infer new upload/control authority from the observation. Fresh acquisition
+and long-run acceptance remain open. Preserve the matching normal and diagnostic
+ELFs described in the SBT handoff.
