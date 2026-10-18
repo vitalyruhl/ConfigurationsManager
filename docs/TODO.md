@@ -14,6 +14,10 @@
 
 ## High Priority (Prio 1) - Runtime stability
 
+- [ ] MQTT verbose logging: Investigate and fix the reported TX payload-preview `LoadProhibited` crash (`strlen(nullptr)` via `vsnprintf`), and harden the related RX preview. Use allocation-free, bounded 200-character previews, null-safe formatting and compile-time exclusion when verbose logging is disabled; preserve MQTT behavior. See [the crash evidence and bounded implementation scope](todo_mqtt_verbose_crash.md). Root cause and fix remain unconfirmed.
+
+- [ ] Web UI: Reduce peak RAM usage for large `/config.json` and `/runtime.json` responses. Investigate full-`String` construction and send-time copies, which may temporarily require roughly twice the payload memory. Replace whole-response buffering with streaming serialization or bounded chunks in ConfigManager where appropriate. Measure peak heap usage and verify complete JSON delivery; coordinate with the HTTP delivery/panic investigation below.
+
 - [ ] Investigate truncated HTTP responses, metadata 503 and the earlier unexplained panic. See [the deferred investigation handoff](todo_http_delivery_panic.md) for the 2026-10-16 evidence, exact baselines, hypotheses and acceptance gates. Keep the current CM feature work off main until resolved, as requested by the owner.
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
