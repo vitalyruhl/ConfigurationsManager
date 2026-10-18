@@ -4,6 +4,9 @@ This changelog is a curated overview.
 
 ## 4.7.0 - Unreleased
 
+- Store built-in System live-field descriptions as compact Int/Bool/Text metadata.
+  Preserve JSON output, existing units/styles/alarms and saved settings.
+
 - Add opt-in compact runtime field types with shared routing text and sparse
   alarm/style/label data. Preserve existing RuntimeFieldMeta registration and
   wire output; legacy mutable-pointer access deliberately promotes individual

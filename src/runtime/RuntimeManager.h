@@ -12,6 +12,10 @@
 #include "detail/RuntimeMetaView.h"
 
 struct RuntimeMetadataState;
+class ConfigManagerRuntime;
+namespace cm { namespace detail {
+void registerBuiltinSystemMetadata(ConfigManagerRuntime& runtime, bool withTime);
+} }
 
 // Forward declaration
 class ConfigManagerClass;
@@ -114,6 +118,7 @@ struct RuntimeAlarm {
 };
 
 class ConfigManagerRuntime {
+  friend void cm::detail::registerBuiltinSystemMetadata(ConfigManagerRuntime&, bool);
 public:
   typedef std::function<void(const char*)> LogCallback;
 
@@ -169,7 +174,7 @@ private:
   // Helper methods
   void registerRuntimePlacement(const RuntimeFieldMeta& meta);
   void registerRuntimePlacement(const RuntimeFieldBase& meta);
-  template<class T> RuntimeFieldId addCompactRuntimeMeta(const T& meta);
+  template<class T> RuntimeFieldId addCompactRuntimeMeta(const T& meta, bool zeroPrecision = false);
   template<class T> bool updateCompactRuntimeMeta(RuntimeFieldId id, const std::function<void(T&)>& updater);
   RuntimeFieldMeta* promoteRuntimeMetaLocked(RuntimeFieldId id, RuntimeFieldMeta&& meta);
   cm::RuntimeMetaView runtimeMetaViewLocked(size_t index) const;

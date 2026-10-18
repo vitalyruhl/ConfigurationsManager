@@ -270,3 +270,135 @@ this feature into an HTTP transport rewrite or mark the original SBT/SIL panic f
 Remaining owner acceptance: review the new metadata API/results and this delivery
 limitation. SIL and SBT migration plans remain deferred until CM is accepted.
 No hardware control-handler actuation or full embedded test execution was done.
+
+
+## Authorized follow-up: built-in System metadata and SBT migration
+
+The owner requested an intermediate commit followed by internal System-field
+migration. Checkpoint `fc02a11025593e6c93a1e7fead7940cd1b95e646` contains the
+previous compact feature and BME example. It is local on the same feature branch;
+no push occurred. The earlier final-status statement about uncommitted base work
+is superseded by this checkpoint. Follow-up changes remain uncommitted.
+
+Bounded design: extract hardware-independent System metadata registration into
+`runtime/detail/BuiltinSystemMetadata.h`; use Int/Bool/Text for new fields, keep
+existing matching fields and their override precedence. Preserve complete wire
+output. Ruling: historical nonnumeric precision zero is kept in spare handle
+padding, not in public Bool/Text definitions. Handle size remains eight bytes.
+Legacy callback changes to precision 0 or 2 stay compact; unsupported values
+still promote. The ordinary typed API defaults remain unchanged. Stored settings,
+NVS keys, sampled values and transport are outside this CM follow-up.
+
+RED evidence: `system-metadata-red.log` rejects promotion for zero precision;
+`system-registration-red.log` rejects legacy-only built-in registration.
+GREEN: `system-metadata-green.log` verifies exact JSON with time on/off, no retained
+legacy records, repeat-upsert stability, custom unit/style/alarm/placement
+preservation and normal typed updates/promotion. Host retained totals:
+legacy 7,968 bytes; compact 2,824 without time or 3,256 with time.
+
+The owner subsequently authorized SBT migration to new types and COM7 upload
+once BME validation shows no new regression/crash. This supersedes the earlier
+deferral of the SBT implementation, but not SIL. Prepare a separate SBT migration
+record and preserve its existing logging changes. Keep existing test-ESP settings,
+verify active app partition before app-only flashing, and leave the open HTTP
+transport finding explicit. Owner will perform the subsequent behavior test.
+
+Independent follow-up review identified one important failure-path issue:
+a two-stage Bool/Text add could retain precision 2 if its later update failed,
+and an update failure could be mistaken for absence and append a duplicate.
+Fixed in one pass: initialize compatibility precision before publishing the
+compact record and check existence with a borrowed view after rejected updates.
+The internal registration helper is a friend; no new public application API or
+retained manager state was added. `system-review-red.log` reproduces precision
+mismatch; `system-review-green.log` passes 200 injected single-reserve failures
+across initial registration and repeated upserts, with no duplicate keys,
+incorrect precision or legacy promotion. Storage suite also passes.
+Final BME build after the correction: success, 39.13 seconds.
+
+BME follow-up hardware gate (COM7, 2026-10-18): app-only upload at verified
+0x10000, 1,246,256 bytes; NVS/table/OTA bytes identical immediately after upload.
+Browser showed CM-BME280-Temp-Sensor 4.7.0, four sensor fields and WebSocket mode
+before and after one explicit reload. HTTP: appinfo complete, runtime metadata
+3,238/3,238 bytes with 18 System fields and precision zero, runtime complete,
+root 61,595/61,595 bytes in 9.12 seconds. Serial observation 70 seconds: zero
+abort/backtrace/Guru/brownout/assert markers, one initial POWERON_RESET/setup,
+sensor ready and one loop report. The initial boot marker is not an app crash.
+
+Raw NVS bytes differed after runtime. CRC-checked semantic comparison of all
+197 active NVS keys found no missing/added keys and only one changed value:
+`nvs.net80211/bssid.set`, an ESP WiFi driver cache/selection flag. All application
+settings, including stored credentials/IP, stayed identical. Partition table and
+OTA selection remained byte-identical. Preserve this distinction: do not claim
+whole-NVS byte identity for this follow-up runtime. Evidence is private under
+`.local/compact-runtime-metadata/system-device-COM7/` (http/serial summaries,
+metadata snapshots, and nvs-semantic-comparison.json). No new crash/regression
+was observed in this short gate; the pre-existing intermittent HTTP issue
+remains open. Owner-authorized SBT migration/upload can proceed.
+
+SBT follow-up software/build/review and COM7 app-only upload are complete.
+SBT 1.0.2 keeps 64 compact application fields. Its first browser load produced
+an observed Core 0 lwIP LoadProhibited panic (sys_sem_signal/tcpip_thread), recorded
+in docs/todo_http_delivery_panic.md and the separate SBT handoff plan. Subsequent
+identity/64-field HTTP responses and browser WebSocket UI succeeded after reset.
+Do not conflate this with stable acceptance or the earlier Core 1 abort.
+All app settings survived; only SDK WiFi cache entries differed. Owner will test.
+Both follow-up implementations remain uncommitted; the approved CM checkpoint
+is fc02a11025593e6c93a1e7fead7940cd1b95e646. No push or final merge occurred.
+
+## Current device and build state after SIL comparison
+
+Owner explicitly paused SBT debugging for a SIL-without-BLE comparison, authorized
+its compact metadata migration/COM7 upload, and then requested SIL's shared PIO
+options in [env]. SIL 5.0.2 is now installed app-only on COM7; no additional NVS
+checks were performed. Existing test profile mocks RS485 output and protects the
+stored OTA password. No BLE module/NimBLE dependency or active BLE code is linked.
+Short test: 70.1 seconds, no panic/software reset; 80 metadata fields delivered,
+reported freeHeap 113,988 bytes; full 61,595-byte root delivered in 7.78 seconds.
+First browser connection reset without an ESP panic; cause remains unproven.
+Owner reports UI subjectively about three times faster and is actively testing.
+Do not interrupt that test with additional upload/browser/monitor operations.
+
+SIL PIO was subsequently corrected after owner feedback: common dependencies now
+use symlink://../ConfigurationsManager rather than an older published CM pin;
+unused OLED packages removed. Normal USB build also passes. No further device
+upload occurred after this build-configuration correction. Separate full SIL
+handoff: C:/Daten/_Codding/ESP32/SolarInverterLimiter/docs/superpowers/plans/2026-10-18-compact-runtime-metadata.md.
+
+Current branches: CM feature/compact-runtime-metadata (local checkpoint fc02a11
+plus uncommitted System follow-up); SBT feature/move-sil-planning (uncommitted
+1.0.2 migration); SIL feature/battery-energy-control (uncommitted 5.0.2 migration
+and PIO cleanup). No push/final commit/merge occurred. Preserve the SBT NULL-lwIP-
+semaphore findings in its handoff; SIL smoke success is not proof of a BLE bug.
+
+## Consolidated CM branch (2026-10-18)
+
+The owner requested one shared CM feature branch beside main for BLE and the
+compact runtime field types. The active branch is now
+`feature/ble-compact-runtime`, created from `fc02a11`. BLE transport completion
+`554869d`, `feature/jbd-bms-transport` at `cc627b1`, and
+`feature/hybrid-json-output` at `cc627b1` are already ancestors of this branch;
+no content merge or conflict resolution was needed. The checkpoint on this
+branch also includes the built-in System compact-metadata follow-up and its
+failure-path regression coverage described above. This supersedes earlier
+statements that the CM System follow-up is uncommitted.
+
+`main` and `origin/main` remain at
+`fc171e07a2081dcfff722e527e144ddf4d92fe5b`. Previous feature branches and the
+detached demand-runtime worktree are preserved. CM remains 4.7.0 Unreleased.
+No push, release, main integration or branch deletion is authorized by this
+consolidation request or performed as part of it.
+
+Fresh consolidation checks: compact storage host tests and production-manager
+compatibility host tests pass, including exact System JSON with time on/off,
+200 injected reserve failures and legacy compatibility. The focused ESP32
+compile-only result is recorded in the checkpoint validation below. Private
+build log: `.local/compact-runtime-metadata/consolidation-embedded-build.log`.
+
+SBT and SIL changes remain in their separate repositories/branches as previously
+documented. SIL remains installed on COM7 and under owner testing; this task
+performs no device, browser, serial-monitor or NVS operations. The intermittent
+HTTP/lwIP panic investigation remains open; consolidation is not a crash fix.
+Checkpoint validation: `pio test -e runtime-meta-test --without-uploading
+--without-testing` exited 0 after 58.56 seconds. Its build stage completed;
+PlatformIO reports the execution stage as SKIPPED, with zero device test cases
+run. Both host suites exited 0. Product sources were unchanged after these checks.

@@ -1,5 +1,6 @@
 #include "CompactHostString.h"
 #include "runtime/RuntimeManager.h"
+#include "runtime/detail/BuiltinSystemMetadata.h"
 #include <ArduinoJson.h>
 #include <cassert>
 #include <iostream>
@@ -372,7 +373,126 @@ static void compactCompatibility() {
   assert(weak.runtimeMetaJsonPayload());
   assert(weak.getRuntimeMetaSerializationBuildCountForTest() == count + 1);
 }
+
+static void builtinSystemMetadata(bool withTime) {
+  struct Expected { const char* key; const char* label; const char* unit; int order; bool boolean = false; bool text = false; };
+  const Expected fields[] = {
+    {"wifiConnected", "Wifi Connected", "", 10, true},
+    {"channel", "WiFi Channel", "", 11},
+    {"rssiTxt", "Signal", "", 12, false, true},
+    {"rssi", "WiFi RSSI", "dBm", 13},
+    {"localIP", "Local IP", "", 14, false, true},
+    {"gateway", "Gateway", "", 15, false, true},
+    {"routerMAC", "Router MAC", "", 16, false, true},
+    {"allowOTA", "AllowOTA", "", 20, true},
+    {"otaActive", "OtaActive", "", 21, true},
+    {"dateTime", "Date/Time", "", 22, false, true},
+    {"cpuFreqMHz", "CpuFreqMHz", "", 30},
+    {"flashSize", "FlashSize", "", 31},
+    {"sketchSize", "SketchSize", "", 32},
+    {"freeSketchSpace", "FreeSketchSpace", "", 33},
+    {"heapFragmentation", "HeapFragmentation", "", 34},
+    {"totalHeap", "TotalHeap", "", 35},
+    {"usedHeap", "UsedHeap", "", 36},
+    {"freeHeap", "FreeHeap", "", 37}
+  };
+  ConfigManagerRuntime actual, legacy;
+  for (const auto& expected : fields) {
+    if (!withTime && std::string(expected.key) == "dateTime") continue;
+    RuntimeFieldMeta old;
+    old.group = "system"; old.key = expected.key; old.label = expected.label;
+    old.unit = expected.unit; old.order = expected.order;
+    old.isBool = expected.boolean; old.isString = expected.text; old.precision = 0;
+    legacy.addRuntimeMeta(old);
+  }
+  cm::detail::registerBuiltinSystemMetadata(actual, withTime);
+  assert(actual.runtimeMetaToJSON() == legacy.runtimeMetaToJSON());
+  const auto stats = actual.getRuntimeMetaStatsForTest();
+  assert(stats.compactStateAllocated);
+  assert(stats.legacyCapacityBytes == 0);
+  assert(stats.retainedBytes < legacy.getRuntimeMetaStatsForTest().retainedBytes);
+  const auto json = actual.runtimeMetaToJSON();
+  cm::detail::registerBuiltinSystemMetadata(actual, withTime);
+  assert(actual.runtimeMetaToJSON() == json);
+  assert(actual.getRuntimeMetaStatsForTest().legacyCapacityBytes == 0);
+  assert(actual.getRuntimeMetaStatsForTest().retainedBytes == stats.retainedBytes);
+  std::cout << "[I] Built-in system metadata (time=" << withTime << ") host retained bytes: legacy="
+            << legacy.getRuntimeMetaStatsForTest().retainedBytes << ", compact=" << stats.retainedBytes
+            << "; identical wire output. Host ABI only.\n";
+}
+static void builtinSystemMetadataPreservesOverrides() {
+  ConfigManagerRuntime rt;
+  RuntimeFieldMeta custom;
+  custom.group = "system"; custom.key = "rssi"; custom.label = "Old label";
+  custom.unit = "custom unit"; custom.precision = 5; custom.order = 99;
+  custom.page = "Diagnostics"; custom.card = "Radio";
+  custom.hasAlarm = true; custom.alarmMin = -90;
+  custom.style.rule("values").set("color", "blue");
+  rt.addRuntimeMeta(custom);
+  cm::detail::registerBuiltinSystemMetadata(rt, false);
+  JsonDocument json;
+  assert(!deserializeJson(json, rt.runtimeMetaToJSON().c_str()));
+  int matches = 0;
+  for (JsonObjectConst meta : json.as<JsonArrayConst>()) {
+    if (meta["key"] != "rssi") continue;
+    ++matches;
+    assert(meta["label"] == "WiFi RSSI");
+    assert(meta["unit"] == "custom unit");
+    assert(meta["precision"] == 0);
+    assert(meta["page"] == "Diagnostics" && meta["card"] == "Radio");
+    assert(meta["alarmMin"] == -90);
+    assert(meta["style"]["values"]["color"] == "blue");
+  }
+  assert(matches == 1);
+}
+static void builtinSystemMetadataAllocationFailure() {
+  // [MOCKED!] Fail one String reserve at each successive production copy point.
+  for (int existing = 0; existing < 2; ++existing) {
+    for (int fail = 0; fail < 100; ++fail) {
+      ConfigManagerRuntime rt;
+      if (existing) cm::detail::registerBuiltinSystemMetadata(rt, true);
+      String::failOnce = true;
+      String::failAfter = fail;
+      cm::detail::registerBuiltinSystemMetadata(rt, true);
+      String::failAfter = -1;
+      String::failOnce = false;
+      JsonDocument json;
+      assert(!deserializeJson(json, rt.runtimeMetaToJSON().c_str()));
+      std::vector<std::string> keys;
+      for (JsonObjectConst meta : json.as<JsonArrayConst>()) {
+        assert(meta["precision"] == 0);
+        const std::string key = meta["key"].as<const char*>();
+        for (const auto& previous : keys) assert(previous != key);
+        keys.push_back(key);
+      }
+      if (existing) assert(keys.size() == 18);
+      assert(rt.getRuntimeMetaStatsForTest().legacyCapacityBytes == 0);
+    }
+  }
+}
+static void nonnumericZeroPrecisionCompatibility() {
+  ConfigManagerRuntime rt;
+  RuntimeBoolMeta flag; flag.base.key = "flag"; flag.base.group = "system";
+  const auto id = rt.addRuntimeMeta(flag);
+  assert(id);
+  assert(rt.updateRuntimeMeta("system", "flag", [](RuntimeFieldMeta& m) { m.precision = 0; }));
+  assert(rt.getRuntimeMetaStatsForTest().legacyCapacityBytes == 0);
+  assert(rt.updateRuntimeMeta(id, std::function<void(RuntimeBoolMeta&)>([](RuntimeBoolMeta& m) { m.base.label = "Changed"; })));
+  JsonDocument json;
+  assert(!deserializeJson(json, rt.runtimeMetaToJSON().c_str()));
+  assert(json[0]["precision"] == 0 && json[0]["isBool"] == true);
+  assert(rt.updateRuntimeMeta("system", "flag", [](RuntimeFieldMeta& m) { m.precision = 2; }));
+  assert(rt.getRuntimeMetaStatsForTest().legacyCapacityBytes == 0);
+  assert(rt.updateRuntimeMeta("system", "flag", [](RuntimeFieldMeta& m) { m.precision = 7; }));
+  assert(rt.getRuntimeMetaStatsForTest().legacyCapacityBytes != 0);
+}
+
 int main() {
+  builtinSystemMetadataAllocationFailure();
+  nonnumericZeroPrecisionCompatibility();
+  builtinSystemMetadata(false);
+  builtinSystemMetadata(true);
+  builtinSystemMetadataPreservesOverrides();
   placementCallbacksBorrowOneBase();
   allKindWireCompatibility();
   failedChangesRemainAtomic();

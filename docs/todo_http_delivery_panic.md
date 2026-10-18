@@ -191,3 +191,22 @@ idle timeout during responses. AsyncTCP ACK-timeout closure after a stalled
 cause. A useful follow-up is ACK/admission/send-error/close-reason tracing;
 another setNoDelay call would not address the existing setting. Keep the
 original SBT/SIL crash and HTTP-delivery acceptance open pending owner evidence.
+
+### SBT compact-metadata test follow-up (2026-10-18)
+
+After successful bounded BME/System-metadata smoke testing, owner-authorized SBT
+1.0.2 with all 64 application fields compact was uploaded app-only to COM7.
+The first browser load produced a Core 0 LoadProhibited panic, not the earlier
+Core 1 abort. Exact deployed ELF SHA-256:
+`7ded81181f7c496f6cffebb6c1a3303d00dced284b920247190fd6026e3c8e01`.
+Backtrace `0x40142326:0x3ffdf390 0x401328be:0x3ffdf3b0` resolves to lwIP
+`sys_sem_signal` (sys_arch.c:152) and `tcpip_thread_handle_msg` / `tcpip_thread`
+(tcpip.c:173/154). This locates the observed failure, not its root cause.
+
+After reboot SBT identity, all 64 metadata fields and its WebSocket UI were
+available. Do not mark the panic fixed or declare this a proven metadata
+regression. No transport/dependency workaround was applied. Settings preservation
+was verified separately (all app values unchanged; only SDK WiFi cache changed).
+Full separate SBT plan/evidence pointers:
+`C:/Daten/_Codding/ESP32/SolarBatteryTelemetry/docs/plans/2026-10-18-compact-runtime-metadata.md`.
+Owner performs the next behavior test. Keep this issue open.

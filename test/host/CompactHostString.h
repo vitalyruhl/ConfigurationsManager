@@ -12,6 +12,7 @@ private:
   std::string value_;
 public:
   inline static int failAfter = -1;
+  inline static bool failOnce = false;
   String() = default;
   String(const char* s) : value_(s ? s : "") {}
   String(const char* s, unsigned n) : value_(s, n) {}
@@ -25,7 +26,7 @@ public:
     else value_=std::move(other.value_);
     return *this;
   }
-  bool reserve(unsigned n) { if (failAfter == 0) return false; if (failAfter > 0) --failAfter; value_.reserve(n); return true; }
+  bool reserve(unsigned n) { if (failAfter == 0) { if (failOnce) failAfter = -1; return false; } if (failAfter > 0) --failAfter; value_.reserve(n); return true; }
   bool concat(const char* s, unsigned n) { value_.append(s, n); return true; }
   bool concat(char c) { value_ += c; return true; }
   size_t allocatedBytes() const { return isSSO() ? 0 : capacity() + 1; }

@@ -1,5 +1,6 @@
 #include "RuntimeManager.h"
 #include "detail/RuntimeMetaJson.h"
+#include "detail/BuiltinSystemMetadata.h"
 #include "../ConfigManager.h"
 #include <algorithm>
 #include <esp_heap_caps.h>
@@ -343,66 +344,7 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             obj["otaHasPassword"] = ota.hasPassword();
         } }, 0);
 
-  // Provide basic meta so UI can display the RSSI and its quality text
-  {
-    // Helper to upsert meta with a specific order
-    auto upsertMeta = [this](const String& key, const String& label, const String& unit, int order, bool isBool = false, bool isString = false, int precision = 0) {
-      const bool updated = updateRuntimeMeta("system", key, [&](RuntimeFieldMeta& existing) {
-        existing.order = order;
-        if (label.length())
-          existing.label = label;
-        if (unit.length() && existing.unit.length() == 0)
-          existing.unit = unit;
-        if (isBool)
-          existing.isBool = true;
-        if (isString)
-          existing.isString = true;
-        if (precision >= 0)
-          existing.precision = precision;
-      });
-      if (updated) {
-        return;
-      }
-      RuntimeFieldMeta m;
-      m.group = "system";
-      m.key = key;
-      m.label = label.length() ? label : key;
-      m.unit = unit;
-      m.order = order;
-      m.isBool = isBool;
-      m.isString = isString;
-      m.precision = precision;
-      addRuntimeMeta(m);
-    };
-
-    // Orders 0-2 are used by app_name/app_version/build_date defined in main.cpp
-    upsertMeta("wifiConnected", "Wifi Connected", "", 10, true);
-    upsertMeta("channel", "WiFi Channel", "", 11, false, false, 0);
-    upsertMeta("rssiTxt", "Signal", "", 12, false, true, 0);
-    upsertMeta("rssi", "WiFi RSSI", "dBm", 13, false, false, 0);
-    upsertMeta("localIP", "Local IP", "", 14, false, true, 0);
-    upsertMeta("gateway", "Gateway", "", 15, false, true, 0);
-    upsertMeta("routerMAC", "Router MAC", "", 16, false, true, 0);
-    // Connectivity and OTA state (booleans)
-    upsertMeta("allowOTA", "AllowOTA", "", 20, true);
-    upsertMeta("otaActive", "OtaActive", "", 21, true);
-
-#if CM_ENABLE_SYSTEM_TIME
-    upsertMeta("dateTime", "Date/Time", "", 22, false, true, 0);
-#endif
-
-    // System numeric stats
-    // todo: make heap settable to show or not....
-    upsertMeta("cpuFreqMHz", "CpuFreqMHz", "", 30, false, false, 0);
-    upsertMeta("flashSize", "FlashSize", "", 31, false, false, 0);
-    upsertMeta("sketchSize", "SketchSize", "", 32, false, false, 0);
-    upsertMeta("freeSketchSpace", "FreeSketchSpace", "", 33, false, false, 0);
-    upsertMeta("heapFragmentation", "HeapFragmentation", "", 34, false, false, 0);
-    upsertMeta("totalHeap", "TotalHeap", "", 35, false, false, 0);
-    upsertMeta("usedHeap", "UsedHeap", "", 36, false, false, 0);
-    // Keep unit empty to avoid conflicting with pre-existing meta; value is in bytes currently
-    upsertMeta("freeHeap", "FreeHeap", "", 37, false, false, 0);
-  }
+  cm::detail::registerBuiltinSystemMetadata(*this, CM_ENABLE_SYSTEM_TIME != 0);
 
   builtinSystemProviderRegistered = true;
   builtinSystemProviderEnabled = true;

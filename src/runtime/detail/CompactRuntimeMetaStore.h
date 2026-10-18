@@ -127,7 +127,8 @@ class CompactRuntimeMetaStore {
   template<class T> using Buffer = detail::CheckedVector<T>;
   template<class P> using Records = Buffer<detail::StoredRecord<P>>;
   struct TextEntry { detail::OwnedRuntimeString value; uint32_t uses = 0; };
-  struct Handle { uint32_t index = 0; RuntimeFieldKind kind = RuntimeFieldKind::Invalid; bool promoted = false; };
+  struct Handle { uint32_t index = 0; RuntimeFieldKind kind = RuntimeFieldKind::Invalid; bool promoted = false; bool zeroPrecision = false; };
+  static_assert(sizeof(Handle) == 8, "Compatibility precision must fit existing handle padding.");
   template<class T> struct Sparse { RuntimeFieldId id; T value; };
   Buffer<TextEntry> text_;
   Buffer<Handle> handles_;
@@ -206,6 +207,7 @@ class CompactRuntimeMetaStore {
     if constexpr (!std::is_same<P,detail::EmptyPayload>::value && !std::is_same<P,detail::StatePayload>::value) unit=&text(r.payload.unit);
     RuntimeMetaView v(text(r.base.group),text(r.base.sourceGroup),text(r.base.page),r.base.key,r.base.label,*unit,labels?labels->onLabel:RuntimeMetaView::emptyString(),labels?labels->offLabel:RuntimeMetaView::emptyString(),staticText?*staticText:RuntimeMetaView::emptyString(),text(r.base.card));
     v.order=r.base.order;
+    if (h.zeroPrecision) v.precision = 0;
     if constexpr (std::is_same<P,detail::FloatPayload>::value || std::is_same<P,detail::FloatRangePayload>::value) v.precision=r.payload.precision;
     if constexpr (std::is_same<P,detail::IntPayload>::value || std::is_same<P,detail::IntRangePayload>::value) v.precision=0;
     if constexpr (std::is_same<P,detail::StatePayload>::value) v.initialState=r.payload.initialState;
@@ -222,12 +224,12 @@ class CompactRuntimeMetaStore {
 #define CM_EACH_KIND(X) \
  X(Float,RuntimeFloatMeta) X(Int,RuntimeIntMeta) X(Bool,RuntimeBoolMeta) X(Text,RuntimeTextMeta) X(Divider,RuntimeDividerMeta) X(Button,RuntimeButtonMeta) X(Checkbox,RuntimeCheckboxMeta) X(StateButton,RuntimeStateButtonMeta) X(MomentaryButton,RuntimeMomentaryButtonMeta) X(IntSlider,RuntimeIntSliderMeta) X(IntInput,RuntimeIntInputMeta) X(FloatSlider,RuntimeFloatSliderMeta) X(FloatInput,RuntimeFloatInputMeta)
 public:
-  template<class T> RuntimeFieldId add(const T& d) {
+  template<class T> RuntimeFieldId add(const T& d, bool zeroPrecision = false) {
     if(handles_.size()>=UINT32_MAX)return {};
     auto& p=pool<T>(); if(p.size()>=UINT32_MAX || !handles_.ensureOne() || !p.ensureOne())return {};
     detail::StoredRecord<typename detail::MetaTraits<T>::Payload> r; TextTransaction tx{*this};
     if(!prepare(d,r,tx))return {};
-    Handle h{static_cast<uint32_t>(p.size()),detail::MetaTraits<T>::kind,false};
+    Handle h{static_cast<uint32_t>(p.size()),detail::MetaTraits<T>::kind,false,zeroPrecision};
     p.push_back(std::move(r)); handles_.push_back(std::move(h)); tx.committed=true;
     return RuntimeFieldId{static_cast<uint32_t>(handles_.size())};
   }
@@ -307,7 +309,7 @@ public:
     CM_SAME_FLAG(isBool);CM_SAME_FLAG(isString);CM_SAME_FLAG(isDivider);CM_SAME_FLAG(isButton);CM_SAME_FLAG(isCheckbox);CM_SAME_FLAG(isStateButton);CM_SAME_FLAG(isMomentaryButton);CM_SAME_FLAG(isIntSlider);CM_SAME_FLAG(isFloatSlider);CM_SAME_FLAG(isIntInput);CM_SAME_FLAG(isFloatInput);
 #undef CM_SAME_FLAG
     const auto k=kind(id);
-    if(!numeric(k)&&(m.unit.length()||m.precision!=2||m.alarmMin!=0||m.alarmMax!=0||m.warnMin!=0||m.warnMax!=0))return false;
+    if(!numeric(k)&&(m.unit.length()||(m.precision!=2&&m.precision!=0)||m.alarmMin!=0||m.alarmMax!=0||m.warnMin!=0||m.warnMax!=0))return false;
     if((k==RuntimeFieldKind::Int||k==RuntimeFieldKind::IntSlider||k==RuntimeFieldKind::IntInput)&&m.precision!=0)return false;
     if(!boolean(k)&&(m.alarmWhenTrue||m.boolAlarmValue||m.onLabel.length()||m.offLabel.length()))return false;
     if(!boolean(k)&&!numeric(k)&&m.hasAlarm)return false;
@@ -350,6 +352,7 @@ public:
       default:return false;
     }
     if(!replaced)return false;
+    handle(id)->zeroPrecision = !numeric(k) && m.precision == 0;
     if(na)commitSparse(numericAlarms_,id,RuntimeNumericAlarm{m.hasAlarm,m.alarmMin,m.alarmMax,m.warnMin,m.warnMax});else removeSparse(numericAlarms_,id);
     if(ba)commitSparse(boolAlarms_,id,RuntimeBoolAlarm{m.hasAlarm,m.alarmWhenTrue,m.boolAlarmValue});else removeSparse(boolAlarms_,id);
     if(hasLabels)commitSparse(labels_,id,std::move(labels));else removeSparse(labels_,id);

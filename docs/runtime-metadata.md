@@ -129,7 +129,8 @@ mutation automatically adds cache invalidation beyond the existing contract.
 
 ## Memory and failure boundaries
 
-The compact store is lazy: old-only applications allocate none. Retained compact
+The compact store is lazy: legacy-only registrations allocate none unless the
+built-in System provider is enabled; that provider now creates compact fields. Retained compact
 storage uses checked local buffers and owned text; repeated routing and unit
 text is shared. Empty numeric-alarm/style options are not embedded in every
 field. Registration failure returns an invalid ID; rejected updates do not
@@ -148,6 +149,22 @@ actual-manager 64-Float host fixture accounts for these retained capacities:
 legacy43200->compact15184 bytes (64.85% less). Host ABI/String behavior differs
 from ESP32 and allocator bookkeeping is excluded. No device heap/fragmentation
 saving is claimed from those host numbers. See heap-memory-inventory.md.
+
+## Built-in System fields
+
+Enabling the built-in System provider automatically uses compact Int/Bool/Text
+metadata for its 17 fields (18 with system time). Applications need no migration
+for these internal descriptions. Existing matching fields are updated with the
+previous precedence rules; custom units, placement, styles and alarms survive.
+Sampling, saved `Config<T>` settings, NVS keys and values are unchanged.
+
+The historical `precision: 0` on System Bool/Text fields is preserved through a
+compatibility flag in existing handle padding. New Bool/Text definitions still
+have no precision member; their normal default output remains unchanged.
+Native tests compare complete JSON against equivalent legacy registrations,
+check repeated upserts and account for owned text/capacities: 7,968 legacy bytes
+versus 2,824 compact bytes (no time), or 3,256 compact bytes (with time). These
+are host measurements, not device heap measurements.
 
 ## Focused validation
 

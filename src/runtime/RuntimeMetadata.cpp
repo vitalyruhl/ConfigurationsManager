@@ -149,7 +149,7 @@ void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
 }
 
 template <class T>
-RuntimeFieldId ConfigManagerRuntime::addCompactRuntimeMeta(const T& meta) {
+RuntimeFieldId ConfigManagerRuntime::addCompactRuntimeMeta(const T& meta, bool zeroPrecision) {
   T normalized;
   if (!copyDefinition(normalized, meta))
     return {};
@@ -171,7 +171,7 @@ RuntimeFieldId ConfigManagerRuntime::addCompactRuntimeMeta(const T& meta) {
     }
     if (!state->order.ensureOne())
       return {};
-    id = state->store.add(normalized);
+    id = state->store.add(normalized, zeroPrecision);
     if (!id)
       return {};
     state->order.emplace_back(RuntimeMetadataState::Ref{0, id});
