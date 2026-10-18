@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.6.1
+> Version 4.7.0
 
 ## Preview Before Installing
 
@@ -291,3 +291,8 @@ Become a patron, by simply clicking on this button (**very appreciated!**):
 `2024-2026 (c)Vitaly Ruhl`
 
 License: GNU General Public License v3.0
+
+### Compact runtime metadata
+
+Version 4.7.0 adds opt-in small field definitions while retaining the legacy API.
+See [Runtime metadata](docs/runtime-metadata.md) for typed registration, sparse extensions, promotion and memory measurements.

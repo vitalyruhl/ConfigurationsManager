@@ -130,15 +130,15 @@ network browsing or secret/device/config reads are needed for metadata work.
 | Phase/task | State | Evidence / next step |
 | --- | --- | --- |
 | Context and owner approval | Complete | Owner approved and instructed implementation; this restart record added. |
-| Phase0 checkpoint/return/new branch | Pending | Verify clean named scope, commit fixes/context, ff-only previous branch, create new branch. |
-| Task1 compatibility/baselines | Pending | Characterize actual legacy behavior before storage integration. |
-| Task2 compact types/storage | Pending | Test-first, then scoped store implementation; define shared view contract. |
-| Task3 integration/bridges | Pending | Parent integrates shared serializer/layout, pointer promotion and revision locking. |
-| Task4 memory/docs/build/review | Pending | Memory threshold,4.7.0 mirrors,focused ESP32 build,independent review. |
+| Phase0 checkpoint/return/new branch | Complete | cc627b1e0096f83a359e1d88554f509ea49af966 committed; previous branch ff-merged; feature/compact-runtime-metadata created at same SHA; no push. |
+| Task1 compatibility/baselines | Complete | Actual RuntimeMetadata.cpp native baseline and legacy normalization/lookup/cache/override/concurrency fixtures pass. |
+| Task2 compact types/storage | Complete | All13 types, checked pools/interner/sparse data, rollback, promotion and actual String release covered; normal/no-exception host tests pass. |
+| Task3 integration/bridges | Complete | Actual native all-kind JSON parity, mixed order/legacy bridges/cache/concurrency and retained-memory gate pass; target integration compiles. |
+| Task4 memory/docs/build/review | Software complete; bounded device test complete with limitation | 4.7.0 guide/mirrors, final CM/BME builds, independent review; COM7 image verified, no serial crashes, settings byte-identical. HTTP timeout/truncation remains open. |
 
 A resumed agent must inspect git status/log and this ledger before starting.
 Finished rows must not be rerun wholesale. Record file ownership and active
-agent work here before delegation. No active implementation agent at this snapshot.
+agent work here before delegation. Active ownership is listed below; completed rows must not be blindly redispatched.
 
 ## Preflight decisions and dependencies
 
@@ -152,3 +152,121 @@ No open product question is required before starting. Allocation failure behavio
 must be inspected under actual exception flags; do not promise new std::vector
 OOM recovery. If a new allocator/public-contract decision is necessary, present
 the concrete constraint before implementing that affected part.
+
+## Approved scope additions and live ownership
+
+The owner subsequently authorized migrating exactly one nonminimal example,
+preferably BME280-Temp-Sensor, then uploading that example over COM7 and briefly
+checking crashes/browser loading. Existing test-ESP IP:http://192.168.2.126/.
+The owner explicitly requires preserving all existing settings, especially the
+shared WiFi/NVS values. No other example migration is authorized.
+
+Before upload: save the current partition table/NVS (prefer full flash backup)
+under ignored local evidence, compare offsets/sizes, and do not erase flash or
+rewrite/relocate data partitions. Prefer app-only flashing with preserved OTA
+selection when partition tables differ; verify active app partition first.
+Example startup must not seed/overwrite WiFi or OTA defaults. Never print saved
+passwords/secret values; backups are local ignored device data.
+
+- compact_store: RuntimeFieldTypes.h, CompactRuntimeMetaStore.h, RuntimeMetaView.h,
+  CompactHostString.h, compact storage host tests/runner. Public composition
+  member is .base; field IDs are 1-based, zero invalid.
+- metadata_integration: RuntimeManager.h/.cpp, RuntimeMetadata.cpp,
+  ConfigManager.h/Layout, actual-core compatibility test/runner and relevant
+  embedded regression. Actual hardware hooks are stubbed only in native tests.
+- bme_example: completed only examples/BME280-Temp-Sensor/src/main.cpp and README.
+  Four compact floats + one provider; legacy alarm retained. Automatic network/
+  OTA default-writing paths removed. No build/device work by that agent.
+- parent: ownership coordination, docs/version after integration, final builds,
+  independent review, backup/COM7 upload and bounded live check.
+
+Ruling: metadata methods are extracted into RuntimeMetadata.cpp behind small
+placement/logging hooks to test actual registry/cache implementation natively.
+This is a scoped file split, not a second metadata implementation. Target build
+must validate hooks. Ruling: retained compact storage uses checked local buffers
+and checked String copies; existing legacy escape paths retain documented
+allocation limitations and conditional bad_alloc handling. Actual installed
+Arduino target enables -fexceptions; never equate SDK configuration alone with
+a guarantee of OOM recovery. String/allocator accounting separates capacities
+and allocator bookkeeping; host and target numbers remain separate.
+
+## Final software validation and device state (completion in progress)
+
+All implementation workers finished; no source writer remains active. Parent
+owns documentation/final hardware evidence only. Independent fresh-context
+metadata_review found no concrete correctness/compatibility defect. Its limits:
+native tests stub placement hooks; embedded actual-page regression compiled but
+not run; no new hardware control-handler actuation. Handler policy stayed intact.
+
+Builds: CM compile-only runtime-meta-test exit0,27.56s, runtimeSKIPPED;
+BME280 USB example exit0,29.01s, staticRAM55736,flash1237321. Full regression
+matrix not requested. Real String behavior, conditional exceptions and target
+ABI validated. Runtime manager192->200; legacyMeta244,storedFloat60,Bool56.
+Full manager host64Float retained43200->15184;64Bool15064;64mixed14032.
+All counts include capacities/owned payloads, exclude allocator bookkeeping;
+no measured ESP32 heap improvement inferred from hostfigures.
+
+Device COM7 flash backup4194304 bytes saved locally under
+.local/compact-runtime-metadata/device-COM7/flash-before.bin. NVS20480 bytes
+saved separately. Active partitionapp0 offset0x10000,size0x1c0000 determined
+from the actual saved partition table and valid OTA selection CRC. BME firmware
+1243904 bytes, SHA256 AC01FA679F9995ECD22C6516EC96315C18B45196972FE069108C11F818FCD377,
+written ONLY to activeapp0; esptool verified image hash. No table/NVS/otadata/
+bootloader upload. Readback0x8000..0x10000 was BYTE-IDENTICAL before app startup.
+
+Browser visibly rendered CM-BME280-Temp-Sensor4.7.0 with Temperature/Humidity/
+Pressure/Dewpoint and Condensation Risk in WebSocket mode. BME sensor initialized.
+A repeated browser-automation batch exceeded its control timeout and debugger
+binding was lost, so it is NOT counted as10verifiedbrowserreloads. Serial180s
+reported0crashmarkers,1setup,2loopreports, WiFi3 and heap173720/172844.
+Supplementary HTTP10x6route smoke aborted on an8s read timeout and is not
+a passing60-request run. Further serial90s finished with0crashmarkers,0new
+setup completions,2loopreports. Post-runtime readback of table,NVS and
+OTA selection was BYTE-IDENTICAL to the original full backup. Preserve private logs/backups ignored and never
+publish settings/password values.
+
+Ruling: retain an honest bounded validation scope. Retained RAM is allocation-
+accounted and passes the approval threshold; absolute per-phase allocator peaks
+are not comprehensively benchmarked. Report this limitation rather than relabel
+record sizes or observed free heap as a complete allocation census.
+
+## Final handoff status
+
+Implementation is reviewable and uncommitted on `feature/compact-runtime-metadata`
+(base `cc627b1`). Do not redo branch setup or reimplement completed tasks. No push,
+main merge, final commit, consumer migration or other-example conversion occurred.
+User guide: `docs/runtime-metadata.md`. All version mirrors are `4.7.0`.
+
+The final example build succeeded in 32.48 seconds after whitespace cleanup.
+Its firmware binary is byte-identical to the image already uploaded to COM7.
+Static RAM: 55,736 bytes. Flash: 1,237,321 bytes.
+
+COM7 smoke findings: BME initialized and the browser rendered four sensor values
+plus the legacy warning in WebSocket mode. Two serial observation windows covered
+270 seconds: zero abort/Backtrace/Guru/Brownout/assert markers, one initial setup,
+and zero unexpected setups in the later window. Expected esptool verification
+resets occurred outside those windows. NVS, partition table and OTA selection
+remained byte-identical after runtime, as well as immediately after upload.
+Private backup files and logs are under ignored `.local/compact-runtime-metadata`.
+
+HTTP limit: read-only appinfo, metadata, runtime, page index and layout endpoints
+returned complete HTTP 200 bodies in an endpoint diagnostic, but some took
+5.23 or 10.58 seconds. One static-page response closed after 3,072 of 61,595 bytes
+(about 13 seconds). After the intentional settings-verification reboot, one full
+root response delivered all 61,595 bytes in 9.74 seconds. This is intermittent
+HTTP delivery evidence; do not claim all reloads pass. The eight-second timeout
+was insufficient for the successful 9.74-second transfer, but does not explain
+the separately observed premature EOF. Exact records: `device-http-diagnostic.json`
+and `device-root-retry.json`. No proxy was configured.
+
+Independent narrow source review found server NODELAY is already active; do not
+add another `setNoDelay` as a supposed fix. An ACK stall followed by AsyncTCP's
+five-second ACK timeout is a candidate, not proven without close-reason and ACK
+instrumentation. `BoundedResponse.h`, `StaticGzipResponse.h` and `WebServer.cpp`
+are unchanged from `cc627b1`, so a new metadata regression has not been established.
+Preserve this finding in `docs/todo_http_delivery_panic.md`. Do not silently expand
+this feature into an HTTP transport rewrite or mark the original SBT/SIL panic fixed.
+
+Remaining owner acceptance: review the new metadata API/results and this delivery
+limitation. SIL and SBT migration plans remain deferred until CM is accepted.
+No hardware control-handler actuation or full embedded test execution was done.

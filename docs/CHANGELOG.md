@@ -2,6 +2,15 @@
 
 This changelog is a curated overview.
 
+## 4.7.0 - Unreleased
+
+- Add opt-in compact runtime field types with shared routing text and sparse
+  alarm/style/label data. Preserve existing RuntimeFieldMeta registration and
+  wire output; legacy mutable-pointer access deliberately promotes individual
+  compact fields without retaining a second full metadata mirror.
+- Convert only the BME280-Temp-Sensor example to four compact sensor fields
+  alongside its existing legacy warning. Preserve saved WiFi/OTA settings by
+  removing automatic startup default writes from this example.
 ## 4.6.1 - Unreleased
 
 - Release each MQTT System-Info JSON document before publishing its payload,

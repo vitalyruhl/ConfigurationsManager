@@ -224,3 +224,12 @@ until the review package and execution method are approved.
 Planning validation: source/API references and branch ancestry checked;
 document links/checklists/contract consistency and whitespace checked. No
 product tests, builds, uploads or Git mutations are part of this planning turn.
+
+## Execution outcome
+
+CM 4.7.0 is implemented; read the linked handoff for completed tasks, exact
+checkpoints, memory accounting, test/build evidence and COM7 settings proof.
+The selected example was flashed and showed no serial crash markers in270s.
+An intermittent inherited HTTP delivery timeout/truncation remains an explicit
+acceptance limitation. The implementation is not automatically committed or
+published, and SIL/SBT migration plans remain deferred until owner acceptance.

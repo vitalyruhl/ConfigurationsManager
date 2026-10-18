@@ -8,6 +8,10 @@
 #include <vector>
 #include "../ConfigManagerConfig.h"
 #include "detail/RuntimeSnapshot.h"
+#include "RuntimeFieldTypes.h"
+#include "detail/RuntimeMetaView.h"
+
+struct RuntimeMetadataState;
 
 // Forward declaration
 class ConfigManagerClass;
@@ -20,160 +24,6 @@ struct RuntimeValueProvider {
 
   RuntimeValueProvider(const String& n, std::function<void(JsonObject&)> f, int o = 100)
       : name(n), fill(f), order(o) {}
-};
-
-struct RuntimeStyleProperty {
-  String key;
-  String value;
-};
-
-struct RuntimeStyleRule {
-  String target;
-  std::vector<RuntimeStyleProperty> properties;
-  bool hasVisible = false;
-  bool visible = true;
-  String className;
-
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
-  RuntimeStyleRule() = default;
-
-  RuntimeStyleRule(const RuntimeStyleRule& other)
-      : target(other.target), properties(other.properties), hasVisible(other.hasVisible), visible(other.visible), className(other.className) {
-    ++copyCount;
-  }
-
-  RuntimeStyleRule& operator=(const RuntimeStyleRule& other) {
-    if (this != &other) {
-      target = other.target;
-      properties = other.properties;
-      hasVisible = other.hasVisible;
-      visible = other.visible;
-      className = other.className;
-    }
-    ++copyCount;
-    return *this;
-  }
-
-  RuntimeStyleRule(RuntimeStyleRule&&) noexcept = default;
-  RuntimeStyleRule& operator=(RuntimeStyleRule&&) noexcept = default;
-
-  static void resetCopyCount() {
-    copyCount = 0;
-  }
-
-  static size_t getCopyCount() {
-    return copyCount;
-  }
-
-private:
-  inline static size_t copyCount = 0;
-
-public:
-#endif
-
-  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
-  // cppcheck-suppress-begin useStlAlgorithm
-  RuntimeStyleRule& set(const char* property, const char* value) {
-    if (!property || !property[0]) {
-      return *this;
-    }
-    for (auto& prop : properties) {
-      if (prop.key == property) {
-        prop.value = value ? value : "";
-        return *this;
-      }
-    }
-    properties.push_back(RuntimeStyleProperty{String(property), value ? String(value) : String()});
-    return *this;
-  }
-  // Cppcheck rationale: End the local embedded-loop exception.
-  // cppcheck-suppress-end useStlAlgorithm
-
-  RuntimeStyleRule& setVisible(bool value) {
-    hasVisible = true;
-    visible = value;
-    return *this;
-  }
-
-  RuntimeStyleRule& addCSSClass(const char* cssClass) {
-    if (!cssClass || !cssClass[0]) {
-      return *this;
-    }
-    if (!className.isEmpty()) {
-      className += " ";
-    }
-    className += cssClass;
-    return *this;
-  }
-};
-
-struct RuntimeFieldStyle {
-  std::vector<RuntimeStyleRule> rules;
-
-  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
-  // cppcheck-suppress-begin useStlAlgorithm
-  RuntimeStyleRule& rule(const char* targetName) {
-    String target = targetName ? String(targetName) : String();
-    for (auto& styleRule : rules) {
-      if (styleRule.target == target) {
-        return styleRule;
-      }
-    }
-    RuntimeStyleRule created;
-    created.target = target;
-    rules.push_back(std::move(created));
-    return rules.back();
-  }
-  // Cppcheck rationale: End the local embedded-loop exception.
-  // cppcheck-suppress-end useStlAlgorithm
-
-  bool empty() const {
-    return rules.empty();
-  }
-};
-
-// Runtime field metadata structure
-struct RuntimeFieldMeta {
-  String group;
-  String sourceGroup;
-  String page;
-  String key;
-  String label;
-  String unit;
-  String onLabel;
-  String offLabel;
-  int precision = 2;
-  int order = 100;
-  bool isBool = false;
-  bool isString = false;
-  bool isDivider = false;
-  bool isButton = false;
-  bool isCheckbox = false;
-  bool isStateButton = false;
-  bool isMomentaryButton = false;
-  bool isIntSlider = false;
-  bool isFloatSlider = false;
-  bool isIntInput = false;
-  bool isFloatInput = false;
-  bool hasAlarm = false;
-  bool alarmWhenTrue = false;
-  bool boolAlarmValue = false;
-  float alarmMin = 0.0f;
-  float alarmMax = 0.0f;
-  float warnMin = 0.0f;
-  float warnMax = 0.0f;
-  // Slider specific properties
-  int intMin = 0;
-  int intMax = 100;
-  int intInit = 0;
-  float floatMin = 0.0f;
-  float floatMax = 1.0f;
-  float floatInit = 0.0f;
-  int floatPrecision = 2;
-  bool initialState = false;
-  String staticValue;
-  String card;
-  RuntimeFieldStyle style;
 };
 
 // Interactive control structures
@@ -289,6 +139,7 @@ private:
   // Runtime data
   std::vector<RuntimeValueProvider> runtimeProviders;
   std::vector<RuntimeFieldMeta> runtimeMeta;
+  std::unique_ptr<RuntimeMetadataState> runtimeMetadataState;
 
   std::vector<RuntimeButton> runtimeButtons;
 
@@ -316,7 +167,17 @@ private:
 #endif
 
   // Helper methods
-  String buildRuntimeMetaJsonLocked(const std::function<bool(const RuntimeFieldMeta&)>& include = {});
+  void registerRuntimePlacement(const RuntimeFieldMeta& meta);
+  void registerRuntimePlacement(const RuntimeFieldBase& meta);
+  template<class T> RuntimeFieldId addCompactRuntimeMeta(const T& meta);
+  template<class T> bool updateCompactRuntimeMeta(RuntimeFieldId id, const std::function<void(T&)>& updater);
+  RuntimeFieldMeta* promoteRuntimeMetaLocked(RuntimeFieldId id, RuntimeFieldMeta&& meta);
+  cm::RuntimeMetaView runtimeMetaViewLocked(size_t index) const;
+  size_t runtimeMetaCountLocked() const;
+  void reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) const;
+  void logRuntimeMetaAdded(const String& group, const String& key) const;
+  void logRuntimeMetaEvent(const char* message, size_t count) const;
+  String buildRuntimeMetaJsonLocked(const std::function<bool(const RuntimeFieldMeta&)>& include = {}, const std::function<bool(const cm::RuntimeMetaView&)>& viewInclude = {});
   void markRuntimeMetaJsonCacheDirtyLocked();
   RuntimeAlarm* findAlarm(const String& name);
   const RuntimeAlarm* findAlarm(const String& name) const;
@@ -337,6 +198,37 @@ public:
   // Runtime metadata
   // Thread-safe registration: may be called while runtime JSON is generated.
   void addRuntimeMeta(const RuntimeFieldMeta& meta);
+  RuntimeFieldId addRuntimeMeta(const RuntimeFloatMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeFloatMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeIntMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeIntMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeBoolMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeBoolMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeTextMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeTextMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeDividerMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeDividerMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeButtonMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeButtonMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeCheckboxMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeCheckboxMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeStateButtonMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeStateButtonMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeMomentaryButtonMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeMomentaryButtonMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeIntSliderMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeIntSliderMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeIntInputMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeIntInputMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeFloatSliderMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeFloatSliderMeta&)>& updater);
+  RuntimeFieldId addRuntimeMeta(const RuntimeFloatInputMeta& meta);
+  bool updateRuntimeMeta(RuntimeFieldId id, const std::function<void(RuntimeFloatInputMeta&)>& updater);
+  bool setRuntimeNumericAlarm(RuntimeFieldId id, const RuntimeNumericAlarm& alarm);
+  bool setRuntimeBoolAlarm(RuntimeFieldId id, const RuntimeBoolAlarm& alarm);
+  bool setRuntimeStateLabels(RuntimeFieldId id, const RuntimeStateLabels& labels);
+  bool setRuntimeFieldStyle(RuntimeFieldId id, const RuntimeFieldStyle& style);
+  bool setRuntimeStaticText(RuntimeFieldId id, const String& text);
   bool updateRuntimeMeta(const String& group, const String& key, const std::function<void(RuntimeFieldMeta&)>& updater);
   // Note: returned pointer is only stable until the next runtime meta mutation.
   RuntimeFieldMeta* findRuntimeMeta(const String& group, const String& key);
@@ -347,10 +239,20 @@ public:
   void fillRuntimeSnapshot(JsonObject root, const cm::RuntimeSelection& selection);
   String runtimeMetaToJSON();
   String runtimeMetaToJSON(const std::function<bool(const RuntimeFieldMeta&)>& include);
+  // Internal layout predicates borrow the locked metadata without materialization.
+  String runtimeMetaToJSONView(const std::function<bool(const cm::RuntimeMetaView&)>& include);
+  bool hasRuntimeMetaView(const std::function<bool(const cm::RuntimeMetaView&)>& include = {}) const;
   bool hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>& include = {}) const;
   std::shared_ptr<const String> runtimeMetaJsonPayload();
 
 #ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+  struct RuntimeMetaStatsForTest {
+    size_t retainedBytes=0, legacyCapacityBytes=0, legacyOwnedBytes=0;
+    size_t stateBytes=0, storeBytes=0, orderCapacityBytes=0;
+    bool compactStateAllocated=false;
+  };
+  RuntimeMetaStatsForTest getRuntimeMetaStatsForTest() const;
+
   void setRuntimeMetaSerializationFailureForTest(bool fail) {
     std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
     std::lock_guard<std::mutex> dataLock(runtimeDataMutex);

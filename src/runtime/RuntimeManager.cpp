@@ -25,33 +25,6 @@ void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes
 
 } // namespace
 
-ConfigManagerRuntime::ConfigManagerRuntime()
-    : configManager(nullptr)
-#if CM_ENABLE_SYSTEM_PROVIDER
-      ,
-      builtinSystemProviderEnabled(false), builtinSystemProviderRegistered(false), loopWindowStart(0), loopSamples(0), loopAccumMs(0.0), loopAvgMs(0.0)
-#endif
-{
-}
-
-ConfigManagerRuntime::~ConfigManagerRuntime() {
-}
-
-void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
-  configManager = cm;
-  RUNTIME_LOG("Runtime manager initialized");
-  if (configManager) {
-    std::vector<RuntimeFieldMeta> metaSnapshot;
-    {
-      std::lock_guard<std::mutex> lock(runtimeDataMutex);
-      metaSnapshot = runtimeMeta;
-    }
-    for (const auto& meta : metaSnapshot) {
-      configManager->registerLivePlacement(meta);
-    }
-  }
-}
-
 void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
   logCallback = logger;
 }
@@ -66,60 +39,6 @@ void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider& provid
 
 void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order) {
   addRuntimeProvider(RuntimeValueProvider(name, fillFunc, order));
-}
-
-void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
-  RuntimeFieldMeta normalized = meta;
-  if (normalized.sourceGroup.isEmpty()) {
-    normalized.sourceGroup = normalized.group;
-    if (normalized.page.isEmpty() && normalized.card.isEmpty()) {
-      normalized.group = String();
-    }
-  }
-  {
-    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-    runtimeMeta.push_back(normalized);
-    markRuntimeMetaJsonCacheDirtyLocked();
-  }
-  // Cppcheck rationale: The value is consumed by a compile-time logging macro in enabled builds.
-  // cppcheck-suppress unreadVariable
-  const String& logGroup = normalized.sourceGroup.length() ? normalized.sourceGroup : normalized.group;
-  RUNTIME_LOG("Added meta: %s.%s", logGroup.c_str(), normalized.key.c_str());
-  if (configManager) {
-    configManager->registerLivePlacement(normalized);
-  }
-}
-
-bool ConfigManagerRuntime::updateRuntimeMeta(const String& group, const String& key, const std::function<void(RuntimeFieldMeta&)>& updater) {
-  if (!updater) {
-    return false;
-  }
-
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-  for (auto& meta : runtimeMeta) {
-    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-    // cppcheck-suppress useStlAlgorithm
-    if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
-      updater(meta);
-      markRuntimeMetaJsonCacheDirtyLocked();
-      return true;
-    }
-  }
-  return false;
-}
-
-RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {
-  std::lock_guard<std::mutex> lock(runtimeDataMutex);
-  for (auto& meta : runtimeMeta) {
-    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-    // cppcheck-suppress useStlAlgorithm
-    if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
-      return &meta;
-    }
-  }
-  return nullptr;
 }
 
 RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) {
@@ -195,142 +114,6 @@ void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::Runtim
     root["system"]["otaActive"] = ota.isActive();
     root["system"]["otaHasPassword"] = ota.hasPassword();
   }
-}
-
-String ConfigManagerRuntime::buildRuntimeMetaJsonLocked(const std::function<bool(const RuntimeFieldMeta&)>& include) {
-  // Keep the stored metadata ordered so serialization can read it directly
-  // while the mutex keeps strings, vectors, and iterators stable.
-#ifdef development
-  std::vector<RuntimeFieldMeta>& meta = runtimeMetaOverrideActive ? runtimeMetaOverride : runtimeMeta;
-#else
-  std::vector<RuntimeFieldMeta>& meta = runtimeMeta;
-#endif
-
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
-  if (runtimeMetaSerializationFailureForTest) {
-    return String();
-  }
-#endif
-
-  std::sort(meta.begin(), meta.end(), [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
-    if (a.group == b.group) {
-      if (a.order == b.order)
-        return a.label < b.label;
-      return a.order < b.order;
-    }
-    return a.group < b.group;
-  });
-
-  // Serialize the same locked metadata twice without temporary JSON trees:
-  // first count bytes, then write into one exactly reserved output buffer.
-  const auto emit = [&](auto& sink) {
-    if (!sink.raw("[")) return false;
-    bool first = true;
-    for (const auto& field : meta) {
-      if (include && !include(field)) continue;
-      if (!first && !sink.raw(",")) return false;
-      first = false;
-      if (!cm::writeRuntimeMeta(sink, field)) return false;
-    }
-    return sink.raw("]");
-  };
-  // Preserve the required-size and failure-stage diagnostics for heap analysis.
-  cm::JsonOutput<String> count(nullptr, std::numeric_limits<unsigned int>::max() - size_t(1));
-  if (!emit(count) || !count.good()) {
-    logRuntimeMetaSerializationFailure("size", count.size(), meta.size());
-    return String();
-  }
-  String out;
-  if (!out.reserve(static_cast<unsigned int>(count.size()))) {
-    logRuntimeMetaSerializationFailure("reserve", count.size(), meta.size());
-    return String();
-  }
-  cm::JsonOutput<String> writer(&out, count.size());
-  if (!emit(writer) || !writer.good()) {
-    logRuntimeMetaSerializationFailure("serialize", count.size(), meta.size());
-    return String();
-  }
-  if (writer.size() != count.size() || out.length() != count.size()) {
-    logRuntimeMetaSerializationFailure("length", count.size(), meta.size());
-    return String();
-  }
-  return out;
-}
-
-void ConfigManagerRuntime::markRuntimeMetaJsonCacheDirtyLocked() {
-  runtimeMetaJsonCacheDirty = true;
-  ++runtimeMetaRevision;
-}
-
-std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() {
-  // A cache rebuild is single-flight. Other callers keep using the last valid
-  // snapshot immediately instead of queueing behind a large serialization.
-  {
-    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-    const auto cached = runtimeMetaJsonCache.lock();
-    if (cached && !runtimeMetaJsonCacheDirty) {
-      return cached;
-    }
-    if (runtimeMetaJsonCacheBuildInProgress) {
-      return cached;
-    }
-    runtimeMetaJsonCacheBuildInProgress = true;
-  }
-
-  uint32_t builtRevision = 0;
-  String candidate;
-  {
-    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
-    ++runtimeMetaSerializationBuildCount;
-#endif
-    candidate = buildRuntimeMetaJsonLocked();
-    builtRevision = runtimeMetaRevision.load();
-  }
-
-  std::shared_ptr<const String> replacement;
-  if (candidate.length() != 0) {
-    replacement = std::make_shared<String>(std::move(candidate));
-  }
-
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  runtimeMetaJsonCacheBuildInProgress = false;
-  auto cached = runtimeMetaJsonCache.lock();
-  if (replacement && replacement->length() != 0) {
-    if (runtimeMetaRevision.load() == builtRevision) {
-      runtimeMetaJsonCache = replacement;
-      runtimeMetaJsonCacheDirty = false;
-      cached = replacement;
-    } else if (!cached) {
-      // The candidate is complete JSON for the most recent stable state
-      // seen by this build. Keep it as a temporary fallback, but rebuild
-      // again before treating it as current metadata.
-      runtimeMetaJsonCache = replacement;
-      cached = replacement;
-    }
-  }
-  return cached;
-}
-
-bool ConfigManagerRuntime::hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>& include) const {
-  std::lock_guard<std::mutex> lock(runtimeDataMutex);
-#ifdef development
-  const auto& entries = runtimeMetaOverrideActive ? runtimeMetaOverride : runtimeMeta;
-#else
-  const auto& entries = runtimeMeta;
-#endif
-  for (const auto& entry : entries) if (!include || include(entry)) return true;
-  return false;
-}
-
-String ConfigManagerRuntime::runtimeMetaToJSON(const std::function<bool(const RuntimeFieldMeta&)>& include) {
-  std::lock_guard<std::mutex> lock(runtimeDataMutex);
-  return buildRuntimeMetaJsonLocked(include);
-}
-
-String ConfigManagerRuntime::runtimeMetaToJSON() {
-  const std::shared_ptr<const String> payload = runtimeMetaJsonPayload();
-  return payload ? *payload : String();
 }
 
 void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const String& key, const String& label, int minValue, int maxValue, int initValue, std::function<int()> getter, std::function<void(int)> setter, const String& unit, const String& card, int order) {
@@ -869,28 +652,6 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
   return active;
 }
 
-#ifdef development
-
-void ConfigManagerRuntime::setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override) {
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-  runtimeMetaOverride = override;
-  runtimeMetaOverrideActive = true;
-  markRuntimeMetaJsonCacheDirtyLocked();
-  RUNTIME_LOG("Meta override set (%d entries)", override.size());
-}
-
-void ConfigManagerRuntime::clearRuntimeMetaOverride() {
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-  runtimeMetaOverride.clear();
-  runtimeMetaOverrideActive = false;
-  markRuntimeMetaJsonCacheDirtyLocked();
-  RUNTIME_LOG("Meta override cleared");
-}
-
-#endif
-
 // Interactive runtime control implementations
 
 void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label, std::function<void()> onPress, const String& card, int order) {
@@ -1104,4 +865,21 @@ void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const St
     }
   }
   RUNTIME_LOG("Float slider not found: %s.%s", group.c_str(), key.c_str());
+}
+
+// Metadata core hooks keep networking and target diagnostics out of the registry.
+void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldMeta& meta) {
+  if (configManager) configManager->registerLivePlacement(meta);
+}
+void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldBase& meta) {
+  if (configManager) configManager->registerLivePlacement(cm::RuntimeMetaView(meta));
+}
+void ConfigManagerRuntime::reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) const {
+  logRuntimeMetaSerializationFailure(reason, bytes, fields);
+}
+void ConfigManagerRuntime::logRuntimeMetaAdded(const String& group, const String& key) const {
+  RUNTIME_LOG("Added meta: %s.%s", group.c_str(), key.c_str());
+}
+void ConfigManagerRuntime::logRuntimeMetaEvent(const char* message, size_t count) const {
+  RUNTIME_LOG("%s (%u)", message, static_cast<unsigned>(count));
 }

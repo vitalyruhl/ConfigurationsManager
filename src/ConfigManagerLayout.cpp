@@ -274,6 +274,10 @@ void ConfigManagerClass::addToLiveGroup(const char* itemId, const char* pageName
 }
 
 void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
+  registerLivePlacement(cm::RuntimeMetaView(meta));
+}
+
+void ConfigManagerClass::registerLivePlacement(const cm::RuntimeMetaView& meta) {
   if (meta.key.isEmpty()) {
     return;
   }
@@ -520,7 +524,7 @@ String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const Str
 bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
   if (!supportsLivePageSelection()) return false;
   for (const auto& page : livePages) if (normalizeLayoutName(page.name) == pageKey) return true;
-  return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMeta([&](const RuntimeFieldMeta& meta) {
+  return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMetaView([&](const cm::RuntimeMetaView& meta) {
     return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
   });
 }
@@ -539,7 +543,7 @@ String ConfigManagerClass::buildLivePageIndexJSON() const {
 }
 
 String ConfigManagerClass::buildLivePageMetadataJSON(const String& pageKey) {
-  return runtimeManager.runtimeMetaToJSON([&](const RuntimeFieldMeta& meta) {
+  return runtimeManager.runtimeMetaToJSONView([&](const cm::RuntimeMetaView& meta) {
     return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
   });
 }

@@ -427,6 +427,49 @@ void test_runtime_meta_serialization_avoids_deep_style_copy() {
 } // namespace
 #endif
 
+void test_compact_runtime_meta_mixed_legacy_bridge() {
+  ConfigManagerClass manager;
+  ConfigManagerRuntime& runtime = manager.getRuntime();
+  runtime.begin(&manager);
+  RuntimeFloatMeta compact;
+  compact.base.key = "compact";
+  compact.base.label = "Compact temperature";
+  compact.base.group = "sensors";
+  compact.base.page = "Sensors";
+  compact.base.card = "Measurements";
+  compact.unit = "C";
+  const RuntimeFieldId id = runtime.addRuntimeMeta(compact);
+  TEST_ASSERT_TRUE(static_cast<bool>(id));
+  RuntimeFieldMeta legacy;
+  legacy.key = "legacy";
+  legacy.label = "Legacy value";
+  legacy.group = "separate";
+  runtime.addRuntimeMeta(legacy);
+  TEST_ASSERT_TRUE(runtime.updateRuntimeMeta("sensors", "compact", [](RuntimeFieldMeta& meta) {
+    meta.hasAlarm = true;
+    meta.alarmMax = 50;
+  }));
+  TEST_ASSERT_TRUE(runtime.updateRuntimeMeta(id, std::function<void(RuntimeFloatMeta&)>([](RuntimeFloatMeta& meta) {
+    meta.precision = 1;
+  })));
+  JsonDocument parsed;
+  TEST_ASSERT_FALSE(deserializeJson(parsed, runtime.runtimeMetaToJSON()));
+  TEST_ASSERT_EQUAL_UINT32(2, parsed.size());
+  const String selected = runtime.runtimeMetaToJSONView([](const cm::RuntimeMetaView& meta) {
+    return meta.page == "Sensors";
+  });
+  TEST_ASSERT_FALSE(deserializeJson(parsed, selected));
+  TEST_ASSERT_EQUAL_UINT32(1, parsed.size());
+  TEST_ASSERT_EQUAL_STRING("compact", parsed[0]["key"].as<const char*>());
+  TEST_ASSERT_EQUAL_FLOAT(50, parsed[0]["alarmMax"].as<float>());
+  TEST_ASSERT_TRUE(manager.hasLivePageKey("sensors"));
+  TEST_ASSERT_FALSE(deserializeJson(parsed, manager.buildLivePageMetadataJSON("sensors")));
+  TEST_ASSERT_EQUAL_UINT32(1, parsed.size());
+  TEST_ASSERT_EQUAL_STRING("compact", parsed[0]["key"].as<const char*>());
+  TEST_ASSERT_NOT_NULL(runtime.findRuntimeMeta("sensors", "compact"));
+  TEST_ASSERT_FALSE(runtime.updateRuntimeMeta(id, std::function<void(RuntimeFloatMeta&)>([](RuntimeFloatMeta&) {})));
+}
+
 void setup() {
   delay(1500);
   Serial.begin(115200);
@@ -470,6 +513,7 @@ void setup() {
   RUN_TEST(test_key_length_error_flag);
   RUN_TEST(test_showIf_visibility);
   RUN_TEST(test_runtime_string_divider_and_order);
+  RUN_TEST(test_compact_runtime_meta_mixed_legacy_bridge);
 
 #ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
   RUN_TEST(test_runtime_meta_serialization_avoids_deep_style_copy);

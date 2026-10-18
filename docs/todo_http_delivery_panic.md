@@ -164,3 +164,30 @@ The mounted regression test first demonstrated the old burst and early socket/ru
 Final software validation: 31 WebUI Node tests pass; mounted-browser order/body-delay/navigation/visibility/repeated-schema-error/initial-OTA tests pass; regenerated embedded page's recovery browser test passes; independent review has no open substantive finding. `npm --prefix webui run build` and header generation pass. CM verbose-off compile-only and isolated SBT verbose-on builds pass. The SBT ELF SHA-256 is `6E402C02D42CF2323901A3C39B098B59B6A8C53BAD85A43F057E97D7874DE8F4`; its actual embedded gzip (61,595 bytes) matches the generated header. These are compiler/browser proofs, not target heap measurements. CM remains unreleased 4.6.1 and SBT remains the uncommitted 1.0.1 candidate.
 
 This reduces a demonstrated startup overlap, but does not enforce a process-wide heap budget, eliminate fragmentation, or protect independent tabs/clients. A consumed browser body is not proof that the ESP has processed the final ACK. Device confirmation is still required. No upload, monitor, commit or push has been performed.
+
+### 2026-10-18: compact metadata BME acceptance smoke
+
+CM4.7.0 adds opt-in compact fields; only BME280-Temp-Sensor was migrated.
+On COM7 at192.168.2.126, the example initialized the sensor and rendered its
+four compact Float fields plus legacy warning. Two serial observation windows
+(total270s) contained no abort/backtrace/reset evidence after initial setup.
+Full flash was backed up and only activeapp0 at0x10000 was uploaded; partition
+table,NVS andOTA selection were byte-identical before/after upload and runtime.
+
+Delivery is NOT fully accepted: an8s repeated HTTP smoke aborted on read timeout.
+A separate diagnostic returned complete appinfo107B,meta1302B,runtime539B,
+pageindex201B,layout779B bodies, but meta took10.58s. A static root response
+advertised61595B and closed with3072B received after~13s. After an intentional
+settings-verification reboot, a full root request delivered61595/61595B in9.74s.
+The short client timeout explains some failures, not the independent early EOF.
+Browser automated reload count was lost in a tool timeout and must not be
+reported as10successfulreloads. Private detailed JSON/serial evidence is under
+.local/compact-runtime-metadata; no secrets belong in this report.
+
+The feature does not change BoundedResponse/StaticGzipResponse/WebServer.cpp.
+Pinned ESPAsyncWebServer already sets server NODELAY and disables request RX
+idle timeout during responses. AsyncTCP ACK-timeout closure after a stalled
+512-byte bounded window is a plausible next diagnostic target, not a decoded
+cause. A useful follow-up is ACK/admission/send-error/close-reason tracing;
+another setNoDelay call would not address the existing setting. Keep the
+original SBT/SIL crash and HTTP-delivery acceptance open pending owner evidence.

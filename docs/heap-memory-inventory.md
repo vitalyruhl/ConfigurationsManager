@@ -165,3 +165,30 @@ that the failed DEFAULT allocation cannot use.
    under concurrent BLE/MQTT/UI/OTA stress before considering stack sizes.
 4. Require complete payload delivery and unchanged telemetry/control behavior;
    fewer allocations with truncated output or missed messages is not a saving.
+
+## 4.7.0 compact metadata implementation evidence
+
+The compact field model is now implemented opt-in. Existing SBT/SIL registrations
+remain legacy; no savings are attributed to those applications until their
+separate migrations. Only BME280-Temp-Sensor uses the new metadata definitions.
+
+Target ABI, checked with the installed Xtensa compiler and current headers:
+legacy RuntimeFieldMeta244 bytes, stored Float60, stored Bool56; runtime manager
+object192->200 bytes (+8), with no compact-store allocation in old-only cases.
+These record sizes exclude shared storage and capacities. Full actual-manager
+host fixtures include text/pool/handle/sparse capacities, lazy state and mixed
+ordering references: 64Float43200->15184 bytes,64Bool43200->15064,
+64mixedFloat/Bool43200->14032. The >=25% retained-memory gate passes. Allocator
+bookkeeping/common manager object and device fragmentation are excluded.
+Store-only fixtures use different input texts and must not be added to these
+manager totals. Absolute registration/serialization peak allocations have not
+been comprehensively benchmarked; output, owned copies, ordering capacity and
+legacy predicate conversion costs are reported separately in runtime-metadata.md.
+
+The new native suite exercises the actual metadata registry/cache implementation,
+with only target placement/logging hooks stubbed. All13 typed kinds match equivalent
+legacy JSON; mixed ordering, promotion, failure rollback and concurrent updates
+pass. A real ConfigManager selected-page regression is added to basictest.cpp
+but only compiled, not executed on hardware. The BME live smoke covers normal
+page/field delivery; cross-page repeated-key control-handler execution remains
+outside this bounded hardware smoke.
