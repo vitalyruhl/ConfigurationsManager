@@ -128,6 +128,7 @@ private:
   // Metadata mutations take cacheMutex before this mutex; cache rebuilds only
   // hold this mutex while traversing mutable metadata.
   mutable std::mutex runtimeDataMutex;
+  std::recursive_mutex runtimeGenerationMutex;
   mutable std::mutex runtimeMetaCacheMutex;
 
   // Reuse metadata only while a response/caller still owns the complete snapshot.
@@ -239,6 +240,13 @@ public:
   RuntimeFieldMeta* findRuntimeMeta(const String& group, const String& key);
 
   // JSON generation
+  // HTTP waits only for generation; main-loop WS ticks use a nonblocking claim.
+  std::unique_lock<std::recursive_mutex> acquireRuntimeGeneration(bool wait = true) {
+    std::unique_lock<std::recursive_mutex> lock(runtimeGenerationMutex, std::defer_lock);
+    if (wait) lock.lock();
+    else (void)lock.try_lock();
+    return lock;
+  }
   String runtimeValuesToJSON();
   String runtimeValuesToJSON(const cm::RuntimeSelection& selection);
   void fillRuntimeSnapshot(JsonObject root, const cm::RuntimeSelection& selection);

@@ -1,5 +1,6 @@
 #pragma once
 #include "RuntimeSelection.h"
+#include "RuntimeDelivery.h"
 #include <cstdint>
 
 namespace cm {
@@ -9,6 +10,7 @@ struct RuntimeClient {
   unsigned long lastSeen;
   RuntimeMode mode;
   RuntimeSelection selection;
+  std::shared_ptr<RuntimeDeliveryState> delivery = std::make_shared<RuntimeDeliveryState>();
 };
 // Callers synchronize access; callbacks and network sends use a detached snapshot.
 class RuntimeSubscriptions {
@@ -26,6 +28,13 @@ public:
   }
   void seen(uint32_t id, unsigned long now) {
     for (auto& client : clients) if (client.id == id) { client.lastSeen = now; return; }
+  }
+  // Caller holds its subscription mutex; claim once before external close/callbacks.
+  bool removeIfExpired(uint32_t id, uint32_t now, uint32_t timeout) {
+    const auto client = std::find_if(clients.begin(),clients.end(),[id](const auto& c){return c.id==id;});
+    if (client == clients.end() || uint32_t(now - uint32_t(client->lastSeen)) <= timeout) return false;
+    remove(id);
+    return true;
   }
   void remove(uint32_t id) {
     clients.erase(std::remove_if(clients.begin(),clients.end(),[id](const auto& client){return client.id==id;}),clients.end());

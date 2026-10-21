@@ -69,11 +69,14 @@ String ConfigManagerRuntime::runtimeValuesToJSON() {
 }
 
 String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection& selection) {
+  auto generation = acquireRuntimeGeneration();
   JsonDocument document;
   fillRuntimeSnapshot(document.to<JsonObject>(), selection);
+  if (document.overflowed()) return String();
   String out;
   serializeJson(document, out);
-  return out.length() ? out : "{}";
+  if (out.length() != measureJson(document)) return String();
+  return out;
 }
 
 void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::RuntimeSelection& selection) {

@@ -53,8 +53,11 @@ public:
 #endif
 
 #include "runtime/detail/RuntimeSubscriptions.h"
+#if CM_ENABLE_WS_PUSH
+#include "runtime/detail/RuntimeMessage.h"
+#endif
 
-#define CONFIGMANAGER_VERSION "4.7.0" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.7.1" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1740,7 +1743,15 @@ public:
     for (const auto& client : clients) {
       auto* connection = ws->client(client.id);
       if (!connection) wsRemove(client.id);
-      else if (now - client.lastSeen > wsHeartbeatTimeout) connection->close();
+      else {
+        bool expired;
+        {
+          std::lock_guard<std::mutex> lock(wsClientsMutex);
+          // Recheck current activity and time; a Pong may have followed the snapshot.
+          expired = wsSubscriptions.removeIfExpired(client.id, uint32_t(millis()), wsHeartbeatTimeout);
+        }
+        if (expired) connection->close(); // Callback may re-enter after the claim lock is released.
+      }
     }
     ws->cleanupClients();
   }
@@ -2923,40 +2934,67 @@ public:
       std::lock_guard<std::mutex> lock(wsClientsMutex);
       subscriptions = wsSubscriptions;
     }
-    bool hasRuntimeClient = false;
-    for (const auto& client : subscriptions.clients) {
-      if (client.mode != cm::RuntimeMode::Events) hasRuntimeClient = true;
-    }
     wsLastPush = millis();
-    if (!hasRuntimeClient) return false;
-    bool sent = false;
-    // Custom builders retain their complete opaque payload contract, once per tick.
-    if (customPayloadBuilder) {
-      const String payload = customPayloadBuilder();
-      for (const auto& client : subscriptions.clients) {
-        if (client.mode != cm::RuntimeMode::Events) sent = sendWebSocketText(ws->client(client.id), payload) || sent;
-      }
-      return sent;
-    }
-    JsonDocument snapshot;
-    runtimeManager.fillRuntimeSnapshot(snapshot.to<JsonObject>(), subscriptions.unionSelection());
-    String fullPayload;
-    for (const auto& client : subscriptions.clients) {
-      if (client.mode == cm::RuntimeMode::Events) continue;
-      auto* connection = ws->client(client.id);
-      if (!connection || connection->queueIsFull()) continue;
-      if (client.mode == cm::RuntimeMode::Legacy) {
-        if (!fullPayload.length()) serializeJson(snapshot, fullPayload);
-        sent = sendWebSocketText(connection, fullPayload) || sent;
+    // Claim before providers/builders allocate. Busy peers skip this tick entirely.
+    std::vector<cm::RuntimeDeliveryReservation> deliveries;
+    for (auto client = subscriptions.clients.begin(); client != subscriptions.clients.end();) {
+      cm::RuntimeDeliveryReservation reservation(client->delivery);
+      auto* connection = reservation ? ws->client(client->id) : nullptr;
+      if (client->mode == cm::RuntimeMode::Events || !reservation || !connection || connection->queueIsFull()) {
+        client = subscriptions.clients.erase(client);
       } else {
-        JsonDocument projected;
-        cm::filterRuntimeSnapshot(projected.to<JsonObject>(), snapshot.as<JsonObjectConst>(), client.selection);
-        JsonArray groups = projected["_runtimeGroups"].to<JsonArray>();
-        for (const auto& group : client.selection.groups) groups.add(group);
-        String payload;
-        serializeJson(projected, payload);
-        sent = sendWebSocketText(connection, payload) || sent;
+        deliveries.push_back(std::move(reservation));
+        ++client;
       }
+    }
+    if (subscriptions.clients.empty()) return false;
+    String fullPayload;
+    std::vector<String> selectedPayloads(subscriptions.clients.size());
+    const bool custom = bool(customPayloadBuilder);
+    {
+      auto generation = runtimeManager.acquireRuntimeGeneration(false);
+      if (!generation.owns_lock()) return false;
+      // Opaque custom builders still run once and may call runtime JSON recursively.
+      if (custom) {
+        fullPayload = customPayloadBuilder();
+      } else {
+        JsonDocument snapshot;
+        runtimeManager.fillRuntimeSnapshot(snapshot.to<JsonObject>(), subscriptions.unionSelection());
+        if (snapshot.overflowed()) return false;
+        const bool singleSelected = subscriptions.clients.size() == 1 && subscriptions.clients[0].mode == cm::RuntimeMode::Selected;
+        if (singleSelected) {
+          // fillRuntimeSnapshot already selects groups and retains uptime/OTA safety.
+          JsonArray groups = snapshot["_runtimeGroups"].to<JsonArray>();
+          for (const auto& group : subscriptions.clients[0].selection.groups) groups.add(group);
+          if (snapshot.overflowed()) return false;
+          serializeJson(snapshot, selectedPayloads[0]);
+          if (selectedPayloads[0].length() != measureJson(snapshot)) return false;
+        } else {
+          for (size_t i = 0; i < subscriptions.clients.size(); ++i) {
+            const auto& client = subscriptions.clients[i];
+            if (client.mode == cm::RuntimeMode::Legacy) {
+              if (!fullPayload.length()) serializeJson(snapshot, fullPayload);
+              if (fullPayload.length() != measureJson(snapshot)) return false;
+            } else {
+              JsonDocument projected;
+              cm::filterRuntimeSnapshot(projected.to<JsonObject>(), snapshot.as<JsonObjectConst>(), client.selection);
+              JsonArray groups = projected["_runtimeGroups"].to<JsonArray>();
+              for (const auto& group : client.selection.groups) groups.add(group);
+              if (projected.overflowed()) continue;
+              serializeJson(projected, selectedPayloads[i]);
+              if (selectedPayloads[i].length() != measureJson(projected)) selectedPayloads[i] = String();
+            }
+          }
+        }
+      }
+    } // JSON documents and generation lock are gone before transport allocation/callbacks.
+    bool sent = false;
+    for (size_t i = 0; i < subscriptions.clients.size(); ++i) {
+      const auto& client = subscriptions.clients[i];
+      const bool shared = custom || client.mode == cm::RuntimeMode::Legacy;
+      const String& payload = shared ? fullPayload : selectedPayloads[i];
+      sent = cm::sendRuntimeMessage(ws->client(client.id), payload, std::move(deliveries[i])) || sent;
+      if (!shared) selectedPayloads[i] = String();
     }
     return sent;
   }

@@ -3,6 +3,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
+#include <mutex>
+#include <cstdint>
 #include "runtime/detail/RuntimeSelection.h"
 #include "runtime/detail/RuntimeSnapshot.h"
 #include "runtime/detail/RuntimeSubscriptions.h"
@@ -10,7 +13,135 @@
 using cm::RuntimeSelection;
 struct Provider { std::string name; std::function<void(JsonObject&)> fill; int order = 0; };
 struct Control { std::string group; std::string key; std::function<int()> getter; };
-int main() {
+// [MOCKED!] The pinned peer close queues a control message and stays connected.
+// Only the network shell is synthetic; maintenance and subscription logic are real.
+static uint32_t heartbeatNow = 0;
+static uint32_t millis() { return heartbeatNow; }
+struct HeartbeatPeer {
+  unsigned closeCalls = 0;
+  bool connected = true;
+  std::function<void()> onClose;
+  void close() { ++closeCalls; if (onClose) onClose(); }
+};
+struct HeartbeatSocket {
+  std::map<uint32_t,HeartbeatPeer> peers;
+  std::function<void(uint32_t)> beforeLookup;
+  bool availableForWriteAll() const { return false; }
+  void textAll(const char*) {}
+  HeartbeatPeer* client(uint32_t id) {
+    if (beforeLookup) beforeLookup(id);
+    const auto found = peers.find(id);
+    return found == peers.end() ? nullptr : &found->second;
+  }
+  void cleanupClients() {}
+};
+struct HeartbeatHarness {
+  bool wsEnabled = true;
+  HeartbeatSocket socket;
+  HeartbeatSocket* ws = &socket;
+  std::mutex wsClientsMutex;
+  cm::RuntimeSubscriptions wsSubscriptions;
+  unsigned long wsLastHeartbeat = 0;
+  uint32_t wsHeartbeatInterval = 30000, wsHeartbeatTimeout = 120000;
+  void wsRemove(uint32_t id) {
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    wsSubscriptions.remove(id);
+  }
+#include "heartbeat-maintenance.inc"
+};
+static void heartbeatSingleClose() {
+  HeartbeatHarness h;
+  assert(h.wsSubscriptions.connect(1,"selected",0));
+  h.socket.peers[1] = HeartbeatPeer{};
+  heartbeatNow = 120001;
+  for (unsigned i=0; i<10000; ++i) h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[1].connected && h.socket.peers[1].closeCalls == 1);
+  assert(h.wsSubscriptions.clients.empty());
+  h.wsSubscriptions.seen(1,heartbeatNow);
+  assert(!h.wsSubscriptions.subscribe(1,"{\"type\":\"runtimeSubscribe\",\"groups\":[\"A\"]}",heartbeatNow));
+  assert(h.wsSubscriptions.clients.empty());
+}
+static void heartbeatLatePong() {
+  HeartbeatHarness h;
+  assert(h.wsSubscriptions.connect(2,"selected",1000));
+  h.socket.peers[2] = HeartbeatPeer{};
+  heartbeatNow = 121000; // Strict greater-than boundary is still healthy.
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[2].closeCalls == 0);
+  bool updated = false;
+  h.socket.beforeLookup = [&](uint32_t id) {
+    if (updated) return;
+    updated = true;
+    ++heartbeatNow; // Pong after the detached snapshot and outer clock sample.
+    std::lock_guard<std::mutex> lock(h.wsClientsMutex);
+    h.wsSubscriptions.seen(id,heartbeatNow);
+  };
+  heartbeatNow = 121001;
+  h.wsHeartbeatMaintenance();
+  assert(updated && h.socket.peers[2].closeCalls == 0);
+  assert(h.wsSubscriptions.clients.size() == 1);
+  heartbeatNow = 241002;
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[2].closeCalls == 0);
+  ++heartbeatNow;
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[2].closeCalls == 1 && h.wsSubscriptions.clients.empty());
+}
+static void heartbeatDisconnectReconnect() {
+  HeartbeatHarness h;
+  assert(h.wsSubscriptions.connect(3,"selected",0));
+  h.socket.peers[3] = HeartbeatPeer{};
+  h.wsRemove(3); h.wsRemove(3);
+  heartbeatNow = 500000;
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[3].closeCalls == 0);
+  assert(h.wsSubscriptions.connect(3,"selected",heartbeatNow));
+  heartbeatNow += 120001;
+  bool reconnected = false;
+  h.socket.beforeLookup = [&](uint32_t id) {
+    if (reconnected) return;
+    reconnected = true;
+    std::lock_guard<std::mutex> lock(h.wsClientsMutex);
+    h.wsSubscriptions.remove(id);
+    assert(h.wsSubscriptions.connect(id,"selected",heartbeatNow));
+  };
+  h.wsHeartbeatMaintenance(); // Old snapshot cannot expire a newly connected entry.
+  assert(reconnected && h.socket.peers[3].closeCalls == 0);
+  h.socket.peers[3].onClose = [&]() {
+    assert(h.wsSubscriptions.clients.empty()); // Claim precedes the external callback.
+    h.wsRemove(3); // Reentrant disconnect must run without the CM mutex held.
+  };
+  heartbeatNow += 120001;
+  h.wsHeartbeatMaintenance();
+  h.wsRemove(3);
+  assert(h.socket.peers[3].closeCalls == 1 && h.wsSubscriptions.clients.empty());
+  assert(h.wsSubscriptions.connect(4,"none",heartbeatNow));
+  h.socket.peers[4] = HeartbeatPeer{};
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[4].closeCalls == 0);
+}
+static void heartbeatRollover() {
+  HeartbeatHarness h;
+  const uint32_t start = 0xffffff00u;
+  assert(h.wsSubscriptions.connect(5,"none",start));
+  h.socket.peers[5] = HeartbeatPeer{};
+  heartbeatNow = uint32_t(start + 120000u);
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[5].closeCalls == 0);
+  ++heartbeatNow;
+  h.wsHeartbeatMaintenance();
+  assert(h.socket.peers[5].closeCalls == 1 && h.wsSubscriptions.clients.empty());
+}
+int main(int argc, char** argv) {
+  if (argc>1) {
+    const std::string scenario = argv[1];
+    if (scenario=="heartbeat-single") heartbeatSingleClose();
+    else if (scenario=="heartbeat-pong") heartbeatLatePong();
+    else return 2;
+    std::cout << scenario << " passed\n";
+    return 0;
+  }
+
   RuntimeSelection selected;
   assert(!selected.all && !selected.contains("A"));
   assert(cm::parseRuntimeSelection("[\"A\",\"A\",\"controls\",\"alarms\"]", selected));
@@ -87,5 +218,6 @@ int main() {
   assert(two["system"]["otaHasPassword"]==true);
   std::cout << "full_bytes=" << measureJson(all) << " selected_bytes=" << measureJson(small) << " empty_bytes=" << measureJson(none) << '\n';
   assert(measureJson(small)<measureJson(all));
-  std::cout << "Runtime selection/provider tests passed\n";
+  heartbeatSingleClose(); heartbeatLatePong(); heartbeatDisconnectReconnect(); heartbeatRollover();
+  std::cout << "Runtime selection/provider and4 heartbeat lifecycle scenarios passed\n";
 }

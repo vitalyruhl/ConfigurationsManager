@@ -2,6 +2,43 @@
 
 This changelog is a curated overview.
 
+## 4.7.1 - Unreleased
+
+- Serialize CM runtime JSON generation across HTTP and WebSocket builds. HTTP
+  waits only for provider/JSON construction; main-loop WebSocket ticks skip a
+  busy generator. Recursive custom-builder runtime calls remain supported. Free
+  generation documents and unlock before transport handoff; avoid the projected
+  document for one selected client when its snapshot already has that selection.
+  This bounds a proven allocation overlap, with device acceptance still pending.
+
+- Bound CM runtime WebSocket delivery to one outstanding message per client.
+  Atomically reserve before snapshot/custom-builder work and skip saturated ticks;
+  release only after transport message destruction has freed its copied payload.
+  Preserve selected groups, legacy/custom payloads and independent healthy peers;
+  general text/event APIs remain unchanged. Device concurrency acceptance remains
+  required; this does not assign the cause of missing TCP acknowledgements.
+
+- Return runtime JSON by move/elision instead of a conditional expression that
+  copied the complete String while its JSON document and original output were
+  still alive. Reject overflowed documents or incomplete serialization and return
+  HTTP 503 for an empty runtime provider result rather than HTTP 200 with no body.
+  This removes a proven transient allocation mechanism; aggregate concurrent
+  HTTP/WebSocket memory and device acceptance remain to be measured.
+
+- Claim expired WebSocket subscriptions once before requesting close, preventing
+  repeated heartbeat maintenance from queuing unlimited close controls for a
+  stalled peer. Recheck current activity under the subscription mutex so a late
+  Pong can keep the client active; release the mutex before external callbacks.
+  Existing timeout thresholds and reconnect behavior remain intact.
+
+- Let bounded HTTP responses admit up to two negotiated TCP segments (at most
+  2920 bytes; keep the 512-byte fallback when MSS is zero) and configure a
+  15-second ACK budget. Reduce repeated
+  acknowledgement waits on large UI responses while keeping accepted-byte
+  accounting and response ownership. Timeout enforcement retains the upstream
+  eligibility condition: same-tick TX/ACK timestamps can suppress that callback.
+  Hardware delivery acceptance and the cause of missing ACKs remain open.
+
 ## 4.7.0 - Unreleased
 
 - Separate BLE peer configuration from outgoing IO slots and add the consumer

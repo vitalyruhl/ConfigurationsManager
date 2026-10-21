@@ -1165,6 +1165,10 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
     if (runtimeJsonProvider || (selected && selectedRuntimeJsonProvider)) {
       // A standalone legacy callback has no selective interface and retains full semantics.
       String json = selected && selectedRuntimeJsonProvider ? selectedRuntimeJsonProvider(selection) : runtimeJsonProvider();
+      if (!json.length()) {
+        request->send(503, "application/json", "{\"error\":\"runtime_unavailable\"}");
+        return;
+      }
       AsyncWebServerResponse* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
       if (!response) {
         request->send(503, "application/json", "{\"error\":\"runtime_unavailable\"}");

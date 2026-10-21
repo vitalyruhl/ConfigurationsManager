@@ -36,6 +36,11 @@ public:
       if (request && request->client()) request->client()->close();
       return;
     }
+    // Bound each response to two negotiated segments and tolerate measured ACK stalls.
+    // This HTTP-only budget does not change MQTT, source freshness or OTA timers.
+    request->client()->setAckTimeout(15000);
+    const size_t mss = request->client()->getMss();
+    maxInFlight_ = mss ? 2 * std::min<size_t>(mss, 1460) : 512;
     header_ = _assembleHead(request->version());
     if (!header_.length()) {
       _state = RESPONSE_FAILED;
@@ -62,7 +67,7 @@ public:
   }
 
 private:
-  static constexpr size_t maxInFlight = 512;
+  size_t maxInFlight_ = 512;
   const uint8_t* content_ = nullptr;
   String owned_;
   std::shared_ptr<const String> shared_;
@@ -85,8 +90,8 @@ private:
     }
     if (_state != RESPONSE_HEADERS && _state != RESPONSE_CONTENT) return 0;
     const size_t outstanding = _writtenLength - _ackedLength;
-    if (outstanding >= maxInFlight) return 0;
-    const size_t allowance = std::min(client->space(), maxInFlight - outstanding);
+    if (outstanding >= maxInFlight_) return 0;
+    const size_t allowance = std::min(client->space(), maxInFlight_ - outstanding);
     if (!allowance) return 0;
     const bool sendingHeader = _state == RESPONSE_HEADERS;
     const size_t remaining = sendingHeader ? header_.length() - headerOffset_ : _contentLength - _sentLength;

@@ -15,18 +15,25 @@ enum WebResponseState { RESPONSE_SETUP, RESPONSE_HEADERS, RESPONSE_CONTENT, RESP
 class AsyncClient {
 public:
   size_t available = 16384, outstanding = 0, maximumOutstanding = 0, maximumOffer = 0, sends = 0;
+  uint16_t mss = 512;
+  size_t transmitted = 0, acknowledged = 0, timeoutEvents = 0;
+  uint32_t nowMs = 1, lastTxMs = 0, lastAckMs = 0, ackTimeoutMs = 5000;
+  std::function<void()> onTimeout;
   std::deque<size_t> acceptLimits;
   std::deque<bool> flushResults;
-  std::string accepted;
+  std::string accepted, received;
   std::vector<const char*> offeredPointers;
   bool closed = false;
   std::function<void()> onClose;
-  size_t space() const { return available; }
+  uint16_t getMss() const { return mss; }
+  void setAckTimeout(uint32_t timeout) { ackTimeoutMs = timeout; }
+  bool canSend() const { return space() > 0; }
+  size_t space() const { return closed || outstanding >= available ? 0 : available - outstanding; }
   size_t add(const char* data, size_t length, uint8_t flags) {
     assert(flags == ASYNC_WRITE_FLAG_COPY);
     maximumOffer = std::max(maximumOffer, length);
     offeredPointers.push_back(data);
-    size_t count = std::min(length, available);
+    size_t count = std::min(length, space());
     if (!acceptLimits.empty()) { count = std::min(count, acceptLimits.front()); acceptLimits.pop_front(); }
     accepted.append(data, count);
     outstanding += count;
@@ -35,15 +42,43 @@ public:
   }
   bool send() {
     ++sends;
-    if (flushResults.empty()) return true;
-    bool result = flushResults.front(); flushResults.pop_front(); return result;
+    bool result = true;
+    if (!flushResults.empty()) { result = flushResults.front(); flushResults.pop_front(); }
+    if (result) { transmitted = accepted.size(); lastTxMs = nowMs; }
+    return result;
   }
-  void close() { closed = true; if (onClose) onClose(); }
+  // Peer delivery and ACK feedback are independent events: payload can arrive
+  // completely while its ACK is delayed or absent, as in the device trace.
+  void receiveTransmitted() {
+    received.append(accepted.data() + received.size(), transmitted - received.size());
+  }
+  // Only bytes handed to a successful output operation can generate TCP ACKs.
+  size_t acknowledge(size_t length) {
+    if (closed) return 0;
+    receiveTransmitted();
+    const size_t count = std::min(length, transmitted - acknowledged);
+    acknowledged += count; outstanding -= count;
+    if (count) lastAckMs = nowMs;
+    return count;
+  }
+  void advance(uint32_t elapsed) {
+    nowMs += elapsed;
+    // Mirror the pinned AsyncTCP poll condition; its HTTP timeout callback closes.
+    const uint32_t oneDay = 86400000;
+    if (!closed && ackTimeoutMs && (lastAckMs - lastTxMs + oneDay) < oneDay
+        && uint32_t(nowMs - lastTxMs) >= ackTimeoutMs) {
+      ++timeoutEvents;
+      if (onTimeout) onTimeout();
+    }
+  }
+  void close() { if (closed) return; closed = true; if (onClose) onClose(); }
 };
 class AsyncWebServerRequest {
   AsyncClient* client_;
 public:
-  explicit AsyncWebServerRequest(AsyncClient* client) : client_(client) {}
+  explicit AsyncWebServerRequest(AsyncClient* client) : client_(client) {
+    client_->onTimeout = [client]() { client->close(); };
+  }
   AsyncClient* client() { return client_; }
   uint8_t version() const { return 1; }
 };

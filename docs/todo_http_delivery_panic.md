@@ -210,3 +210,328 @@ was verified separately (all app values unchanged; only SDK WiFi cache changed).
 Full separate SBT plan/evidence pointers:
 `C:/Daten/_Codding/ESP32/SolarBatteryTelemetry/docs/plans/2026-10-18-compact-runtime-metadata.md`.
 Owner performs the next behavior test. Keep this issue open.
+
+### Bounded HTTP transport follow-up (2026-10-20, CM 4.7.1 Unreleased)
+
+A private SBT 1.2.0 probe reproduced an active `/runtime.json` response closed by
+AsyncTCP's ACK timeout after 5025 ms. Of 2946 declared body bytes, 1536 were admitted;
+1024 body bytes were acknowledged and the next 512-byte block remained pending.
+TCP still had 5248 bytes of send space; no output/flush failure was logged. Sampled
+free heap remained 26124-26840 bytes with an 18420-byte largest block and WiFi
+status 3. This establishes the observed timeout/close path, not why the ACK was
+missing. It does not directly assign the earlier EOF events or explain prior
+ESP panics. Five separate RX timeouts had no request/response and were idle
+connections. The same probe delivered a 61598-byte UI file in 122 admissions,
+requiring 8.25-22.40 seconds; the repeated 512-byte ACK waits amplify transport
+latency.
+
+The initial CM 4.7.1 candidate configured only BoundedResponse HTTP clients with
+a finite 15000 ms ACK budget and one public negotiated MSS as the admission cap,
+limited to 1460 bytes and falling back to 512 when MSS is zero. For the measured
+1436-byte MSS this allowed up to 924 additional TCP payload bytes per active
+response versus the earlier 512-byte sender, adding one size_t to the object. It changes no MQTT, source
+freshness, MOS, OTA flow, dependency or WebUI retry policy. Existing successful
+admission accounting and final-ACK ownership remain intact. No NODELAY change is
+needed; the pinned server already enables it.
+
+This is not a universal 15-second cleanup guarantee. Pinned AsyncTCP evaluates
+its ACK timeout only when the last TX timestamp is strictly later than the last
+ACK timestamp. An ACK and the following send within the same millisecond do not
+satisfy that condition. The host fixture explicitly models one millisecond
+between ACK processing and the next send; its expiry assertions cover that
+eligible path. This pre-existing upstream condition is unchanged by CM 4.7.1.
+
+The focused production-header host regression now models transmitted bytes
+separately from accepted bytes and gates polls by send space. Its expiry case
+models the upstream ACK-timeout eligibility condition. It covers 1436-byte MSS
+delivery, 0/256/9000-byte MSS fallback and bounds, a 9-second delayed ACK, partial ACKs, no-ACK polling/15000 ms expiry,
+failed flush duplicate safety and the existing six ownership scenarios. The
+61598-byte fixture needs 44 successful output operations with full-segment ACKs,
+versus 122 at 512 bytes. RED was observed against the former sender; all focused
+scenarios pass with the correction.
+
+All four SBT/SIL consumer builds passed for that initial one-segment candidate.
+The follow-up below supersedes its window size; device acceptance remains open.
+Do not mark the original crash or HTTP-delivery finding resolved before owner
+confirmation. Packet loss, client behavior and TCP/event scheduling remain
+unassigned hypotheses; increasing this budget does not establish their cause.
+
+
+### Two-segment candidate follow-up (2026-10-21, CM 4.7.1 Unreleased)
+
+On the stable-power COM8 SIL probe, two runtime responses still closed on actual
+ACK timeouts after 15007/15109 ms. The client received exactly the admitted body
+prefixes: 2505 of 2803 bytes and 1436 of 2802 bytes. The server retained 4324 bytes
+of TCP send space, with no output failure and eligible TX/ACK timestamps, but its
+one-segment cap prevented the remaining body from being admitted. The receiver's
+ACK absence is unassigned; packet loss, client behavior and event scheduling are
+not proved causes. Increasing the ACK budget further is not this candidate.
+
+The refined unpublished CM 4.7.1 candidate clamps nonzero MSS to 1460 bytes, then
+allows twice that amount outstanding (maximum 2920 bytes). Zero MSS keeps the
+legacy 512-byte window. The 15000 ms ACK budget, timestamp eligibility condition,
+COPY admission, flush retry/accounting and final-ACK ownership are unchanged.
+No third-party, Nagle, power-saving, zero-copy or source/control timer change is
+included. At the measured MSS 1436, each response can queue up to 1436 additional
+payload bytes versus the one-segment candidate (at most 1460 on other links),
+plus TCP/pbuf overhead. There is no additional response-object field. Concurrent
+responses multiply this cost; SBT's roughly 10 KB observed minimum heap requires
+fresh device validation rather than an assumed safe margin.
+
+Two new regressions first failed with the one-segment sender: a delayed first
+ACK prevented second-segment peer delivery, and a 2803-byte body remained
+incomplete at the peer despite its header already being acknowledged. The new
+fixture separates peer byte delivery from ACK feedback. With two segments, the
+peer receives the complete 2803-byte body before its body ACK, while the sender
+retains ownership until that ACK arrives. Partial ACKs replenish only the freed
+window; repeated polls without ACK progress remain bounded. The six previous
+ownership cases and five earlier MSS/timeout/flush cases remain covered with the
+updated limits. All 13 focused scenarios pass; the new pipelining/peer-completion
+cases and low/high MSS bounds were observed RED before the product change.
+
+This mitigates a measured application-level ACK dependency. It does not fix or
+explain the missing ACK, guarantee arbitrary response completion, or establish
+crash/overnight stability. Parent-independent host review, all four rebuilt
+consumer artifacts and low-heap SBT/SIL device acceptance are separate gates.
+
+
+### Matched panic and heartbeat-close candidate (2026-10-21)
+
+The SBT two-MSS test failed under stable COM8 power with allocation failures and
+HTTP timeouts. A subsequent observation began after a new boot; it is not valid
+cooldown/heap-recovery evidence. The retained core has matching CRC32 8EE39DE8
+and application ELF digest prefix 958042be00309985 (full ELF SHA256
+`958042BE00309985341C0881B428B39D51FB6BDE3DD458A728018CC0CCE1A7D3`).
+Installed Xtensa GDB decoded 15 captured tasks. Core 0 task `esp_timer` panicked
+at the conditional abort call 0x40084ec5 in newlib `lock_init_generic`, after
+`xQueueCreateMutex` returned zero while WiFi timer error logging needed a UART
+recursive mutex. Concurrent `loopTask` was inside failed 8-byte `operator new`
+from `AsyncWebSocketClient::_queueControl`, reached through WebSocket close and
+`ConfigManagerClass::handleWebsocketPush`. The private matching decode report is
+retained with the core; application/library LTO line labels were not trusted
+without checking symbols and actual source. The WebSocket object is outside
+captured memory, so its queue length and the entire retained-heap composition
+cannot be measured from this dump.
+
+Source inspection matches a specific CM defect: heartbeat maintenance requested
+close on every application-loop call after a client's 120000 ms deadline. Pinned
+ESPAsyncWebServer close appends an uncapped control message while leaving its
+status CONNECTED; a stalled peer can therefore accumulate repeated close
+controls. This path appears in the simultaneous failing-allocation stack. It is
+not proof that all memory loss came from those controls or that TCP/ACK behavior
+was otherwise correct.
+
+The unpublished 4.7.1 heartbeat candidate now rechecks the current client's
+lastSeen under `wsClientsMutex` and atomically removes an expired subscription
+before requesting external close. It samples the current 32-bit clock inside the
+same lock, so a Pong received after the detached snapshot is not misclassified.
+Close runs after unlocking, permitting a reentrant disconnect callback. Removed
+IDs cannot be revived by seen/subscribe; disconnect remains idempotent and an
+explicit new connection can register again. Strict `elapsed > 120000` expiry and
+uint32 rollover behavior are retained. There is no new closing state, queue
+budget, third-party edit, abort policy or changed heartbeat timeout.
+
+The existing runtime host runner extracts the actual production maintenance
+method into a synthetic network shell and uses the real subscription helper.
+Behavioral RED showed repeated close against a stalled CONNECTED peer and a late
+Pong ignored by the snapshot-based check. GREEN covers exactly one close across
+10000 maintenance passes, removed-ID seen/subscribe rejection, healthy/deadline
+and late-Pong behavior, disconnect/reconnect with a stale snapshot, a reentrant
+disconnect callback and rollover boundaries, alongside the existing runtime
+selection/provider tests. The separate 13 HTTP sender cases were unchanged and
+were not repeated for this heartbeat-only change.
+
+Parent-independent review, rebuilt consumer images and fresh low-heap device
+acceptance follow. Keep the HTTP/ACK cause, overall heap-retention attribution
+and historical overnight-reset acceptance open; this bounded source correction
+is not a complete panic-resolution claim.
+
+
+### Runtime return-copy allocation failure (2026-10-21)
+
+The subsequent SBT heartbeat candidate stayed on the same boot and recovered
+its free heap after a concurrent root/runtime request pair, but one runtime
+response returned HTTP 200 with Content-Length 0 in 0.279 seconds. The parallel
+periodic runtime response contained 2944 bytes; subsequent pairs returned
+2944/2945 bytes. At uptime about 94 seconds the diagnostic recorded one failed
+`heap_caps_realloc` of 2960 bytes with free heap 2848 and largest block 1908.
+The minimum reached 2728; later samples returned to about 33504 free and 28660
+largest. This is a transient failure, not evidence of another reset or a measured
+breakdown of every concurrent allocation.
+
+`runtimeValuesToJSON()` returned `out.length() ? out : "{}"`. The conditional
+expression copied the String while its JsonDocument and original output remained
+alive. The pinned ESP32 String copy reserves `(length + 16) & ~0xf` bytes:
+2944 becomes exactly 2960. A failed copy invalidates the returned temporary,
+explaining how the nonempty branch could still produce an empty HTTP body.
+ArduinoJson's String writer clears its destination on construction, so reserving
+before `serializeJson` does not prevent this copy or reserve its final output.
+
+The unpublished candidate now returns the local String directly by move/elision,
+rejects document overflow and an output length different from `measureJson`, and
+sends HTTP 503 for an empty runtime provider result. The focused host runner
+extracts the actual serialization and route bodies. A counted String shell with
+copy allocation failure reproduces the old empty return, while the new return
+preserves all 2944 bytes with no copy even with optional elision disabled. Tests
+also cover document overflow, partial/empty writer output and explicit empty
+provider 503 versus valid provider 200. The shell does not model every target
+allocator or concurrent provider; no WebSocket queue policy, TCP window, timeout
+or heartbeat change is included in this follow-up. Consumer builds and another
+bounded hardware gate are required before a device acceptance claim.
+
+
+### Runtime-only WebSocket backpressure candidate (2026-10-21)
+
+After the runtime return-copy correction, all six concurrent HTTP requests
+completed, but the SBT final2 run recorded two failed 2308-byte
+`heap_caps_malloc` allocations: free heap 5752, largest block 1524. A selected
+Connectivity runtime payload was about 2307 bytes, matching the pinned
+`AsyncWebSocketBasicMessage` payload allocation of `length + 1`. Heap later
+recovered to about 33 KiB on the same boot, with minimum 1968. This size match was a hypothesis only, not an identified producer. Runtime
+backpressure is independently bounded by its documented contract, but this
+observation did not identify the failing caller or prove a new panic. See the
+private probe below for a later2308-byte WiFi allocation stack. The earlier return-copy and one-shot heartbeat
+corrections remain in place; their historical failed gates remain evidence.
+
+The pinned public `AsyncWebSocketClient::message()` owns its message argument,
+deletes it on rejection, and destroys queued messages on release/disconnect.
+`AsyncWebSocketMessage` has a virtual destructor. CM now wraps its own runtime
+messages around a private `AsyncWebSocketBasicMessage`, delegates its public
+transport virtuals, and frees the inner copied payload before releasing a shared
+atomic reservation. The reservation is independent of subscription-vector
+addresses and survives detached copies/disconnect. A new connection receives its
+own state. No upstream field or MessageBuffer reference count is inspected.
+
+Each runtime client can have at most one reserved build or outstanding CM runtime
+message. Claims occur before snapshot/provider/custom-builder work, so saturated
+clients skip the current tick and receive a fresh snapshot after release instead
+of accumulating old values. Only eligible clients contribute selected groups to
+the current snapshot. Healthy clients proceed independently. The custom builder
+keeps its opaque complete-payload contract and runs once when any eligible client
+exists. General WebSocket text, events and heartbeat paths are unchanged.
+
+The limit adds one shared atomic state per connected subscription and one small
+wrapper per outstanding runtime message, while preventing up to 32 copied runtime
+payloads per stalled peer. It is a count/lifetime limit, not a global byte budget;
+multiple clients, snapshot documents, HTTP output and TCP buffers can still overlap.
+No universal low-memory or network-delivery guarantee is claimed.
+
+The focused host runner extracts the actual `pushRuntimeSnapshot` body. Its old
+behavior failed the 10000-stalled-tick assertion before product changes. The new
+body keeps one build/message until release, then emits a fresh snapshot. Tests
+cover selected/legacy/custom/event modes, late ACK versus actual destruction,
+payload-free-before-token-release, queue rejection/payload failure/missing client,
+detached lifetime, reconnect, reentrant build, two-thread atomic contention, and
+independent slow/healthy selections. Transport allocation is explicitly mocked;
+consumer builds and the separately recorded final3 hardware gate remain pending.
+
+
+### Runtime generation lifetime candidate (2026-10-21)
+
+The final3 SBT gate still failed: two concurrent HTTP requests timed out and one
+completed response took about 23.15 seconds. During uptime 111-113 seconds the
+trace recorded failed 1622-byte allocations (`caps=0x80c`) and 2308-byte
+allocations (`caps=0x1800`), whose callers were not captured in that run, with largest contiguous block 1524 despite
+about 7 KiB free. Heap later recovered to about 33 KiB on the same boot and the
+minimum was 5416. The 1622-byte allocation's caller is not established by its
+capability flags alone. The per-client queue bound remains valid, while this
+failed gate shows it did not by itself provide sufficient contiguous memory.
+
+The WS generation path still kept its union JsonDocument and selected projected
+JsonDocument alive when `message()` copied the serialized String into the SDK
+message. Concurrent HTTP runtime generation could additionally hold another
+JsonDocument/output. The final4 candidate addresses these specific lifetimes:
+
+- RuntimeManager has one recursive generation mutex. HTTP runtime JSON waits for
+  the provider/document/serialization scope; the main-loop WS path tries once and
+  skips a busy tick. The subscription mutex is released before this acquisition.
+  Registry callbacks retain their existing short inner mutex scope. The generation
+  lock never extends across CM's transport handoff, ACK or network callbacks.
+- WS output Strings outlive an inner generation scope; all JSON documents are
+  destroyed before that scope releases the guard and before `message()` is called.
+  Each selected output String is freed immediately after its handoff. Legacy and
+  opaque custom payloads share one original String across their eligible peers.
+  Recursive custom-builder calls into runtime JSON remain supported.
+- Exactly one eligible selected client serializes its already-selected snapshot
+  directly, avoiding a projected document. `fillRuntimeSnapshot` writes selected
+  provider/control/alarm groups, uptime and the two OTA safety fields; this is
+  the same output selection as the previous filter. Multiple eligible clients
+  retain one union snapshot and individual projections, not per-client provider
+  regeneration. Events and general text remain unchanged.
+
+The new lifetime assertion first failed against the previous extracted production
+push method because a JsonDocument was alive at the SDK boundary. Focused tests
+now exercise the actual generation acquisition, HTTP serializer and WS push body:
+HTTP-held generation makes WS skip; WS-held generation makes HTTP wait then
+complete; recursive custom JSON succeeds; JSON documents are gone and the guard
+is available before SDK handoff. A tracked document wraps the real host
+ArduinoJson document, and thread-local lifetime checks distinguish each build
+from an independently resumed HTTP task. Direct selected JSON equals the prior
+filter for empty, A, system and A+B selections, including uptime, both OTA fields,
+nested data/nulls and nested names that resemble other groups. The earlier
+backpressure, copy-failure and heartbeat regressions remain green.
+
+This does not impose a heap threshold, assign the missing-ACK cause or establish
+all allocation ownership. Completed response Strings, queued message payloads,
+multiple clients and TCP/WiFi allocations can still coexist. Consumer builds and
+the separately preserved final4 device gate remain required; final3 is retained
+as a failed acceptance stage.
+
+
+### Final4 overload result and remaining transport work (2026-10-21)
+
+The added three concurrent root/runtime GET pairs also failed with final4: one
+root request timed out after 12.846 seconds and the periodic recorder reported
+two 8-second timeouts. First, a 2308-byte allocation failed with 12788 free but
+largest block 2292; later 1460-byte allocations failed with about 6700 free and
+largest block 1076. The sampled failure counter reached 4480 (85 printed failure
+lines are sampling, not the total). Later same-boot health recovered to 28136
+free/largest 21492, with minimum 4080. This demonstrates inadequate contiguous
+memory under that added load; the generation and queue corrections did not clear
+it. Preserve the matching final4 artifacts and failed trace. Do not describe the
+candidate as production-cleared or the overload as solved.
+
+The owner authorized CM fixes for evidenced faults. Product source is currently frozen while missing allocation-caller and transport evidence is collected; no further speculative fix is being applied. The separately
+named `*-cm471-final4-normal-ui` gates exercise the original Live/all Settings,
+three reloads, five-second observer and at least 300-second follow-up, without
+the additional parallel GET pairs. Record those normal UI results independently;
+a pass cannot erase the failed overload cohorts.
+
+Remaining work belongs to this existing investigation, not a second active plan:
+
+- Obtain the actual allocation caller/task and correlate live HTTP requests,
+  response-owned Strings/documents, WebSocket payloads, accepted/unacknowledged
+  bytes and connection cleanup. Allocation sizes alone do not prove the 1460-byte
+  caller or missing-ACK cause. Track simultaneous counts and lifetimes, not only
+  periodic free-heap samples.
+- Design admission before expensive generation/payload allocation across HTTP
+  and runtime WebSocket work, with an explicit packet receive/control headroom
+  contract. Choose limits from measured resource costs and required ordinary
+  UI concurrency, not an invented free-heap threshold. Extra load may receive
+  documented recoverable rejection/backoff; runtime values and control must
+  continue progressing.
+- Include resources retained after application-response destruction. The pinned
+  `close(bool)` ignores its argument and uses graceful `tcp_close`; response
+  destruction alone does not prove unacknowledged TCP buffers were freed.
+  Public `abort()` has a different asynchronous error/discard path. Its synchronous
+  TCP/IP call and blocking AsyncTCP error-event enqueue require lifecycle/queue
+  analysis before any abort policy; do not substitute `close(true)` or release
+  admission credits on an unproven kernel-resource lifetime boundary.
+- Accept an eventual transport change only with bounded normal and excess-load
+  cohorts, including slow/unacknowledged/cancelled peers and reconnect. Require
+  complete valid successful responses or explicit recoverable rejection, zero
+  allocator failures/reset/panic, continued MQTT/source/control progress and
+  recovery without a reboot after load stops. Re-run the previously failed
+  concurrency cohort; increasing client deadlines or dropping that cohort cannot
+  establish overload recovery.
+
+
+### Private allocation probe: measured WiFi/TCP callers and distinct AsyncTCP panic (2026-10-21)
+
+A private SBT final4 source/profile copy added fixed bounded allocation-stack records without changing normal SBT/CM source. Its additional1168B RAM/1576B flash is diagnostic overhead; matching ELF SHA256 `F97B16FDA7D7FC197F9E52A2F06CB5DE72D0410F6E4B307E66BFD3B1CA089C36`. Independent source review and build passed. The normal UI cohort had78 complete responses/zero failures over387.172s, including305.029s after UI stress. This does not replace the failed final4 normal-UI gate.
+
+A separate six-extra-GET cohort produced five timeouts, one connection reset, allocation failures and a new StoreProhibited panic. Five intact depth-limited records identify2308B as `wifi_malloc -> esf_buf_alloc_dynamic -> esf_buf_alloc`;1622B as WiFi `ieee80211_output_process`;1536B as lwIP `pbuf_alloc -> tcp_pbuf_prealloc / tcp_write`. No intact1460B caller was captured. Four corrupted/interleaved UART records were excluded. The earlier2307+1 WebSocket size match must not be presented as an identified allocation source; this2308B event is specifically WiFi. These records do not retroactively assign all older same-size events or identify the upper transport caller beyond the captured frames.
+
+The matched core (raw SHA256 `AA1CC8543708F51D3F6B53EC4F20731EE975E2E238DAB30597EFF7B5237F89B3`, CRC32 `C57516F0`) independently proves AsyncTCP `_tcp_poll` immediately stores through null after `malloc(36)` fails. Its event allocation has no null guard in pinned AsyncTCP2.1.4. This is an immediate third-party failure path under extreme pressure, separate from the preceding retention/delivery cause; it is not a stack-walker fault. A null guard alone would not establish adequate receive/control headroom or successful overload recovery. No third-party or product patch was applied from this diagnostic.
+
+The private probe was removed and the exact prior final4 diagnostic image restored on COM8 after target/partition/OTA/hash verification. Controls remain disabled and MQTT root isolated. Full source/resource lifetime accounting, packet ACK evidence and repeatable normal/overload recovery remain required before claiming a complete repair. The owner has authorized the bounded packet capture, but cannot physically confirm Windows UAC while away; no capture has started.
