@@ -44,9 +44,7 @@ void setup() {
   ConfigManager.loadAll();
    ConfigManager.startWebServer();
  
-   // Optional: reboot if WiFi stays down too long.
-   // Note: ConfigManager.startWebServer() already passes WiFiRb into WiFiManager.begin().
-   ConfigManager.getWiFiManager().setAutoRebootTimeout((unsigned long)wifiSettings.rebootTimeoutMin.get());
+   // startWebServer() applies the registered WiFi recovery settings.
  }
 
 void onWiFiConnected() {
@@ -76,7 +74,8 @@ If you use `cm::CoreSettings` (see src/core/CoreSettings.h), the following setti
 | `WiFiSubnet` | Subnet Mask | string | Subnet mask |
 | `WiFiDNS1` | Primary DNS | string | Optional DNS1 |
 | `WiFiDNS2` | Secondary DNS | string | Optional DNS2 |
-| `WiFiRb` | Reboot if WiFi lost (min) | int | Auto reboot timeout in minutes |
+| `WiFiProbe` | Connectivity check target | string | `off` (default), `gateway`, or strict unicast IPv4 |
+| `WiFiRb` | Reboot if WiFi lost (min) | int | Whole minutes 0..9999; default 1; 0 disables network restarts |
 
 Related system settings (category `System`):
 
@@ -219,6 +218,33 @@ Important notes:
 
 - Avoid tight reconnect loops.
 - Prefer backoff / cooldown logic if your environment has unstable WiFi.
+
+## Connectivity checks and independent loop recovery
+
+With `WiFiProbe=off`, WiFi-loss recovery stays active. An enabled target also
+requires matching ICMP replies every ten seconds, with a one-second deadline;
+`gateway` follows the currently active DHCP/static gateway. A connected radio
+alone does not keep an unreachable target healthy. AP mode and OTA suspend
+network-triggered restarts and grant a fresh recovery window afterward.
+
+`WiFiRb` is still stored in minutes: 60/120 provide one/two hours. Its one-minute
+default applies to new/reset values; saved values are preserved. Apply changes
+RAM, Save changes NVS, and reset/load synchronize the loop-owned recovery state.
+Syntax validation does not prove reachability: test with Apply before Save. An
+unreachable saved target can cause repeated recovery restarts; retain USB/AP
+access to restore `off` or a correct target.
+
+For temporary application overrides, `setConnectivityCheckTarget(target)` and
+`setWiFiAutoRebootTimeout(minutes)` validate and queue updates for the servicing
+loop; they do not save settings. Continue calling `handleClient()`.
+
+A separate supervisor starts with the first `handleClient()` call and defaults
+to 30 seconds. `setLoopWatchdogTimeout(ms)` returns false for unsupported values;
+use 0 to disable or 1000..3600000 ms to configure it. It does not install a global
+task watchdog and still requires the scheduler/ESP timer task to run. Synchronous
+ArduinoOTA progress can confirm loop work; asynchronous HTTP traffic cannot.
+See [bounded device acceptance](acceptance/2026-10-21-connectivity-watchdog.md)
+for the tested source/image identities and limits.
 
 ## Smart WiFi Roaming
 

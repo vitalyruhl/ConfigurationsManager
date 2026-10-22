@@ -1,4 +1,8 @@
+#include <algorithm>
 #include "ConfigManager.h"
+#include "web/JsonOutput.h"
+#include "runtime/detail/LiveLayoutJson.h"
+#include "runtime/detail/LivePageSelection.h"
 
 namespace {
 String resolveLayoutLabel(const char* provided, const String& fallback) {
@@ -271,10 +275,15 @@ void ConfigManagerClass::addToLiveGroup(const char* itemId, const char* pageName
 }
 
 void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
+  registerLivePlacement(cm::RuntimeMetaView(meta));
+}
+
+void ConfigManagerClass::registerLivePlacement(const cm::RuntimeMetaView& meta) {
   if (meta.key.isEmpty()) {
     return;
   }
 
+  const String identitySource = meta.sourceGroup.length() ? meta.sourceGroup : meta.group;
   String pageName = meta.page;
   String cardName = meta.card;
   String groupName = meta.group;
@@ -299,7 +308,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
     for (auto& placement : livePlacements) {
       // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
       // cppcheck-suppress useStlAlgorithm
-      if (placement.id == meta.key) {
+      if (cm::sameLiveField(placement, meta.key.c_str(), identitySource.c_str())) {
         placement.page = resolvedPage;
         placement.card = resolvedCard;
         placement.group = resolvedGroup;
@@ -307,7 +316,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
         return;
       }
     }
-    livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order});
+    livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order, identitySource});
     return;
   }
 
@@ -366,7 +375,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
   for (auto& placement : livePlacements) {
     // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
     // cppcheck-suppress useStlAlgorithm
-    if (placement.id == meta.key) {
+    if (cm::sameLiveField(placement, meta.key.c_str(), identitySource.c_str())) {
       placement.page = resolvedPage;
       placement.card = resolvedCard;
       placement.group = resolvedGroup;
@@ -375,7 +384,7 @@ void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
     }
   }
 
-  livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order});
+  livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order, identitySource});
 }
 
 // Cppcheck rationale: Retain the established runtime-group terminology in this API.
@@ -495,120 +504,69 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
   livePlacements.push_back({key, resolvedPage, resolvedCard, resolvedLayoutGroup, order});
 }
 
-String ConfigManagerClass::buildLiveLayoutJSON() const {
-  DynamicJsonDocument doc(16384);
-  JsonObject root = doc.to<JsonObject>();
-  JsonArray pagesArray = root.createNestedArray("pages");
-  if (!liveLayoutEnabled) {
-    JsonObject placementsObj = root.createNestedObject("placements");
-    for (const auto& placement : livePlacements) {
-      JsonObject placementObj = placementsObj.createNestedObject(placement.id);
-      placementObj["page"] = placement.page;
-      placementObj["card"] = placement.card;
-      placementObj["group"] = placement.group;
-      placementObj["order"] = placement.order;
-    }
-    root["defaultPage"] = String();
+bool ConfigManagerClass::supportsLivePageSelection() const {
+  if (!liveLayoutEnabled)
+    return false;
+  return std::all_of(livePages.begin(), livePages.end(), [this](const auto& page) {
+    const String key = normalizeLayoutName(page.name);
+    return key.length() && key.length() <= 256 && key != "__unassigned__";
+  });
+}
 
-    String output;
-    serializeJson(doc, output);
-    return output;
+String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const String& sourceGroup) const {
+  const UiPlacement* selected = cm::findLivePlacement(livePlacements, fieldKey.c_str(), sourceGroup.c_str());
+  if (selected) {
+    const String key = normalizeLayoutName(selected->page);
+    if (std::any_of(livePages.begin(), livePages.end(), [&](const auto& page) { return normalizeLayoutName(page.name) == key; }))
+      return key;
   }
+  return "__unassigned__";
+}
 
-  const auto normalizeToken = [this](const String& value) -> String {
-    return normalizeLayoutName(value);
+bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
+  if (!supportsLivePageSelection())
+    return false;
+  if (std::any_of(livePages.begin(), livePages.end(), [&](const auto& page) { return normalizeLayoutName(page.name) == pageKey; }))
+    return true;
+  return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMetaView([&](const cm::RuntimeMetaView& meta) {
+    return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
+  });
+}
+
+String ConfigManagerClass::buildLivePageIndexJSON() const {
+  const bool scoped = supportsLivePageSelection();
+  const bool hasContent = !livePages.empty() || runtimeManager.hasRuntimeMeta();
+  const bool hasUnassigned = scoped && hasLivePageKey("__unassigned__");
+  const auto normalize = [this](const String& value) { return normalizeLayoutName(value); };
+  const auto emitIndex = [&](auto& sink) {
+    return cm::writeLivePageIndexJson(sink, livePages, scoped, hasContent, hasUnassigned, normalize);
   };
-
-  auto collectPlacements = [&](const String& pageName, const String& cardName, const String& groupName, JsonArray target) {
-    const String pageNorm = normalizeToken(pageName);
-    const String cardNorm = normalizeToken(cardName);
-    const String groupNorm = normalizeToken(groupName);
-
-    std::vector<const UiPlacement*> matches;
-    matches.reserve(livePlacements.size());
-    for (const auto& placement : livePlacements) {
-      if (normalizeToken(placement.page) == pageNorm &&
-          normalizeToken(placement.card) == cardNorm &&
-          normalizeToken(placement.group) == groupNorm) {
-        matches.push_back(&placement);
-      }
-    }
-
-    std::sort(matches.begin(), matches.end(), [](const UiPlacement* a, const UiPlacement* b) {
-      if (a->order == b->order) {
-        return a->id < b->id;
-      }
-      return a->order < b->order;
-    });
-
-    for (const auto* placement : matches) {
-      target.add(placement->id);
-    }
-  };
-
-  auto makeSortedPointers = [](const auto& container) {
-    using ElementType = typename std::remove_reference<decltype(container)>::type::value_type;
-    std::vector<const ElementType*> result;
-    result.reserve(container.size());
-    for (const auto& entry : container) {
-      // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-      // cppcheck-suppress useStlAlgorithm
-      result.push_back(&entry);
-    }
-    std::sort(result.begin(), result.end(), [](const ElementType* a, const ElementType* b) {
-      if (a->order == b->order) {
-        return a->name < b->name;
-      }
-      return a->order < b->order;
-    });
-    return result;
-  };
-
-  const auto sortedPages = makeSortedPointers(livePages);
-  for (const auto* page : sortedPages) {
-    JsonObject pageObj = pagesArray.createNestedObject();
-    pageObj["name"] = page->name;
-    pageObj["title"] = page->name;
-    pageObj["order"] = page->order;
-    pageObj["key"] = normalizeToken(page->name);
-
-    JsonArray cardsArray = pageObj.createNestedArray("cards");
-    const auto sortedCards = makeSortedPointers(page->cards);
-    for (const auto* card : sortedCards) {
-      JsonObject cardObj = cardsArray.createNestedObject();
-      cardObj["name"] = card->name;
-      cardObj["title"] = card->name;
-      cardObj["order"] = card->order;
-
-      JsonArray itemsArray = cardObj.createNestedArray("items");
-      collectPlacements(page->name, card->name, String(), itemsArray);
-
-      JsonArray groupsArray = cardObj.createNestedArray("groups");
-      const auto sortedGroups = makeSortedPointers(card->groups);
-      for (const auto* group : sortedGroups) {
-        JsonObject groupObj = groupsArray.createNestedObject();
-        groupObj["name"] = group->name;
-        groupObj["title"] = group->name;
-        groupObj["order"] = group->order;
-
-        JsonArray groupItemsArray = groupObj.createNestedArray("items");
-        collectPlacements(page->name, card->name, group->name, groupItemsArray);
-      }
-    }
-  }
-
-  JsonObject placementsObj = root.createNestedObject("placements");
-  for (const auto& placement : livePlacements) {
-    JsonObject placementObj = placementsObj.createNestedObject(placement.id);
-    placementObj["page"] = placement.page;
-    placementObj["card"] = placement.card;
-    placementObj["group"] = placement.group;
-    placementObj["order"] = placement.order;
-  }
-
-  root["defaultPage"] = sortedPages.empty() ? String() : sortedPages.front()->name;
-
   String output;
-  serializeJson(doc, output);
+  if (!cm::buildJsonOutput(emitIndex, output))
+    return String();
+  return output;
+}
+
+String ConfigManagerClass::buildLivePageMetadataJSON(const String& pageKey) {
+  return runtimeManager.runtimeMetaToJSONView([&](const cm::RuntimeMetaView& meta) {
+    return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
+  });
+}
+
+String ConfigManagerClass::buildLiveLayoutJSON() const {
+  return buildLiveLayoutJSONImpl(nullptr);
+}
+String ConfigManagerClass::buildLiveLayoutJSON(const String& pageKey) const {
+  return buildLiveLayoutJSONImpl(&pageKey);
+}
+
+String ConfigManagerClass::buildLiveLayoutJSONImpl(const String* pageKey) const {
+  const auto normalize = [this](const String& value) { return normalizeLayoutName(value); };
+  const auto emitLayout = [&](auto& sink) {
+    return cm::writeLiveLayoutJson(sink, livePages, livePlacements, liveLayoutEnabled, pageKey, normalize);
+  };
+  String output;
+  if (!cm::buildJsonOutput(emitLayout, output))
+    return String();
   return output;
 }

@@ -1,6 +1,65 @@
 # Changelog
 
-This changelog is a curated overview.
+This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
+are consolidated into 4.8.0; they were not separate releases.
+
+## 4.8.0 - 2026-10-22
+
+- Add an opt-in BLE transport with consumer-supplied NimBLE, persisted enable
+  setting, runtime diagnostics, a dedicated worker and bounded command/event
+  queues. Keep protocol decoding and device write permissions in the consumer.
+  Reduce retained queue/configuration storage and allow a verified smaller
+  outgoing payload limit through `CM_BLE_TX_MAX_BYTES` (default 272 bytes).
+  Add thread-safe `cancelPendingCommands()` to fence buffered backend writes;
+  already-started writes finish before cancellation returns.
+  Cancellation also recovers stale connection/scan state so fresh telemetry can
+  resume ([#83](https://github.com/vitalyruhl/ConfigurationsManager/issues/83)).
+  Remove one advertisement/GATT peer independently and select acknowledged or
+  unacknowledged GATT writes from the characteristic's supported properties;
+  reject non-writable targets.
+- Add independent Arduino/HTTP OTA lifecycle observation and session ownership
+  so optional transports can pause and recover without replacing existing reboot
+  or logging callbacks. Preserve successful HTTP acknowledgement/reboot handoff
+  and serialize shared flash operations against concurrent update attempts.
+- Load dashboard layout, metadata and runtime values for the active page; retain
+  unfiltered endpoints and legacy WebSocket clients. Cache successful browser
+  schema loads, defer configuration loading until Settings opens and preserve
+  OTA safety telemetry while ordinary runtime groups are paused. Cancel stale
+  requests, bound body deadlines/retries and serialize startup HTTP/socket work.
+- Add opt-in compact runtime field metadata with shared routing text and sparse
+  alarm/style/label data. Preserve legacy registration, mutable-pointer access
+  through field promotion and JSON output. Use compact metadata for built-in
+  System fields and the four BME280 example fields; preserve saved settings.
+- Reduce temporary JSON and payload copies in live page indexes, layouts,
+  metadata, app identity, theme CSS and MQTT System-Info. Preserve wire formats,
+  escaping and response ownership; reject incomplete generated JSON with a
+  recoverable error instead of returning a partial successful body. Recover the
+  application name after interrupted app-info requests with bounded fallback
+  and retries.
+- Bound static/JSON HTTP delivery to at most two negotiated TCP segments
+  (maximum 2920 bytes; 512-byte fallback for unknown MSS) with a 15-second ACK
+  budget. Serialize runtime JSON generation across HTTP and WebSocket paths,
+  avoid a runtime return-value copy, allow one outstanding runtime message per
+  WebSocket client and close each expired subscription once. Preserve healthy
+  peers, selected groups, custom payloads and general text/event APIs.
+- Add the WiFi **Connectivity check target** setting (`WiFiProbe`): `off` by
+  default, `gateway` for the active DHCP/static gateway, or strict unicast IPv4.
+  Enabled checks run every ten seconds with a one-second deadline. `WiFiRb`
+  accepts whole minutes 0..9999 and defaults to one minute for new/reset values;
+  existing saved values survive and zero disables network-triggered restarts.
+  AP mode and OTA suspend network recovery and grant a fresh window afterward.
+  Apply is temporary; Save persists the target, including an unreachable one.
+- Add an independent 30-second loop supervisor from the first `handleClient()`
+  call, configurable/disableable through `setLoopWatchdogTimeout(ms)`. Preserve
+  the recovery reason across software resets. Synchronous ArduinoOTA progress
+  feeds the loop supervisor and records network-recovery suspension before its
+  blocking transfer; asynchronous HTTP traffic cannot mask a blocked loop.
+- On 2026-10-22 the operator accepted normal SIL/SBT web access as substantially
+  faster and without observed crashes, closing this development iteration's
+  HTTP/WebSocket item. Earlier diagnostic/overload failures remain recorded in
+  [the investigation history](todo_http_delivery_panic.md); their causes and
+  overload recovery are not claimed resolved. This operator acceptance does not
+  establish a full repository validation result.
 
 ## 4.4.10 - 2026-08-09
 
@@ -229,4 +288,3 @@ This changelog is a curated overview.
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
 | _none_ | - | Changelog only; no dedicated public API in this document. | See topic docs for API details. |
-

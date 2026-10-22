@@ -7,6 +7,7 @@
 #include <memory>
 #include <esp_system.h>
 #include "../ConfigManagerConfig.h"
+#include "../runtime/detail/RuntimeSelection.h"
 
 #if CM_EMBED_WEBUI
 #include "../html_content.h"
@@ -33,6 +34,7 @@ private:
   // Callbacks for ConfigManager integration
   JsonProvider configJsonProvider;
   JsonProvider runtimeJsonProvider;
+  std::function<String(const cm::RuntimeSelection&)> selectedRuntimeJsonProvider;
   RuntimeMetaProvider runtimeMetaJsonProvider;
   std::atomic<uint32_t> runtimeMetaActiveRequests{0};
   SimpleCallback rebootCallback;
@@ -75,7 +77,7 @@ private:
   String getContentType(const String& path);
   void sendWebUI(AsyncWebServerRequest* request);
   void redirectToPortalRoot(AsyncWebServerRequest* request);
-  void enableCORS(AsyncWebServerResponse* response);
+  void enableCORS(AsyncWebServerResponse* response, const char* diagnosticRoute = nullptr);
   void log(const char* format, ...) const;
 
 public:
@@ -83,6 +85,10 @@ public:
   // cppcheck-suppress noExplicitConstructor
   ConfigManagerWeb(AsyncWebServer* webServer = nullptr);
   ~ConfigManagerWeb();
+
+  void setSelectedRuntimeJsonProvider(std::function<String(const cm::RuntimeSelection&)> provider) {
+    selectedRuntimeJsonProvider = std::move(provider);
+  }
 
   // Initialization
   void begin(ConfigManagerClass* cm);

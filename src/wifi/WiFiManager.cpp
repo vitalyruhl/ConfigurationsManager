@@ -6,6 +6,7 @@
 #include "../ConfigManager.h"
 #include <Esp.h>
 #include <esp_system.h>
+#include <esp_attr.h>
 #include <esp_wifi.h>
 
 // Logging support with verbosity levels
@@ -18,8 +19,8 @@ constexpr uint32_t kRestartCauseWiFiAutoReboot = 1;
 constexpr unsigned long kTransientGraceWindowMs = 10000UL;
 constexpr unsigned long kTransientLogIntervalMs = 5000UL;
 
-RTC_DATA_ATTR uint32_t g_restartMarkerMagic = 0;
-RTC_DATA_ATTR uint32_t g_restartMarkerCause = 0;
+RTC_NOINIT_ATTR uint32_t g_restartMarkerMagic;
+RTC_NOINIT_ATTR uint32_t g_restartMarkerCause;
 
 const char* resetReasonToStr(const esp_reset_reason_t reason) {
   switch (reason) {
@@ -54,7 +55,7 @@ void markRestartCause(const uint32_t cause) {
 }
 
 void logAndClearRestartMarker() {
-  if (g_restartMarkerMagic == kRestartMarkerMagic) {
+  if (esp_reset_reason() == ESP_RST_SW && g_restartMarkerMagic == kRestartMarkerMagic) {
     if (g_restartMarkerCause == kRestartCauseWiFiAutoReboot) {
       WIFI_LOG("[INFO] Previous restart marker: WiFi auto-reboot");
     } else {
@@ -101,6 +102,9 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
   autoRebootTimeoutMs = autoRebootTimeoutMin * 60000UL; // Convert minutes to milliseconds
   autoRebootEnabled = (autoRebootTimeoutMin > 0);
   connectionMonitoringStartedMillis = millis();
+  connectivitySocket_.cancel();
+  connectivityCheck_.seed(esp_random());
+  connectivityCheck_.reset(connectionMonitoringStartedMillis);
   transientStatusActive = false;
   transientStatusCode = WL_IDLE_STATUS;
   transientStatusStartedMillis = 0;
@@ -120,7 +124,8 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
     WIFI_LOG("Starting in AP mode");
   } else if (WiFi.status() == WL_CONNECTED && isValidStationIp(WiFi.localIP())) {
     currentState = WIFI_STATE_CONNECTED;
-    lastGoodConnectionMillis = millis();
+    if (!connectivityCheck_.enabled())
+      lastGoodConnectionMillis = millis();
     WIFI_LOG_VERBOSE("Already connected to %s (IP: %s)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
   } else {
     currentState = WIFI_STATE_DISCONNECTED;
@@ -310,7 +315,7 @@ bool ConfigManagerWiFi::advanceStackReset_() {
       return false;
     case 4:
       // Set additional WiFi parameters for stability
-      WiFi.setSleep(false);                // Disable WiFi sleep
+      WiFi.setSleep(WIFI_PS_MIN_MODEM);    // Required for WiFi/Bluetooth coexistence
       WiFi.setAutoReconnect(true);         // Enable auto-reconnect
       WiFi.persistent(true);               // Store WiFi configuration in flash
       WiFi.setTxPower(WIFI_POWER_19_5dBm); // Set specific power level
@@ -393,6 +398,7 @@ void ConfigManagerWiFi::update() {
   const IPAddress localIp = WiFi.localIP();
   const bool apMode = (WiFi.getMode() == WIFI_AP);
   const bool validStaIp = isValidStationIp(localIp);
+  updateConnectivity_(now, wifiStatus == WL_CONNECTED && validStaIp, apMode || isOtaActive_());
 
   if (apMode) {
     transientStatusActive = false;
@@ -417,7 +423,6 @@ void ConfigManagerWiFi::update() {
       if (currentState != WIFI_STATE_CONNECTED) {
         transitionToState(WIFI_STATE_CONNECTED);
       }
-      lastGoodConnectionMillis = now;
     } else if (currentState == WIFI_STATE_CONNECTED) {
       WIFI_LOG("Healthy WiFi check failed: status=%d, IP=%s, logicalState=%s -> recovery",
                wifiStatus,
@@ -675,6 +680,54 @@ void ConfigManagerWiFi::handleReconnection() {
   }
 }
 
+void ConfigManagerWiFi::updateConnectivity_(uint32_t now, bool stationHealthy, bool suspended) {
+  const auto before = connectivityCheck_.state();
+  // The live gateway also covers DHCP; the configured static gateway is not proof of a route.
+  const IPAddress route = WiFi.gatewayIP();
+  const uint32_t gatewayAddress = (uint32_t(route[0]) << 24) | (uint32_t(route[1]) << 16) |
+                                  (uint32_t(route[2]) << 8) | route[3];
+  if (connectivityCheck_.tick(now, stationHealthy, suspended, gatewayAddress, connectivitySocket_)) {
+    lastGoodConnectionMillis = now;
+  }
+  const auto after = connectivityCheck_.state();
+  if (after != before) {
+    [[maybe_unused]] const char* state = "waiting";
+    switch (after) {
+      case cm::detail::ConnectivityState::Off:
+        state = "off";
+        break;
+      case cm::detail::ConnectivityState::Reachable:
+        state = "reachable";
+        break;
+      case cm::detail::ConnectivityState::Unreachable:
+        state = "unreachable";
+        break;
+      case cm::detail::ConnectivityState::Suspended:
+        state = "suspended";
+        break;
+      case cm::detail::ConnectivityState::Waiting:
+        break;
+    }
+    WIFI_LOG("[I] Network check: %s", state);
+  }
+}
+
+void ConfigManagerWiFi::pauseConnectivityForSynchronousOta() {
+  if (initialized)
+    updateConnectivity_(millis(), false, true);
+}
+
+bool ConfigManagerWiFi::setConnectivityCheckTarget(const String& target) {
+  if (!cm::detail::isConnectivityTarget(target.c_str()))
+    return false;
+  if (connectivityCheck_.matchesTarget(target.c_str()))
+    return true;
+  connectivitySocket_.cancel();
+  connectivityCheck_.configure(target.c_str(), millis());
+  WIFI_LOG("[I] Network check target: %s", target.c_str());
+  return true;
+}
+
 void ConfigManagerWiFi::checkAutoReboot() {
   if (!autoRebootEnabled || autoRebootTimeoutMs == 0)
     return;
@@ -682,8 +735,7 @@ void ConfigManagerWiFi::checkAutoReboot() {
     return;
 
   unsigned long now = millis();
-  const unsigned long referenceMillis = lastGoodConnectionMillis != 0 ? lastGoodConnectionMillis : connectionMonitoringStartedMillis;
-  unsigned long timeSinceLastConnection = now - referenceMillis;
+  [[maybe_unused]] const unsigned long timeSinceLastConnection = connectivityCheck_.elapsed(now);
 
   static unsigned long lastAutoRebootEligibilityLog = 0;
   if (lastAutoRebootEligibilityLog == 0 || now - lastAutoRebootEligibilityLog >= 5000UL) {
@@ -698,7 +750,7 @@ void ConfigManagerWiFi::checkAutoReboot() {
                      autoRebootTimeoutMs);
   }
 
-  if (timeSinceLastConnection >= autoRebootTimeoutMs) {
+  if (connectivityCheck_.expired(now, autoRebootTimeoutMs)) {
     // Time for auto-reboot
     WIFI_LOG("Auto-reboot triggered after %lu ms without connection", timeSinceLastConnection);
     markRestartCause(kRestartCauseWiFiAutoReboot);
@@ -782,6 +834,8 @@ void ConfigManagerWiFi::disconnect() {
 void ConfigManagerWiFi::reset() {
   currentState = WIFI_STATE_DISCONNECTED;
   connectionMonitoringStartedMillis = millis();
+  connectivitySocket_.cancel();
+  connectivityCheck_.reset(connectionMonitoringStartedMillis);
   lastReconnectAttempt = 0;
   roamingReconnectPending = false;
   roamingTargetBSSID = "";
@@ -848,13 +902,12 @@ void ConfigManagerWiFi::attemptConnect() {
   roamingTargetBSSID = "";
   const uint8_t phase = connectAttempts;
   const unsigned long now = millis();
-  const unsigned long timeSinceLastGood = now - lastGoodConnectionMillis;
-  const bool autoRebootDue = (autoRebootEnabled && autoRebootTimeoutMs > 0 && timeSinceLastGood >= autoRebootTimeoutMs);
+  [[maybe_unused]] const unsigned long timeSinceLastGood = connectivityCheck_.elapsed(now);
 
   if (phase == 0) {
     WIFI_LOG_VERBOSE("Attempt 1: normal connect (no stack reset)");
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
+    WiFi.setSleep(WIFI_PS_MIN_MODEM); // Required even if Bluetooth starts later.
     WiFi.setAutoReconnect(true);
     WiFi.persistent(true);
   } else if (phase == 1) {
@@ -874,15 +927,7 @@ void ConfigManagerWiFi::attemptConnect() {
                      autoRebootEnabled ? "enabled" : "disabled",
                      timeoutMin);
 
-    if (autoRebootDue) {
-      WIFI_LOG("Auto-reboot triggered after %lu ms without connection (attempt=%u)",
-               timeSinceLastGood,
-               static_cast<unsigned int>(phase) + 1U);
-      markRestartCause(kRestartCauseWiFiAutoReboot);
-      delay(50); // allow log to flush
-      ESP.restart();
-      return;
-    }
+    // Only checkAutoReboot() may restart; it uses the same target proof and OTA/AP grace.
 
     // Periodically reset the WiFi stack to recover from stuck states without rebooting the MCU.
     // With a 10s reconnect interval, every 6th retry is roughly once per minute.
@@ -896,7 +941,7 @@ void ConfigManagerWiFi::attemptConnect() {
     } else {
       // Ensure WiFi is in a sane STA config before calling begin() again.
       WiFi.mode(WIFI_STA);
-      WiFi.setSleep(false);
+      WiFi.setSleep(WIFI_PS_MIN_MODEM); // Required even if Bluetooth starts later.
       WiFi.setAutoReconnect(true);
       WiFi.persistent(true);
     }

@@ -17,6 +17,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "detail/SystemInfoJson.h"
 
 namespace cm {
 
@@ -131,11 +132,11 @@ public:
     return settings_;
   }
 
-  // Attach to ConfigManager (layout only; settings are explicit).
+  // Attach to ConfigManager and register baseline settings once plus the default layout.
   // This keeps MQTT optional: only projects that include this header and call attach() use it.
   void attach(ConfigManagerClass& configManager, const char* basePageName = "MQTT");
 
-  // Baseline MQTT settings (host/user/pass/etc) are explicit.
+  // Optional placement of the already registered baseline MQTT settings.
   void addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
                                       const char* pageName,
                                       const char* groupName,
@@ -1688,41 +1689,8 @@ inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained
     return publishWithQos_(topic.c_str(), payload.c_str(), retained, 0);
   };
 
-  StaticJsonDocument<512> espDoc;
-  espDoc["uptimeMs"] = info.uptimeMs;
-  espDoc["uptimeHuman"] = uptimeHuman;
-  espDoc["freeHeap"] = info.freeHeap;
-  if (info.minFreeHeap > 0)
-    espDoc["minFreeHeap"] = info.minFreeHeap;
-  if (info.maxAllocHeap > 0)
-    espDoc["maxAllocHeap"] = info.maxAllocHeap;
-  espDoc["flashSizeBytes"] = info.flashSizeBytes;
-  espDoc["cpuFreqMHz"] = info.cpuFreqMHz;
-  espDoc["chipModel"] = info.chipModel;
-  espDoc["chipRevision"] = info.chipRevision;
-  espDoc["sdkVersion"] = info.sdkVersion;
-
-  String espPayload;
-  serializeJson(espDoc, espPayload);
-  const String espTopic = baseTopic + "/ESP";
-  const bool okEsp = publishPayload(espTopic, espPayload);
-
-  StaticJsonDocument<512> wifiDoc;
-  wifiDoc["uptimeMs"] = info.uptimeMs;
-  wifiDoc["uptimeHuman"] = uptimeHuman;
-  wifiDoc["hostname"] = info.hostname;
-  wifiDoc["ssid"] = info.ssid;
-  wifiDoc["rssi"] = info.rssi;
-  wifiDoc["ip"] = info.ip;
-  wifiDoc["mac"] = info.mac;
-  wifiDoc["connected"] = WiFi.isConnected();
-
-  String wifiPayload;
-  serializeJson(wifiDoc, wifiPayload);
-  const String wifiTopic = baseTopic + "/WiFi";
-  const bool okWiFi = publishPayload(wifiTopic, wifiPayload);
-
-  return okEsp && okWiFi;
+  return detail::publishSystemInfoPayloads(
+    info, baseTopic, uptimeHuman, [] { return WiFi.isConnected(); }, publishPayload);
 }
 
 inline bool MQTTManager::publishSystemInfoNow(bool retained) {

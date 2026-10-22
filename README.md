@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.4.10
+> Version 4.8.0
 
 ## Preview Before Installing
 
@@ -60,6 +60,8 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 ### Web UI & Runtime
 - Responsive WebUI (embedded in flash)
 - Live runtime values (`/runtime.json`, WebSocket)
+- Page-scoped dashboard loading and bounded runtime delivery
+- Opt-in compact runtime metadata (legacy APIs preserved)
 - Per-setting styling & theming
 
 ### Device & Connectivity
@@ -67,6 +69,43 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - External-network startup for Ethernet-based projects
 - OTA firmware upload via WebUI
 - Optional MQTT module (PubSubClient-based)
+- Optional BLE transport (consumer-supplied NimBLE, bounded worker and queues)
+
+### Compact runtime metadata
+
+Version 4.8.0 includes opt-in small field definitions while retaining the legacy API.
+See [Runtime metadata](docs/runtime-metadata.md) for typed registration, sparse extensions, promotion and memory measurements.
+
+### Connectivity and loop recovery
+
+`cm::CoreWiFiSettings` exposes one **Connectivity check target** field (`WiFiProbe`):
+choose **Off** (`off`, the default), **Standard gateway** (`gateway`), or enter a
+strict unicast IPv4 address. Gateway checks use the currently active
+`WiFi.gatewayIP()`, including the DHCP-provided gateway. There is no separate mode
+setting. Off preserves existing WiFi-loss recovery; an enabled target additionally
+requires successful reachability checks every 10 seconds, with a one-second probe
+deadline. The `WiFiRb` timeout defaults to one minute (60 seconds); zero disables
+network-triggered restarts. It accepts whole minutes from 0 to 9999, so values such
+as 60 or 120 provide one- or two-hour recovery windows. Existing saved values
+remain unchanged. AP mode and OTA suspend network-triggered restart checks.
+
+**Apply** changes the target in memory only; reboot restores the saved value.
+**Save** persists it, including a validly written address that is unreachable.
+A wrong saved target can therefore cause repeated recovery restarts. Test with
+Apply before Save, and keep USB or AP access available to restore `off` or the
+correct target if network access is lost. Validation checks syntax, not reachability.
+
+A separate loop supervisor defaults to 30 seconds and starts with the first
+`ConfigManager.handleClient()` call. `ConfigManager.setLoopWatchdogTimeout(ms)`
+adjusts its timeout; passing zero disables it. Its independent timer does not
+rely on the application loop progressing and does not install a global task
+watchdog. The ESP timer task and scheduler must still be able to run; this
+supervisor is not a replacement for interrupt/hardware watchdogs. ArduinoOTA
+progress confirms synchronous loop work; asynchronous HTTP upload traffic does
+not mask a blocked application loop. A failed synchronous ArduinoOTA transfer
+receives a fresh network recovery window when the loop resumes. See the
+[connectivity acceptance record](docs/acceptance/2026-10-21-connectivity-watchdog.md)
+for the tested image, bounded device results and remaining limitations.
 
 ### Logging
 - Optional logging module (Serial, GUI log tab, MQTT output)
@@ -93,6 +132,7 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 | OTA + Web UI flashing                     | [docs/OTA.md](docs/OTA.md)                             |
 | Security Notes (password transport)       | [docs/SECURITY.md](docs/SECURITY.md)                   |
 | Troubleshooting                           | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)     |
+| Bluetooth Module                          | [docs/BLUETOOTH.md](docs/BLUETOOTH.md)                 |
 | MQTT Module                               | [docs/MQTT.md](docs/MQTT.md)                           |
 | Changelog                                 | [docs/CHANGELOG.md](docs/CHANGELOG.md)                 |
 | Build Options / Feature Flags             | [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)         |

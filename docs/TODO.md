@@ -12,6 +12,14 @@
   - LiveCard = card container inside a live page
   - LiveGroup = if we want a second nesting level like Settings
 
+## High Priority (Prio 1) - Runtime stability
+
+- [ ] MQTT verbose logging: Investigate and fix the reported TX payload-preview `LoadProhibited` crash (`strlen(nullptr)` via `vsnprintf`), and harden the related RX preview. Use allocation-free, bounded 200-character previews, null-safe formatting and compile-time exclusion when verbose logging is disabled; preserve MQTT behavior. See [the crash evidence and bounded implementation scope](todo_mqtt_verbose_crash.md). Root cause and fix remain unconfirmed.
+
+- [x] Web UI/HTTP/WebSocket iteration: reduce temporary JSON/payload copies, bound HTTP delivery and runtime socket queues, and serialize startup/runtime generation. Normal SIL/SBT access was operator-accepted on 2026-10-22 as faster and without observed crashes. See [the acceptance and preserved investigation history](todo_http_delivery_panic.md). Whole-response output buffers still exist; optional overload/headroom research is deferred, with no claim that earlier failed stress cohorts passed.
+
+- [x] Close the current HTTP delivery/panic work item by operator acceptance (2026-10-22). Preserve historical failures, firmware identities and unproven causes in the linked handoff; this acceptance authorizes neither a release nor main integration. The separate WT32-ETH01 Ethernet rapid-reload issue #71 is unaffected.
+
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
 - Add new stability check:
@@ -70,4 +78,4 @@
 
 ## Status Notes
 
-- stable
+- The current HTTP/WebSocket iteration is operator-accepted; optional historical overload research is deferred. The separate MQTT verbose-logging item remains open. CM 4.8.0 release preparation is authorized, subject to green CI and the integration/release gates.

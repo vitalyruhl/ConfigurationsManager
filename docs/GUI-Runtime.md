@@ -11,6 +11,60 @@ Runtime values are served by the Web UI using:
 - `/live_layout.json` for the optional page/card/group layout
 - `/user_theme.css` for optional global CSS
 
+### Demand-driven updates (4.8.0)
+
+`/runtime.json` without a selector remains a full snapshot. Pass a URL-encoded
+JSON array in `groups`, for example `groups=%5B%22sensors%22%5D`, to evaluate only
+those exact, case-sensitive source groups. `groups=[]` selects none; unknown
+valid names do not expand to all. Malformed selectors return HTTP 400 before
+providers run. Limits: 32 groups, 64 UTF-8 bytes per group, 2048 bytes in the
+serialized selector. Control-only groups and the `alarms` group work as usual.
+Selected snapshots retain `uptime` and, when the built-in system provider is
+enabled, `system.otaActive` and `system.otaHasPassword`; this safety envelope does
+not execute unrelated system telemetry. Each selected control getter runs once.
+
+Legacy `/ws` connections still receive full snapshots. New clients connect to
+`/ws?runtime=selected` (initially empty) and send
+`{"type":"runtimeSubscribe","groups":["sensors"]}`. `/ws?runtime=none` receives
+independent GUI/log events only. Unknown or explicitly empty runtime modes are
+closed. At most eight selective subscriptions are retained; legacy/event
+connections keep their existing connection behavior. Only complete text frames
+up to 2112 bytes are considered, and invalid selections retain the last valid
+subscription. The server evaluates the union once per tick and projects it per
+client. Selected frames include `_runtimeGroups` so clients can discard queued
+frames for an old page. A legacy client intentionally forces a full union.
+
+Custom WebSocket payload builders keep their complete opaque payload and are
+called once per tick with runtime recipients; selection does not reinterpret
+custom fields. GUI-only clients do not trigger them. Standalone legacy HTTP
+`setCallbacks` providers remain full even when `groups` is supplied unless an
+additive `setSelectedRuntimeJsonProvider` callback is installed. ConfigManager
+installs that callback itself and filters before provider/getter invocation.
+
+The bundled UI uses one union for visible cards on the active page, an event-only
+GUI socket and one selective dashboard socket. Settings, log-only view and hidden
+browser documents request only the safety envelope. Without WebSocket support,
+the fallback polls that small envelope while ordinary groups are paused. A page
+change/resume obtains a fresh selected snapshot. Successful metadata/layout are
+shared in browser memory until reload; failed loads can retry. A metadata-less
+legacy dashboard performs one shared full discovery request. No runtime JSON
+files or persistent per-card copies are created. Response-body timeouts abort,
+and at most one fallback request is active; superseded replies are ignored.
+
+### Delivery and backpressure
+
+Runtime JSON construction is serialized across HTTP and WebSocket requests; a
+busy generator makes the loop's WebSocket tick skip rather than wait. Each
+runtime recipient has at most one outstanding message; slow peers skip ticks
+without suppressing independent healthy peers. General text/log/event APIs keep
+their existing behavior. HTTP static/JSON responses use bounded TCP admission;
+this limits in-flight bytes, not the total memory held by a generated response.
+An empty runtime provider result returns HTTP 503.
+
+Normal SIL/SBT access was operator-accepted on 2026-10-22 as faster and without
+observed crashes. See [the investigation record](todo_http_delivery_panic.md)
+for the acceptance scope and preserved failed diagnostic/overload cohorts.
+
 ## 2. Runtime Providers
 
 A runtime provider fills a `JsonObject` when `/runtime.json` is requested.
@@ -358,3 +412,35 @@ ConfigManager.sendWarnMessage(
 | `ConfigManager.setCustomLivePayloadBuilder` | `setCustomLivePayloadBuilder(std::function<String()> fn)` | Replaces default runtime payload generation with custom JSON. | Advanced customization hook. |
 | `ConfigManager.sendWarnMessage` | `sendWarnMessage(...)` | Shows runtime warning dialog with optional callbacks/context. | Use for operator-visible runtime events. |
 
+
+
+## Page-scoped dashboard discovery
+
+`GET /live_pages.json` returns
+`{pageScoped,hasLiveContent,pages:[{key,name,title,order}],defaultPage}`.
+The index describes navigation without invoking runtime provider getters. Page
+keys are exact backend identifiers (trimmed, lowercase layout names); retain
+spaces and punctuation and URL-encode the complete key.
+
+When `pageScoped` is true, request `/live_layout.json?page=<key>` followed by
+`/runtime_meta.json?page=<key>`. Layout keeps its existing
+`{pages,placements,defaultPage}` schema and metadata remains an array, each limited
+to the selected page. The optional `__unassigned__` index entry covers metadata
+without a rendered placement. Empty/oversized selectors return 400; unknown keys
+return 404. A failed allocation returns 503, never a partial successful payload.
+Omitting `page` preserves the original complete endpoints.
+
+The built-in dashboard shares the index request, caches successful page pairs in
+browser memory and loads layout before metadata. Failed or aborted loads are
+retryable. Tabs remain visible while content loads. Page changes and hidden or
+Settings views clear runtime group demand; only the active loaded page resumes
+its selected source groups. GUI/log events and OTA safety remain available.
+Settings configuration is loaded when Settings opens. Unsupported index routes
+or `pageScoped:false` retain legacy discovery; an empty scoped page does not
+trigger full discovery.
+
+Automatic placements retain both field key and source group, so identical field
+keys on separate pages resolve to the correct provider. Explicit legacy layout
+bindings without a source group remain global overrides. Two different sources
+with the same bare field ID on the same page remain ambiguous in the legacy
+layout wire schema; use distinct field IDs for that arrangement.

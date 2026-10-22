@@ -11,13 +11,6 @@
 #include "core/CoreWiFiServices.h"
 #include "helpers/HelperModule.h"
 
-#if __has_include("secret/secrets.h")
-#include "secret/secrets.h"
-#define CM_HAS_WIFI_SECRETS 1
-#else
-#define CM_HAS_WIFI_SECRETS 0
-#endif
-
 #ifndef BME280_ADDRESS
 #define BME280_ADDRESS 0x76
 #endif
@@ -31,10 +24,6 @@
 #define SETTINGS_PASSWORD ""
 #endif
 
-#ifndef OTA_PASSWORD
-#define OTA_PASSWORD SETTINGS_PASSWORD
-#endif
-
 // I2C pins for the BME280 sensor
 #define I2C_SDA 21
 #define I2C_SCL 22
@@ -44,7 +33,6 @@ extern ConfigManagerClass ConfigManager;
 // Built-in core settings templates.
 static cm::CoreSettings& coreSettings = cm::CoreSettings::instance();
 static cm::CoreSystemSettings& systemSettings = coreSettings.system;
-static cm::CoreWiFiSettings& wifiSettings = coreSettings.wifi;
 static cm::CoreNtpSettings& ntpSettings = coreSettings.ntp;
 static cm::CoreWiFiServices wifiServices;
 static cm::AlarmManager alarmManager;
@@ -67,7 +55,6 @@ static const char GLOBAL_THEME_OVERRIDE[] PROGMEM = R"CSS(
 void onWiFiConnected();
 void onWiFiDisconnected();
 void onWiFiAPMode();
-static void setupNetworkDefaults();
 
 struct TempSettings {
   Config<float>* tempCorrection = nullptr;
@@ -114,40 +101,51 @@ struct TempSettings {
 static TempSettings tempSettings;
 
 static void setupRuntimeUI() {
-  auto live = ConfigManager.liveGroup("sensors")
-                .page("Sensors", 10)
-                .card("BME280 - Temperature Sensor");
+  ConfigManager.addLivePage("Sensors", 10);
+  ConfigManager.addLiveCard("Sensors", "BME280 - Temperature Sensor", -1);
+  ConfigManager.addLiveGroup("Sensors", "BME280 - Temperature Sensor", "Dewpoint", 20);
 
-  live.value("temp", []() { return temperature; })
-    .label("Temperature")
-    .unit("C")
-    .precision(1)
-    .addCSSClass("myCSSTempClass")
-    .order(10);
+  auto& runtime = ConfigManager.getRuntime();
+  runtime.addRuntimeProvider("sensors", [](JsonObject& values) {
+    values["temp"] = temperature;
+    values["hum"] = humidity;
+    values["pressure"] = pressure;
+    values["dew"] = dewPoint; }, 10);
 
-  live.value("hum", []() { return humidity; })
-    .label("Humidity")
-    .unit("%")
-    .precision(1)
-    .order(11);
+  RuntimeFloatMeta temperatureMeta;
+  temperatureMeta.base = {"temp", "Temperature", "", "sensors", "Sensors", "BME280 - Temperature Sensor", 10};
+  temperatureMeta.unit = "C";
+  temperatureMeta.precision = 1;
+  const auto temperatureId = runtime.addRuntimeMeta(temperatureMeta);
 
-  live.value("pressure", []() { return pressure; })
-    .label("Pressure")
-    .unit("hPa")
-    .precision(1)
-    .order(12);
+  // Preserve every target of the legacy builder's addCSSClass() shorthand.
+  RuntimeFieldStyle temperatureStyle;
+  temperatureStyle.rule("row").addCSSClass("myCSSTempClass");
+  temperatureStyle.rule("label").addCSSClass("myCSSTempClass");
+  temperatureStyle.rule("values").addCSSClass("myCSSTempClass");
+  temperatureStyle.rule("state").addCSSClass("myCSSTempClass");
+  temperatureStyle.rule("unit").addCSSClass("myCSSTempClass");
+  runtime.setRuntimeFieldStyle(temperatureId, temperatureStyle);
 
-  auto dewpointGroup = ConfigManager.liveGroup("sensors")
-                         .page("Sensors", 10)
-                         .card("BME280 - Temperature Sensor")
-                         .group("Dewpoint", 20);
+  RuntimeFloatMeta humidityMeta;
+  humidityMeta.base = {"hum", "Humidity", "", "sensors", "Sensors", "BME280 - Temperature Sensor", 11};
+  humidityMeta.unit = "%";
+  humidityMeta.precision = 1;
+  runtime.addRuntimeMeta(humidityMeta);
 
-  dewpointGroup.value("dew", []() { return dewPoint; })
-    .label("Dewpoint")
-    .unit("C")
-    .precision(1)
-    .order(20);
+  RuntimeFloatMeta pressureMeta;
+  pressureMeta.base = {"pressure", "Pressure", "", "sensors", "Sensors", "BME280 - Temperature Sensor", 12};
+  pressureMeta.unit = "hPa";
+  pressureMeta.precision = 1;
+  runtime.addRuntimeMeta(pressureMeta);
 
+  RuntimeFloatMeta dewPointMeta;
+  dewPointMeta.base = {"dew", "Dewpoint", "Dewpoint", "sensors", "Sensors", "BME280 - Temperature Sensor", 20};
+  dewPointMeta.unit = "C";
+  dewPointMeta.precision = 1;
+  runtime.addRuntimeMeta(dewPointMeta);
+
+  // Keep this existing warning on the legacy path to demonstrate mixed metadata.
   alarmManager.addDigitalWarning({
     .id = "dewRisk",
     .name = "Condensation Risk",
@@ -228,7 +226,6 @@ void setup() {
   tempSettings.placeInUi();
 
   ConfigManager.loadAll();
-  setupNetworkDefaults();
 
   setupRuntimeUI();
 
@@ -255,47 +252,6 @@ void onWiFiDisconnected() {
 void onWiFiAPMode() {
   wifiServices.onAPMode();
   Serial.printf("[INFO] AP Mode: http://%s\n", WiFi.softAPIP().toString().c_str());
-}
-
-static void setupNetworkDefaults() {
-  if (wifiSettings.wifiSsid.get().isEmpty()) {
-#if CM_HAS_WIFI_SECRETS
-    Serial.println("-------------------------------------------------------------");
-    Serial.println("SETUP: *** SSID is empty, setting My values *** ");
-    Serial.println("-------------------------------------------------------------");
-    wifiSettings.wifiSsid.set(MY_WIFI_SSID);
-    wifiSettings.wifiPassword.set(MY_WIFI_PASSWORD);
-
-    // Optional secret fields (not present in every example).
-#ifdef MY_WIFI_IP
-    wifiSettings.staticIp.set(MY_WIFI_IP);
-#endif
-#ifdef MY_USE_DHCP
-    wifiSettings.useDhcp.set(MY_USE_DHCP);
-#endif
-#ifdef MY_GATEWAY_IP
-    wifiSettings.gateway.set(MY_GATEWAY_IP);
-#endif
-#ifdef MY_SUBNET_MASK
-    wifiSettings.subnet.set(MY_SUBNET_MASK);
-#endif
-#ifdef MY_DNS_IP
-    wifiSettings.dnsPrimary.set(MY_DNS_IP);
-#endif
-    ConfigManager.saveAll();
-    Serial.println("-------------------------------------------------------------");
-    Serial.println("Restarting ESP, after auto setting WiFi credentials");
-    Serial.println("-------------------------------------------------------------");
-    delay(500);
-    ESP.restart();
-#else
-    Serial.println("SETUP: WiFi SSID is empty but secret/secrets.h is missing; using UI/AP mode");
-#endif
-  }
-
-  if (systemSettings.otaPassword.get() != OTA_PASSWORD) {
-    systemSettings.otaPassword.save(OTA_PASSWORD);
-  }
 }
 
 void loop() {

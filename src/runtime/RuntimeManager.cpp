@@ -1,4 +1,6 @@
 #include "RuntimeManager.h"
+#include "detail/RuntimeMetaJson.h"
+#include "detail/BuiltinSystemMetadata.h"
 #include "../ConfigManager.h"
 #include <algorithm>
 #include <esp_heap_caps.h>
@@ -11,27 +13,6 @@
 
 namespace {
 
-class StringAppendPrint : public Print {
-public:
-  explicit StringAppendPrint(String& output)
-      : output(output) {
-  }
-
-  size_t write(uint8_t byte) override {
-    return output.concat(static_cast<char>(byte)) ? 1 : 0;
-  }
-
-  size_t write(const uint8_t* buffer, size_t size) override {
-    if (size > std::numeric_limits<unsigned int>::max()) {
-      return 0;
-    }
-    return output.concat(reinterpret_cast<const char*>(buffer), static_cast<unsigned int>(size)) ? size : 0;
-  }
-
-private:
-  String& output;
-};
-
 void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes, size_t fieldCount) {
   RUNTIME_LOG("[W] Runtime meta unavailable: %s need=%u free=%u min=%u largest=%u fields=%u",
               reason,
@@ -42,151 +23,7 @@ void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes
               static_cast<unsigned>(fieldCount));
 }
 
-void populateRuntimeMetaJson(JsonObject o, const RuntimeFieldMeta& m) {
-  o["group"] = m.group;
-  if (m.sourceGroup.length()) {
-    o["sourceGroup"] = m.sourceGroup;
-  }
-  if (m.page.length()) {
-    o["page"] = m.page;
-  }
-  if (m.card.length()) {
-    o["card"] = m.card;
-  }
-  o["key"] = m.key;
-  o["label"] = m.label;
-  if (m.unit.length()) {
-    o["unit"] = m.unit;
-  }
-  o["precision"] = m.precision;
-  if (m.isBool)
-    o["isBool"] = true;
-  if (m.isString)
-    o["isString"] = true;
-  if (m.isDivider)
-    o["isDivider"] = true;
-  if (m.isButton)
-    o["isButton"] = true;
-  if (m.isCheckbox)
-    o["isCheckbox"] = true;
-  if (m.isStateButton)
-    o["isStateButton"] = true;
-  if (m.isMomentaryButton)
-    o["isMomentaryButton"] = true;
-  if (m.isIntSlider) {
-    o["isIntSlider"] = true;
-    o["min"] = m.intMin;
-    o["max"] = m.intMax;
-    o["init"] = m.intInit;
-  }
-  if (m.isFloatSlider) {
-    o["isFloatSlider"] = true;
-    o["min"] = m.floatMin;
-    o["max"] = m.floatMax;
-    o["init"] = m.floatInit;
-  }
-  if (m.isIntInput) {
-    o["isIntInput"] = true;
-    o["min"] = m.intMin;
-    o["max"] = m.intMax;
-    o["init"] = m.intInit;
-  }
-  if (m.isFloatInput) {
-    o["isFloatInput"] = true;
-    o["min"] = m.floatMin;
-    o["max"] = m.floatMax;
-    o["init"] = m.floatInit;
-  }
-  if (m.hasAlarm)
-    o["hasAlarm"] = true;
-  if (m.alarmWhenTrue)
-    o["alarmWhenTrue"] = true;
-  if (m.boolAlarmValue) {
-    o["boolAlarmValue"] = m.boolAlarmValue;
-  }
-  if (m.alarmMin != 0.0f || m.alarmMax != 0.0f) {
-    o["alarmMin"] = m.alarmMin;
-    o["alarmMax"] = m.alarmMax;
-  }
-  if (m.warnMin != 0.0f || m.warnMax != 0.0f) {
-    o["warnMin"] = m.warnMin;
-    o["warnMax"] = m.warnMax;
-  }
-  o["order"] = m.order;
-  if (m.staticValue.length()) {
-    o["staticValue"] = m.staticValue;
-  }
-  if (m.onLabel.length()) {
-    o["onLabel"] = m.onLabel;
-  }
-  if (m.offLabel.length()) {
-    o["offLabel"] = m.offLabel;
-  }
-  if (!m.style.empty()) {
-    JsonObject styleObj = o.createNestedObject("style");
-    for (const auto& rule : m.style.rules) {
-      if (!rule.target.length()) {
-        continue;
-      }
-      JsonObject ruleObj = styleObj.createNestedObject(rule.target);
-      if (rule.hasVisible) {
-        ruleObj["visible"] = rule.visible;
-      }
-      if (rule.className.length()) {
-        ruleObj["className"] = rule.className;
-      }
-      for (const auto& prop : rule.properties) {
-        if (prop.key.length()) {
-          ruleObj[prop.key] = prop.value;
-        }
-      }
-    }
-  }
-}
-
-size_t runtimeMetaJsonSize(const RuntimeFieldMeta& meta) {
-  StaticJsonDocument<1536> entryDoc;
-  populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
-  return measureJson(entryDoc);
-}
-
-bool appendRuntimeMetaJson(String& out, const RuntimeFieldMeta& meta) {
-  StaticJsonDocument<1536> entryDoc;
-  populateRuntimeMetaJson(entryDoc.to<JsonObject>(), meta);
-  const size_t offset = out.length();
-  StringAppendPrint writer(out);
-  const size_t written = serializeJson(entryDoc, writer);
-  return written != 0 && out.length() == offset + written;
-}
-
 } // namespace
-
-ConfigManagerRuntime::ConfigManagerRuntime()
-    : configManager(nullptr)
-#if CM_ENABLE_SYSTEM_PROVIDER
-      ,
-      builtinSystemProviderEnabled(false), builtinSystemProviderRegistered(false), loopWindowStart(0), loopSamples(0), loopAccumMs(0.0), loopAvgMs(0.0)
-#endif
-{
-}
-
-ConfigManagerRuntime::~ConfigManagerRuntime() {
-}
-
-void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
-  configManager = cm;
-  RUNTIME_LOG("Runtime manager initialized");
-  if (configManager) {
-    std::vector<RuntimeFieldMeta> metaSnapshot;
-    {
-      std::lock_guard<std::mutex> lock(runtimeDataMutex);
-      metaSnapshot = runtimeMeta;
-    }
-    for (const auto& meta : metaSnapshot) {
-      configManager->registerLivePlacement(meta);
-    }
-  }
-}
 
 void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
   logCallback = logger;
@@ -202,60 +39,6 @@ void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider& provid
 
 void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order) {
   addRuntimeProvider(RuntimeValueProvider(name, fillFunc, order));
-}
-
-void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta& meta) {
-  RuntimeFieldMeta normalized = meta;
-  if (normalized.sourceGroup.isEmpty()) {
-    normalized.sourceGroup = normalized.group;
-    if (normalized.page.isEmpty() && normalized.card.isEmpty()) {
-      normalized.group = String();
-    }
-  }
-  {
-    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-    runtimeMeta.push_back(normalized);
-    markRuntimeMetaJsonCacheDirtyLocked();
-  }
-  // Cppcheck rationale: The value is consumed by a compile-time logging macro in enabled builds.
-  // cppcheck-suppress unreadVariable
-  const String& logGroup = normalized.sourceGroup.length() ? normalized.sourceGroup : normalized.group;
-  RUNTIME_LOG("Added meta: %s.%s", logGroup.c_str(), normalized.key.c_str());
-  if (configManager) {
-    configManager->registerLivePlacement(normalized);
-  }
-}
-
-bool ConfigManagerRuntime::updateRuntimeMeta(const String& group, const String& key, const std::function<void(RuntimeFieldMeta&)>& updater) {
-  if (!updater) {
-    return false;
-  }
-
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-  for (auto& meta : runtimeMeta) {
-    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-    // cppcheck-suppress useStlAlgorithm
-    if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
-      updater(meta);
-      markRuntimeMetaJsonCacheDirtyLocked();
-      return true;
-    }
-  }
-  return false;
-}
-
-RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {
-  std::lock_guard<std::mutex> lock(runtimeDataMutex);
-  for (auto& meta : runtimeMeta) {
-    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-    // cppcheck-suppress useStlAlgorithm
-    if (meta.key == key && (meta.group == group || meta.sourceGroup == group)) {
-      return &meta;
-    }
-  }
-  return nullptr;
 }
 
 RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) {
@@ -281,326 +64,63 @@ const RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) const {
 }
 
 String ConfigManagerRuntime::runtimeValuesToJSON() {
-  // Must stay small enough for frequent WS pushes, but large enough for typical runtime payloads.
-  DynamicJsonDocument d(4096);
-  JsonObject root = d.to<JsonObject>();
-  root["uptime"] = millis();
+  return runtimeValuesToJSON(cm::RuntimeSelection::everything());
+}
 
-  std::vector<RuntimeValueProvider> providersSnapshot;
-  std::vector<RuntimeCheckbox> checkboxesSnapshot;
-  std::vector<RuntimeStateButton> stateButtonsSnapshot;
-  std::vector<RuntimeIntSlider> intSlidersSnapshot;
-  std::vector<RuntimeFloatSlider> floatSlidersSnapshot;
-  std::vector<RuntimeIntInput> intInputsSnapshot;
-  std::vector<RuntimeFloatInput> floatInputsSnapshot;
-  std::vector<RuntimeAlarm> alarmsSnapshot;
+String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection& selection) {
+  auto generation = acquireRuntimeGeneration();
+  JsonDocument document;
+  fillRuntimeSnapshot(document.to<JsonObject>(), selection);
+  if (document.overflowed())
+    return String();
+  String out;
+  serializeJson(document, out);
+  if (out.length() != measureJson(document))
+    return String();
+  return out;
+}
+
+void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::RuntimeSelection& selection) {
+  root["uptime"] = millis();
+  std::vector<RuntimeValueProvider> providers;
+  std::vector<RuntimeCheckbox> checkboxes;
+  std::vector<RuntimeStateButton> buttons;
+  std::vector<RuntimeIntSlider> intSliders;
+  std::vector<RuntimeFloatSlider> floatSliders;
+  std::vector<RuntimeIntInput> intInputs;
+  std::vector<RuntimeFloatInput> floatInputs;
+  std::vector<RuntimeAlarm> alarms;
   {
     std::lock_guard<std::mutex> lock(runtimeDataMutex);
-    providersSnapshot = runtimeProviders;
-    checkboxesSnapshot = runtimeCheckboxes;
-    stateButtonsSnapshot = runtimeStateButtons;
-    intSlidersSnapshot = runtimeIntSliders;
-    floatSlidersSnapshot = runtimeFloatSliders;
-    intInputsSnapshot = runtimeIntInputs;
-    floatInputsSnapshot = runtimeFloatInputs;
-    alarmsSnapshot = runtimeAlarms;
+    const auto group = [](const auto& control) { return control.group.c_str(); };
+    providers = cm::selectRuntimeEntries(runtimeProviders, selection, [](const auto& provider) { return provider.name.c_str(); });
+    checkboxes = cm::selectRuntimeEntries(runtimeCheckboxes, selection, group);
+    buttons = cm::selectRuntimeEntries(runtimeStateButtons, selection, group);
+    intSliders = cm::selectRuntimeEntries(runtimeIntSliders, selection, group);
+    floatSliders = cm::selectRuntimeEntries(runtimeFloatSliders, selection, group);
+    intInputs = cm::selectRuntimeEntries(runtimeIntInputs, selection, group);
+    floatInputs = cm::selectRuntimeEntries(runtimeFloatInputs, selection, group);
+    if (selection.contains("alarms"))
+      alarms = runtimeAlarms;
   }
-
-  // Do not sort runtimeProviders in-place here: runtimeValuesToJSON() can be called from
-  // multiple contexts (WS push + HTTP handlers). In-place std::sort would introduce data races.
-  std::vector<const RuntimeValueProvider*> providers;
-  providers.reserve(providersSnapshot.size());
-  for (const auto& prov : providersSnapshot) {
-    // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-    // cppcheck-suppress useStlAlgorithm
-    providers.push_back(&prov);
+  // User callbacks run outside the registry mutex and only for selected groups.
+  cm::fillRuntimeProviders(root, providers);
+  cm::fillRuntimeControls(root, checkboxes);
+  cm::fillRuntimeControls(root, buttons);
+  cm::fillRuntimeControls(root, intSliders);
+  cm::fillRuntimeControls(root, floatSliders);
+  cm::fillRuntimeControls(root, intInputs);
+  cm::fillRuntimeControls(root, floatInputs);
+  if (!alarms.empty()) {
+    JsonObject slot = root["alarms"].to<JsonObject>();
+    for (const auto& alarm : alarms)
+      slot[alarm.name] = alarm.active;
   }
-  std::sort(providers.begin(), providers.end(), [](const RuntimeValueProvider* a, const RuntimeValueProvider* b) {
-    return a->order < b->order;
-  });
-
-  for (const auto* provPtr : providers) {
-    if (!provPtr) {
-      continue;
-    }
-    const auto& prov = *provPtr;
-    JsonObject slot;
-    JsonVariant existing = root[prov.name];
-    if (existing.isNull()) {
-      slot = root.createNestedObject(prov.name);
-    } else if (existing.is<JsonObject>()) {
-      slot = existing.as<JsonObject>();
-    } else {
-      root.remove(prov.name);
-      slot = root.createNestedObject(prov.name);
-    }
-    if (prov.fill) {
-      prov.fill(slot);
-    }
-
-    // Add interactive control states for this provider/group
-    for (auto& checkbox : checkboxesSnapshot) {
-      if (checkbox.group == prov.name && checkbox.getter) {
-        slot[checkbox.key] = checkbox.getter();
-      }
-    }
-
-    for (auto& button : stateButtonsSnapshot) {
-      if (button.group == prov.name && button.getter) {
-        slot[button.key] = button.getter();
-      }
-    }
-
-    for (auto& slider : intSlidersSnapshot) {
-      if (slider.group == prov.name && slider.getter) {
-        slot[slider.key] = slider.getter();
-      }
-    }
-
-    for (auto& slider : floatSlidersSnapshot) {
-      if (slider.group == prov.name && slider.getter) {
-        slot[slider.key] = slider.getter();
-      }
-    }
-
-    for (auto& input : intInputsSnapshot) {
-      if (input.group == prov.name && input.getter) {
-        slot[input.key] = input.getter();
-      }
-    }
-
-    for (auto& input : floatInputsSnapshot) {
-      if (input.group == prov.name && input.getter) {
-        slot[input.key] = input.getter();
-      }
-    }
+  if (configManager) {
+    const auto& ota = configManager->getOTAManager();
+    root["system"]["otaActive"] = ota.isActive();
+    root["system"]["otaHasPassword"] = ota.hasPassword();
   }
-
-  // Ensure interactive controls are present even when no runtime provider exists for their group.
-  // Otherwise the frontend cannot retrieve the latest values after refresh and may snap back
-  // to defaults (e.g. sliders to 0).
-  auto getOrCreateSlot = [&](const String& groupName) -> JsonObject {
-    JsonObject slot;
-    JsonVariant existing = root[groupName];
-    if (existing.isNull()) {
-      slot = root.createNestedObject(groupName);
-    } else if (existing.is<JsonObject>()) {
-      slot = existing.as<JsonObject>();
-    } else {
-      root.remove(groupName);
-      slot = root.createNestedObject(groupName);
-    }
-    return slot;
-  };
-
-  for (auto& checkbox : checkboxesSnapshot) {
-    if (checkbox.getter) {
-      JsonObject slot = getOrCreateSlot(checkbox.group);
-      slot[checkbox.key] = checkbox.getter();
-    }
-  }
-
-  for (auto& button : stateButtonsSnapshot) {
-    if (button.getter) {
-      JsonObject slot = getOrCreateSlot(button.group);
-      slot[button.key] = button.getter();
-    }
-  }
-
-  for (auto& slider : intSlidersSnapshot) {
-    if (slider.getter) {
-      JsonObject slot = getOrCreateSlot(slider.group);
-      slot[slider.key] = slider.getter();
-    }
-  }
-
-  for (auto& slider : floatSlidersSnapshot) {
-    if (slider.getter) {
-      JsonObject slot = getOrCreateSlot(slider.group);
-      slot[slider.key] = slider.getter();
-    }
-  }
-
-  for (auto& input : intInputsSnapshot) {
-    if (input.getter) {
-      JsonObject slot = getOrCreateSlot(input.group);
-      slot[input.key] = input.getter();
-    }
-  }
-
-  for (auto& input : floatInputsSnapshot) {
-    if (input.getter) {
-      JsonObject slot = getOrCreateSlot(input.group);
-      slot[input.key] = input.getter();
-    }
-  }
-
-  if (!alarmsSnapshot.empty()) {
-    JsonObject alarms = root.createNestedObject("alarms");
-    // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
-    // cppcheck-suppress constVariableReference
-    for (auto& a : alarmsSnapshot) {
-      alarms[a.name] = a.active;
-    }
-  }
-
-  String out;
-  size_t estimatedBytes = 512;
-  estimatedBytes += providersSnapshot.size() * 96;
-  estimatedBytes += checkboxesSnapshot.size() * 24;
-  estimatedBytes += stateButtonsSnapshot.size() * 24;
-  estimatedBytes += intSlidersSnapshot.size() * 28;
-  estimatedBytes += floatSlidersSnapshot.size() * 28;
-  estimatedBytes += intInputsSnapshot.size() * 28;
-  estimatedBytes += floatInputsSnapshot.size() * 28;
-  estimatedBytes += alarmsSnapshot.size() * 16;
-  if (estimatedBytes > 8192) {
-    estimatedBytes = 8192;
-  }
-  out.reserve(estimatedBytes);
-  const size_t written = serializeJson(d, out);
-  if (written == 0 || out.length() == 0 || out[0] != '{') {
-    // Never return an empty/invalid frame; the WebUI expects a JSON object.
-    return "{}";
-  }
-  return out;
-}
-
-String ConfigManagerRuntime::buildRuntimeMetaJsonLocked() {
-  // Keep the stored metadata ordered so serialization can read it directly
-  // while the mutex keeps strings, vectors, and iterators stable.
-#ifdef development
-  std::vector<RuntimeFieldMeta>& meta = runtimeMetaOverrideActive ? runtimeMetaOverride : runtimeMeta;
-#else
-  std::vector<RuntimeFieldMeta>& meta = runtimeMeta;
-#endif
-
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
-  if (runtimeMetaSerializationFailureForTest) {
-    return String();
-  }
-#endif
-
-  std::sort(meta.begin(), meta.end(), [](const RuntimeFieldMeta& a, const RuntimeFieldMeta& b) {
-    if (a.group == b.group) {
-      if (a.order == b.order)
-        return a.label < b.label;
-      return a.order < b.order;
-    }
-    return a.group < b.group;
-  });
-
-  // Determine the exact response size before allocating the one unavoidable
-  // output buffer. Avoiding incremental growth is important on fragmented heaps.
-  size_t outputSize = 2; // '[' and ']'
-  bool firstEntry = true;
-  for (const auto& m : meta) {
-    const size_t entrySize = runtimeMetaJsonSize(m);
-    if (entrySize == 0 || entrySize > std::numeric_limits<size_t>::max() - outputSize) {
-      logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
-      return String();
-    }
-    outputSize += entrySize;
-    if (!firstEntry) {
-      if (outputSize == std::numeric_limits<size_t>::max()) {
-        logRuntimeMetaSerializationFailure("size", outputSize, meta.size());
-        return String();
-      }
-      ++outputSize;
-    }
-    firstEntry = false;
-  }
-
-  String out;
-  if (!out.reserve(outputSize)) {
-    logRuntimeMetaSerializationFailure("reserve", outputSize, meta.size());
-    return String();
-  }
-  if (!out.concat('[')) {
-    logRuntimeMetaSerializationFailure("open", outputSize, meta.size());
-    return String();
-  }
-
-  bool first = true;
-  for (const auto& m : meta) {
-    if (!first) {
-      if (!out.concat(',')) {
-        logRuntimeMetaSerializationFailure("separator", outputSize, meta.size());
-        return String();
-      }
-    }
-    first = false;
-    if (!appendRuntimeMetaJson(out, m)) {
-      logRuntimeMetaSerializationFailure("serialize", outputSize, meta.size());
-      return String();
-    }
-  }
-
-  if (!out.concat(']')) {
-    logRuntimeMetaSerializationFailure("close", outputSize, meta.size());
-    return String();
-  }
-  if (out.length() != outputSize) {
-    logRuntimeMetaSerializationFailure("length", outputSize, meta.size());
-    return String();
-  }
-  return out;
-}
-
-void ConfigManagerRuntime::markRuntimeMetaJsonCacheDirtyLocked() {
-  runtimeMetaJsonCacheDirty = true;
-  ++runtimeMetaRevision;
-}
-
-std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() {
-  // A cache rebuild is single-flight. Other callers keep using the last valid
-  // snapshot immediately instead of queueing behind a large serialization.
-  {
-    std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-    if (runtimeMetaJsonCache && !runtimeMetaJsonCacheDirty) {
-      return runtimeMetaJsonCache;
-    }
-    if (runtimeMetaJsonCacheBuildInProgress) {
-      return runtimeMetaJsonCache;
-    }
-    runtimeMetaJsonCacheBuildInProgress = true;
-  }
-
-  uint32_t builtRevision = 0;
-  String candidate;
-  {
-    std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
-    ++runtimeMetaSerializationBuildCount;
-#endif
-    candidate = buildRuntimeMetaJsonLocked();
-    builtRevision = runtimeMetaRevision.load();
-  }
-
-  std::shared_ptr<const String> replacement;
-  if (candidate.length() != 0) {
-    replacement = std::make_shared<String>(std::move(candidate));
-  }
-
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  runtimeMetaJsonCacheBuildInProgress = false;
-  if (replacement && replacement->length() != 0) {
-    if (runtimeMetaRevision.load() == builtRevision) {
-      runtimeMetaJsonCache = replacement;
-      runtimeMetaJsonCacheDirty = false;
-    } else if (!runtimeMetaJsonCache) {
-      // The candidate is complete JSON for the most recent stable state
-      // seen by this build. Keep it as a temporary fallback, but rebuild
-      // again before treating it as current metadata.
-      runtimeMetaJsonCache = replacement;
-    }
-  }
-  return runtimeMetaJsonCache;
-}
-
-String ConfigManagerRuntime::runtimeMetaToJSON() {
-  const std::shared_ptr<const String> payload = runtimeMetaJsonPayload();
-  return payload ? *payload : String();
 }
 
 void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const String& key, const String& label, int minValue, int maxValue, int initValue, std::function<int()> getter, std::function<void(int)> setter, const String& unit, const String& card, int order) {
@@ -830,66 +350,7 @@ void ConfigManagerRuntime::enableBuiltinSystemProvider() {
             obj["otaHasPassword"] = ota.hasPassword();
         } }, 0);
 
-  // Provide basic meta so UI can display the RSSI and its quality text
-  {
-    // Helper to upsert meta with a specific order
-    auto upsertMeta = [this](const String& key, const String& label, const String& unit, int order, bool isBool = false, bool isString = false, int precision = 0) {
-      const bool updated = updateRuntimeMeta("system", key, [&](RuntimeFieldMeta& existing) {
-        existing.order = order;
-        if (label.length())
-          existing.label = label;
-        if (unit.length() && existing.unit.length() == 0)
-          existing.unit = unit;
-        if (isBool)
-          existing.isBool = true;
-        if (isString)
-          existing.isString = true;
-        if (precision >= 0)
-          existing.precision = precision;
-      });
-      if (updated) {
-        return;
-      }
-      RuntimeFieldMeta m;
-      m.group = "system";
-      m.key = key;
-      m.label = label.length() ? label : key;
-      m.unit = unit;
-      m.order = order;
-      m.isBool = isBool;
-      m.isString = isString;
-      m.precision = precision;
-      addRuntimeMeta(m);
-    };
-
-    // Orders 0-2 are used by app_name/app_version/build_date defined in main.cpp
-    upsertMeta("wifiConnected", "Wifi Connected", "", 10, true);
-    upsertMeta("channel", "WiFi Channel", "", 11, false, false, 0);
-    upsertMeta("rssiTxt", "Signal", "", 12, false, true, 0);
-    upsertMeta("rssi", "WiFi RSSI", "dBm", 13, false, false, 0);
-    upsertMeta("localIP", "Local IP", "", 14, false, true, 0);
-    upsertMeta("gateway", "Gateway", "", 15, false, true, 0);
-    upsertMeta("routerMAC", "Router MAC", "", 16, false, true, 0);
-    // Connectivity and OTA state (booleans)
-    upsertMeta("allowOTA", "AllowOTA", "", 20, true);
-    upsertMeta("otaActive", "OtaActive", "", 21, true);
-
-#if CM_ENABLE_SYSTEM_TIME
-    upsertMeta("dateTime", "Date/Time", "", 22, false, true, 0);
-#endif
-
-    // System numeric stats
-    // todo: make heap settable to show or not....
-    upsertMeta("cpuFreqMHz", "CpuFreqMHz", "", 30, false, false, 0);
-    upsertMeta("flashSize", "FlashSize", "", 31, false, false, 0);
-    upsertMeta("sketchSize", "SketchSize", "", 32, false, false, 0);
-    upsertMeta("freeSketchSpace", "FreeSketchSpace", "", 33, false, false, 0);
-    upsertMeta("heapFragmentation", "HeapFragmentation", "", 34, false, false, 0);
-    upsertMeta("totalHeap", "TotalHeap", "", 35, false, false, 0);
-    upsertMeta("usedHeap", "UsedHeap", "", 36, false, false, 0);
-    // Keep unit empty to avoid conflicting with pre-existing meta; value is in bytes currently
-    upsertMeta("freeHeap", "FreeHeap", "", 37, false, false, 0);
-  }
+  cm::detail::registerBuiltinSystemMetadata(*this, CM_ENABLE_SYSTEM_TIME != 0);
 
   builtinSystemProviderRegistered = true;
   builtinSystemProviderEnabled = true;
@@ -1139,28 +600,6 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
   return active;
 }
 
-#ifdef development
-
-void ConfigManagerRuntime::setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override) {
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-  runtimeMetaOverride = override;
-  runtimeMetaOverrideActive = true;
-  markRuntimeMetaJsonCacheDirtyLocked();
-  RUNTIME_LOG("Meta override set (%d entries)", override.size());
-}
-
-void ConfigManagerRuntime::clearRuntimeMetaOverride() {
-  std::lock_guard<std::mutex> cacheLock(runtimeMetaCacheMutex);
-  std::lock_guard<std::mutex> dataLock(runtimeDataMutex);
-  runtimeMetaOverride.clear();
-  runtimeMetaOverrideActive = false;
-  markRuntimeMetaJsonCacheDirtyLocked();
-  RUNTIME_LOG("Meta override cleared");
-}
-
-#endif
-
 // Interactive runtime control implementations
 
 void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label, std::function<void()> onPress, const String& card, int order) {
@@ -1374,4 +813,23 @@ void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const St
     }
   }
   RUNTIME_LOG("Float slider not found: %s.%s", group.c_str(), key.c_str());
+}
+
+// Metadata core hooks keep networking and target diagnostics out of the registry.
+void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldMeta& meta) {
+  if (configManager)
+    configManager->registerLivePlacement(meta);
+}
+void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldBase& meta) {
+  if (configManager)
+    configManager->registerLivePlacement(cm::RuntimeMetaView(meta));
+}
+void ConfigManagerRuntime::reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) const {
+  logRuntimeMetaSerializationFailure(reason, bytes, fields);
+}
+void ConfigManagerRuntime::logRuntimeMetaAdded(const String& group, const String& key) const {
+  RUNTIME_LOG("Added meta: %s.%s", group.c_str(), key.c_str());
+}
+void ConfigManagerRuntime::logRuntimeMetaEvent(const char* message, size_t count) const {
+  RUNTIME_LOG("%s (%u)", message, static_cast<unsigned>(count));
 }

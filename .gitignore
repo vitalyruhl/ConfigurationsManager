@@ -48,6 +48,7 @@ secrets.h
 .pio-home
 
 # Serena local/cache data
+/.serena/project.yml
 /.cache/
 /.serena/project.local.yml
 /.serena/cache/

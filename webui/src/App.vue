@@ -12,12 +12,12 @@
       </button>
       <button
         :class="{ active: activeTab === 'settings' }"
-        :disabled="externalOtaActive"
+        :disabled="externalOtaActive || !startupComplete"
         @click="switchToSettings()"
       >
         Settings
       </button>
-      <button class="flash-btn" @click="startFlash" :disabled="!canFlash || externalOtaActive">
+      <button class="flash-btn" @click="startFlash" :disabled="!canFlash || externalOtaActive || !startupComplete">
         Flash
       </button>
       <button
@@ -130,13 +130,14 @@
     </div>
 
     <RuntimeDashboard
-      v-if="hasLiveContent"
+      v-if="hasLiveContent && startupReady"
       v-show="activeTab !== 'settings'"
       ref="runtimeDashboard"
       :config="config"
       :view="activeTab"
       @can-flash-change="handleCanFlashChange"
       @ota-active-change="handleOtaActiveChange"
+      @bootstrap-complete="handleDashboardBootstrap"
     />
     <section v-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
       <div class="category-tabs" role="tablist" aria-label="Settings categories">
@@ -191,7 +192,10 @@
 <script setup>
 import { ref, onBeforeUnmount, onMounted, provide, nextTick, computed, watch } from "vue";
 import Category from "./components/Category.vue";
+import { readJson, loadRuntimeMeta, loadRuntimeDiscovery, loadLivePages } from "./runtimeDataClient.mjs";
 import RuntimeDashboard from "./components/RuntimeDashboard.vue";
+import { createAppInfoRecovery } from "./appInfoClient.mjs";
+import { readTextResponse } from "./startupHttp.mjs";
 
 function isUnsetPasswordValue(value) {
   return value === undefined || value === null || value === '' || value === '***';
@@ -514,6 +518,10 @@ const HTTP_ONLY_HINT_STORAGE_KEY = 'cm.dismiss.httpOnlyHint.v1';
 
 // Detect if there is any live UI content available
 const hasLiveContent = ref(true);
+const startupReady = ref(false);
+const startupComplete = ref(false);
+let startupDisposed = false;
+const startupController = new AbortController();
 
 const guiPopup = ref(null);
 const guiPopupQueue = [];
@@ -935,11 +943,12 @@ function buildGuiActionBody(context) {
 function initGuiWebSocket() {
   if (typeof window === "undefined") return;
   const proto = window.location.protocol === "https:" ? "wss://" : "ws://";
-  const url = proto + window.location.host + "/ws";
+  const url = proto + window.location.host + "/ws?runtime=none";
   connectGuiWebSocket(url);
 }
 
 function connectGuiWebSocket(url) {
+  if (startupDisposed) return;
   closeGuiWebSocket();
   let connectionTimeout = null;
   try {
@@ -962,6 +971,9 @@ function connectGuiWebSocket(url) {
   guiWebSocket.onopen = () => {
     clearTimeout(connectionTimeout);
     guiWsRetry = 0;
+    // The first connection already has the mount request; later opens can follow a reboot.
+    if (guiHasConnected) injectVersion();
+    guiHasConnected = true;
   };
   guiWebSocket.onclose = () => {
     clearTimeout(connectionTimeout);
@@ -975,7 +987,7 @@ function connectGuiWebSocket(url) {
 }
 
 function scheduleGuiReconnect(url) {
-  if (guiWsReconnectTimer) return;
+  if (startupDisposed || guiWsReconnectTimer) return;
   const delay = Math.min(10000, 1000 + guiWsRetry * 700);
   guiWsRetry = Math.min(10, guiWsRetry + 1);
   guiWsReconnectTimer = setTimeout(() => {
@@ -1053,127 +1065,54 @@ function dismissHttpOnlyHint() {
   }
 }
 
-async function loadSettings() {
-  try {
-    //console.log("[Frontend] Starting loadSettings...");
-    
-    // Firefox-compatible timeout implementation
-    const fetchPromise = fetch("/config.json");
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), 10000)
-    );
-    
-    const r = await Promise.race([fetchPromise, timeoutPromise]);
-    
-    //console.log(`[Frontend] Response status: ${r.status} ${r.statusText}`);
-    //console.log(`[Frontend] Response headers:`, Object.fromEntries(r.headers.entries()));
-    
-    if (!r.ok) {
-      throw new Error(`HTTP ${r.status}: ${r.statusText}`);
-    }
-    
-    // Check content-length header vs actual response
-    // Check content-length header vs actual response (compare bytes, not JS string length)
-    const contentLength = r.headers.get('content-length');
-    //console.log(`[Frontend] config.json - Content-Length: ${contentLength}`);
-
-    const text = await r.text();
-    if (contentLength) {
-      const headerBytes = parseInt(contentLength, 10);
-      const actualBytes = (typeof TextEncoder !== 'undefined')
-        ? new TextEncoder().encode(text).length
-        : text.length;
-      if (Number.isFinite(headerBytes) && headerBytes !== actualBytes) {
-        console.warn(`[Frontend] Content-Length mismatch (bytes)! Header: ${headerBytes}, Actual: ${actualBytes}`);
-      }
-    }
-    
-    // Clean the response text from potential control characters
-    const cleanedText = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-    
-    const data = JSON.parse(cleanedText);
-    config.value = data.config || data;
-    refreshKey.value++;
-    
-    //console.log("[Frontend] config.json loaded successfully");
-    // Re-evaluate live content availability after config loads
-    checkLiveContent();
-  } catch (e) {
-    console.error("[Frontend] loadSettings error:", e);
-    if (e.name === 'AbortError') {
-      notify("Connection timeout: Could not load settings", "error", 8000);
-    } else if (e.message.includes('Content-Length')) {
-      notify("Server response error: Data transmission interrupted", "error", 8000);
-    } else if (e instanceof SyntaxError && e.message.includes('JSON')) {
-      // JSON parsing error - provide more helpful message
-      notify("JSON parsing error. Please check if password contains special characters.", "error", 10000);
-      console.error("[Frontend] JSON parsing failed. Response preview:", text.substring(0, 500));
-    } else {
-      notify("Fehler: " + e.message, "error", 8000);
-    }
-  }
-}
-
-// Helper: fetch with timeout (Firefox-friendly)
-async function fetchWithTimeout(resource, options = {}, timeoutMs = 5000) {
-  if (typeof AbortController !== 'undefined') {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
+let settingsLoad = null;
+function loadSettings() {
+  if (settingsLoad) return settingsLoad;
+  settingsLoad = (async () => {
     try {
-      const res = await fetch(resource, { ...options, signal: controller.signal });
-      return res;
+      const data = await readJson("/config.json", {}, 10000);
+      config.value = data.config || data;
+      refreshKey.value++;
+    } catch (error) {
+      // Configuration responses can contain credentials; never log their text or parser excerpt.
+      console.error("[Frontend] Settings load failed:", error.name);
+      notify(error.name === "AbortError"
+        ? "Connection timeout: Could not load settings"
+        : "Could not load settings. Please retry.", "error", 8000);
     } finally {
-      clearTimeout(id);
+      settingsLoad = null;
     }
-  }
-  return Promise.race([
-    fetch(resource, options),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), timeoutMs))
-  ]);
+  })();
+  return settingsLoad;
 }
 
 async function checkLiveContent() {
   try {
-    // 1) Prefer explicit runtime meta definition
-    const m = await fetchWithTimeout(`/runtime_meta.json?ts=${Date.now()}`, {}, 4000);
-    if (m && m.ok) {
-      const meta = await m.json().catch(() => []);
-      if (Array.isArray(meta) && meta.length > 0) {
-        hasLiveContent.value = true;
-        return;
-      }
+    let index;
+    try { index = await loadLivePages(); }
+    catch (error) { if (error.status !== 404) throw error; }
+    if (index?.pageScoped) {
+      hasLiveContent.value = index.hasLiveContent;
+      if (!hasLiveContent.value && activeTab.value === "live") await switchToSettings();
+      return;
     }
-  } catch (_) { /* ignore */ }
-
-  // 2) Fallback: check runtime data has any groups with values
-  try {
-    const r = await fetchWithTimeout(`/runtime.json?ts=${Date.now()}`, {}, 4000);
-    if (r && r.ok) {
-      const rt = await r.json().catch(() => ({}));
-      // Consider there is live content only if there is at least one non-empty group
-      const groups = Object.keys(rt || {});
-      const hasContent = groups.some(g => {
-        const o = rt[g];
-        if (!o || typeof o !== 'object') return false;
-        return Object.keys(o).length > 0;
-      });
-      hasLiveContent.value = !!hasContent;
-    } else {
-      hasLiveContent.value = false;
-    }
-  } catch (_) {
-    hasLiveContent.value = false;
-  }
-
-  // If no live content, switch to settings automatically
-  if (!hasLiveContent.value) {
-    if (activeTab.value === 'live') {
-      // Auto-switch to settings; auto-auth if no password
+    let meta;
+    try { meta = await loadRuntimeMeta(); }
+    catch (error) { if (error.status !== 404) throw error; meta = []; }
+    if (meta.length) { hasLiveContent.value = true; return; }
+    const runtime = await loadRuntimeDiscovery();
+    hasLiveContent.value = Object.entries(runtime || {}).some(([name, value]) =>
+      name !== "uptime" && value && typeof value === "object" &&
+      Object.keys(value).some(key => name !== "system" || !["otaActive", "otaHasPassword"].includes(key)));
+    if (!hasLiveContent.value && activeTab.value === "live") {
       await switchToSettings();
       notify("No live dashboard defined – opening Settings", "info");
     }
+  } catch {
+    // Transient discovery failure is not evidence of an empty dashboard. The dashboard retries.
   }
 }
+
 async function switchToSettings() {
   if (activeTab.value !== "settings" && blockIfExternalOtaActive()) return;
 
@@ -1238,47 +1177,35 @@ function cancelSettingsAuth() {
   pendingFlashStart.value = false; // Clear any pending flash start
   activeTab.value = "live"; // Stay on live tab
 }
-async function injectVersion() {
-  try {
-    // Preferred: structured app info
-    const r = await fetch("/appinfo");
-    if (r.ok) {
-      const info = await r.json().catch(() => ({}));
-      appName.value = info && typeof info.appName === 'string' ? info.appName.trim() : "";
-      appTitle.value = info && typeof info.appTitle === 'string' ? info.appTitle.trim() : "";
-      version.value = info && typeof info.version === 'string' ? info.version.trim() : "";
-      guiLoggingEnabled.value = !!(info && info.guiLogging);
-
-      const tabBase = (appTitle.value && appTitle.value.length)
-        ? appTitle.value
-        : ((appName.value && appName.value.length) ? appName.value : "ESP32 Configuration");
-      document.title = (version.value && version.value.length) ? `${tabBase} ${version.value}` : tabBase;
-      return;
-    }
-
-    // Fallback: legacy /version (plain text "<name> <semver>")
-    const r2 = await fetch("/version");
-    if (!r2.ok) throw new Error("Version fetch failed");
-    const raw = String(await r2.text()).trim();
-    const m = raw.match(/^(.*)\s+(\d+\.\d+\.\d+(?:[-+].*)?)$/);
-    const legacyName = (m && m[1]) ? String(m[1]).trim() : raw;
-    const legacyVer = (m && m[2]) ? String(m[2]).trim() : "";
-    appName.value = legacyName;
-    version.value = legacyVer;
-    document.title = (legacyVer && legacyVer.length) ? `${legacyName} ${legacyVer}` : legacyName;
-  } catch (e) {
-    appName.value = "";
-    appTitle.value = "";
-    version.value = "";
-    guiLoggingEnabled.value = false;
-    document.title = "ESP32 Configuration";
-  }
+const appInfoRecovery = createAppInfoRecovery({
+  onUpdate(info) {
+    appName.value = info.appName;
+    appTitle.value = info.appTitle;
+    version.value = info.version;
+    guiLoggingEnabled.value = info.guiLogging;
+    const tabBase = info.appTitle || info.appName || "ESP32 Configuration";
+    document.title = info.version ? `${tabBase} ${info.version}` : tabBase;
+  },
+});
+// Keep identity retry timers from competing with initial dashboard schema loads.
+appInfoRecovery.pauseRetries();
+function handleDashboardBootstrap() {
+  if (startupDisposed) return;
+  startupComplete.value = true;
+  appInfoRecovery.resumeRetries();
+  initGuiWebSocket();
+}
+let guiHasConnected = false;
+function injectVersion() {
+  return appInfoRecovery.run();
 }
 async function loadUserTheme() {
   try {
-    const css = await fetch(`/user_theme.css?ts=${Date.now()}`)
-      .then((r) => (r.status === 200 ? r.text() : ""))
-      .catch(() => "");
+    const response = await readTextResponse(`/user_theme.css?ts=${Date.now()}`, {
+      signal: startupController.signal,
+    });
+    if (startupDisposed) return;
+    const css = response.status === 200 ? response.body : "";
     if (css && css.trim().length) {
       const existing = document.getElementById("user-theme-css");
       if (existing) existing.remove();
@@ -1586,19 +1513,25 @@ watch(externalOtaActive, (active) => {
   }
 });
 
-onMounted(() => {
+onMounted(async () => {
   applyTheme(themeMode.value);
   if (shouldShowHttpOnlyHint()) {
     httpOnlyHintUrl.value = `http://${window.location.host}/`;
     showHttpOnlyHint.value = true;
   }
-  loadUserTheme();
-  loadSettings();
-  injectVersion();
-  checkLiveContent();
-  initGuiWebSocket();
+  await loadUserTheme();
+  if (startupDisposed) return;
+  await injectVersion();
+  if (startupDisposed) return;
+  await checkLiveContent();
+  if (startupDisposed) return;
+  startupReady.value = true;
+  if (!hasLiveContent.value) handleDashboardBootstrap();
 });
 onBeforeUnmount(() => {
+  startupDisposed = true;
+  startupController.abort();
+  appInfoRecovery.stop();
   if (typeof window !== "undefined") {
     window.removeEventListener("beforeunload", preventNavigationDuringExternalOta);
   }

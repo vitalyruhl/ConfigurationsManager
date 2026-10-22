@@ -32,9 +32,12 @@
 // Modular components
 #if CM_ENABLE_WIFI
 #include "wifi/WiFiManager.h"
+#include "wifi/ConnectivityCheck.h"
+#include "wifi/detail/WiFiHealthConfig.h"
 #endif
 #include "web/WebServer.h"
 #include "ota/OTAManager.h"
+#include "core/LoopWatchdog.h"
 #include "runtime/RuntimeManager.h"
 
 #if CM_EMBED_WEBUI
@@ -52,7 +55,12 @@ public:
 };
 #endif
 
-#define CONFIGMANAGER_VERSION "4.4.10" // Synced to library.json
+#include "runtime/detail/RuntimeSubscriptions.h"
+#if CM_ENABLE_WS_PUSH
+#include "runtime/detail/RuntimeMessage.h"
+#endif
+
+#define CONFIGMANAGER_VERSION "4.8.0" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1637,10 +1645,44 @@ private:
   // Modular components
 #if CM_ENABLE_WIFI
   ConfigManagerWiFi wifiManager;
+  cm::detail::WiFiHealthConfigMailbox wifiHealthConfig;
+
+  void initializeWiFiHealthConfig() {
+    BaseSetting* setting = findSettingByKeyHint("WiFi", "WiFiProbe");
+    if (setting && setting->getType() == SettingType::STRING) {
+      wifiManager.setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
+    }
+  }
+
+  void applyWiFiHealthConfig() {
+    cm::detail::WiFiHealthConfig update;
+    if (!wifiHealthConfig.take(update))
+      return;
+    if (update.timeoutChanged)
+      wifiManager.setAutoRebootTimeout(update.timeoutMinutes);
+    if (update.targetChanged)
+      wifiManager.setConnectivityCheckTarget(String(update.target.data()));
+  }
+
+  void queueWiFiHealthSetting(BaseSetting* setting) {
+    if (!setting)
+      return;
+    if (setting == findSettingByKeyHint("WiFi", "WiFiRb") && setting->getType() == SettingType::INT) {
+      const int minutes = static_cast<Config<int>*>(setting)->get();
+      setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes)));
+    } else if (setting == findSettingByKeyHint("WiFi", "WiFiProbe") && setting->getType() == SettingType::STRING) {
+      setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
+    }
+  }
+  void queueWiFiHealthSettings() {
+    queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiRb"));
+    queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiProbe"));
+  }
 #endif
   ConfigManagerWeb webManager;
   ConfigManagerOTA otaManager;
   ConfigManagerRuntime runtimeManager;
+  cm::LoopWatchdog loopWatchdog;
 
   // Optional user-provided global CSS to inject into the Web UI
   const char* customCss = nullptr;
@@ -1690,6 +1732,7 @@ private:
 public:
   void setCategoryLayoutOverride(const char* category, const char* page, const char* card, const char* group, int order);
   void registerLivePlacement(const RuntimeFieldMeta& meta);
+  void registerLivePlacement(const cm::RuntimeMetaView& meta);
   void registerLivePlacement(const String& liveGroup,
                              const String& key,
                              const String& label,
@@ -1709,32 +1752,18 @@ public:
   std::function<String()> customPayloadBuilder;
   std::vector<std::function<void(AsyncWebSocketClient*)>> wsConnectCallbacks;
   std::vector<std::function<void(AsyncWebSocketClient*)>> wsDisconnectCallbacks;
-  // Manual heartbeat tracking
-  struct WsClientInfo {
-    uint32_t id;
-    unsigned long lastSeen;
-  };
-  std::vector<WsClientInfo> wsClients;
+  mutable std::mutex wsClientsMutex;
+  cm::RuntimeSubscriptions wsSubscriptions;
   unsigned long wsLastHeartbeat = 0;
-  uint32_t wsHeartbeatInterval = 30000; // ms - ping every 30 seconds instead of 15
-  uint32_t wsHeartbeatTimeout = 120000; // ms - 2 minutes timeout instead of 45 seconds
-  // Cppcheck rationale: Keep allocation-free, early-exit loops on the embedded target.
-  // cppcheck-suppress-begin useStlAlgorithm
+  uint32_t wsHeartbeatInterval = 30000;
+  uint32_t wsHeartbeatTimeout = 120000;
   void wsMarkSeen(uint32_t id) {
-    for (auto& c : wsClients) {
-      // Cppcheck rationale: Keep the allocation-free, early-exit loop on the embedded target.
-      // cppcheck-suppress useStlAlgorithm
-      if (c.id == id) {
-        c.lastSeen = millis();
-        return;
-      }
-    }
-    wsClients.push_back({id, millis()});
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    wsSubscriptions.seen(id, millis());
   }
-  // Cppcheck rationale: End the local embedded-loop exception.
-  // cppcheck-suppress-end useStlAlgorithm
   void wsRemove(uint32_t id) {
-    wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [id](const WsClientInfo& c) { return c.id == id; }), wsClients.end());
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    wsSubscriptions.remove(id);
   }
   void wsHeartbeatMaintenance() {
     if (!wsEnabled || !ws)
@@ -1742,19 +1771,29 @@ public:
     const unsigned long now = millis();
     if (now - wsLastHeartbeat >= wsHeartbeatInterval) {
       wsLastHeartbeat = now;
-      if (ws->availableForWriteAll()) {
-        ws->textAll("__ping"); // application-level ping
+      if (ws->availableForWriteAll())
+        ws->textAll("__ping");
+    }
+    std::vector<cm::RuntimeClient> clients;
+    {
+      std::lock_guard<std::mutex> lock(wsClientsMutex);
+      clients = wsSubscriptions.clients;
+    }
+    for (const auto& client : clients) {
+      auto* connection = ws->client(client.id);
+      if (!connection)
+        wsRemove(client.id);
+      else {
+        bool expired;
+        {
+          std::lock_guard<std::mutex> lock(wsClientsMutex);
+          // Recheck current activity and time; a Pong may have followed the snapshot.
+          expired = wsSubscriptions.removeIfExpired(client.id, uint32_t(millis()), wsHeartbeatTimeout);
+        }
+        if (expired)
+          connection->close(); // Callback may re-enter after the claim lock is released.
       }
     }
-    // Drop stale clients
-    for (const auto& c : wsClients) {
-      if (now - c.lastSeen > wsHeartbeatTimeout) {
-        if (auto* cl = ws->client(c.id))
-          cl->close();
-      }
-    }
-    // cleanup removed
-    wsClients.erase(std::remove_if(wsClients.begin(), wsClients.end(), [this](const WsClientInfo& c) { return ws->client(c.id) == nullptr; }), wsClients.end());
     ws->cleanupClients();
   }
 #endif
@@ -1762,12 +1801,22 @@ public:
 public:
   ConfigManagerClass()
       : appVersion(CONFIGMANAGER_VERSION) {
+    webManager.setSelectedRuntimeJsonProvider([this](const cm::RuntimeSelection& selection) {
+      return runtimeManager.runtimeValuesToJSON(selection);
+    });
     webManager.setCallbacks(
       [this]() { return toJSON(true); },                            // config JSON - include secrets for web interface
       [this]() { return runtimeManager.runtimeValuesToJSON(); },    // runtime JSON
       [this]() { return runtimeManager.runtimeMetaJsonPayload(); }, // runtime meta JSON
       [this]() { reboot(); },                                       // reboot callback
-      [this]() { for (const auto &entry : settings) entry->setDefault(); saveAll(); },                                                 // reset callback
+      [this]() {
+        for (const auto& entry : settings)
+          entry->setDefault();
+        saveAll();
+#if CM_ENABLE_WIFI
+        queueWiFiHealthSettings();
+#endif
+      }, // reset callback
       [this](const String& group, const String& key, const String& value) -> bool {
         return updateSetting(group, key, value); // Save to flash
       },
@@ -1870,6 +1919,7 @@ public:
     String card;
     String group;
     int order = DEFAULT_LAYOUT_ORDER;
+    String sourceGroup; // Optional internal identity; empty preserves explicit global overrides.
   };
 
   std::vector<UiPlacement> settingsPlacements;
@@ -1944,6 +1994,9 @@ public:
         }
       }
     }
+#if CM_ENABLE_WIFI
+    queueWiFiHealthSettings();
+#endif
   }
 
   void saveAll() {
@@ -2016,6 +2069,9 @@ public:
 
     // Side-effects: keep runtime subsystems in sync with specific settings
     if (result) {
+#if CM_ENABLE_WIFI
+      queueWiFiHealthSetting(setting);
+#endif
       // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
       // cppcheck-suppress constVariablePointer
       if (BaseSetting* otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting) {
@@ -2118,6 +2174,9 @@ public:
       }
 
       // Side-effects: keep runtime subsystems in sync with specific settings
+#if CM_ENABLE_WIFI
+      queueWiFiHealthSetting(setting);
+#endif
       // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
       // cppcheck-suppress constVariablePointer
       if (BaseSetting* otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting) {
@@ -2439,12 +2498,13 @@ public:
       return static_cast<Config<int>*>(s)->get();
     };
 
-    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
-    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
+    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 1);
+    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : std::min(9999UL, static_cast<unsigned long>(autoRebootMinCfg));
 
     // Start WiFi connection non-blocking
     wifiManager.setAutoRebootTimeout(autoRebootMin);
     wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
+    initializeWiFiHealthConfig();
     wifiManager.setCallbacks(
       [this]() {
         CM_CORE_LOG("Connected! Starting web server...");
@@ -2501,11 +2561,12 @@ public:
       return static_cast<Config<int>*>(s)->get();
     };
 
-    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
-    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
+    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 1);
+    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : std::min(9999UL, static_cast<unsigned long>(autoRebootMinCfg));
 
     wifiManager.setAutoRebootTimeout(autoRebootMin);
     wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
+    initializeWiFiHealthConfig();
     wifiManager.setCallbacks(
       [this]() {
         CM_CORE_LOG("Connected! Starting web server...");
@@ -2577,6 +2638,10 @@ public:
 
   // Non-blocking client handling
   void handleClient() {
+    loopWatchdog.heartbeat();
+#if CM_ENABLE_WIFI
+    applyWiFiHealthConfig();
+#endif
     updateLoopTiming();
     handleWebsocketPush();
     handleOTA();
@@ -2589,6 +2654,37 @@ public:
   }
   void reconnectWifi() {
     wifiManager.reconnect();
+  }
+#endif
+
+  // The independent supervisor arms at the first handleClient() call, after setup.
+  // Zero disables it; valid nonzero values are 1000..3600000 milliseconds.
+  bool setLoopWatchdogTimeout(uint32_t timeoutMs) {
+    return loopWatchdog.configure(timeoutMs);
+  }
+
+  // Only actual same-loop progress (including synchronous ArduinoOTA) may feed it.
+  void noteSynchronousOtaStart() {
+    loopWatchdog.heartbeat();
+#if CM_ENABLE_WIFI
+    // ArduinoOTA blocks this loop; record suspension before entering the transfer.
+    wifiManager.pauseConnectivityForSynchronousOta();
+#endif
+  }
+
+  void noteLoopProgress() {
+    loopWatchdog.heartbeat();
+  }
+
+#if CM_ENABLE_WIFI
+  bool setConnectivityCheckTarget(const String& target) {
+    if (!cm::detail::isConnectivityTarget(target.c_str()))
+      return false;
+    return wifiHealthConfig.setTarget(target.c_str());
+  }
+
+  bool setWiFiAutoRebootTimeout(uint32_t minutes) {
+    return wifiHealthConfig.setTimeoutMinutes(minutes);
   }
 #endif
 
@@ -2829,6 +2925,13 @@ public:
   }
 
   String buildLiveLayoutJSON() const;
+  String buildLiveLayoutJSON(const String& pageKey) const;
+  String buildLiveLayoutJSONImpl(const String* pageKey) const;
+  String buildLivePageIndexJSON() const;
+  String buildLivePageMetadataJSON(const String& pageKey);
+  bool supportsLivePageSelection() const;
+  bool hasLivePageKey(const String& pageKey) const;
+  String livePageKeyForField(const String& fieldKey, const String& sourceGroup = String()) const;
 
   // Runtime providers
   void addRuntimeProvider(const RuntimeValueProvider& provider) {
@@ -2903,7 +3006,8 @@ public:
     return true;
   }
   size_t getWebSocketClientCount() const {
-    return wsClients.size();
+    std::lock_guard<std::mutex> lock(wsClientsMutex);
+    return wsSubscriptions.clients.size();
   }
 
   static uint32_t clampWebSocketInterval_(uint32_t intervalMs) {
@@ -2914,35 +3018,94 @@ public:
     if (!wsEnabled || !ws)
       return;
     wsHeartbeatMaintenance();
-    if (wsClients.empty())
+    if (millis() - wsLastPush < wsInterval)
       return;
-
-    unsigned long now = millis();
-    if (now - wsLastPush < wsInterval)
-      return;
-    wsLastPush = now;
-
-    String payload;
-    if (customPayloadBuilder) {
-      payload = customPayloadBuilder();
-    } else {
-      payload = runtimeManager.runtimeValuesToJSON();
-    }
-
-    sendWebSocketText(payload);
+    pushRuntimeSnapshot();
   }
 
   bool pushRuntimeSnapshot() {
     if (!wsEnabled || !ws)
       return false;
-    String payload;
-    if (customPayloadBuilder) {
-      payload = customPayloadBuilder();
-    } else {
-      payload = runtimeManager.runtimeValuesToJSON();
+    cm::RuntimeSubscriptions subscriptions;
+    {
+      std::lock_guard<std::mutex> lock(wsClientsMutex);
+      subscriptions = wsSubscriptions;
     }
     wsLastPush = millis();
-    return sendWebSocketText(payload);
+    // Claim before providers/builders allocate. Busy peers skip this tick entirely.
+    std::vector<cm::RuntimeDeliveryReservation> deliveries;
+    for (auto client = subscriptions.clients.begin(); client != subscriptions.clients.end();) {
+      cm::RuntimeDeliveryReservation reservation(client->delivery);
+      auto* connection = reservation ? ws->client(client->id) : nullptr;
+      if (client->mode == cm::RuntimeMode::Events || !reservation || !connection || connection->queueIsFull()) {
+        client = subscriptions.clients.erase(client);
+      } else {
+        deliveries.push_back(std::move(reservation));
+        ++client;
+      }
+    }
+    if (subscriptions.clients.empty())
+      return false;
+    String fullPayload;
+    std::vector<String> selectedPayloads(subscriptions.clients.size());
+    const bool custom = bool(customPayloadBuilder);
+    {
+      auto generation = runtimeManager.acquireRuntimeGeneration(false);
+      if (!generation.owns_lock())
+        return false;
+      // Opaque custom builders still run once and may call runtime JSON recursively.
+      if (custom) {
+        fullPayload = customPayloadBuilder();
+      } else {
+        JsonDocument snapshot;
+        runtimeManager.fillRuntimeSnapshot(snapshot.to<JsonObject>(), subscriptions.unionSelection());
+        if (snapshot.overflowed())
+          return false;
+        const bool singleSelected = subscriptions.clients.size() == 1 && subscriptions.clients[0].mode == cm::RuntimeMode::Selected;
+        if (singleSelected) {
+          // fillRuntimeSnapshot already selects groups and retains uptime/OTA safety.
+          JsonArray groups = snapshot["_runtimeGroups"].to<JsonArray>();
+          for (const auto& group : subscriptions.clients[0].selection.groups)
+            groups.add(group);
+          if (snapshot.overflowed())
+            return false;
+          serializeJson(snapshot, selectedPayloads[0]);
+          if (selectedPayloads[0].length() != measureJson(snapshot))
+            return false;
+        } else {
+          for (size_t i = 0; i < subscriptions.clients.size(); ++i) {
+            const auto& client = subscriptions.clients[i];
+            if (client.mode == cm::RuntimeMode::Legacy) {
+              if (!fullPayload.length())
+                serializeJson(snapshot, fullPayload);
+              if (fullPayload.length() != measureJson(snapshot))
+                return false;
+            } else {
+              JsonDocument projected;
+              cm::filterRuntimeSnapshot(projected.to<JsonObject>(), snapshot.as<JsonObjectConst>(), client.selection);
+              JsonArray groups = projected["_runtimeGroups"].to<JsonArray>();
+              for (const auto& group : client.selection.groups)
+                groups.add(group);
+              if (projected.overflowed())
+                continue;
+              serializeJson(projected, selectedPayloads[i]);
+              if (selectedPayloads[i].length() != measureJson(projected))
+                selectedPayloads[i] = String();
+            }
+          }
+        }
+      }
+    } // JSON documents and generation lock are gone before transport allocation/callbacks.
+    bool sent = false;
+    for (size_t i = 0; i < subscriptions.clients.size(); ++i) {
+      const auto& client = subscriptions.clients[i];
+      const bool shared = custom || client.mode == cm::RuntimeMode::Legacy;
+      const String& payload = shared ? fullPayload : selectedPayloads[i];
+      sent = cm::sendRuntimeMessage(ws->client(client.id), payload, std::move(deliveries[i])) || sent;
+      if (!shared)
+        selectedPayloads[i] = String();
+    }
+    return sent;
   }
 
   void enableWebSocketPush(uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {
@@ -2954,10 +3117,28 @@ public:
       // cppcheck-suppress constParameterPointer
       ws->onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len) {
         switch (type) {
-          case WS_EVT_CONNECT:
+          case WS_EVT_CONNECT: {
+            // ESPAsyncWebServer 3.4 passes the live HTTP request as the connect argument.
+            auto* request = static_cast<AsyncWebServerRequest*>(arg);
+            String mode;
+            if (request && request->hasParam("runtime")) {
+              mode = request->getParam("runtime")->value();
+              if (!mode.length()) {
+                client->close();
+                break;
+              }
+            }
+            bool accepted;
+            {
+              std::lock_guard<std::mutex> lock(wsClientsMutex);
+              accepted = wsSubscriptions.connect(client->id(), mode.c_str(), millis());
+            }
+            if (!accepted) {
+              client->close();
+              break;
+            }
             CM_CORE_LOG_VERBOSE("[WS] Client connect %u", client->id());
-            wsMarkSeen(client->id());
-            if (pushOnConnect)
+            if (pushOnConnect && !mode.length())
               handleWebsocketPush();
             // Cppcheck rationale: Avoid changing mutable callback and integration handles without a call-site audit.
             // cppcheck-suppress constVariableReference
@@ -2966,6 +3147,7 @@ public:
                 cb(client);
             }
             break;
+          }
           case WS_EVT_DISCONNECT:
             CM_CORE_LOG_VERBOSE("[WS] Client disconnect %u", client->id());
             wsRemove(client->id());
@@ -2988,13 +3170,11 @@ public:
             if (arg && data && len) {
               const auto* info = reinterpret_cast<const AwsFrameInfo*>(arg);
               if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-                // Small fixed buffer for compare
-                char buf[16];
-                size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
-                memcpy(buf, data, n);
-                buf[n] = '\0';
-                if (strcmp(buf, "__pong") == 0) {
+                if (len == 6 && memcmp(data, "__pong", 6) == 0) {
                   wsMarkSeen(client->id());
+                } else if (len <= cm::RuntimeSelection::maxPayloadBytes + 64) {
+                  std::lock_guard<std::mutex> lock(wsClientsMutex);
+                  wsSubscriptions.subscribe(client->id(), reinterpret_cast<const char*>(data), len, millis());
                 }
               }
             }
