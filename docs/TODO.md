@@ -16,9 +16,9 @@
 
 - [ ] MQTT verbose logging: Investigate and fix the reported TX payload-preview `LoadProhibited` crash (`strlen(nullptr)` via `vsnprintf`), and harden the related RX preview. Use allocation-free, bounded 200-character previews, null-safe formatting and compile-time exclusion when verbose logging is disabled; preserve MQTT behavior. See [the crash evidence and bounded implementation scope](todo_mqtt_verbose_crash.md). Root cause and fix remain unconfirmed.
 
-- [ ] Web UI: Reduce peak RAM usage for large `/config.json` and `/runtime.json` responses. Investigate full-`String` construction and send-time copies, which may temporarily require roughly twice the payload memory. Replace whole-response buffering with streaming serialization or bounded chunks in ConfigManager where appropriate. Measure peak heap usage and verify complete JSON delivery; coordinate with the HTTP delivery/panic investigation below.
+- [x] Web UI/HTTP/WebSocket iteration: reduce temporary JSON/payload copies, bound HTTP delivery and runtime socket queues, and serialize startup/runtime generation. Normal SIL/SBT access was operator-accepted on 2026-10-22 as faster and without observed crashes. See [the acceptance and preserved investigation history](todo_http_delivery_panic.md). Whole-response output buffers still exist; optional overload/headroom research is deferred, with no claim that earlier failed stress cohorts passed.
 
-- [ ] Investigate truncated HTTP responses, metadata 503 and the earlier unexplained panic. See [the deferred investigation handoff](todo_http_delivery_panic.md) for the 2026-10-16 evidence, exact baselines, hypotheses and acceptance gates. Keep the current CM feature work off main until resolved, as requested by the owner.
+- [x] Close the current HTTP delivery/panic work item by operator acceptance (2026-10-22). Preserve historical failures, firmware identities and unproven causes in the linked handoff; this acceptance authorizes neither a release nor main integration. The separate WT32-ETH01 Ethernet rapid-reload issue #71 is unaffected.
 
 ## High Priority (Prio 1) - Proposed API vNext (Draft)
 
@@ -78,4 +78,4 @@
 
 ## Status Notes
 
-- Runtime stability remains under investigation; see the open HTTP delivery/panic item above.
+- The current HTTP/WebSocket iteration is operator-accepted; optional historical overload research is deferred. The separate MQTT verbose-logging item remains open. CM 4.8.0 is unreleased on the consolidated development branch.

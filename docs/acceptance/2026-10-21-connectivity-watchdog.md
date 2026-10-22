@@ -3,8 +3,9 @@
 ## Scope and identity
 
 - Repository: ConfigurationsManager, branch `feature/ble-compact-runtime`.
-- Base: `0ef9b5f4aa5ad33aba7239bcccc9c6d2f5936854`; changes remain uncommitted.
-- Compatible feature version: 4.8.0. No release, push or production upload.
+- Historical test base: `0ef9b5f4aa5ad33aba7239bcccc9c6d2f5936854`; tested changes were uncommitted at that checkpoint.
+- Consolidated CM source commit (2026-10-22): `4c2daf2238ca3fbb6ea9a5ecb8a802b09a8f1072`. All 19 files in the final HIL source manifest were compared unchanged against this commit.
+- Compatible feature version: 4.8.0 Unreleased. Development-branch consolidation only; this record does not authorize main integration, release or a production upload.
 - Hardware: test ESP32 on COM8; isolated CM HIL sketch, not a SIL plant test.
 - Final firmware SHA-256: `BACA56E10D4A2A9D6FC078B6F2C3F119738E36C9A0092FF374007490744BBB56`.
 - Final image: 1,188,896 bytes; flash usage 1,182,325 / 1,310,720; static RAM 54,500 bytes.
@@ -76,6 +77,21 @@ timing and rollover are covered by host tests.
   not proof of recovery from all CPU, interrupt, power or network hardware faults.
 - No conclusion about the production SIL Guru/root cause or long-run stability
   follows from these bounded tests. Production SIL/SBT and HA were not changed.
+
+## Consolidation and operator disposition - 2026-10-22
+
+The consolidated source commit above preserves the HIL-tested source bytes.
+Focused connectivity, loop-supervisor, WiFi-settings and BLE host checks, six
+connectivity Vue tests and the CM USB build passed during consolidation. The
+firmware hash and device results above remain the original test checkpoint;
+source equivalence does not create a new deployed-image identity.
+
+Separately, the operator accepted normal SIL/SBT web access as substantially
+faster and without observed crashes, and requested closure of the current
+HTTP/WebSocket iteration. See [the preserved investigation](../todo_http_delivery_panic.md).
+That report does not pass the historical overload cohorts or resolve the native
+ArduinoOTA receive failures recorded here. The complete release matrix was not
+run; CM remains on its development branch.
 
 ## Focused commands
 

@@ -1,8 +1,37 @@
 # Deferred HTTP delivery and panic investigation
 
-Status: open; original evidence checkpoint 2026-10-16, follow-up 2026-10-18. Owner: ConfigurationsManager (CM), with separate SolarBatteryTelemetry (SBT) and SolarInverterLimiter (SIL) consumer checks.
+Status: completed for the current iteration; operator-accepted on 2026-10-22.
+Owner: ConfigurationsManager (CM), with separate SolarBatteryTelemetry (SBT) and
+SolarInverterLimiter (SIL) consumer observations.
 
-The owner requested a durable handoff because investigation may resume a week later. Preserve the current CM feature branch on origin; do not integrate it into main while these failures remain unresolved. This document records an investigation, not an implemented fix or a proven shared root cause.
+## Current disposition - 2026-10-22
+
+The operator reports that normal SIL and SBT web access is good, substantially
+faster than before and does not cause observed crashes. On that basis the
+operator explicitly accepted the HTTP/WebSocket work and requested that this
+iteration be marked done. This is operator-provided runtime evidence, not a new
+agent-run load test or an assertion about every historical firmware cohort.
+
+CM sources are consolidated on `feature/ble-compact-runtime` at
+`4c2daf2238ca3fbb6ea9a5ecb8a802b09a8f1072`, version 4.8.0 Unreleased. The current
+instruction is development-branch consolidation; no main integration, release or
+new hardware action follows from this acceptance. The former blanket instruction
+to keep the feature off main until this investigation is solved is superseded by
+this disposition; ordinary integration/release governance still applies.
+
+All entries below are dated historical evidence. Preserve their failures, source
+identities, firmware hashes and limitations. Their then-current instructions and
+pending gates describe those checkpoints, not the present work queue. The failed
+normal/overload cohorts have not been retroactively passed, and the historical
+allocation-pressure/missing-ACK causes have not been established as fully fixed.
+Further overload/resource-lifetime research is optional and deferred; it does
+not block this operator acceptance. Reopen only for a new reproducible problem
+or an explicit request for that research. GitHub issue #71 concerns WT32-ETH01
+Ethernet rapid reload and is not closed by SIL/SBT WiFi feedback.
+
+The original evidence checkpoint is 2026-10-16, with follow-ups through
+2026-10-21. This document retains that investigation history and does not claim
+a proven shared root cause.
 
 ## Resume context
 

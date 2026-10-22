@@ -1,7 +1,17 @@
 # Compact runtime metadata handoff and execution record
 
-Updated: 2026-10-18. This file is the restart entry point. Read it before
-redispatching work; then read the linked design and implementation plan.
+Current disposition: 2026-10-22. CM sources are consolidated on
+`feature/ble-compact-runtime` at `4c2daf2238ca3fbb6ea9a5ecb8a802b09a8f1072`,
+version 4.8.0 Unreleased. The operator accepted normal SIL/SBT web access as
+faster and without observed crashes; the current HTTP/WebSocket iteration is
+complete. See [the current acceptance and historical evidence](../../todo_http_delivery_panic.md).
+Earlier versions, branches, permissions and pending gates below describe their
+dated checkpoints. Overload research remains optional and deferred; historical
+failed cohorts and artifact identities are preserved. No main integration or
+release is implied.
+
+Historical handoff updated: 2026-10-18. Read the linked design and implementation
+plan when investigating the original compact-metadata work.
 
 ## Owner request and authority
 

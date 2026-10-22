@@ -145,3 +145,15 @@ handler without taking the flash-operation mutex: these operations perform no
 flash writes. Ordinary servicing after Succeeded cannot turn that already accepted
 update into HTTP 409 or prevent its reboot handoff. Stale IDs, contenders and late
 cleanup cannot acquire the successful owner's acknowledgement or release its pause.
+
+## Connectivity and loop recovery during OTA
+
+AP/OTA suspend network-triggered recovery; normal operation resumes with a fresh
+recovery window. Synchronous ArduinoOTA records suspension before entering its
+blocking transfer, including the failed-transfer path. Its start/progress confirms
+loop work to the independent supervisor; asynchronous HTTP upload traffic does
+not feed that supervisor. Continue servicing `handleClient()` and keep the
+application loop responsive during HTTP uploads. See [WiFi recovery](WIFI.md)
+and the [bounded acceptance record](acceptance/2026-10-21-connectivity-watchdog.md)
+for the 30-second default, timeout API and tested slow/interrupted HTTP OTA cases.
+The recorded native ArduinoOTA receive failures remain a separate limitation.

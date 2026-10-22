@@ -1,6 +1,6 @@
 # Runtime metadata: legacy and compact fields
 
-Since 4.7.0, applications can opt into compact field metadata. Existing
+In 4.8.0 (Unreleased), applications can opt into compact field metadata. Existing
 RuntimeFieldMeta, live builders, providers, controls and JSON consumers remain
 supported. Compact metadata describes fields; providers/getters still supply
 values. Existing applications do not need conversion.

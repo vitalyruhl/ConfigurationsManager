@@ -1,175 +1,60 @@
 # Changelog
 
-This changelog is a curated overview.
+This changelog is a curated overview. Unpublished development versions 4.5.0
+through 4.7.1 are consolidated below; they were not separate releases.
 
 ## 4.8.0 - Unreleased
 
-- Add thread-safe BLE `cancelPendingCommands()` to fence buffered writes before
-  backend dispatch. Already-started writes complete before cancellation returns;
-  peer configuration and independent pause reasons remain unchanged.
-
-- Add the single WiFi **Connectivity check target** setting (`WiFiProbe`): Off by
-  default, the active DHCP/static gateway, or a strict unicast IPv4 address. The
-  editable field offers Off and Standard gateway and rejects invalid syntax.
-  Check enabled targets every ten seconds with a one-second deadline; preserve
-  `WiFiRb` with a new one-minute (60-second) default, retaining existing saved
-  values. Accept only whole minutes from 0 to 9999: zero disables network
-  restarts; 60/120 minutes provide one-/two-hour windows. Suspend
-  network-triggered restarts during AP mode and OTA.
-- Add an independent loop-progress supervisor, enabled with a 30-second default
-  from the first `handleClient()` call. Expose timeout adjustment/disable through
-  `setLoopWatchdogTimeout(ms)` without a global task watchdog.
-- Keep Apply temporary and Save persistent. Document that an unreachable saved
-  target can cause recovery restarts and that USB/AP access may be needed to
-  correct it. Existing stored settings remain compatible; device acceptance is
-  verified separately from host/UI tests.
-
-- Preserve the WiFi recovery restart marker across software resets so the next
-  boot can report the initiating recovery path.
-
-- Mark synchronous ArduinoOTA suspension before its blocking transfer starts,
-  so an aborted long transfer receives a fresh network recovery window when the
-  application loop resumes.
-
-- Mark synchronous ArduinoOTA suspension before its blocking transfer starts,
-  so an aborted long transfer receives a fresh network recovery window when the
-  application loop resumes.
-
-## 4.7.1 - Unreleased
-
-- Serialize CM runtime JSON generation across HTTP and WebSocket builds. HTTP
-  waits only for provider/JSON construction; main-loop WebSocket ticks skip a
-  busy generator. Recursive custom-builder runtime calls remain supported. Free
-  generation documents and unlock before transport handoff; avoid the projected
-  document for one selected client when its snapshot already has that selection.
-  This bounds a proven allocation overlap, with device acceptance still pending.
-
-- Bound CM runtime WebSocket delivery to one outstanding message per client.
-  Atomically reserve before snapshot/custom-builder work and skip saturated ticks;
-  release only after transport message destruction has freed its copied payload.
-  Preserve selected groups, legacy/custom payloads and independent healthy peers;
-  general text/event APIs remain unchanged. Device concurrency acceptance remains
-  required; this does not assign the cause of missing TCP acknowledgements.
-
-- Return runtime JSON by move/elision instead of a conditional expression that
-  copied the complete String while its JSON document and original output were
-  still alive. Reject overflowed documents or incomplete serialization and return
-  HTTP 503 for an empty runtime provider result rather than HTTP 200 with no body.
-  This removes a proven transient allocation mechanism; aggregate concurrent
-  HTTP/WebSocket memory and device acceptance remain to be measured.
-
-- Claim expired WebSocket subscriptions once before requesting close, preventing
-  repeated heartbeat maintenance from queuing unlimited close controls for a
-  stalled peer. Recheck current activity under the subscription mutex so a late
-  Pong can keep the client active; release the mutex before external callbacks.
-  Existing timeout thresholds and reconnect behavior remain intact.
-
-- Let bounded HTTP responses admit up to two negotiated TCP segments (at most
-  2920 bytes; keep the 512-byte fallback when MSS is zero) and configure a
-  15-second ACK budget. Reduce repeated
-  acknowledgement waits on large UI responses while keeping accepted-byte
-  accounting and response ownership. Timeout enforcement retains the upstream
-  eligibility condition: same-tick TX/ACK timestamps can suppress that callback.
-  Hardware delivery acceptance and the cause of missing ACKs remain open.
-
-## 4.7.0 - Unreleased
-
-- Separate BLE peer configuration from outgoing IO slots and add the consumer
-  `CM_BLE_TX_MAX_BYTES` limit (default 272 bytes). Preserve full 272-byte receive
-  events, queue depths, configuration revisions and query completion safeguards.
-
-- Store built-in System live-field descriptions as compact Int/Bool/Text metadata.
-  Preserve JSON output, existing units/styles/alarms and saved settings.
-
-- Add opt-in compact runtime field types with shared routing text and sparse
-  alarm/style/label data. Preserve existing RuntimeFieldMeta registration and
-  wire output; legacy mutable-pointer access deliberately promotes individual
-  compact fields without retaining a second full metadata mirror.
-- Convert only the BME280-Temp-Sensor example to four compact sensor fields
-  alongside its existing legacy warning. Preserve saved WiFi/OTA settings by
-  removing automatic startup default writes from this example.
-## 4.6.1 - Unreleased
-
-- Release each MQTT System-Info JSON document before publishing its payload,
-  and release ESP payload/topic storage before generating WiFi information.
-  Preserve topics, JSON output, retained behavior and MQTT buffer sizing.
-
-- Stagger WebUI startup body reads, schema loading and socket handshakes to
-  reduce overlapping network/JSON allocation peaks. Keep bounded retry and OTA
-  status recovery active after initial schema failures.
-- Send built-in theme CSS from immutable static data and snapshot custom CSS
-  once for the bounded sender, avoiding the response stream's default buffer.
-- Generate app-info JSON without a temporary document tree and move its buffer
-  into the response. Under verbose logging, report heap/default-allocation
-  snapshots and integrity at app-info/page-index response boundaries using ROM
-  output. These diagnostics are compiled out when verbose logging is disabled.
-- Recover the WebUI application name after interrupted app-info requests: use
-  the legacy version endpoint for transport/JSON failures, retry with bounded
-  delays, and retain an already loaded identity during temporary outages.
-  Cancel pending identity requests on unmount and refresh after GUI reconnect.
-- Serialize CM-owned live page indexes, layouts and runtime metadata directly
-  into a bounded output buffer, without temporary ArduinoJson document trees.
-  Preserve page selection, ordering, duplicate-key behavior and provider/parser
-  APIs. Escape all JSON control bytes and reject incomplete output on failure.
-- Retain ArduinoJson numeric formatting through an allocation-free adapter to
-  preserve floating-point wire values. The complete response buffer and existing
-  layout sorting/normalization still require memory; hardware panic acceptance
-  and HTTP delivery timing remain open.
-
-## 4.6.0 - Unreleased
-
-- Add a lightweight live page index and optional page selection for layout and
-  metadata. Existing unfiltered endpoints retain their full schemas. Load active
-  page layout then metadata sequentially and cache successful results in the
-  browser; defer configuration loading until Settings opens.
-- Preserve exact page keys and source identity when different pages expose the
-  same field key. Keep navigation during empty/error states and retry active
-  timeouts without applying cancelled page results. OTA safety remains available
-  independently of optional System telemetry.
-
-- Release metadata snapshots after their final caller/response owner while still
-  sharing concurrent responses. Preserve revision invalidation and single-flight
-  rebuilds; later requests rebuild expired snapshots.
-- Use safe character appends for JSON numeric slices in layout and metadata
-  serialization, avoiding the pinned String pointer-concat source over-read.
-- Assemble layout output from one page or placement fragment at a time,
-  preserving JSON escaping, ordering and duplicate-key behavior without retaining
-  the complete JSON document beside the output buffer.
-- Validate complete layout serialization, including document overflow, output
-  reservation and every append. Return 503 instead of a partial layout JSON 200
-  when allocation or serialization fails.
-
-- Bound static root WebUI gzip responses to 512 accepted-but-unacknowledged
-  bytes, preserving headers and payload across zero/short TCP admission and
-  failed flushes. Functional hardware acceptance passed for the final root and
-  scoped JSON flow; general Wi-Fi/startup recovery remains outside this fix.
-- Apply the same bounded sender to successful config, runtime, runtime metadata
-  and live layout JSON responses. Move generated payloads into the response and
-  retain shared metadata until final ACK or disconnect, without another complete
-  payload copy. Preserve schemas, CORS, runtime cache headers and metadata request
-  accounting; large config responses now use Content-Length instead of chunked
-  framing. Provider allocation peaks and OTA routes remain outside this change.
-
-- Evaluate runtime providers and controls only for the active dashboard page,
-  using bounded HTTP/WebSocket group selections and one shared snapshot per
-  push tick. Existing full-runtime consumers retain their complete data.
-- Reuse successful runtime metadata/layout loads, pause ordinary runtime groups
-  in hidden views, and retain GUI/log traffic and the small OTA safety state.
-- Abort timed-out response bodies, serialize fallback requests and ignore stale
-  page responses. Four-page hardware/browser acceptance passed; an initial
-  Wi-Fi/startup refusal episode still required a USB reset. See the page-scoped
-  dashboard plan for artifact identities, payload sizes and measured build deltas.
-
-## 4.5.0 - Unreleased
-
-- Add an opt-in BLE transport module with settings, runtime diagnostics, bounded
-  queues, and a dedicated worker. Applications explicitly supply NimBLE;
-  applications without Bluetooth keep their existing dependency set.
-- Add independent OTA lifecycle observation for Arduino and HTTP uploads,
-  including session ownership and failure recovery, so optional transports can
-  pause during updates without replacing existing reboot or logging callbacks.
-- Add a Bluetooth example and focused host checks for lifecycle and transport
-  behavior. Physical BLE coexistence and OTA acceptance remain pending.
+- Add an opt-in BLE transport with consumer-supplied NimBLE, persisted enable
+  setting, runtime diagnostics, a dedicated worker and bounded command/event
+  queues. Keep protocol decoding and device write permissions in the consumer.
+  Reduce retained queue/configuration storage and allow a verified smaller
+  outgoing payload limit through `CM_BLE_TX_MAX_BYTES` (default 272 bytes).
+  Add thread-safe `cancelPendingCommands()` to fence buffered backend writes;
+  already-started writes finish before cancellation returns.
+- Add independent Arduino/HTTP OTA lifecycle observation and session ownership
+  so optional transports can pause and recover without replacing existing reboot
+  or logging callbacks. Preserve successful HTTP acknowledgement/reboot handoff
+  and serialize shared flash operations against concurrent update attempts.
+- Load dashboard layout, metadata and runtime values for the active page; retain
+  unfiltered endpoints and legacy WebSocket clients. Cache successful browser
+  schema loads, defer configuration loading until Settings opens and preserve
+  OTA safety telemetry while ordinary runtime groups are paused. Cancel stale
+  requests, bound body deadlines/retries and serialize startup HTTP/socket work.
+- Add opt-in compact runtime field metadata with shared routing text and sparse
+  alarm/style/label data. Preserve legacy registration, mutable-pointer access
+  through field promotion and JSON output. Use compact metadata for built-in
+  System fields and the four BME280 example fields; preserve saved settings.
+- Reduce temporary JSON and payload copies in live page indexes, layouts,
+  metadata, app identity, theme CSS and MQTT System-Info. Preserve wire formats,
+  escaping and response ownership; reject incomplete generated JSON with a
+  recoverable error instead of returning a partial successful body. Recover the
+  application name after interrupted app-info requests with bounded fallback
+  and retries.
+- Bound static/JSON HTTP delivery to at most two negotiated TCP segments
+  (maximum 2920 bytes; 512-byte fallback for unknown MSS) with a 15-second ACK
+  budget. Serialize runtime JSON generation across HTTP and WebSocket paths,
+  avoid a runtime return-value copy, allow one outstanding runtime message per
+  WebSocket client and close each expired subscription once. Preserve healthy
+  peers, selected groups, custom payloads and general text/event APIs.
+- Add the WiFi **Connectivity check target** setting (`WiFiProbe`): `off` by
+  default, `gateway` for the active DHCP/static gateway, or strict unicast IPv4.
+  Enabled checks run every ten seconds with a one-second deadline. `WiFiRb`
+  accepts whole minutes 0..9999 and defaults to one minute for new/reset values;
+  existing saved values survive and zero disables network-triggered restarts.
+  AP mode and OTA suspend network recovery and grant a fresh window afterward.
+  Apply is temporary; Save persists the target, including an unreachable one.
+- Add an independent 30-second loop supervisor from the first `handleClient()`
+  call, configurable/disableable through `setLoopWatchdogTimeout(ms)`. Preserve
+  the recovery reason across software resets. Synchronous ArduinoOTA progress
+  feeds the loop supervisor and records network-recovery suspension before its
+  blocking transfer; asynchronous HTTP traffic cannot mask a blocked loop.
+- On 2026-10-22 the operator accepted normal SIL/SBT web access as substantially
+  faster and without observed crashes, closing this development iteration's
+  HTTP/WebSocket item. Earlier diagnostic/overload failures remain recorded in
+  [the investigation history](todo_http_delivery_panic.md); their causes and
+  overload recovery are not claimed resolved. This is not a release or a full
+  repository validation result.
 
 ## 4.4.10 - 2026-08-09
 

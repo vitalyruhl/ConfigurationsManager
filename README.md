@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.8.0
+> Version 4.8.0 (Unreleased development version)
 
 ## Preview Before Installing
 
@@ -60,6 +60,8 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 ### Web UI & Runtime
 - Responsive WebUI (embedded in flash)
 - Live runtime values (`/runtime.json`, WebSocket)
+- Page-scoped dashboard loading and bounded runtime delivery
+- Opt-in compact runtime metadata (legacy APIs preserved)
 - Per-setting styling & theming
 
 ### Device & Connectivity
@@ -68,6 +70,11 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 - OTA firmware upload via WebUI
 - Optional MQTT module (PubSubClient-based)
 - Optional BLE transport (consumer-supplied NimBLE, bounded worker and queues)
+
+### Compact runtime metadata
+
+Version 4.8.0 includes opt-in small field definitions while retaining the legacy API.
+See [Runtime metadata](docs/runtime-metadata.md) for typed registration, sparse extensions, promotion and memory measurements.
 
 ### Connectivity and loop recovery
 
@@ -96,8 +103,9 @@ watchdog. The ESP timer task and scheduler must still be able to run; this
 supervisor is not a replacement for interrupt/hardware watchdogs. ArduinoOTA
 progress confirms synchronous loop work; asynchronous HTTP upload traffic does
 not mask a blocked application loop. A failed synchronous ArduinoOTA transfer
-receives a fresh network recovery window when the loop resumes. Device acceptance
-remains a separate validation step.
+receives a fresh network recovery window when the loop resumes. See the
+[connectivity acceptance record](docs/acceptance/2026-10-21-connectivity-watchdog.md)
+for the tested image, bounded device results and remaining limitations.
 
 ### Logging
 - Optional logging module (Serial, GUI log tab, MQTT output)
@@ -321,8 +329,3 @@ Become a patron, by simply clicking on this button (**very appreciated!**):
 `2024-2026 (c)Vitaly Ruhl`
 
 License: GNU General Public License v3.0
-
-### Compact runtime metadata
-
-Version 4.7.0 adds opt-in small field definitions while retaining the legacy API.
-See [Runtime metadata](docs/runtime-metadata.md) for typed registration, sparse extensions, promotion and memory measurements.

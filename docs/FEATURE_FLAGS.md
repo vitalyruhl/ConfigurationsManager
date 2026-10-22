@@ -25,6 +25,14 @@ Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*`
 
 If your project still defines removed flags, the build will fail with a clear `#error` message so you can remove them (example: `CM_ENABLE_WS_PUSH`).
 
+## Optional BLE transport
+
+BLE is opt-in through `bluetooth/BluetoothManager.h`; it does not add NimBLE to
+core consumers. `CM_BLE_TX_MAX_BYTES` defaults to 272 and accepts 1..272 for
+outgoing commands. Apply the same value to every translation unit that includes
+BLE headers; receive events keep their 272-byte capacity. See
+[Bluetooth](BLUETOOTH.md) for dependency pinning, queue sizes and consumer setup.
+
 ## Size impact (rough guidance)
 
 These are rough estimates. Exact savings depend on compiler, LTO, and what your firmware actually uses.
