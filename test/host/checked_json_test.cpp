@@ -56,6 +56,8 @@ int main() {
   page["name"] = "Bluetooth";
   page["title"] = "A \"quoted\" title\\path";
   page["order"] = 40;
+  // ArduinoJson proxy assignment mutates layout; serialize/deserialize below verifies it.
+  // cppcheck-suppress unreadVariable
   page["cards"].to<JsonArray>().add<JsonObject>()["name"] = "Power";
   layout["placements"]["source.value"]["page"] = "Bluetooth";
   layout["defaultPage"] = "Bluetooth";
@@ -67,6 +69,7 @@ int main() {
   assert(good.reserves == 1 && good.length() == measureJson(layout));
   JsonDocument decoded;
   assert(!deserializeJson(decoded, good.value));
+  assert(decoded["pages"][0]["cards"][0]["name"].as<std::string>() == "Power");
   assert(decoded["pages"][0]["title"].as<std::string>() == "A \"quoted\" title\\path");
   Destination reserveFailure;
   reserveFailure.failReserve = true;

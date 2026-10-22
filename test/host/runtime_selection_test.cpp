@@ -18,7 +18,9 @@ struct Provider {
 };
 struct Control {
   std::string group;
-  std::string key;
+  // Retain the complete control record consumed by production snapshot templates.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] std::string key;
   std::function<int()> getter;
 };
 // [MOCKED!] The pinned peer close queues a control message and stays connected.

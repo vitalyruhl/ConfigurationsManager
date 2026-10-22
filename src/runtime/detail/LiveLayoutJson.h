@@ -1,4 +1,5 @@
 #pragma once
+#include <iterator>
 #include <algorithm>
 #include <cstddef>
 #include <vector>
@@ -10,8 +11,7 @@ auto sortedPointers(const Container& entries) {
   using Entry = typename Container::value_type;
   std::vector<const Entry*> result;
   result.reserve(entries.size());
-  for (const auto& entry : entries)
-    result.push_back(&entry);
+  std::transform(entries.begin(), entries.end(), std::back_inserter(result), [](const auto& entry) { return &entry; });
   std::sort(result.begin(), result.end(), [](const Entry* a, const Entry* b) {
     return a->order == b->order ? a->name < b->name : a->order < b->order;
   });
@@ -94,8 +94,8 @@ bool writeLiveLayoutJson(Sink& sink, const Pages& pages, const Placements& place
   const auto ordered = live_layout_detail::sortedPointers(pages);
   if (!sink.raw("{\"pages\":["))
     return false;
-  bool firstPage = true;
-  if (enabled)
+  if (enabled) {
+    bool firstPage = true;
     for (const auto* page : ordered) {
       if (pageKey && normalize(page->name) != *pageKey)
         continue;
@@ -128,6 +128,7 @@ bool writeLiveLayoutJson(Sink& sink, const Pages& pages, const Placements& place
       if (!sink.raw("]}"))
         return false;
     }
+  }
   if (!sink.raw("],\"placements\":{"))
     return false;
   const auto selected = [&](const Placement& placement) {
@@ -135,10 +136,7 @@ bool writeLiveLayoutJson(Sink& sink, const Pages& pages, const Placements& place
       return true;
     if (*pageKey != "__unassigned__")
       return normalize(placement.page) == *pageKey;
-    for (const auto& page : pages)
-      if (normalize(page.name) == normalize(placement.page))
-        return false;
-    return true;
+    return std::none_of(pages.begin(), pages.end(), [&](const auto& page) { return normalize(page.name) == normalize(placement.page); });
   };
   bool firstPlacement = true;
   for (size_t index = 0; index < placements.size(); ++index) {
@@ -178,11 +176,9 @@ bool writeLiveLayoutJson(Sink& sink, const Pages& pages, const Placements& place
   const StringType* defaultPage = !enabled || ordered.empty() ? nullptr : &ordered.front()->name;
   if (pageKey) {
     defaultPage = nullptr;
-    for (const auto* page : ordered)
-      if (normalize(page->name) == *pageKey) {
-        defaultPage = &page->name;
-        break;
-      }
+    const auto page = std::find_if(ordered.begin(), ordered.end(), [&](const auto* entry) { return normalize(entry->name) == *pageKey; });
+    if (page != ordered.end())
+      defaultPage = &(*page)->name;
   }
   if (defaultPage ? !sink.string(*defaultPage) : !sink.string(""))
     return false;

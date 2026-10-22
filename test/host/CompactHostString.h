@@ -22,6 +22,8 @@ public:
   inline static int failAfter = -1;
   inline static bool failOnce = false;
   String() = default;
+  // Preserve implicit Arduino String conversion in the production-facing host adapter.
+  // cppcheck-suppress noExplicitConstructor
   String(const char* s)
       : value_(s ? s : "") {}
   String(const char* s, unsigned n)

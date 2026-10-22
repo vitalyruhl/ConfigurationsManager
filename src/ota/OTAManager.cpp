@@ -326,7 +326,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
   cleanup(request);
 }
 
-void ConfigManagerOTA::sendHttpSuccess(AsyncWebServerRequest* request, OtaUploadContext* ctx) {
+void ConfigManagerOTA::sendHttpSuccess(AsyncWebServerRequest* request, const OtaUploadContext* ctx) {
   AsyncWebServerResponse* response = request->beginResponse(200, "application/json", "{\"status\":\"ok\",\"action\":\"reboot\"}");
   response->addHeader("Connection", "close");
 

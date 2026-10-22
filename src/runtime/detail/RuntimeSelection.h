@@ -1,4 +1,5 @@
 #pragma once
+#include <iterator>
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <cstring>
@@ -31,10 +32,9 @@ struct RuntimeSelection {
       groups.clear();
       return;
     }
-    for (const auto& group : other.groups) {
-      if (!contains(group.c_str()) && groups.size() < maxClients * maxGroups)
-        groups.push_back(group);
-    }
+    std::copy_if(other.groups.begin(), other.groups.end(), std::back_inserter(groups), [this](const auto& group) {
+      return !contains(group.c_str()) && groups.size() < maxClients * maxGroups;
+    });
   }
 };
 

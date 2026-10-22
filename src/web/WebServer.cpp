@@ -469,6 +469,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     }
     String pageKey;
     bool selected = false;
+    // Invalid selectors send 400; missing managers or unknown page keys send 404.
+    // cppcheck-suppress knownConditionTrueFalse
     if (!readLivePageSelection(request, configManager, pageKey, selected))
       return;
     String json = selected ? configManager->buildLiveLayoutJSON(pageKey) : configManager->buildLiveLayoutJSON();
@@ -1209,6 +1211,8 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
   server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
     String pageKey;
     bool selected = false;
+    // Invalid selectors send 400; missing managers or unknown page keys send 404.
+    // cppcheck-suppress knownConditionTrueFalse
     if (!readLivePageSelection(request, configManager, pageKey, selected))
       return;
     if (runtimeMetaJsonProvider || selected) {

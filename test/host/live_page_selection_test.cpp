@@ -4,7 +4,13 @@
 #include <vector>
 #include <iostream>
 struct Placement {
-  std::string id, page, sourceGroup;
+  // The production findLivePlacement template reads this field identity.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] std::string id;
+  std::string page;
+  // The production findLivePlacement template reads this source identity.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] std::string sourceGroup;
 };
 int main() {
   assert(cm::validLivePageSelector("my page!", 8));

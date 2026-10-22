@@ -691,7 +691,7 @@ void ConfigManagerWiFi::updateConnectivity_(uint32_t now, bool stationHealthy, b
   }
   const auto after = connectivityCheck_.state();
   if (after != before) {
-    const char* state = "waiting";
+    [[maybe_unused]] const char* state = "waiting";
     switch (after) {
       case cm::detail::ConnectivityState::Off:
         state = "off";
@@ -735,7 +735,7 @@ void ConfigManagerWiFi::checkAutoReboot() {
     return;
 
   unsigned long now = millis();
-  const unsigned long timeSinceLastConnection = connectivityCheck_.elapsed(now);
+  [[maybe_unused]] const unsigned long timeSinceLastConnection = connectivityCheck_.elapsed(now);
 
   static unsigned long lastAutoRebootEligibilityLog = 0;
   if (lastAutoRebootEligibilityLog == 0 || now - lastAutoRebootEligibilityLog >= 5000UL) {
@@ -902,7 +902,7 @@ void ConfigManagerWiFi::attemptConnect() {
   roamingTargetBSSID = "";
   const uint8_t phase = connectAttempts;
   const unsigned long now = millis();
-  const unsigned long timeSinceLastGood = connectivityCheck_.elapsed(now);
+  [[maybe_unused]] const unsigned long timeSinceLastGood = connectivityCheck_.elapsed(now);
 
   if (phase == 0) {
     WIFI_LOG_VERBOSE("Attempt 1: normal connect (no stack reset)");

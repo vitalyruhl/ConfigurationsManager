@@ -117,7 +117,7 @@ void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::Runtim
       slot[alarm.name] = alarm.active;
   }
   if (configManager) {
-    auto& ota = configManager->getOTAManager();
+    const auto& ota = configManager->getOTAManager();
     root["system"]["otaActive"] = ota.isActive();
     root["system"]["otaHasPassword"] = ota.hasPassword();
   }

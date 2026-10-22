@@ -76,7 +76,9 @@ int main() {
   assert(!commands.push(cmd));
   Backend b;
   detail::BluetoothScheduler<Backend> s(b);
-  assert(s.attachOnce() && !s.attachOnce());
+  const bool firstAttach = s.attachOnce();
+  const bool secondAttach = s.attachOnce();
+  assert(firstAttach && !secondAttach);
   s.configure(false, true, true, 0);
   s.tick(0);
   assert(s.state() == BleState::Disabled && b.scans == 0);
@@ -120,6 +122,7 @@ int main() {
   auto beforeTimeout = s.generation();
   s.tick(10001);
   assert(!s.queryPending() && !s.connected() && s.generation() != beforeTimeout);
+  assert(!b.connected);
   b.connected = true;
   s.requestConnect(10002);
   assert(s.write(bytes, 2, 10003));
@@ -144,6 +147,8 @@ int main() {
   s.tick(0xfffffff0u);
   auto scans = b.scans;
   s.tick(0x000003d8u);
+  // Production tick may mutate the scan count; this boundary must start no new scan.
+  // cppcheck-suppress knownConditionTrueFalse
   assert(b.scans == scans);
   s.tick(0x00001378u);
   assert(b.scans == scans + 1);
@@ -156,6 +161,8 @@ int main() {
   for (uint32_t delay : {1000u, 2000u, 4000u, 8000u, 16000u, 30000u, 30000u}) {
     auto before = retry.connects;
     rs.tick(at + delay - 1);
+    // Production tick may reconnect; one millisecond before the deadline it must not.
+    // cppcheck-suppress knownConditionTrueFalse
     assert(retry.connects == before);
     at += delay;
     rs.tick(at);

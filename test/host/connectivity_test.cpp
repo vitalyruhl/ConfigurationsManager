@@ -9,7 +9,9 @@ using cm::detail::ConnectivityState;
 struct Wire final : cm::detail::ConnectivityTransport {
   struct Probe {
     uint32_t target;
-    uint16_t sequence;
+    // Preserve the full emitted ICMP probe identity alongside target and nonce.
+    // cppcheck-suppress unusedStructMember
+    [[maybe_unused]] uint16_t sequence;
     uint32_t nonce;
   };
   std::vector<Probe> probes;

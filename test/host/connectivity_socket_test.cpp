@@ -7,13 +7,15 @@
 // [MOCKED!] The lwIP C syscall boundary only; actual adapter and packet validation run unchanged.
 using socklen_t = unsigned;
 struct sockaddr {
-  uint16_t sin_family;
+  // Preserve the sockaddr ABI prefix; production socket calls use sockaddr_in.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] uint16_t sin_family;
 };
 struct in_addr {
   uint32_t s_addr;
 };
 struct sockaddr_in {
-  uint16_t sin_family;
+  [[maybe_unused]] uint16_t sin_family;
   in_addr sin_addr;
 };
 enum { AF_INET = 2,
@@ -56,7 +58,7 @@ static int lwip_sendto(int fd, const void* bytes, std::size_t n, int flags, cons
   sent.assign(b, b + n);
   return failSend ? -1 : static_cast<int>(n);
 }
-static int lwip_recvfrom(int fd, void* bytes, std::size_t n, int flags, sockaddr* from, socklen_t* size) {
+static int lwip_recvfrom(int fd, void* bytes, std::size_t n, int flags, sockaddr* from, const socklen_t* size) {
   assert(fd == 7 && flags == MSG_DONTWAIT && *size == sizeof(sockaddr_in));
   ++received;
   if (incoming.empty())

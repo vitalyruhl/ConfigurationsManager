@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 
+namespace {
 struct TrackingAllocator : ArduinoJson::Allocator {
   std::map<void*, size_t> blocks;
   bool fail = false;
@@ -83,6 +84,8 @@ static void placement(JsonObject item, int i) {
 static std::string key(int i) {
   return i == 61 ? "key\"0\\" : "key\"" + std::to_string(i) + "\\";
 }
+} // namespace
+
 int main() {
   std::string golden;
   {
@@ -162,7 +165,8 @@ int main() {
   assert(calls == 1 && reserveFailure.value.empty());
   Output changed;
   unsigned changes = 0;
-  assert(!cm::buildFragmentedJson([&](auto& sink) { return sink.raw(++changes == 1 ? "{}" : "{\"x\":1}"); }, changed));
+  const bool changingBuild = cm::buildFragmentedJson([&](auto& sink) { return sink.raw(++changes == 1 ? "{}" : "{\"x\":1}"); }, changed);
+  assert(!changingBuild);
   assert(changed.value.empty());
   Output writeFailure;
   writeFailure.failAfter = 62;

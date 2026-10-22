@@ -34,11 +34,9 @@ public:
     return true;
   }
   void seen(uint32_t id, unsigned long now) {
-    for (auto& client : clients)
-      if (client.id == id) {
-        client.lastSeen = now;
-        return;
-      }
+    const auto client = std::find_if(clients.begin(), clients.end(), [id](const auto& entry) { return entry.id == id; });
+    if (client != clients.end())
+      client->lastSeen = now;
   }
   // Caller holds its subscription mutex; claim once before external close/callbacks.
   bool removeIfExpired(uint32_t id, uint32_t now, uint32_t timeout) {

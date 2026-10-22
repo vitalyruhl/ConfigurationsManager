@@ -11,6 +11,8 @@ struct String {
   static bool failCopies;
   static unsigned copies;
   String() = default;
+  // Preserve implicit Arduino String conversion in the production-facing host adapter.
+  // cppcheck-suppress noExplicitConstructor
   String(const char* p)
       : value(p ? p : "") {}
   String(const String& other) {
@@ -51,7 +53,9 @@ static size_t serializeJson(const JsonDocument&, String& out) {
 }
 namespace cm {
 struct RuntimeSelection {
-  static constexpr size_t maxPayloadBytes = 2048;
+  // Match the production RuntimeSelection payload-limit interface for extracted routes.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] static constexpr size_t maxPayloadBytes = 2048;
   static RuntimeSelection everything() {
     return {};
   }
@@ -133,12 +137,15 @@ int main(int argc, char**) {
     assert(json.length() == 2944 && String::copies == 0);
     String::failCopies = false;
     JsonDocument::overflow = true;
-    assert(runtime.runtimeValuesToJSON({}).length() == 0);
+    const auto failedPayload1 = runtime.runtimeValuesToJSON({});
+    assert(failedPayload1.length() == 0);
     JsonDocument::overflow = false;
     serializationLimit = 2890; // Writer's reported count alone can hide a failed final concat.
-    assert(runtime.runtimeValuesToJSON({}).length() == 0);
+    const auto failedPayload2 = runtime.runtimeValuesToJSON({});
+    assert(failedPayload2.length() == 0);
     serializationLimit = 0;
-    assert(runtime.runtimeValuesToJSON({}).length() == 0);
+    const auto failedPayload3 = runtime.runtimeValuesToJSON({});
+    assert(failedPayload3.length() == 0);
     std::cout << "Runtime serialization: no output copy; document/partial/empty failures rejected PASS\n";
   } else {
     ConfigManagerWeb web;

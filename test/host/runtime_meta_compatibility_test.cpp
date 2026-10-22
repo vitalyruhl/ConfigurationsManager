@@ -8,7 +8,6 @@
 #include <atomic>
 
 // [MOCKED!] Hardware integration hooks only; all registry/cache code is production.
-class ConfigManagerClass {};
 static size_t placements = 0;
 static ConfigManagerRuntime* placementRuntime = nullptr;
 void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldMeta&) {
@@ -208,7 +207,8 @@ static void failedChangesRemainAtomic() {
 }
 static void placementCallbacksBorrowOneBase() {
   ConfigManagerRuntime rt;
-  ConfigManagerClass hardware;
+  // [MOCKED!] Opaque hardware identity; placement hooks never dereference it.
+  static unsigned char hardwareToken = 0;
   auto legacy = field("Legacy", 0);
   legacy.style.rule("values").set("color", "red");
   rt.addRuntimeMeta(legacy);
@@ -218,7 +218,7 @@ static void placementCallbacksBorrowOneBase() {
   placements = 0;
   placementRuntime = &rt;
   RuntimeStyleRule::resetCopyCount();
-  rt.begin(&hardware);
+  rt.begin(reinterpret_cast<ConfigManagerClass*>(&hardwareToken));
   assert(placements == 2);
   assert(RuntimeStyleRule::getCopyCount() == 0);
   compact.base.key = "later";

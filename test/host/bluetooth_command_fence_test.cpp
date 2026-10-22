@@ -54,6 +54,7 @@ int main() {
   // Reproduce the normal worker generation-change reconnect lifecycle, without a settings mutation.
   scheduler.cancel();
   scheduler.disconnected(2);
+  assert(!backend.connected);
   backend.connected = true;
   assert(scheduler.requestConnect(3));
   BleCommand read{};

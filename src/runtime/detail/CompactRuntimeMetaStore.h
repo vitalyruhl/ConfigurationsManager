@@ -1,5 +1,6 @@
 #pragma once
 #include "RuntimeMetaView.h"
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -403,17 +404,13 @@ class CompactRuntimeMetaStore {
   }
   template <class T>
   static T* sparse(Buffer<Sparse<T>>& b, RuntimeFieldId id) {
-    for (auto& x : b)
-      if (x.id == id)
-        return &x.value;
-    return nullptr;
+    const auto entry = std::find_if(b.begin(), b.end(), [id](const auto& value) { return value.id == id; });
+    return entry == b.end() ? nullptr : &entry->value;
   }
   template <class T>
   static const T* sparse(const Buffer<Sparse<T>>& b, RuntimeFieldId id) {
-    for (const auto& x : b)
-      if (x.id == id)
-        return &x.value;
-    return nullptr;
+    const auto entry = std::find_if(b.begin(), b.end(), [id](const auto& value) { return value.id == id; });
+    return entry == b.end() ? nullptr : &entry->value;
   }
   template <class T>
   static void removeSparse(Buffer<Sparse<T>>& b, RuntimeFieldId id) {
@@ -686,11 +683,7 @@ public:
     return true;
   }
   size_t textCount() const {
-    size_t n = 0;
-    for (const auto& t : text_)
-      if (t.uses)
-        ++n;
-    return n;
+    return static_cast<size_t>(std::count_if(text_.begin(), text_.end(), [](const auto& text) { return text.uses; }));
   }
   bool materialize(RuntimeFieldId id, RuntimeFieldMeta& out) const {
     const auto v = view(id);

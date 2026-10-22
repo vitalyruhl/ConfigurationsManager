@@ -20,10 +20,14 @@ struct HostString : std::string {
   HostString() {
     ++live;
   }
+  // Preserve implicit Arduino String conversion in the production-facing host adapter.
+  // cppcheck-suppress noExplicitConstructor
   HostString(const char* s)
       : std::string(s) {
     ++live;
   }
+  // Preserve implicit Arduino String conversion in the production-facing host adapter.
+  // cppcheck-suppress noExplicitConstructor
   HostString(const std::string& s)
       : std::string(s) {
     ++live;

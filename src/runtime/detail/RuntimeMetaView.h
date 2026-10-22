@@ -15,7 +15,7 @@ struct RuntimePropertiesView {
     return source ? count(source) : 0;
   }
   RuntimePropertyView operator[](size_t i) const {
-    return item(source, i);
+    return (*item)(source, i);
   }
   template <class P>
   static RuntimePropertiesView from(const P& p) {
@@ -36,7 +36,7 @@ struct RuntimeRulesView {
     return source ? count(source) : 0;
   }
   RuntimeRuleView operator[](size_t i) const {
-    return item(source, i);
+    return (*item)(source, i);
   }
   template <class R>
   static RuntimeRulesView from(const R& r) {

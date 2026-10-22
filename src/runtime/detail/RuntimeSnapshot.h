@@ -1,13 +1,12 @@
 #pragma once
+#include <iterator>
 #include "RuntimeSelection.h"
 
 namespace cm {
 template <typename Entry, typename Group>
 std::vector<Entry> selectRuntimeEntries(const std::vector<Entry>& entries, const RuntimeSelection& selection, Group group) {
   std::vector<Entry> selected;
-  for (const auto& entry : entries)
-    if (selection.contains(group(entry)))
-      selected.push_back(entry);
+  std::copy_if(entries.begin(), entries.end(), std::back_inserter(selected), [&](const auto& entry) { return selection.contains(group(entry)); });
   return selected;
 }
 

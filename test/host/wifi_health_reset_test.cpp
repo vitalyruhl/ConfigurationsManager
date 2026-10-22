@@ -8,6 +8,7 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+namespace wifi_health_reset_fixture {
 #define CM_ENABLE_WIFI 1
 #define CM_CORE_LOG(...) ((void)0)
 // Platform storage/OTA are mocked; production reset, load and queue methods are extracted unchanged.
@@ -77,14 +78,14 @@ struct Harness {
   Preferences prefs;
   struct {
     void setPassword(const String&) {}
-  } otaManager;
+    // Retain the OTA integration slot referenced by the extracted reset callback.
+    // cppcheck-suppress unusedStructMember
+  } otaManager [[maybe_unused]];
   cm::detail::WiFiHealthConfigMailbox mailbox;
   unsigned saves = 0;
   BaseSetting* findSettingByKeyHint(const char*, const char* hint) {
-    for (auto* setting : settings)
-      if (std::strcmp(setting->getKeyHint(), hint) == 0)
-        return setting;
-    return nullptr;
+    const auto setting = std::find_if(settings.begin(), settings.end(), [&](const auto* value) { return std::strcmp(value->getKeyHint(), hint) == 0; });
+    return setting == settings.end() ? nullptr : *setting;
   }
   void setWiFiAutoRebootTimeout(uint32_t minutes) {
     assert(mailbox.setTimeoutMinutes(minutes));
@@ -99,7 +100,10 @@ struct Harness {
   }
 #include "wifi-health-reset.inc"
 };
+} // namespace wifi_health_reset_fixture
+
 int main() {
+  using namespace wifi_health_reset_fixture;
   Config<int> timeout("WiFiRb", 5, 1);
   Config<String> target("WiFiProbe", String("gateway"), String("off"));
   Harness manager;

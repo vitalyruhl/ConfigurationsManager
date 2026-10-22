@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+namespace {
 using String = std::string;
 static unsigned long clockNow = 0;
 static unsigned long millis() {
@@ -86,7 +87,9 @@ struct Wire : cm::detail::ConnectivityTransport {
 struct ConfigManagerWiFi {
   bool autoRebootEnabled = true, ota = false, initialized = true, connectAfterStackReset = false, transientStatusActive = false, roamingReconnectPending = false;
   int transientStatusCode = WL_IDLE_STATUS;
-  String roamingTargetBSSID;
+  // Retain the platform manager field used by extracted roaming-update paths.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] String roamingTargetBSSID;
   unsigned long autoRebootTimeoutMs = 60000, lastGoodConnectionMillis = 77, connectionMonitoringStartedMillis = 0;
   unsigned long transientStatusStartedMillis = 0, transientStatusLastLogMillis = 0;
   WiFiManagerState currentState = WIFI_STATE_CONNECTED;
@@ -120,10 +123,13 @@ struct ConfigManagerWiFi {
   void pauseConnectivityForSynchronousOta();
 };
 #include "connectivity-manager.inc"
+} // namespace
+
 int main() {
   ConfigManagerWiFi manager;
   clockNow = 100;
-  assert(manager.setConnectivityCheckTarget("gateway"));
+  const bool targetAccepted1 = manager.setConnectivityCheckTarget("gateway");
+  assert(targetAccepted1);
   manager.update();
   assert(manager.lastGoodConnectionMillis == 77 && manager.connectivitySocket_.targets.back() == 0xc0a80201u);
   manager.connectivitySocket_.ready = true;
@@ -131,13 +137,15 @@ int main() {
   manager.update();
   assert(manager.lastGoodConnectionMillis == 200);
   clockNow = 201;
-  assert(manager.setConnectivityCheckTarget("gateway")); // Reapplying same setting must not cancel or reset proof.
+  const bool targetAccepted2 = manager.setConnectivityCheckTarget("gateway"); // Reapplying same setting must not cancel or reset proof.
+  assert(targetAccepted2);
   WiFi.route = {{192, 168, 3, 1}};
   manager.connectivitySocket_.ready = true;
   clockNow = 300;
   manager.update();
   assert(manager.lastGoodConnectionMillis == 200 && manager.connectivitySocket_.targets.back() == 0xc0a80301u);
-  assert(!manager.setConnectivityCheckTarget("192.168.3.999"));
+  const bool targetAccepted3 = manager.setConnectivityCheckTarget("192.168.3.999");
+  assert(!targetAccepted3);
   manager.ota = true;
   clockNow = 1000000;
   manager.update();
@@ -166,7 +174,8 @@ int main() {
   assert(ESP.resets == 1);
   ESP.resets = 0;
   clockNow = 3000000;
-  assert(manager.setConnectivityCheckTarget("off"));
+  const bool targetAccepted4 = manager.setConnectivityCheckTarget("off");
+  assert(targetAccepted4);
   manager.update();
   assert(manager.lastGoodConnectionMillis == 3000000 && ESP.resets == 0);
   WiFi.ip = {};
@@ -179,7 +188,8 @@ int main() {
   WiFi.mode = WIFI_STA;
   clockNow = 0;
   ConfigManagerWiFi synchronous;
-  assert(synchronous.setConnectivityCheckTarget("gateway"));
+  const bool targetAccepted5 = synchronous.setConnectivityCheckTarget("gateway");
+  assert(targetAccepted5);
   synchronous.update();
   synchronous.ota = true;
   synchronous.pauseConnectivityForSynchronousOta();

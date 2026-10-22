@@ -66,7 +66,7 @@ private:
   void notifyActivityState();
   void checkStaleUpload();
 #if CM_ENABLE_OTA
-  void sendHttpSuccess(AsyncWebServerRequest* request, OtaUploadContext* context);
+  void sendHttpSuccess(AsyncWebServerRequest* request, const OtaUploadContext* context);
 #endif
 
 public:

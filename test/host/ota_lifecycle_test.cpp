@@ -32,6 +32,8 @@ int main() {
   state.finish(last, OtaStage::Succeeded, 0);
   auto count = events.size();
   state.finish(last, OtaStage::Failed, 99);
+  // Production finish can emit lifecycle events; a repeated terminal event must emit none.
+  // cppcheck-suppress knownConditionTrueFalse
   assert(!state.tryStart(OtaTransport::Arduino) && events.size() == count);
   // Observer registration is independently retained by the production state helper.
   unsigned observed = 0;
@@ -100,7 +102,8 @@ int main() {
   });
   serviceHeld.get_future().wait();
   bool responseInstalled = false, rebootInstalled = false;
-  assert(gate.completeHttp(httpId, [&] {responseInstalled=true;rebootInstalled=true; }));
+  const bool completedHttp = gate.completeHttp(httpId, [&] {responseInstalled=true;rebootInstalled=true; });
+  assert(completedHttp);
   assert(responseInstalled && rebootInstalled);
   assert(!gate.completeHttp(httpId + 1, [&] { assert(false); }));
   assert(!http.tryStart(OtaTransport::Arduino));

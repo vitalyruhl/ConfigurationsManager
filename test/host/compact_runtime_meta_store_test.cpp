@@ -1,3 +1,4 @@
+#include <numeric>
 #include "CompactHostString.h"
 #include "runtime/detail/CompactRuntimeMetaStore.h"
 #include "runtime/detail/RuntimeMetaJson.h"
@@ -90,8 +91,7 @@ static size_t legacyBytes(const std::vector<RuntimeFieldMeta>& fields) {
     total += m.style.rules.capacity() * sizeof(RuntimeStyleRule);
     for (const auto& r : m.style.rules) {
       total += r.target.allocatedBytes() + r.className.allocatedBytes() + r.properties.capacity() * sizeof(RuntimeStyleProperty);
-      for (const auto& p : r.properties)
-        total += p.key.allocatedBytes() + p.value.allocatedBytes();
+      total = std::accumulate(r.properties.begin(), r.properties.end(), total, [](size_t bytes, const auto& property) { return bytes + property.key.allocatedBytes() + property.value.allocatedBytes(); });
     }
   }
   return total;

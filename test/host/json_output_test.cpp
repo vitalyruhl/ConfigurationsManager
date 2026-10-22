@@ -161,6 +161,17 @@ static void numericCompatibility() {
 }
 
 static void failuresAreStickyAndAtomic() {
+  Output numericPartial;
+  numericPartial.reserve(16);
+  numericPartial.failAfter = 2;
+  cm::JsonOutput<Output> numericSink(&numericPartial);
+  const bool numericWritten = numericSink.value(123.456);
+  assert(!numericWritten && !numericSink.good());
+  assert(numericSink.size() == 2 && numericPartial.text == "12");
+  Output atomicNumeric;
+  atomicNumeric.failAfter = 2;
+  const bool numericBuilt = cm::buildJsonOutput([](auto& sink) { return sink.value(123.456); }, atomicNumeric);
+  assert(!numericBuilt && atomicNumeric.text.empty());
   cm::JsonOutput<Output> limited(nullptr, 3);
   assert(limited.raw("abc"));
   assert(!limited.raw("d") && !limited.good());

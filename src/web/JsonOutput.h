@@ -184,6 +184,8 @@ private:
     size_t write(const uint8_t* bytes, size_t length) {
       const size_t before = sink->size();
       sink->append(reinterpret_cast<const char*>(bytes), length);
+      // append() mutates the sink and can stop after a partial character write.
+      // cppcheck-suppress duplicateExpression
       return sink->size() - before;
     }
   };

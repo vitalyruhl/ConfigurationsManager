@@ -7,10 +7,16 @@ template <class T>
 struct ConfigOptions {
   const char* key;
   const char* name;
-  const char* category;
+  // Match the category field in production ConfigOptions aggregate initializers.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] const char* category;
   T defaultValue;
-  bool showInWeb;
-  int sortOrder;
+  // Match the visibility field in production ConfigOptions aggregate initializers.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] bool showInWeb;
+  // Match the ordering field in production ConfigOptions aggregate initializers.
+  // cppcheck-suppress unusedStructMember
+  [[maybe_unused]] int sortOrder;
 };
 struct JsonSetting {
   virtual ~JsonSetting() = default;

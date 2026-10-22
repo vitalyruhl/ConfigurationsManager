@@ -32,8 +32,7 @@ public:
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (active_ || succeeded_)
       return false;
-    if (++next_ == 0)
-      ++next_;
+    next_ = next_ == UINT32_MAX ? 1u : next_ + 1u;
     active_ = next_;
     transport_ = transport;
     emit(OtaStage::Starting, active_, 0);

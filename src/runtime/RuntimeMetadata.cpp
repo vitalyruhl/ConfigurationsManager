@@ -283,13 +283,14 @@ bool ConfigManagerRuntime::updateRuntimeMeta(const String& group, const String& 
         return promoteRuntimeMetaLocked(ref.compactId, std::move(m)) != nullptr;
       }
     }
-  } else
-    for (auto& m : runtimeMeta)
-      if (m.key == key && (m.group == group || m.sourceGroup == group)) {
-        updater(m);
-        markRuntimeMetaJsonCacheDirtyLocked();
-        return true;
-      }
+  } else {
+    const auto field = std::find_if(runtimeMeta.begin(), runtimeMeta.end(), [&](const auto& m) { return m.key == key && (m.group == group || m.sourceGroup == group); });
+    if (field != runtimeMeta.end()) {
+      updater(*field);
+      markRuntimeMetaJsonCacheDirtyLocked();
+      return true;
+    }
+  }
   return false;
 }
 RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, const String& key) {
@@ -312,10 +313,10 @@ RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String& group, con
         return promoteRuntimeMetaLocked(ref.compactId, std::move(m));
       }
     }
-  } else
-    for (auto& m : runtimeMeta)
-      if (m.key == key && (m.group == group || m.sourceGroup == group))
-        return &m;
+  } else {
+    const auto field = std::find_if(runtimeMeta.begin(), runtimeMeta.end(), [&](const auto& m) { return m.key == key && (m.group == group || m.sourceGroup == group); });
+    return field == runtimeMeta.end() ? nullptr : &*field;
+  }
   return nullptr;
 }
 

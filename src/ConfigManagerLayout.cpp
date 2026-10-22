@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "ConfigManager.h"
 #include "web/JsonOutput.h"
 #include "runtime/detail/LiveLayoutJson.h"
@@ -506,21 +507,18 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
 bool ConfigManagerClass::supportsLivePageSelection() const {
   if (!liveLayoutEnabled)
     return false;
-  for (const auto& page : livePages) {
+  return std::all_of(livePages.begin(), livePages.end(), [this](const auto& page) {
     const String key = normalizeLayoutName(page.name);
-    if (!key.length() || key.length() > 256 || key == "__unassigned__")
-      return false;
-  }
-  return true;
+    return key.length() && key.length() <= 256 && key != "__unassigned__";
+  });
 }
 
 String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const String& sourceGroup) const {
   const UiPlacement* selected = cm::findLivePlacement(livePlacements, fieldKey.c_str(), sourceGroup.c_str());
   if (selected) {
     const String key = normalizeLayoutName(selected->page);
-    for (const auto& page : livePages)
-      if (normalizeLayoutName(page.name) == key)
-        return key;
+    if (std::any_of(livePages.begin(), livePages.end(), [&](const auto& page) { return normalizeLayoutName(page.name) == key; }))
+      return key;
   }
   return "__unassigned__";
 }
@@ -528,9 +526,8 @@ String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const Str
 bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
   if (!supportsLivePageSelection())
     return false;
-  for (const auto& page : livePages)
-    if (normalizeLayoutName(page.name) == pageKey)
-      return true;
+  if (std::any_of(livePages.begin(), livePages.end(), [&](const auto& page) { return normalizeLayoutName(page.name) == pageKey; }))
+    return true;
   return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMetaView([&](const cm::RuntimeMetaView& meta) {
     return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
   });

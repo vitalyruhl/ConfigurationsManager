@@ -13,6 +13,7 @@
 #include "runtime/detail/RuntimeSubscriptions.h"
 #include "runtime/detail/RuntimeSnapshot.h"
 #include "runtime/detail/RuntimeMessage.h"
+namespace {
 struct Socket {
   std::map<uint32_t, AsyncWebSocketClient> clients;
   AsyncWebSocketClient* client(uint32_t id) {
@@ -281,7 +282,7 @@ static void generationConcurrency() {
       while (!release.load())
         std::this_thread::yield();
   };
-  std::thread http([&] { assert(h.runtimeManager.runtimeValuesToJSON(cm::RuntimeSelection::everything()).length()); });
+  std::thread http([&] { const auto payload = h.runtimeManager.runtimeValuesToJSON(cm::RuntimeSelection::everything()); assert(payload.length()); });
   while (!inBuild.load())
     std::this_thread::yield();
   assert(!h.pushRuntimeSnapshot()); // Main-loop WS never blocks behind HTTP generation.
@@ -304,7 +305,8 @@ static void generationConcurrency() {
   const unsigned before = h.runtimeManager.builds;
   std::thread waitingHttp([&] {
     beforeCall.store(true);
-    assert(h.runtimeManager.runtimeValuesToJSON(cm::RuntimeSelection::everything()).length());
+    const auto payload = h.runtimeManager.runtimeValuesToJSON(cm::RuntimeSelection::everything());
+    assert(payload.length());
     completed.store(true);
   });
   while (!beforeCall.load())
@@ -335,6 +337,8 @@ static void generationReleasedAtTransport() {
   assert(h.pushRuntimeSnapshot());
   AsyncWebSocketClient::onMessage = [] { assert(TrackedDocument::ownAlive == 0); };
 }
+} // namespace
+
 int main() {
   AsyncWebSocketClient::onMessage = [] { assert(TrackedDocument::ownAlive == 0); };
   stalledRuntime();

@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <functional>
 #include <utility>
+namespace ble_host {
 // [MOCKED!] Configuration/UI dependencies; BluetoothManager and transport state remain real.
 struct Preferences {};
 struct JsonObject {
@@ -63,7 +64,6 @@ struct ConfigManagerClass {
     return runtime;
   }
 };
-namespace ble_host {
 inline uint32_t now = 0;
 inline int iteration = 0;
 inline std::function<void()> watermark, delay, cancelConnect;
@@ -71,6 +71,11 @@ inline void (*entry)(void*) = nullptr;
 inline void* entryValue = nullptr;
 struct StopWorker {};
 } // namespace ble_host
+using ble_host::Config;
+using ble_host::ConfigManagerClass;
+using ble_host::ConfigOptions;
+using ble_host::JsonObject;
+using ble_host::Preferences;
 inline uint32_t millis() {
   return ble_host::now;
 }
