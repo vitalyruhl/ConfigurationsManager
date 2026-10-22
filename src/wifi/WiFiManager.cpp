@@ -124,7 +124,8 @@ void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long a
     WIFI_LOG("Starting in AP mode");
   } else if (WiFi.status() == WL_CONNECTED && isValidStationIp(WiFi.localIP())) {
     currentState = WIFI_STATE_CONNECTED;
-    if (!connectivityCheck_.enabled()) lastGoodConnectionMillis = millis();
+    if (!connectivityCheck_.enabled())
+      lastGoodConnectionMillis = millis();
     WIFI_LOG_VERBOSE("Already connected to %s (IP: %s)", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
   } else {
     currentState = WIFI_STATE_DISCONNECTED;
@@ -314,7 +315,7 @@ bool ConfigManagerWiFi::advanceStackReset_() {
       return false;
     case 4:
       // Set additional WiFi parameters for stability
-      WiFi.setSleep(WIFI_PS_MIN_MODEM);     // Required for WiFi/Bluetooth coexistence
+      WiFi.setSleep(WIFI_PS_MIN_MODEM);    // Required for WiFi/Bluetooth coexistence
       WiFi.setAutoReconnect(true);         // Enable auto-reconnect
       WiFi.persistent(true);               // Store WiFi configuration in flash
       WiFi.setTxPower(WIFI_POWER_19_5dBm); // Set specific power level
@@ -692,23 +693,35 @@ void ConfigManagerWiFi::updateConnectivity_(uint32_t now, bool stationHealthy, b
   if (after != before) {
     const char* state = "waiting";
     switch (after) {
-      case cm::detail::ConnectivityState::Off: state = "off"; break;
-      case cm::detail::ConnectivityState::Reachable: state = "reachable"; break;
-      case cm::detail::ConnectivityState::Unreachable: state = "unreachable"; break;
-      case cm::detail::ConnectivityState::Suspended: state = "suspended"; break;
-      case cm::detail::ConnectivityState::Waiting: break;
+      case cm::detail::ConnectivityState::Off:
+        state = "off";
+        break;
+      case cm::detail::ConnectivityState::Reachable:
+        state = "reachable";
+        break;
+      case cm::detail::ConnectivityState::Unreachable:
+        state = "unreachable";
+        break;
+      case cm::detail::ConnectivityState::Suspended:
+        state = "suspended";
+        break;
+      case cm::detail::ConnectivityState::Waiting:
+        break;
     }
     WIFI_LOG("[I] Network check: %s", state);
   }
 }
 
 void ConfigManagerWiFi::pauseConnectivityForSynchronousOta() {
-  if (initialized) updateConnectivity_(millis(), false, true);
+  if (initialized)
+    updateConnectivity_(millis(), false, true);
 }
 
 bool ConfigManagerWiFi::setConnectivityCheckTarget(const String& target) {
-  if (!cm::detail::isConnectivityTarget(target.c_str())) return false;
-  if (connectivityCheck_.matchesTarget(target.c_str())) return true;
+  if (!cm::detail::isConnectivityTarget(target.c_str()))
+    return false;
+  if (connectivityCheck_.matchesTarget(target.c_str()))
+    return true;
   connectivitySocket_.cancel();
   connectivityCheck_.configure(target.c_str(), millis());
   WIFI_LOG("[I] Network check target: %s", target.c_str());

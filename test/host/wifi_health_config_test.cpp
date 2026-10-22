@@ -22,7 +22,9 @@ int main() {
   assert(box.setTarget("off"));
   assert(box.take(update) && !update.timeoutChanged && std::strcmp(update.target.data(), "off") == 0);
   std::thread producer([&] { for (unsigned i=0;i<1000;++i) { assert(box.setTarget(i%2 ? "gateway" : "192.168.2.1")); assert(box.setTimeoutMinutes(i)); } });
-  for (unsigned i=0;i<1000;++i) if (box.take(update) && update.targetChanged) assert(std::strcmp(update.target.data(),"gateway")==0 || std::strcmp(update.target.data(),"192.168.2.1")==0);
+  for (unsigned i = 0; i < 1000; ++i)
+    if (box.take(update) && update.targetChanged)
+      assert(std::strcmp(update.target.data(), "gateway") == 0 || std::strcmp(update.target.data(), "192.168.2.1") == 0);
   producer.join();
   std::cout << "WiFi health configuration handoff checks passed\n";
 }

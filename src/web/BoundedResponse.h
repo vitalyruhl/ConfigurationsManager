@@ -11,7 +11,9 @@ namespace cm {
 class BoundedResponse : public AsyncWebServerResponse {
 public:
   BoundedResponse(const uint8_t* content, size_t length, const String& contentType)
-      : content_(content) { initialize(length, contentType); }
+      : content_(content) {
+    initialize(length, contentType);
+  }
 
   BoundedResponse(String&& content, const String& contentType)
       : owned_(std::move(content)) {
@@ -28,12 +30,15 @@ public:
   BoundedResponse(const BoundedResponse&) = delete;
   BoundedResponse& operator=(const BoundedResponse&) = delete;
 
-  bool _sourceValid() const override { return content_ || _contentLength == 0; }
+  bool _sourceValid() const override {
+    return content_ || _contentLength == 0;
+  }
 
   void _respond(AsyncWebServerRequest* request) override {
     if (!request || !request->client() || !_sourceValid()) {
       _state = RESPONSE_FAILED;
-      if (request && request->client()) request->client()->close();
+      if (request && request->client())
+        request->client()->close();
       return;
     }
     // Bound each response to two negotiated segments and tolerate measured ACK stalls.
@@ -53,8 +58,12 @@ public:
 
   size_t _ack(AsyncWebServerRequest* request, size_t length, uint32_t time) override {
     (void)time;
-    if (_state == RESPONSE_END || _state == RESPONSE_FAILED) return 0;
-    if (!request || !request->client()) { _state = RESPONSE_FAILED; return 0; }
+    if (_state == RESPONSE_END || _state == RESPONSE_FAILED)
+      return 0;
+    if (!request || !request->client()) {
+      _state = RESPONSE_FAILED;
+      return 0;
+    }
     _ackedLength += std::min(length, _writtenLength - _ackedLength);
     if (_state == RESPONSE_WAIT_ACK && _ackedLength == _writtenLength) {
       _state = RESPONSE_END;
@@ -85,22 +94,27 @@ private:
   size_t admit(AsyncWebServerRequest* request) {
     auto* client = request->client();
     if (flushPending_) {
-      if (!client->send()) return 0;
+      if (!client->send())
+        return 0;
       flushPending_ = false;
     }
-    if (_state != RESPONSE_HEADERS && _state != RESPONSE_CONTENT) return 0;
+    if (_state != RESPONSE_HEADERS && _state != RESPONSE_CONTENT)
+      return 0;
     const size_t outstanding = _writtenLength - _ackedLength;
-    if (outstanding >= maxInFlight_) return 0;
+    if (outstanding >= maxInFlight_)
+      return 0;
     const size_t allowance = std::min(client->space(), maxInFlight_ - outstanding);
-    if (!allowance) return 0;
+    if (!allowance)
+      return 0;
     const bool sendingHeader = _state == RESPONSE_HEADERS;
     const size_t remaining = sendingHeader ? header_.length() - headerOffset_ : _contentLength - _sentLength;
     const char* data = sendingHeader ? header_.c_str() + headerOffset_
-                                    : reinterpret_cast<const char*>(content_ + _sentLength);
+                                     : reinterpret_cast<const char*>(content_ + _sentLength);
     // AsyncClient::write can return zero after add succeeded but send failed.
     // Count accepted bytes through add; a failed flush must never re-enqueue them.
     const size_t accepted = client->add(data, std::min(remaining, allowance), ASYNC_WRITE_FLAG_COPY);
-    if (!accepted) return 0;
+    if (!accepted)
+      return 0;
     _writtenLength += accepted;
     if (sendingHeader) {
       headerOffset_ += accepted;
@@ -110,7 +124,8 @@ private:
       }
     } else {
       _sentLength += accepted;
-      if (_sentLength == _contentLength) _state = RESPONSE_WAIT_ACK;
+      if (_sentLength == _contentLength)
+        _state = RESPONSE_WAIT_ACK;
     }
     flushPending_ = !client->send();
     return accepted;
@@ -122,9 +137,17 @@ class RuntimeMetaResponse final : public BoundedResponse {
 public:
   RuntimeMetaResponse(std::shared_ptr<const String> payload, std::atomic<uint32_t>* activeRequests)
       : BoundedResponse(std::move(payload), "application/json"), activeRequests_(activeRequests) {}
-  ~RuntimeMetaResponse() override { if (activeRequests_) --(*activeRequests_); }
-  bool hasPayload() const { return _contentLength != 0 && BoundedResponse::_sourceValid(); }
-  bool _sourceValid() const override { return hasPayload(); }
+  ~RuntimeMetaResponse() override {
+    if (activeRequests_)
+      --(*activeRequests_);
+  }
+  bool hasPayload() const {
+    return _contentLength != 0 && BoundedResponse::_sourceValid();
+  }
+  bool _sourceValid() const override {
+    return hasPayload();
+  }
+
 private:
   std::atomic<uint32_t>* activeRequests_;
 };

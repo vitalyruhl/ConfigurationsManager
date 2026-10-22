@@ -9,6 +9,8 @@ public:
       : BoundedResponse(content, length, "text/html") {
     addHeader("Content-Encoding", "gzip");
   }
-  bool _sourceValid() const override { return _contentLength != 0 && BoundedResponse::_sourceValid(); }
+  bool _sourceValid() const override {
+    return _contentLength != 0 && BoundedResponse::_sourceValid();
+  }
 };
 } // namespace cm

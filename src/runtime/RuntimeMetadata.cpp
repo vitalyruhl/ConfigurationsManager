@@ -203,10 +203,18 @@ bool ConfigManagerRuntime::updateCompactRuntimeMeta(RuntimeFieldId id, const std
     return updateCompactRuntimeMeta(id, updater);                                                           \
   }
 CM_TYPED_API(RuntimeFloatMeta)
-CM_TYPED_API(RuntimeIntMeta) CM_TYPED_API(RuntimeBoolMeta)
-  CM_TYPED_API(RuntimeTextMeta) CM_TYPED_API(RuntimeDividerMeta) CM_TYPED_API(RuntimeButtonMeta)
-    CM_TYPED_API(RuntimeCheckboxMeta) CM_TYPED_API(RuntimeStateButtonMeta) CM_TYPED_API(RuntimeMomentaryButtonMeta)
-      CM_TYPED_API(RuntimeIntSliderMeta) CM_TYPED_API(RuntimeIntInputMeta) CM_TYPED_API(RuntimeFloatSliderMeta) CM_TYPED_API(RuntimeFloatInputMeta)
+CM_TYPED_API(RuntimeIntMeta)
+CM_TYPED_API(RuntimeBoolMeta)
+CM_TYPED_API(RuntimeTextMeta)
+CM_TYPED_API(RuntimeDividerMeta)
+CM_TYPED_API(RuntimeButtonMeta)
+CM_TYPED_API(RuntimeCheckboxMeta)
+CM_TYPED_API(RuntimeStateButtonMeta)
+CM_TYPED_API(RuntimeMomentaryButtonMeta)
+CM_TYPED_API(RuntimeIntSliderMeta)
+CM_TYPED_API(RuntimeIntInputMeta)
+CM_TYPED_API(RuntimeFloatSliderMeta)
+CM_TYPED_API(RuntimeFloatInputMeta)
 #undef CM_TYPED_API
 #define CM_EXTENSION_API(method, type, storeMethod)                                   \
   bool ConfigManagerRuntime::method(RuntimeFieldId id, const type& value) {           \
@@ -217,14 +225,14 @@ CM_TYPED_API(RuntimeIntMeta) CM_TYPED_API(RuntimeBoolMeta)
     markRuntimeMetaJsonCacheDirtyLocked();                                            \
     return true;                                                                      \
   }
-        CM_EXTENSION_API(setRuntimeNumericAlarm, RuntimeNumericAlarm, setNumericAlarm)
-          CM_EXTENSION_API(setRuntimeBoolAlarm, RuntimeBoolAlarm, setBoolAlarm)
-            CM_EXTENSION_API(setRuntimeStateLabels, RuntimeStateLabels, setStateLabels)
-              CM_EXTENSION_API(setRuntimeFieldStyle, RuntimeFieldStyle, setStyle)
-                CM_EXTENSION_API(setRuntimeStaticText, String, setStaticText)
+CM_EXTENSION_API(setRuntimeNumericAlarm, RuntimeNumericAlarm, setNumericAlarm)
+CM_EXTENSION_API(setRuntimeBoolAlarm, RuntimeBoolAlarm, setBoolAlarm)
+CM_EXTENSION_API(setRuntimeStateLabels, RuntimeStateLabels, setStateLabels)
+CM_EXTENSION_API(setRuntimeFieldStyle, RuntimeFieldStyle, setStyle)
+CM_EXTENSION_API(setRuntimeStaticText, String, setStaticText)
 #undef CM_EXTENSION_API
 
-                  RuntimeFieldMeta* ConfigManagerRuntime::promoteRuntimeMetaLocked(RuntimeFieldId id, RuntimeFieldMeta&& meta) {
+RuntimeFieldMeta* ConfigManagerRuntime::promoteRuntimeMetaLocked(RuntimeFieldId id, RuntimeFieldMeta&& meta) {
   if (runtimeMeta.size() > UINT32_MAX)
     return nullptr;
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS)

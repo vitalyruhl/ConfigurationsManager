@@ -18,25 +18,66 @@ struct KeyString : std::string {
   bool operator==(const KeyString& other) const {
     return length() == other.length() && std::strcmp(c_str(), other.c_str()) == 0;
   }
-  bool operator==(const char* other) const { return std::strcmp(c_str(), other) == 0; }
+  bool operator==(const char* other) const {
+    return std::strcmp(c_str(), other) == 0;
+  }
 };
-struct Property { KeyString key; std::string value; };
-struct Rule { KeyString target; std::vector<Property> properties; bool hasVisible=false, visible=true; std::string className; };
-struct Style { std::vector<Rule> rules; bool empty() const { return rules.empty(); } };
+struct Property {
+  KeyString key;
+  std::string value;
+};
+struct Rule {
+  KeyString target;
+  std::vector<Property> properties;
+  bool hasVisible = false, visible = true;
+  std::string className;
+};
+struct Style {
+  std::vector<Rule> rules;
+  bool empty() const {
+    return rules.empty();
+  }
+};
 struct Output {
   std::string value;
-  size_t reserved=0, reserveCalls=0, failAfter=std::numeric_limits<size_t>::max();
-  bool failReserve=false;
-  void remove(unsigned) { value.clear(); }
-  bool reserve(unsigned n) { ++reserveCalls; if(failReserve)return false; reserved=n;value.reserve(n);return true; }
-  bool concat(char c) { if(value.size()>=reserved || value.size()>=failAfter)return false;value.push_back(c);return true; }
-  size_t length() const { return value.size(); }
+  size_t reserved = 0, reserveCalls = 0, failAfter = std::numeric_limits<size_t>::max();
+  bool failReserve = false;
+  void remove(unsigned) {
+    value.clear();
+  }
+  bool reserve(unsigned n) {
+    ++reserveCalls;
+    if (failReserve)
+      return false;
+    reserved = n;
+    value.reserve(n);
+    return true;
+  }
+  bool concat(char c) {
+    if (value.size() >= reserved || value.size() >= failAfter)
+      return false;
+    value.push_back(c);
+    return true;
+  }
+  size_t length() const {
+    return value.size();
+  }
 };
 struct TrackingAllocator : ArduinoJson::Allocator {
-  size_t calls=0, bytes=0;
-  void* allocate(size_t n) override { ++calls;bytes+=n;return std::malloc(n); }
-  void* reallocate(void* p,size_t n) override {++calls;bytes+=n;return std::realloc(p,n);}
-  void deallocate(void* p) override {std::free(p);}
+  size_t calls = 0, bytes = 0;
+  void* allocate(size_t n) override {
+    ++calls;
+    bytes += n;
+    return std::malloc(n);
+  }
+  void* reallocate(void* p, size_t n) override {
+    ++calls;
+    bytes += n;
+    return std::realloc(p, n);
+  }
+  void deallocate(void* p) override {
+    std::free(p);
+  }
 };
 struct Meta {
   std::string group;
@@ -184,46 +225,106 @@ void referenceMeta(JsonObject o, const Meta& m) {
 }
 
 static void compare(const Meta& m) {
-  JsonDocument reference; referenceMeta(reference.to<JsonObject>(),m);
-  std::string expected;serializeJson(reference,expected);
+  JsonDocument reference;
+  referenceMeta(reference.to<JsonObject>(), m);
+  std::string expected;
+  serializeJson(reference, expected);
   Output actual;
-  assert(cm::buildJsonOutput([&](auto& sink){return cm::writeRuntimeMeta(sink,m);},actual));
-  if(expected!=actual.value){std::cerr<<"Expected: "<<expected<<"\nActual: "<<actual.value<<"\n";std::exit(1);}
-  assert(actual.reserveCalls==1);
-  JsonDocument parsed; assert(!deserializeJson(parsed,actual.value));
+  assert(cm::buildJsonOutput([&](auto& sink) { return cm::writeRuntimeMeta(sink, m); }, actual));
+  if (expected != actual.value) {
+    std::cerr << "Expected: " << expected << "\nActual: " << actual.value << "\n";
+    std::exit(1);
+  }
+  assert(actual.reserveCalls == 1);
+  JsonDocument parsed;
+  assert(!deserializeJson(parsed, actual.value));
 }
 int main() {
-  Meta m;compare(m);
-  m.group="g\"\\\n\t";m.sourceGroup="source";m.page="page";m.card="card";
-  m.key="key";m.label="\xc3\xa4\xe6\xbc\xa2";m.unit="V";m.staticValue="value";m.onLabel="On";m.offLabel="Off";
-  m.isBool=m.isString=m.isDivider=m.isButton=m.isCheckbox=m.isStateButton=m.isMomentaryButton=true;
-  m.hasAlarm=m.alarmWhenTrue=m.boolAlarmValue=true;
-  m.alarmMin=-3.25f;m.alarmMax=40.123456f;m.warnMin=0.00000012f;m.warnMax=10000000.0f;
-  m.intMin=INT_MIN;m.intMax=INT_MAX;m.intInit=-1;
-  m.floatMin=-0.123456789f;m.floatMax=123.125f;m.floatInit=-0.0f;
-  for(unsigned mask=0;mask<16;++mask){m.isIntSlider=mask&1;m.isFloatSlider=mask&2;m.isIntInput=mask&4;m.isFloatInput=mask&8;compare(m);}
-  Rule rule;rule.target="label\"";rule.hasVisible=true;rule.visible=false;rule.className="a";
-  rule.properties={{"color","red"},{"visible","override"},{"className","override class"},{"color","blue"},{"","ignored"}};
-  m.style.rules={rule,Rule{},rule};m.style.rules.back().className="last";compare(m);
-  m.style.rules.back().properties={{"new","only"}};m.style.rules.back().hasVisible=false;m.style.rules.back().className.clear();compare(m);
-  Rule nulRule; nulRule.target=KeyString("target\0a",8);
-  nulRule.hasVisible=true; nulRule.className="base";
-  nulRule.properties={{KeyString("visible\0x",9),"separate"},
-      {KeyString("className\0x",11),"separate class"},
-      {KeyString("key\0a",5),"first"},{KeyString("key\0b",5),"second"},
-      {KeyString("key\0a",5),"replacement"}};
-  Rule otherNulRule=nulRule; otherNulRule.target=KeyString("target\0b",8);
-  otherNulRule.properties={{"distinct","target"}};
-  assert(nulRule.target==otherNulRule.target); // Demonstrate the platform comparison trap.
-  m.style.rules={nulRule,otherNulRule}; compare(m);
-  m.style.rules={Rule{}};compare(m);
-  for(float value:{std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),-std::numeric_limits<float>::infinity()}){m.floatMin=value;m.alarmMax=value;compare(m);}
-  m.label=std::string("A\0\x01\x1fZ",5);
-  Output escaped;assert(cm::buildJsonOutput([&](auto& sink){return cm::writeRuntimeMeta(sink,m);},escaped));
-  JsonDocument parsed;assert(!deserializeJson(parsed,escaped.value));assert(parsed["label"].as<std::string>()==m.label);
-  for(bool reserveFailure:{false,true}){Output failed;failed.failReserve=reserveFailure;if(!reserveFailure)failed.failAfter=17;
-    assert(!cm::buildJsonOutput([&](auto& sink){return cm::writeRuntimeMeta(sink,m);},failed));assert(failed.value.empty());}
+  Meta m;
+  compare(m);
+  m.group = "g\"\\\n\t";
+  m.sourceGroup = "source";
+  m.page = "page";
+  m.card = "card";
+  m.key = "key";
+  m.label = "\xc3\xa4\xe6\xbc\xa2";
+  m.unit = "V";
+  m.staticValue = "value";
+  m.onLabel = "On";
+  m.offLabel = "Off";
+  m.isBool = m.isString = m.isDivider = m.isButton = m.isCheckbox = m.isStateButton = m.isMomentaryButton = true;
+  m.hasAlarm = m.alarmWhenTrue = m.boolAlarmValue = true;
+  m.alarmMin = -3.25f;
+  m.alarmMax = 40.123456f;
+  m.warnMin = 0.00000012f;
+  m.warnMax = 10000000.0f;
+  m.intMin = INT_MIN;
+  m.intMax = INT_MAX;
+  m.intInit = -1;
+  m.floatMin = -0.123456789f;
+  m.floatMax = 123.125f;
+  m.floatInit = -0.0f;
+  for (unsigned mask = 0; mask < 16; ++mask) {
+    m.isIntSlider = mask & 1;
+    m.isFloatSlider = mask & 2;
+    m.isIntInput = mask & 4;
+    m.isFloatInput = mask & 8;
+    compare(m);
+  }
+  Rule rule;
+  rule.target = "label\"";
+  rule.hasVisible = true;
+  rule.visible = false;
+  rule.className = "a";
+  rule.properties = {{"color", "red"}, {"visible", "override"}, {"className", "override class"}, {"color", "blue"}, {"", "ignored"}};
+  m.style.rules = {rule, Rule{}, rule};
+  m.style.rules.back().className = "last";
+  compare(m);
+  m.style.rules.back().properties = {{"new", "only"}};
+  m.style.rules.back().hasVisible = false;
+  m.style.rules.back().className.clear();
+  compare(m);
+  Rule nulRule;
+  nulRule.target = KeyString("target\0a", 8);
+  nulRule.hasVisible = true;
+  nulRule.className = "base";
+  nulRule.properties = {{KeyString("visible\0x", 9), "separate"},
+                        {KeyString("className\0x", 11), "separate class"},
+                        {KeyString("key\0a", 5), "first"},
+                        {KeyString("key\0b", 5), "second"},
+                        {KeyString("key\0a", 5), "replacement"}};
+  Rule otherNulRule = nulRule;
+  otherNulRule.target = KeyString("target\0b", 8);
+  otherNulRule.properties = {{"distinct", "target"}};
+  assert(nulRule.target == otherNulRule.target); // Demonstrate the platform comparison trap.
+  m.style.rules = {nulRule, otherNulRule};
+  compare(m);
+  m.style.rules = {Rule{}};
+  compare(m);
+  for (float value : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+    m.floatMin = value;
+    m.alarmMax = value;
+    compare(m);
+  }
+  m.label = std::string("A\0\x01\x1fZ", 5);
+  Output escaped;
+  assert(cm::buildJsonOutput([&](auto& sink) { return cm::writeRuntimeMeta(sink, m); }, escaped));
+  JsonDocument parsed;
+  assert(!deserializeJson(parsed, escaped.value));
+  assert(parsed["label"].as<std::string>() == m.label);
+  for (bool reserveFailure : {false, true}) {
+    Output failed;
+    failed.failReserve = reserveFailure;
+    if (!reserveFailure)
+      failed.failAfter = 17;
+    assert(!cm::buildJsonOutput([&](auto& sink) { return cm::writeRuntimeMeta(sink, m); }, failed));
+    assert(failed.value.empty());
+  }
   TrackingAllocator alloc;
-  for(unsigned i=0;i<64;++i)for(unsigned pass=0;pass<2;++pass){JsonDocument d(&alloc);referenceMeta(d.to<JsonObject>(),m);}
-  std::cout<<"Runtime metadata passed: 16 flag combinations, duplicate styles/properties, escaping, nonfinite numbers, failure cleanup. Legacy 64-field two-pass document allocations="<<alloc.calls<<", requested bytes="<<alloc.bytes<<"; new serializer creates no documents.\n";
+  for (unsigned i = 0; i < 64; ++i)
+    for (unsigned pass = 0; pass < 2; ++pass) {
+      JsonDocument d(&alloc);
+      referenceMeta(d.to<JsonObject>(), m);
+    }
+  std::cout << "Runtime metadata passed: 16 flag combinations, duplicate styles/properties, escaping, nonfinite numbers, failure cleanup. Legacy 64-field two-pass document allocations=" << alloc.calls << ", requested bytes=" << alloc.bytes << "; new serializer creates no documents.\n";
 }

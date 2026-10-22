@@ -4,7 +4,8 @@
 #include <cstring>
 #include <mutex>
 
-namespace cm { namespace detail {
+namespace cm {
+namespace detail {
 struct WiFiHealthConfig {
   std::array<char, 16> target{};
   uint32_t timeoutMinutes = 0;
@@ -16,16 +17,19 @@ struct WiFiHealthConfig {
 class WiFiHealthConfigMailbox {
   std::mutex mutex_;
   WiFiHealthConfig pending_;
+
 public:
   bool setTarget(const char* value) {
-    if (!value || std::strlen(value) >= pending_.target.size()) return false;
+    if (!value || std::strlen(value) >= pending_.target.size())
+      return false;
     std::lock_guard<std::mutex> lock(mutex_);
     std::memcpy(pending_.target.data(), value, std::strlen(value) + 1);
     pending_.targetChanged = true;
     return true;
   }
   bool setTimeoutMinutes(uint32_t minutes) {
-    if (minutes > 9999) return false;
+    if (minutes > 9999)
+      return false;
     std::lock_guard<std::mutex> lock(mutex_);
     pending_.timeoutMinutes = minutes;
     pending_.timeoutChanged = true;
@@ -33,10 +37,12 @@ public:
   }
   bool take(WiFiHealthConfig& output) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!pending_.targetChanged && !pending_.timeoutChanged) return false;
+    if (!pending_.targetChanged && !pending_.timeoutChanged)
+      return false;
     output = pending_;
     pending_.targetChanged = pending_.timeoutChanged = false;
     return true;
   }
 };
-}} // namespace cm::detail
+} // namespace detail
+} // namespace cm

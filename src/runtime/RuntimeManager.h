@@ -13,9 +13,11 @@
 
 struct RuntimeMetadataState;
 class ConfigManagerRuntime;
-namespace cm { namespace detail {
+namespace cm {
+namespace detail {
 void registerBuiltinSystemMetadata(ConfigManagerRuntime& runtime, bool withTime);
-} }
+}
+} // namespace cm
 
 // Forward declaration
 class ConfigManagerClass;
@@ -119,6 +121,7 @@ struct RuntimeAlarm {
 
 class ConfigManagerRuntime {
   friend void cm::detail::registerBuiltinSystemMetadata(ConfigManagerRuntime&, bool);
+
 public:
   typedef std::function<void(const char*)> LogCallback;
 
@@ -175,8 +178,10 @@ private:
   // Helper methods
   void registerRuntimePlacement(const RuntimeFieldMeta& meta);
   void registerRuntimePlacement(const RuntimeFieldBase& meta);
-  template<class T> RuntimeFieldId addCompactRuntimeMeta(const T& meta, bool zeroPrecision = false);
-  template<class T> bool updateCompactRuntimeMeta(RuntimeFieldId id, const std::function<void(T&)>& updater);
+  template <class T>
+  RuntimeFieldId addCompactRuntimeMeta(const T& meta, bool zeroPrecision = false);
+  template <class T>
+  bool updateCompactRuntimeMeta(RuntimeFieldId id, const std::function<void(T&)>& updater);
   RuntimeFieldMeta* promoteRuntimeMetaLocked(RuntimeFieldId id, RuntimeFieldMeta&& meta);
   cm::RuntimeMetaView runtimeMetaViewLocked(size_t index) const;
   size_t runtimeMetaCountLocked() const;
@@ -243,8 +248,10 @@ public:
   // HTTP waits only for generation; main-loop WS ticks use a nonblocking claim.
   std::unique_lock<std::recursive_mutex> acquireRuntimeGeneration(bool wait = true) {
     std::unique_lock<std::recursive_mutex> lock(runtimeGenerationMutex, std::defer_lock);
-    if (wait) lock.lock();
-    else (void)lock.try_lock();
+    if (wait)
+      lock.lock();
+    else
+      (void)lock.try_lock();
     return lock;
   }
   String runtimeValuesToJSON();
@@ -260,9 +267,9 @@ public:
 
 #ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
   struct RuntimeMetaStatsForTest {
-    size_t retainedBytes=0, legacyCapacityBytes=0, legacyOwnedBytes=0;
-    size_t stateBytes=0, storeBytes=0, orderCapacityBytes=0;
-    bool compactStateAllocated=false;
+    size_t retainedBytes = 0, legacyCapacityBytes = 0, legacyOwnedBytes = 0;
+    size_t stateBytes = 0, storeBytes = 0, orderCapacityBytes = 0;
+    bool compactStateAllocated = false;
   };
   RuntimeMetaStatsForTest getRuntimeMetaStatsForTest() const;
 

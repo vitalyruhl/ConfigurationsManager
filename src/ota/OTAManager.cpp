@@ -83,7 +83,8 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     }
 
     ArduinoOTA.onStart([this]() {
-      if (configManager) configManager->noteSynchronousOtaStart();
+      if (configManager)
+        configManager->noteSynchronousOtaStart();
       if (!lifecycle.tryStart(OtaTransport::Arduino)) {
         // Update.begin already rejects an active HTTP upload in Arduino core 2.0.17.
         Update.abort();
@@ -96,7 +97,8 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     });
 
     ArduinoOTA.onEnd([this]() {
-      if (configManager) configManager->noteLoopProgress();
+      if (configManager)
+        configManager->noteLoopProgress();
       lifecycle.finish(arduinoSessionId, OtaStage::Succeeded, 0);
       arduinoSessionId = 0;
       setActive(false);
@@ -112,10 +114,14 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     });
 
     ArduinoOTA.onProgress([this](unsigned int progress, unsigned int total) {
-      if (configManager) configManager->noteLoopProgress();
+      if (configManager)
+        configManager->noteLoopProgress();
       if (!otaEnabled && arduinoSessionId) {
-        Update.abort(); lifecycle.finish(arduinoSessionId,OtaStage::Aborted,0);
-        arduinoSessionId=0;setActive(false);return;
+        Update.abort();
+        lifecycle.finish(arduinoSessionId, OtaStage::Aborted, 0);
+        arduinoSessionId = 0;
+        setActive(false);
+        return;
       }
       markActivity();
       static unsigned int lastPercent = 0;
@@ -127,7 +133,8 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     });
 
     ArduinoOTA.onError([this](ota_error_t error) {
-      if (configManager) configManager->noteLoopProgress();
+      if (configManager)
+        configManager->noteLoopProgress();
       // Authentication/begin errors before onStart do not own the HTTP session.
       if (arduinoSessionId) {
         lifecycle.finish(arduinoSessionId, OtaStage::Failed, error);
@@ -165,8 +172,12 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
 
 void ConfigManagerOTA::enable(bool enabled) {
   otaEnabled = enabled;
-  auto lock=uploadGate.tryRequest();
-  if (!lock.owns_lock()) {if(!enabled)disablePending=true;return;}
+  auto lock = uploadGate.tryRequest();
+  if (!lock.owns_lock()) {
+    if (!enabled)
+      disablePending = true;
+    return;
+  }
   if (!enabled) {
     if (lifecycle.activeSessionId()) {
       Update.abort();
@@ -193,21 +204,30 @@ void ConfigManagerOTA::setHostname(const String& hostname) {
 }
 
 void ConfigManagerOTA::handle() {
-  const bool stale=otaActive && uint32_t(millis()-otaLastActivityMs.load())>=OTA_STALE_TIMEOUT_MS;
-  const auto active=lifecycle.activeSessionId();
-  auto pendingAbort=pendingAbortSession.load();
-  if(pendingAbort && pendingAbort!=active)pendingAbortSession.compare_exchange_strong(pendingAbort,0);
-  const bool maintenance=(disablePending.load() && !otaEnabled) ||
-    (pendingAbort && pendingAbort==active) || stale;
-  auto lock=uploadGate.tryService(maintenance);
-  if (!lock.owns_lock()) return;
+  const bool stale = otaActive && uint32_t(millis() - otaLastActivityMs.load()) >= OTA_STALE_TIMEOUT_MS;
+  const auto active = lifecycle.activeSessionId();
+  auto pendingAbort = pendingAbortSession.load();
+  if (pendingAbort && pendingAbort != active)
+    pendingAbortSession.compare_exchange_strong(pendingAbort, 0);
+  const bool maintenance = (disablePending.load() && !otaEnabled) ||
+                           (pendingAbort && pendingAbort == active) || stale;
+  auto lock = uploadGate.tryService(maintenance);
+  if (!lock.owns_lock())
+    return;
   if (disablePending.exchange(false) && !otaEnabled) {
-    auto id=lifecycle.activeSessionId();
-    if(id){Update.abort();lifecycle.finish(id,OtaStage::Aborted,0);arduinoSessionId=0;setActive(false);}
+    auto id = lifecycle.activeSessionId();
+    if (id) {
+      Update.abort();
+      lifecycle.finish(id, OtaStage::Aborted, 0);
+      arduinoSessionId = 0;
+      setActive(false);
+    }
   }
   const auto pending = pendingAbortSession.exchange(0);
   if (pending && pending == lifecycle.activeSessionId()) {
-    Update.abort(); lifecycle.finish(pending, OtaStage::Aborted, 0); setActive(false);
+    Update.abort();
+    lifecycle.finish(pending, OtaStage::Aborted, 0);
+    setActive(false);
   }
   if (!otaEnabled || !otaInitialized) {
     checkStaleUpload();
@@ -216,7 +236,8 @@ void ConfigManagerOTA::handle() {
 
   checkStaleUpload();
   // Normal Arduino polling never owns Update while an HTTP owner is admitted.
-  if(lifecycle.isActive(OtaTransport::Http))return;
+  if (lifecycle.isActive(OtaTransport::Http))
+    return;
   // ArduinoOTA itself handles the accepted transfer synchronously.
   ArduinoOTA.handle();
   checkStaleUpload();
@@ -254,11 +275,12 @@ void ConfigManagerOTA::setupWebRoutes(AsyncWebServer* webServer) {
 }
 
 void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
-  auto* completed=static_cast<OtaUploadContext*>(request->_tempObject);
-  if(completed && completed->authorized && completed->success && !completed->hasError &&
-     uploadGate.completeHttp(completed->sessionId,[this,request,completed]{sendHttpSuccess(request,completed);}))return;
+  auto* completed = static_cast<OtaUploadContext*>(request->_tempObject);
+  if (completed && completed->authorized && completed->success && !completed->hasError &&
+      uploadGate.completeHttp(completed->sessionId, [this, request, completed] { sendHttpSuccess(request, completed); }))
+    return;
 
-  auto lock=uploadGate.tryRequest();
+  auto lock = uploadGate.tryRequest();
   if (!lock.owns_lock()) {
     request->send(409, "application/json", "{\"status\":\"error\",\"reason\":\"ota_busy\"}");
     cleanup(request);
@@ -300,7 +322,7 @@ void ConfigManagerOTA::handleOTAUpload(AsyncWebServerRequest* request) {
   }
 
   // A success context without the retained accepted owner is never acknowledged.
-  request->send(409,"application/json","{\"status\":\"error\",\"reason\":\"stale_session\"}");
+  request->send(409, "application/json", "{\"status\":\"error\",\"reason\":\"stale_session\"}");
   cleanup(request);
 }
 
@@ -325,13 +347,16 @@ void ConfigManagerOTA::sendHttpSuccess(AsyncWebServerRequest* request, OtaUpload
 }
 
 void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
-  auto lock=uploadGate.tryRequest();
+  auto lock = uploadGate.tryRequest();
   OtaUploadContext* ctx = static_cast<OtaUploadContext*>(request->_tempObject);
 
   if (index == 0) {
     if (ctx) {
-      ctx->hasError=true; ctx->statusCode=400; ctx->errorReason="duplicate_start";
-      if(ctx->sessionId) pendingAbortSession=ctx->sessionId;
+      ctx->hasError = true;
+      ctx->statusCode = 400;
+      ctx->errorReason = "duplicate_start";
+      if (ctx->sessionId)
+        pendingAbortSession = ctx->sessionId;
       return;
     }
     ctx = new OtaUploadContext();
@@ -339,7 +364,9 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
 
     request->onDisconnect([this, request]() { cleanup(request); });
     if (!lock.owns_lock()) {
-      ctx->hasError = true; ctx->statusCode = 409; ctx->errorReason = "ota_busy";
+      ctx->hasError = true;
+      ctx->statusCode = 409;
+      ctx->errorReason = "ota_busy";
       return;
     }
 
@@ -376,7 +403,9 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
     }
 
     if (!lifecycle.tryStart(OtaTransport::Http)) {
-      ctx->hasError = true; ctx->statusCode = 409; ctx->errorReason = "ota_busy";
+      ctx->hasError = true;
+      ctx->statusCode = 409;
+      ctx->errorReason = "ota_busy";
       return;
     }
     ctx->sessionId = lifecycle.activeSessionId();
@@ -396,8 +425,11 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
   }
 
   if (!lock.owns_lock() && ctx) {
-    ctx->hasError = true; ctx->statusCode = 409; ctx->errorReason = "ota_busy";
-    if (ctx->sessionId) pendingAbortSession = ctx->sessionId;
+    ctx->hasError = true;
+    ctx->statusCode = 409;
+    ctx->errorReason = "ota_busy";
+    if (ctx->sessionId)
+      pendingAbortSession = ctx->sessionId;
     return;
   }
   if (!ctx || ctx->hasError || !ctx->authorized) {
@@ -405,7 +437,9 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
   }
 
   if (ctx->sessionId != lifecycle.activeSessionId()) {
-    ctx->hasError = true; ctx->statusCode = 409; ctx->errorReason = "stale_session";
+    ctx->hasError = true;
+    ctx->statusCode = 409;
+    ctx->errorReason = "stale_session";
     return;
   }
 
@@ -465,14 +499,15 @@ void ConfigManagerOTA::cleanup(AsyncWebServerRequest* request) {
     return;
   }
 
-  auto lock=uploadGate.tryRequest();
+  auto lock = uploadGate.tryRequest();
   auto* ctx = static_cast<OtaUploadContext*>(request->_tempObject);
   if (!ctx) {
     return;
   }
 
   if (!lock.owns_lock()) {
-    if (ctx->sessionId && !ctx->success) pendingAbortSession = ctx->sessionId;
+    if (ctx->sessionId && !ctx->success)
+      pendingAbortSession = ctx->sessionId;
   } else if (ctx->sessionId && ctx->sessionId == lifecycle.activeSessionId()) {
     OTA_LOG("Aborting incomplete update");
     Update.abort();

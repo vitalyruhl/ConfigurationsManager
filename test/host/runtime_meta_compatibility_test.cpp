@@ -267,7 +267,8 @@ static void managerAccounting(int mode) {
   assert(!a.compactStateAllocated);
   assert(b.compactStateAllocated);
   assert(b.retainedBytes < a.retainedBytes * 3 / 4);
-  const char* kind = mode == 0 ? "Float" : mode == 1 ? "Bool" : "mixed Float/Bool";
+  const char* kind = mode == 0 ? "Float" : mode == 1 ? "Bool"
+                                                     : "mixed Float/Bool";
   std::cout << "[I] Actual manager 64-" << kind << " host retained bytes: legacy=" << a.retainedBytes << ", compact=" << b.retainedBytes << ", order=" << b.orderCapacityBytes << ", state=" << b.stateBytes << ". Host ABI only.\n";
 }
 static void compactCompatibility() {
@@ -375,7 +376,14 @@ static void compactCompatibility() {
 }
 
 static void builtinSystemMetadata(bool withTime) {
-  struct Expected { const char* key; const char* label; const char* unit; int order; bool boolean = false; bool text = false; };
+  struct Expected {
+    const char* key;
+    const char* label;
+    const char* unit;
+    int order;
+    bool boolean = false;
+    bool text = false;
+  };
   const Expected fields[] = {
     {"wifiConnected", "Wifi Connected", "", 10, true},
     {"channel", "WiFi Channel", "", 11},
@@ -394,15 +402,20 @@ static void builtinSystemMetadata(bool withTime) {
     {"heapFragmentation", "HeapFragmentation", "", 34},
     {"totalHeap", "TotalHeap", "", 35},
     {"usedHeap", "UsedHeap", "", 36},
-    {"freeHeap", "FreeHeap", "", 37}
-  };
+    {"freeHeap", "FreeHeap", "", 37}};
   ConfigManagerRuntime actual, legacy;
   for (const auto& expected : fields) {
-    if (!withTime && std::string(expected.key) == "dateTime") continue;
+    if (!withTime && std::string(expected.key) == "dateTime")
+      continue;
     RuntimeFieldMeta old;
-    old.group = "system"; old.key = expected.key; old.label = expected.label;
-    old.unit = expected.unit; old.order = expected.order;
-    old.isBool = expected.boolean; old.isString = expected.text; old.precision = 0;
+    old.group = "system";
+    old.key = expected.key;
+    old.label = expected.label;
+    old.unit = expected.unit;
+    old.order = expected.order;
+    old.isBool = expected.boolean;
+    old.isString = expected.text;
+    old.precision = 0;
     legacy.addRuntimeMeta(old);
   }
   cm::detail::registerBuiltinSystemMetadata(actual, withTime);
@@ -423,10 +436,16 @@ static void builtinSystemMetadata(bool withTime) {
 static void builtinSystemMetadataPreservesOverrides() {
   ConfigManagerRuntime rt;
   RuntimeFieldMeta custom;
-  custom.group = "system"; custom.key = "rssi"; custom.label = "Old label";
-  custom.unit = "custom unit"; custom.precision = 5; custom.order = 99;
-  custom.page = "Diagnostics"; custom.card = "Radio";
-  custom.hasAlarm = true; custom.alarmMin = -90;
+  custom.group = "system";
+  custom.key = "rssi";
+  custom.label = "Old label";
+  custom.unit = "custom unit";
+  custom.precision = 5;
+  custom.order = 99;
+  custom.page = "Diagnostics";
+  custom.card = "Radio";
+  custom.hasAlarm = true;
+  custom.alarmMin = -90;
   custom.style.rule("values").set("color", "blue");
   rt.addRuntimeMeta(custom);
   cm::detail::registerBuiltinSystemMetadata(rt, false);
@@ -434,7 +453,8 @@ static void builtinSystemMetadataPreservesOverrides() {
   assert(!deserializeJson(json, rt.runtimeMetaToJSON().c_str()));
   int matches = 0;
   for (JsonObjectConst meta : json.as<JsonArrayConst>()) {
-    if (meta["key"] != "rssi") continue;
+    if (meta["key"] != "rssi")
+      continue;
     ++matches;
     assert(meta["label"] == "WiFi RSSI");
     assert(meta["unit"] == "custom unit");
@@ -450,7 +470,8 @@ static void builtinSystemMetadataAllocationFailure() {
   for (int existing = 0; existing < 2; ++existing) {
     for (int fail = 0; fail < 100; ++fail) {
       ConfigManagerRuntime rt;
-      if (existing) cm::detail::registerBuiltinSystemMetadata(rt, true);
+      if (existing)
+        cm::detail::registerBuiltinSystemMetadata(rt, true);
       String::failOnce = true;
       String::failAfter = fail;
       cm::detail::registerBuiltinSystemMetadata(rt, true);
@@ -462,17 +483,21 @@ static void builtinSystemMetadataAllocationFailure() {
       for (JsonObjectConst meta : json.as<JsonArrayConst>()) {
         assert(meta["precision"] == 0);
         const std::string key = meta["key"].as<const char*>();
-        for (const auto& previous : keys) assert(previous != key);
+        for (const auto& previous : keys)
+          assert(previous != key);
         keys.push_back(key);
       }
-      if (existing) assert(keys.size() == 18);
+      if (existing)
+        assert(keys.size() == 18);
       assert(rt.getRuntimeMetaStatsForTest().legacyCapacityBytes == 0);
     }
   }
 }
 static void nonnumericZeroPrecisionCompatibility() {
   ConfigManagerRuntime rt;
-  RuntimeBoolMeta flag; flag.base.key = "flag"; flag.base.group = "system";
+  RuntimeBoolMeta flag;
+  flag.base.key = "flag";
+  flag.base.group = "system";
   const auto id = rt.addRuntimeMeta(flag);
   assert(id);
   assert(rt.updateRuntimeMeta("system", "flag", [](RuntimeFieldMeta& m) { m.precision = 0; }));

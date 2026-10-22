@@ -504,10 +504,12 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
 }
 
 bool ConfigManagerClass::supportsLivePageSelection() const {
-  if (!liveLayoutEnabled) return false;
+  if (!liveLayoutEnabled)
+    return false;
   for (const auto& page : livePages) {
     const String key = normalizeLayoutName(page.name);
-    if (!key.length() || key.length() > 256 || key == "__unassigned__") return false;
+    if (!key.length() || key.length() > 256 || key == "__unassigned__")
+      return false;
   }
   return true;
 }
@@ -516,14 +518,19 @@ String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const Str
   const UiPlacement* selected = cm::findLivePlacement(livePlacements, fieldKey.c_str(), sourceGroup.c_str());
   if (selected) {
     const String key = normalizeLayoutName(selected->page);
-    for (const auto& page : livePages) if (normalizeLayoutName(page.name) == key) return key;
+    for (const auto& page : livePages)
+      if (normalizeLayoutName(page.name) == key)
+        return key;
   }
   return "__unassigned__";
 }
 
 bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
-  if (!supportsLivePageSelection()) return false;
-  for (const auto& page : livePages) if (normalizeLayoutName(page.name) == pageKey) return true;
+  if (!supportsLivePageSelection())
+    return false;
+  for (const auto& page : livePages)
+    if (normalizeLayoutName(page.name) == pageKey)
+      return true;
   return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMetaView([&](const cm::RuntimeMetaView& meta) {
     return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
   });
@@ -538,7 +545,8 @@ String ConfigManagerClass::buildLivePageIndexJSON() const {
     return cm::writeLivePageIndexJson(sink, livePages, scoped, hasContent, hasUnassigned, normalize);
   };
   String output;
-  if (!cm::buildJsonOutput(emitIndex, output)) return String();
+  if (!cm::buildJsonOutput(emitIndex, output))
+    return String();
   return output;
 }
 
@@ -548,8 +556,12 @@ String ConfigManagerClass::buildLivePageMetadataJSON(const String& pageKey) {
   });
 }
 
-String ConfigManagerClass::buildLiveLayoutJSON() const { return buildLiveLayoutJSONImpl(nullptr); }
-String ConfigManagerClass::buildLiveLayoutJSON(const String& pageKey) const { return buildLiveLayoutJSONImpl(&pageKey); }
+String ConfigManagerClass::buildLiveLayoutJSON() const {
+  return buildLiveLayoutJSONImpl(nullptr);
+}
+String ConfigManagerClass::buildLiveLayoutJSON(const String& pageKey) const {
+  return buildLiveLayoutJSONImpl(&pageKey);
+}
 
 String ConfigManagerClass::buildLiveLayoutJSONImpl(const String* pageKey) const {
   const auto normalize = [this](const String& value) { return normalizeLayoutName(value); };
@@ -557,6 +569,7 @@ String ConfigManagerClass::buildLiveLayoutJSONImpl(const String* pageKey) const 
     return cm::writeLiveLayoutJson(sink, livePages, livePlacements, liveLayoutEnabled, pageKey, normalize);
   };
   String output;
-  if (!cm::buildJsonOutput(emitLayout, output)) return String();
+  if (!cm::buildJsonOutput(emitLayout, output))
+    return String();
   return output;
 }

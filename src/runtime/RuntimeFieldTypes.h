@@ -162,31 +162,96 @@ struct RuntimeFieldMeta {
 // An opaque handle stays valid across compact-pool growth and legacy promotion.
 struct RuntimeFieldId {
   uint32_t value = 0;
-  explicit operator bool() const { return value != 0; }
-  bool operator==(RuntimeFieldId other) const { return value == other.value; }
-  bool operator!=(RuntimeFieldId other) const { return value != other.value; }
+  explicit operator bool() const {
+    return value != 0;
+  }
+  bool operator==(RuntimeFieldId other) const {
+    return value == other.value;
+  }
+  bool operator!=(RuntimeFieldId other) const {
+    return value != other.value;
+  }
 };
 enum class RuntimeFieldKind : uint8_t {
-  Invalid, Float, Int, Bool, Text, Divider, Button, Checkbox, StateButton,
-  MomentaryButton, IntSlider, IntInput, FloatSlider, FloatInput
+  Invalid,
+  Float,
+  Int,
+  Bool,
+  Text,
+  Divider,
+  Button,
+  Checkbox,
+  StateButton,
+  MomentaryButton,
+  IntSlider,
+  IntInput,
+  FloatSlider,
+  FloatInput
 };
 struct RuntimeFieldBase {
   String key, label, group, sourceGroup, page, card;
   int order = 100;
 };
-struct RuntimeFloatMeta { RuntimeFieldBase base; String unit; int precision = 2; };
-struct RuntimeIntMeta { RuntimeFieldBase base; String unit; };
-struct RuntimeBoolMeta { RuntimeFieldBase base; };
-struct RuntimeTextMeta { RuntimeFieldBase base; };
-struct RuntimeDividerMeta { RuntimeFieldBase base; };
-struct RuntimeButtonMeta { RuntimeFieldBase base; };
-struct RuntimeCheckboxMeta { RuntimeFieldBase base; };
-struct RuntimeStateButtonMeta { RuntimeFieldBase base; bool initialState = false; };
-struct RuntimeMomentaryButtonMeta { RuntimeFieldBase base; };
-struct RuntimeIntSliderMeta { RuntimeFieldBase base; String unit; int intMin = 0, intMax = 100, intInit = 0; };
-struct RuntimeIntInputMeta { RuntimeFieldBase base; String unit; int intMin = 0, intMax = 100, intInit = 0; };
-struct RuntimeFloatSliderMeta { RuntimeFieldBase base; String unit; float floatMin = 0, floatMax = 1, floatInit = 0; int precision = 2; };
-struct RuntimeFloatInputMeta { RuntimeFieldBase base; String unit; float floatMin = 0, floatMax = 1, floatInit = 0; int precision = 2; };
-struct RuntimeNumericAlarm { bool hasAlarm = false; float alarmMin = 0, alarmMax = 0, warnMin = 0, warnMax = 0; };
-struct RuntimeBoolAlarm { bool hasAlarm = false, alarmWhenTrue = false, boolAlarmValue = false; };
-struct RuntimeStateLabels { String onLabel, offLabel; };
+struct RuntimeFloatMeta {
+  RuntimeFieldBase base;
+  String unit;
+  int precision = 2;
+};
+struct RuntimeIntMeta {
+  RuntimeFieldBase base;
+  String unit;
+};
+struct RuntimeBoolMeta {
+  RuntimeFieldBase base;
+};
+struct RuntimeTextMeta {
+  RuntimeFieldBase base;
+};
+struct RuntimeDividerMeta {
+  RuntimeFieldBase base;
+};
+struct RuntimeButtonMeta {
+  RuntimeFieldBase base;
+};
+struct RuntimeCheckboxMeta {
+  RuntimeFieldBase base;
+};
+struct RuntimeStateButtonMeta {
+  RuntimeFieldBase base;
+  bool initialState = false;
+};
+struct RuntimeMomentaryButtonMeta {
+  RuntimeFieldBase base;
+};
+struct RuntimeIntSliderMeta {
+  RuntimeFieldBase base;
+  String unit;
+  int intMin = 0, intMax = 100, intInit = 0;
+};
+struct RuntimeIntInputMeta {
+  RuntimeFieldBase base;
+  String unit;
+  int intMin = 0, intMax = 100, intInit = 0;
+};
+struct RuntimeFloatSliderMeta {
+  RuntimeFieldBase base;
+  String unit;
+  float floatMin = 0, floatMax = 1, floatInit = 0;
+  int precision = 2;
+};
+struct RuntimeFloatInputMeta {
+  RuntimeFieldBase base;
+  String unit;
+  float floatMin = 0, floatMax = 1, floatInit = 0;
+  int precision = 2;
+};
+struct RuntimeNumericAlarm {
+  bool hasAlarm = false;
+  float alarmMin = 0, alarmMax = 0, warnMin = 0, warnMax = 0;
+};
+struct RuntimeBoolAlarm {
+  bool hasAlarm = false, alarmWhenTrue = false, boolAlarmValue = false;
+};
+struct RuntimeStateLabels {
+  String onLabel, offLabel;
+};

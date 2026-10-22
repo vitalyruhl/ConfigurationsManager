@@ -13,23 +13,28 @@ struct Output {
   bool failReserve = false;
   size_t failAfter = std::numeric_limits<size_t>::max();
   unsigned reserveCalls = 0;
-  void remove(unsigned) { text.clear(); }
+  void remove(unsigned) {
+    text.clear();
+  }
   bool reserve(unsigned length) {
     ++reserveCalls;
-    if (failReserve) return false;
+    if (failReserve)
+      return false;
     text.reserve(length);
     return true;
   }
   bool concat(char byte) {
-    if (text.size() >= failAfter) return false;
+    if (text.size() >= failAfter)
+      return false;
     text.push_back(byte);
     return true;
   }
-  size_t length() const { return text.length(); }
+  size_t length() const {
+    return text.length();
+  }
 };
 
-static void verifyResponse(cm::BoundedResponse& response, const std::string& expected,
-                           const char* borrowed = nullptr) {
+static void verifyResponse(cm::BoundedResponse& response, const std::string& expected, const char* borrowed = nullptr) {
   AsyncClient client;
   AsyncWebServerRequest request(&client);
   response._respond(&request);
@@ -90,5 +95,8 @@ int main() {
   std::cout << "Theme CSS snapshots passed: borrowed builtin, owned custom exact bytes, empty and allocation failures.\n";
 }
 #else
-int main() { std::cerr << "Missing production CSS snapshot helper.\n"; return 1; }
+int main() {
+  std::cerr << "Missing production CSS snapshot helper.\n";
+  return 1;
+}
 #endif

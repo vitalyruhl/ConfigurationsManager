@@ -1690,7 +1690,7 @@ inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained
   };
 
   return detail::publishSystemInfoPayloads(
-      info, baseTopic, uptimeHuman, [] { return WiFi.isConnected(); }, publishPayload);
+    info, baseTopic, uptimeHuman, [] { return WiFi.isConnected(); }, publishPayload);
 }
 
 inline bool MQTTManager::publishSystemInfoNow(bool retained) {

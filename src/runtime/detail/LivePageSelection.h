@@ -17,7 +17,8 @@ const typename Placements::value_type* findLivePlacement(const Placements& place
   const typename Placements::value_type* selected = nullptr;
   for (const auto& placement : placements) {
     if (std::strcmp(placement.id.c_str(), key) == 0 &&
-        (!source[0] || !placement.sourceGroup.length() || std::strcmp(placement.sourceGroup.c_str(), source) == 0)) selected = &placement;
+        (!source[0] || !placement.sourceGroup.length() || std::strcmp(placement.sourceGroup.c_str(), source) == 0))
+      selected = &placement;
   }
   return selected;
 }

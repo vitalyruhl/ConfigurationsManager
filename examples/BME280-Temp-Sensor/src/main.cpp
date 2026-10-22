@@ -110,8 +110,7 @@ static void setupRuntimeUI() {
     values["temp"] = temperature;
     values["hum"] = humidity;
     values["pressure"] = pressure;
-    values["dew"] = dewPoint;
-  }, 10);
+    values["dew"] = dewPoint; }, 10);
 
   RuntimeFloatMeta temperatureMeta;
   temperatureMeta.base = {"temp", "Temperature", "", "sensors", "Sensors", "BME280 - Temperature Sensor", 10};

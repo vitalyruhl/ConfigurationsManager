@@ -23,7 +23,8 @@ namespace {
 
 bool readLivePageSelection(AsyncWebServerRequest* request, ConfigManagerClass* manager, String& pageKey, bool& selected) {
   selected = request->hasParam("page");
-  if (!selected) return true;
+  if (!selected)
+    return true;
   const String& value = request->getParam("page")->value();
   if (!cm::validLivePageSelector(value.c_str(), value.length())) {
     request->send(400, "application/json", "{\"error\":\"invalid_page\"}");
@@ -227,7 +228,8 @@ void ConfigManagerWeb::setupStaticRoutes() {
     String ownedCss;
     if (!usingBuiltin && !cm::snapshotThemeCss(css, bodyLength, ownedCss)) {
       CM_HTTP_HEAP_TRACE("/user_theme.css", "body-failed");
-      if (request->client()) request->client()->close();
+      if (request->client())
+        request->client()->close();
       return;
     }
     CM_HTTP_HEAP_TRACE("/user_theme.css", "body-ready");
@@ -235,11 +237,12 @@ void ConfigManagerWeb::setupStaticRoutes() {
     // data; move the custom snapshot so later app changes cannot alter the body.
     // nothrow does not protect allocations inside the constructor or headers.
     cm::BoundedResponse* response = usingBuiltin
-        ? new (std::nothrow) cm::BoundedResponse(reinterpret_cast<const uint8_t*>(css), bodyLength, "text/css")
-        : new (std::nothrow) cm::BoundedResponse(std::move(ownedCss), "text/css");
+                                      ? new (std::nothrow) cm::BoundedResponse(reinterpret_cast<const uint8_t*>(css), bodyLength, "text/css")
+                                      : new (std::nothrow) cm::BoundedResponse(std::move(ownedCss), "text/css");
     if (!response) {
       CM_HTTP_HEAP_TRACE("/user_theme.css", "response-failed");
-      if (request->client()) request->client()->close();
+      if (request->client())
+        request->client()->close();
       return;
     }
     CM_HTTP_HEAP_TRACE("/user_theme.css", "response-ready");
@@ -312,7 +315,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     if (!cm::buildAppInfoJson(appName, appTitle, version, guiLogging, payload)) {
       CM_HTTP_HEAP_TRACE("/appinfo", "json-failed");
       // An allocation failure must not trigger another allocating error response.
-      if (request->client()) request->client()->close();
+      if (request->client())
+        request->client()->close();
       return;
     }
 
@@ -321,7 +325,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     // still depend on the underlying web server's allocation behavior.
     auto* response = new (std::nothrow) cm::BoundedResponse(std::move(payload), "application/json");
     if (!response) {
-      if (request->client()) request->client()->close();
+      if (request->client())
+        request->client()->close();
       return;
     }
     CM_HTTP_HEAP_TRACE("/appinfo", "response-ready");
@@ -435,12 +440,21 @@ void ConfigManagerWeb::setupAPIRoutes() {
 
   server->on("/live_pages.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
     CM_HTTP_HEAP_TRACE("/live_pages.json", "start");
-    if (!configManager) { request->send(404, "application/json", "{\"error\":\"no_config\"}"); return; }
+    if (!configManager) {
+      request->send(404, "application/json", "{\"error\":\"no_config\"}");
+      return;
+    }
     String json = configManager->buildLivePageIndexJSON();
     CM_HTTP_HEAP_TRACE("/live_pages.json", "json-ready");
-    if (!json.length()) { request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}"); return; }
+    if (!json.length()) {
+      request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}");
+      return;
+    }
     auto* response = new (std::nothrow) cm::BoundedResponse(std::move(json), "application/json");
-    if (!response) { request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}"); return; }
+    if (!response) {
+      request->send(503, "application/json", "{\"error\":\"pages_unavailable\"}");
+      return;
+    }
     CM_HTTP_HEAP_TRACE("/live_pages.json", "response-ready");
     enableCORS(response, "/live_pages.json");
     response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -455,7 +469,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     }
     String pageKey;
     bool selected = false;
-    if (!readLivePageSelection(request, configManager, pageKey, selected)) return;
+    if (!readLivePageSelection(request, configManager, pageKey, selected))
+      return;
     String json = selected ? configManager->buildLiveLayoutJSON(pageKey) : configManager->buildLiveLayoutJSON();
     if (json.length() == 0) {
       request->send(503, "application/json", "{\"error\":\"layout_unavailable\"}");
@@ -1107,11 +1122,17 @@ void ConfigManagerWeb::enableCORS(AsyncWebServerResponse* response, const char* 
   if (!response) {
     return;
   }
-  if (diagnosticRoute) { CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-origin"); }
+  if (diagnosticRoute) {
+    CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-origin");
+  }
   response->addHeader("Access-Control-Allow-Origin", "*");
-  if (diagnosticRoute) { CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-methods"); }
+  if (diagnosticRoute) {
+    CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-methods");
+  }
   response->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  if (diagnosticRoute) { CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-headers"); }
+  if (diagnosticRoute) {
+    CM_HTTP_HEAP_TRACE(diagnosticRoute, "cors-headers");
+  }
   response->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Settings-Token");
 }
 
@@ -1188,13 +1209,15 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
   server->on("/runtime_meta.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
     String pageKey;
     bool selected = false;
-    if (!readLivePageSelection(request, configManager, pageKey, selected)) return;
+    if (!readLivePageSelection(request, configManager, pageKey, selected))
+      return;
     if (runtimeMetaJsonProvider || selected) {
       const uint32_t activeRequests = ++runtimeMetaActiveRequests;
       std::shared_ptr<const String> payload;
       if (selected) {
         String json = configManager->buildLivePageMetadataJSON(pageKey);
-        if (json.length()) payload = std::make_shared<String>(std::move(json));
+        if (json.length())
+          payload = std::make_shared<String>(std::move(json));
       } else {
         payload = runtimeMetaJsonProvider();
       }

@@ -29,24 +29,27 @@ inline constexpr char Ntp[] = "NTP";
 #if CM_ENABLE_WIFI
 class ConnectivityTargetSetting : public Config<String> {
 public:
-  ConnectivityTargetSetting() : Config<String>(ConfigOptions<String>{
-    .key = "WiFiProbe", .name = "Connectivity check target", .category = CoreCategories::WiFi,
-    .defaultValue = String("off"), .showInWeb = true, .sortOrder = 19}) {}
+  ConnectivityTargetSetting()
+      : Config<String>(ConfigOptions<String>{
+          .key = "WiFiProbe", .name = "Connectivity check target", .category = CoreCategories::WiFi, .defaultValue = String("off"), .showInWeb = true, .sortOrder = 19}) {}
   bool fromJSON(const JsonVariant& value) override {
-    if (!value.is<const char*>() || !cm::detail::isConnectivityTarget(value.as<const char*>())) return false;
+    if (!value.is<const char*>() || !cm::detail::isConnectivityTarget(value.as<const char*>()))
+      return false;
     return Config<String>::fromJSON(value);
   }
 };
 
 class WiFiRebootTimeoutSetting : public Config<int> {
 public:
-  WiFiRebootTimeoutSetting() : Config<int>(ConfigOptions<int>{
-    .key = "WiFiRb", .name = "Reboot if WiFi lost (min)", .category = CoreCategories::WiFi,
-    .defaultValue = 1, .showInWeb = true, .sortOrder = 20}) {}
+  WiFiRebootTimeoutSetting()
+      : Config<int>(ConfigOptions<int>{
+          .key = "WiFiRb", .name = "Reboot if WiFi lost (min)", .category = CoreCategories::WiFi, .defaultValue = 1, .showInWeb = true, .sortOrder = 20}) {}
   bool fromJSON(const JsonVariant& value) override {
-    if (value.is<bool>() || !value.is<int>()) return false;
+    if (value.is<bool>() || !value.is<int>())
+      return false;
     const int minutes = value.as<int>();
-    if (minutes < 0 || minutes > 9999) return false;
+    if (minutes < 0 || minutes > 9999)
+      return false;
     return Config<int>::fromJSON(value);
   }
 };

@@ -7,9 +7,7 @@ namespace detail {
 
 // Keep the MQTT schema and publication order together while allowing host validation.
 template <typename Info, typename Text, typename Connected, typename Publish>
-bool publishSystemInfoPayloads(const Info& info, const Text& baseTopic,
-                               const Text& uptimeHuman, Connected connected,
-                               Publish publishPayload) {
+bool publishSystemInfoPayloads(const Info& info, const Text& baseTopic, const Text& uptimeHuman, Connected connected, Publish publishPayload) {
   bool okEsp;
   {
     Text espPayload;

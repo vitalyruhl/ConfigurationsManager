@@ -23,7 +23,6 @@ void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes
               static_cast<unsigned>(fieldCount));
 }
 
-
 } // namespace
 
 void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
@@ -72,10 +71,12 @@ String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection& sel
   auto generation = acquireRuntimeGeneration();
   JsonDocument document;
   fillRuntimeSnapshot(document.to<JsonObject>(), selection);
-  if (document.overflowed()) return String();
+  if (document.overflowed())
+    return String();
   String out;
   serializeJson(document, out);
-  if (out.length() != measureJson(document)) return String();
+  if (out.length() != measureJson(document))
+    return String();
   return out;
 }
 
@@ -99,7 +100,8 @@ void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::Runtim
     floatSliders = cm::selectRuntimeEntries(runtimeFloatSliders, selection, group);
     intInputs = cm::selectRuntimeEntries(runtimeIntInputs, selection, group);
     floatInputs = cm::selectRuntimeEntries(runtimeFloatInputs, selection, group);
-    if (selection.contains("alarms")) alarms = runtimeAlarms;
+    if (selection.contains("alarms"))
+      alarms = runtimeAlarms;
   }
   // User callbacks run outside the registry mutex and only for selected groups.
   cm::fillRuntimeProviders(root, providers);
@@ -111,7 +113,8 @@ void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject root, const cm::Runtim
   cm::fillRuntimeControls(root, floatInputs);
   if (!alarms.empty()) {
     JsonObject slot = root["alarms"].to<JsonObject>();
-    for (const auto& alarm : alarms) slot[alarm.name] = alarm.active;
+    for (const auto& alarm : alarms)
+      slot[alarm.name] = alarm.active;
   }
   if (configManager) {
     auto& ota = configManager->getOTAManager();
@@ -814,10 +817,12 @@ void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const St
 
 // Metadata core hooks keep networking and target diagnostics out of the registry.
 void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldMeta& meta) {
-  if (configManager) configManager->registerLivePlacement(meta);
+  if (configManager)
+    configManager->registerLivePlacement(meta);
 }
 void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldBase& meta) {
-  if (configManager) configManager->registerLivePlacement(cm::RuntimeMetaView(meta));
+  if (configManager)
+    configManager->registerLivePlacement(cm::RuntimeMetaView(meta));
 }
 void ConfigManagerRuntime::reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) const {
   logRuntimeMetaSerializationFailure(reason, bytes, fields);

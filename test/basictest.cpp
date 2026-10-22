@@ -450,8 +450,8 @@ void test_compact_runtime_meta_mixed_legacy_bridge() {
     meta.alarmMax = 50;
   }));
   TEST_ASSERT_TRUE(runtime.updateRuntimeMeta(id, std::function<void(RuntimeFloatMeta&)>([](RuntimeFloatMeta& meta) {
-    meta.precision = 1;
-  })));
+                                               meta.precision = 1;
+                                             })));
   JsonDocument parsed;
   TEST_ASSERT_FALSE(deserializeJson(parsed, runtime.runtimeMetaToJSON()));
   TEST_ASSERT_EQUAL_UINT32(2, parsed.size());
