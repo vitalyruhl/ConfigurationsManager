@@ -6,6 +6,7 @@
 
 #include <WiFi.h>
 #include <functional>
+#include "ConnectivitySocket.h"
 
 // WiFi connection states
 enum WiFiManagerState {
@@ -87,6 +88,10 @@ private:
   uint8_t stackResetStep;
   unsigned long stackResetStepAtMs;
 
+  cm::detail::ConnectivityCheck connectivityCheck_;
+  cm::detail::ConnectivitySocket connectivitySocket_;
+  void updateConnectivity_(uint32_t now, bool stationHealthy, bool suspended);
+
   // Private methods
   void transitionToState(WiFiManagerState newState);
   void handleReconnection();
@@ -131,6 +136,10 @@ public:
   void enableAutoReboot(bool enable);
   void setAutoRebootTimeout(unsigned long timeoutMinutes);
   void setReconnectInterval(unsigned long intervalMs);
+  // Call from the loop owner; configuration callbacks must hand off changes to that owner.
+  bool setConnectivityCheckTarget(const String& target);
+  // ArduinoOTA starts synchronously in the loop; update() cannot observe that transfer's active flag.
+  void pauseConnectivityForSynchronousOta();
   void forceReconnect();
   void reconnect();
   void disconnect();

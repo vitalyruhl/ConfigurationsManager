@@ -32,9 +32,12 @@
 // Modular components
 #if CM_ENABLE_WIFI
 #include "wifi/WiFiManager.h"
+#include "wifi/ConnectivityCheck.h"
+#include "wifi/detail/WiFiHealthConfig.h"
 #endif
 #include "web/WebServer.h"
 #include "ota/OTAManager.h"
+#include "core/LoopWatchdog.h"
 #include "runtime/RuntimeManager.h"
 
 #if CM_EMBED_WEBUI
@@ -1642,10 +1645,40 @@ private:
   // Modular components
 #if CM_ENABLE_WIFI
   ConfigManagerWiFi wifiManager;
+  cm::detail::WiFiHealthConfigMailbox wifiHealthConfig;
+
+  void initializeWiFiHealthConfig() {
+    BaseSetting* setting = findSettingByKeyHint("WiFi", "WiFiProbe");
+    if (setting && setting->getType() == SettingType::STRING) {
+      wifiManager.setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
+    }
+  }
+
+  void applyWiFiHealthConfig() {
+    cm::detail::WiFiHealthConfig update;
+    if (!wifiHealthConfig.take(update)) return;
+    if (update.timeoutChanged) wifiManager.setAutoRebootTimeout(update.timeoutMinutes);
+    if (update.targetChanged) wifiManager.setConnectivityCheckTarget(String(update.target.data()));
+  }
+
+  void queueWiFiHealthSetting(BaseSetting* setting) {
+    if (!setting) return;
+    if (setting == findSettingByKeyHint("WiFi", "WiFiRb") && setting->getType() == SettingType::INT) {
+      const int minutes = static_cast<Config<int>*>(setting)->get();
+      setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes)));
+    } else if (setting == findSettingByKeyHint("WiFi", "WiFiProbe") && setting->getType() == SettingType::STRING) {
+      setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
+    }
+  }
+  void queueWiFiHealthSettings() {
+    queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiRb"));
+    queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiProbe"));
+  }
 #endif
   ConfigManagerWeb webManager;
   ConfigManagerOTA otaManager;
   ConfigManagerRuntime runtimeManager;
+  cm::LoopWatchdog loopWatchdog;
 
   // Optional user-provided global CSS to inject into the Web UI
   const char* customCss = nullptr;
@@ -1768,7 +1801,13 @@ public:
       [this]() { return runtimeManager.runtimeValuesToJSON(); },    // runtime JSON
       [this]() { return runtimeManager.runtimeMetaJsonPayload(); }, // runtime meta JSON
       [this]() { reboot(); },                                       // reboot callback
-      [this]() { for (const auto &entry : settings) entry->setDefault(); saveAll(); },                                                 // reset callback
+      [this]() {
+        for (const auto &entry : settings) entry->setDefault();
+        saveAll();
+#if CM_ENABLE_WIFI
+        queueWiFiHealthSettings();
+#endif
+      }, // reset callback
       [this](const String& group, const String& key, const String& value) -> bool {
         return updateSetting(group, key, value); // Save to flash
       },
@@ -1946,6 +1985,9 @@ public:
         }
       }
     }
+#if CM_ENABLE_WIFI
+    queueWiFiHealthSettings();
+#endif
   }
 
   void saveAll() {
@@ -2018,6 +2060,9 @@ public:
 
     // Side-effects: keep runtime subsystems in sync with specific settings
     if (result) {
+#if CM_ENABLE_WIFI
+      queueWiFiHealthSetting(setting);
+#endif
       // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
       // cppcheck-suppress constVariablePointer
       if (BaseSetting* otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting) {
@@ -2120,6 +2165,9 @@ public:
       }
 
       // Side-effects: keep runtime subsystems in sync with specific settings
+#if CM_ENABLE_WIFI
+      queueWiFiHealthSetting(setting);
+#endif
       // Cppcheck rationale: Avoid changing mutable Arduino integration handles without a call-site audit.
       // cppcheck-suppress constVariablePointer
       if (BaseSetting* otaEnable = findSettingByKeyHint(category, "OTAEn"); otaEnable && otaEnable == setting) {
@@ -2441,12 +2489,13 @@ public:
       return static_cast<Config<int>*>(s)->get();
     };
 
-    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
-    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
+    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 1);
+    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : std::min(9999UL, static_cast<unsigned long>(autoRebootMinCfg));
 
     // Start WiFi connection non-blocking
     wifiManager.setAutoRebootTimeout(autoRebootMin);
     wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
+    initializeWiFiHealthConfig();
     wifiManager.setCallbacks(
       [this]() {
         CM_CORE_LOG("Connected! Starting web server...");
@@ -2503,11 +2552,12 @@ public:
       return static_cast<Config<int>*>(s)->get();
     };
 
-    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 30);
-    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : static_cast<unsigned long>(autoRebootMinCfg);
+    const int autoRebootMinCfg = getInt("WiFi", "WiFiRb", 1);
+    const unsigned long autoRebootMin = autoRebootMinCfg < 0 ? 0UL : std::min(9999UL, static_cast<unsigned long>(autoRebootMinCfg));
 
     wifiManager.setAutoRebootTimeout(autoRebootMin);
     wifiManager.begin(10000, autoRebootMin); // 10s reconnect interval, auto-reboot timeout in minutes
+    initializeWiFiHealthConfig();
     wifiManager.setCallbacks(
       [this]() {
         CM_CORE_LOG("Connected! Starting web server...");
@@ -2579,6 +2629,10 @@ public:
 
   // Non-blocking client handling
   void handleClient() {
+    loopWatchdog.heartbeat();
+#if CM_ENABLE_WIFI
+    applyWiFiHealthConfig();
+#endif
     updateLoopTiming();
     handleWebsocketPush();
     handleOTA();
@@ -2591,6 +2645,36 @@ public:
   }
   void reconnectWifi() {
     wifiManager.reconnect();
+  }
+#endif
+
+  // The independent supervisor arms at the first handleClient() call, after setup.
+  // Zero disables it; valid nonzero values are 1000..3600000 milliseconds.
+  bool setLoopWatchdogTimeout(uint32_t timeoutMs) {
+    return loopWatchdog.configure(timeoutMs);
+  }
+
+  // Only actual same-loop progress (including synchronous ArduinoOTA) may feed it.
+  void noteSynchronousOtaStart() {
+    loopWatchdog.heartbeat();
+#if CM_ENABLE_WIFI
+    // ArduinoOTA blocks this loop; record suspension before entering the transfer.
+    wifiManager.pauseConnectivityForSynchronousOta();
+#endif
+  }
+
+  void noteLoopProgress() {
+    loopWatchdog.heartbeat();
+  }
+
+#if CM_ENABLE_WIFI
+  bool setConnectivityCheckTarget(const String& target) {
+    if (!cm::detail::isConnectivityTarget(target.c_str())) return false;
+    return wifiHealthConfig.setTarget(target.c_str());
+  }
+
+  bool setWiFiAutoRebootTimeout(uint32_t minutes) {
+    return wifiHealthConfig.setTimeoutMinutes(minutes);
   }
 #endif
 

@@ -83,6 +83,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     }
 
     ArduinoOTA.onStart([this]() {
+      if (configManager) configManager->noteSynchronousOtaStart();
       if (!lifecycle.tryStart(OtaTransport::Arduino)) {
         // Update.begin already rejects an active HTTP upload in Arduino core 2.0.17.
         Update.abort();
@@ -95,6 +96,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     });
 
     ArduinoOTA.onEnd([this]() {
+      if (configManager) configManager->noteLoopProgress();
       lifecycle.finish(arduinoSessionId, OtaStage::Succeeded, 0);
       arduinoSessionId = 0;
       setActive(false);
@@ -110,6 +112,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     });
 
     ArduinoOTA.onProgress([this](unsigned int progress, unsigned int total) {
+      if (configManager) configManager->noteLoopProgress();
       if (!otaEnabled && arduinoSessionId) {
         Update.abort(); lifecycle.finish(arduinoSessionId,OtaStage::Aborted,0);
         arduinoSessionId=0;setActive(false);return;
@@ -124,6 +127,7 @@ void ConfigManagerOTA::setup(const String& hostname, const String& password) {
     });
 
     ArduinoOTA.onError([this](ota_error_t error) {
+      if (configManager) configManager->noteLoopProgress();
       // Authentication/begin errors before onStart do not own the HTTP session.
       if (arduinoSessionId) {
         lifecycle.finish(arduinoSessionId, OtaStage::Failed, error);

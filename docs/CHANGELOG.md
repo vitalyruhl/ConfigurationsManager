@@ -8,6 +8,33 @@ This changelog is a curated overview.
   backend dispatch. Already-started writes complete before cancellation returns;
   peer configuration and independent pause reasons remain unchanged.
 
+- Add the single WiFi **Connectivity check target** setting (`WiFiProbe`): Off by
+  default, the active DHCP/static gateway, or a strict unicast IPv4 address. The
+  editable field offers Off and Standard gateway and rejects invalid syntax.
+  Check enabled targets every ten seconds with a one-second deadline; preserve
+  `WiFiRb` with a new one-minute (60-second) default, retaining existing saved
+  values. Accept only whole minutes from 0 to 9999: zero disables network
+  restarts; 60/120 minutes provide one-/two-hour windows. Suspend
+  network-triggered restarts during AP mode and OTA.
+- Add an independent loop-progress supervisor, enabled with a 30-second default
+  from the first `handleClient()` call. Expose timeout adjustment/disable through
+  `setLoopWatchdogTimeout(ms)` without a global task watchdog.
+- Keep Apply temporary and Save persistent. Document that an unreachable saved
+  target can cause recovery restarts and that USB/AP access may be needed to
+  correct it. Existing stored settings remain compatible; device acceptance is
+  verified separately from host/UI tests.
+
+- Preserve the WiFi recovery restart marker across software resets so the next
+  boot can report the initiating recovery path.
+
+- Mark synchronous ArduinoOTA suspension before its blocking transfer starts,
+  so an aborted long transfer receives a fresh network recovery window when the
+  application loop resumes.
+
+- Mark synchronous ArduinoOTA suspension before its blocking transfer starts,
+  so an aborted long transfer receives a fresh network recovery window when the
+  application loop resumes.
+
 ## 4.7.1 - Unreleased
 
 - Serialize CM runtime JSON generation across HTTP and WebSocket builds. HTTP

@@ -15,7 +15,7 @@
         </label>
       </div>
       <div class="actions bool-actions">
-        <button class="save-btn" :disabled="busy || disabled" @click="emit('save', keyName, inputValue)">
+        <button class="save-btn" :disabled="busy || disabled || connectivityTargetInvalid" @click="submitSetting('save')">
           <span v-if="busy">…</span><span v-else>Save</span>
         </button>
       </div>
@@ -56,6 +56,28 @@
             </svg>
           </span>
         </button>
+        <div v-else-if="isConnectivityTarget" class="connectivity-target">
+          <input
+            type="text"
+            :value="inputValue"
+            :list="connectivityChoicesId"
+            :aria-label="displayName"
+            :aria-invalid="connectivityTargetInvalid ? 'true' : undefined"
+            :aria-describedby="connectivityTargetInvalid ? `${connectivityChoicesId}-error` : undefined"
+            autocomplete="off"
+            spellcheck="false"
+            @input="onInput($event.target.value)"
+            :name="`${category}.${keyName}`"
+            :disabled="disabled"
+          />
+          <datalist :id="connectivityChoicesId">
+            <option value="off" label="Off" />
+            <option value="gateway" label="Standard gateway" />
+          </datalist>
+          <span v-if="connectivityTargetInvalid" :id="`${connectivityChoicesId}-error`" class="field-error" role="alert">
+            Choose Off or Standard gateway, or enter a valid unicast IPv4 address.
+          </span>
+        </div>
         <input
           v-else-if="type === 'number'"
           type="number"
@@ -76,12 +98,12 @@
       <div class="actions">
         <button
           class="apply-btn"
-          :disabled="busy || disabled"
-          @click="emit('apply', keyName, inputValue)"
+          :disabled="busy || disabled || connectivityTargetInvalid"
+          @click="submitSetting('apply')"
         >
           <span v-if="busy">…</span><span v-else>Apply</span>
         </button>
-        <button class="save-btn" :disabled="busy || disabled" @click="emit('save', keyName, inputValue)">
+        <button class="save-btn" :disabled="busy || disabled || connectivityTargetInvalid" @click="submitSetting('save')">
           <span v-if="busy">…</span><span v-else>Save</span>
         </button>
       </div>
@@ -91,6 +113,11 @@
 
 <style scoped>
 .setting{margin:15px 0;padding:15px;background:var(--cm-card-bg);border:1px solid var(--cm-card-border);border-radius:5px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;color:var(--cm-fg)}.bool-setting{flex-direction:row;align-items:center;justify-content:space-between;gap:1.25rem;max-width:520px}.bool-setting .bool-label{font-weight:600;padding-right:2rem}label{font-weight:600;min-width:70px}.input-area{flex:2;display:flex;align-items:center;gap:.75rem}.input-area input[type=text],.input-area input[type=number],.input-area input[type=password]{flex:1}.pwd-toggle{background:var(--cm-bg);border:1px solid var(--cm-card-border);border-radius:4px;padding:0.4rem 0.6rem;cursor:pointer;font-size:1rem;transition:background-color 0.2s;flex-shrink:0;color:var(--cm-fg)}.pwd-toggle:hover{background:var(--cm-card-bg)}.pwd-toggle:active{background:var(--cm-bg)}.actions{display:flex;flex-direction:column;gap:5px;width:100%}.actions button{padding:8px 16px;font-size:14px;border:none;border-radius:4px;cursor:pointer;transition:.3s;width:100%;margin-bottom:5px;box-shadow:0 1px 3px rgba(0,0,0,.12)}.apply-btn{background:#3498db;color:#fff}.save-btn{background:#27ae60;color:#fff}.bool-actions{width:auto;align-items:flex-end}.bool-actions button{width:auto;margin-bottom:0}input,select{width:100%;padding:8px;border:1px solid var(--cm-card-border);border-radius:4px;font-size:14px;box-sizing:border-box;background:var(--cm-bg);color:var(--cm-fg)}
+
+.connectivity-target{display:flex;flex:1;flex-direction:column;gap:.35rem}
+.connectivity-target input{width:100%}
+.connectivity-target input[aria-invalid=true]{border-color:#c0392b}
+.field-error{color:#c0392b;font-size:.875rem}
 
 /* Password toggle: match Apply button sizing, but slightly darker */
 .input-area .pwd-toggle{padding:8px 12px;font-size:14px;border:none;border-radius:4px;cursor:pointer;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.12);background:#2f86c7;color:#fff;flex-shrink:0;min-width:40px;height:34px;display:flex;align-items:center;justify-content:center}
@@ -166,6 +193,7 @@ input:checked + .slider:before {
 
 <script setup>
 import { computed, ref, watch, inject } from 'vue';
+import { isConnectivityTargetSetting, isConnectivityTargetValue } from '../connectivityTarget.mjs';
 
 const props = defineProps({
   category: String,
@@ -181,7 +209,7 @@ const notify = inject('notify', null);
 const fetchStoredPassword = inject('fetchStoredPassword', null);
 
 const displayName =
-  props.settingData.displayName || props.keyName;
+  props.settingData.displayName || props.settingData.name || props.keyName;
 
 const isPassword =
   props.keyName.toLowerCase().includes('pass') ||
@@ -205,6 +233,12 @@ function initialValue() {
 }
 
 const inputValue = ref(initialValue());
+const isConnectivityTarget = computed(() =>
+  isConnectivityTargetSetting(props.category, props.keyName, props.settingData));
+const connectivityTargetInvalid = computed(() =>
+  isConnectivityTarget.value && !isConnectivityTargetValue(inputValue.value));
+const connectivityChoicesId = computed(() =>
+  `cm-connectivity-${encodeURIComponent(props.category)}-${encodeURIComponent(props.keyName)}`);
 const passwordVisible = ref(false);
 const passwordBusy = ref(false);
 const passwordInputEl = ref(null);
@@ -281,6 +315,11 @@ watch(
     }
   }
 );
+
+function submitSetting(action) {
+  if (props.busy || props.disabled || connectivityTargetInvalid.value) return;
+  emit(action, props.keyName, inputValue.value);
+}
 
 function onInput(val) {
   inputValue.value = val;

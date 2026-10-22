@@ -27,6 +27,30 @@ inline constexpr char Ntp[] = "NTP";
 } // namespace CoreCategories
 
 #if CM_ENABLE_WIFI
+class ConnectivityTargetSetting : public Config<String> {
+public:
+  ConnectivityTargetSetting() : Config<String>(ConfigOptions<String>{
+    .key = "WiFiProbe", .name = "Connectivity check target", .category = CoreCategories::WiFi,
+    .defaultValue = String("off"), .showInWeb = true, .sortOrder = 19}) {}
+  bool fromJSON(const JsonVariant& value) override {
+    if (!value.is<const char*>() || !cm::detail::isConnectivityTarget(value.as<const char*>())) return false;
+    return Config<String>::fromJSON(value);
+  }
+};
+
+class WiFiRebootTimeoutSetting : public Config<int> {
+public:
+  WiFiRebootTimeoutSetting() : Config<int>(ConfigOptions<int>{
+    .key = "WiFiRb", .name = "Reboot if WiFi lost (min)", .category = CoreCategories::WiFi,
+    .defaultValue = 1, .showInWeb = true, .sortOrder = 20}) {}
+  bool fromJSON(const JsonVariant& value) override {
+    if (value.is<bool>() || !value.is<int>()) return false;
+    const int minutes = value.as<int>();
+    if (minutes < 0 || minutes > 9999) return false;
+    return Config<int>::fromJSON(value);
+  }
+};
+
 struct CoreWiFiSettings {
   Config<String> wifiSsid{ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = CoreCategories::WiFi, .defaultValue = String(""), .showInWeb = true, .sortOrder = 1}};
   Config<String> wifiPassword{ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = CoreCategories::WiFi, .defaultValue = String(""), .showInWeb = true, .isPassword = true, .sortOrder = 2}};
@@ -38,7 +62,8 @@ struct CoreWiFiSettings {
   Config<String> dnsPrimary{ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = CoreCategories::WiFi, .defaultValue = String("192.168.0.1"), .showInWeb = true, .sortOrder = 7}};
   Config<String> dnsSecondary{ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = CoreCategories::WiFi, .defaultValue = String("8.8.8.8"), .showInWeb = true, .sortOrder = 8}};
 
-  Config<int> rebootTimeoutMin{ConfigOptions<int>{.key = "WiFiRb", .name = "Reboot if WiFi lost (min)", .category = CoreCategories::WiFi, .defaultValue = 5, .showInWeb = true, .sortOrder = 20}};
+  ConnectivityTargetSetting connectivityTarget;
+  WiFiRebootTimeoutSetting rebootTimeoutMin;
 
   void attachTo(ConfigManagerClass& cfg) {
     cfg.addSetting(&wifiSsid);
@@ -49,7 +74,10 @@ struct CoreWiFiSettings {
     cfg.addSetting(&subnet);
     cfg.addSetting(&dnsPrimary);
     cfg.addSetting(&dnsSecondary);
+    cfg.addSetting(&connectivityTarget);
     cfg.addSetting(&rebootTimeoutMin);
+    connectivityTarget.setCallback([&cfg](const String& value) { cfg.setConnectivityCheckTarget(value); });
+    rebootTimeoutMin.setCallback([&cfg](int minutes) { cfg.setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes))); });
 
     // Keep DHCP-dependent visibility consistent with the original demo pattern.
     staticIp.showIfFunc = [this]() { return !useDhcp.get(); };
