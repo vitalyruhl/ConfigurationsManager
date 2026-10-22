@@ -6,6 +6,7 @@
 #include "detail/BluetoothScheduler.h"
 #include "detail/BluetoothDispatch.h"
 #include "detail/BluetoothEnabledSetting.h"
+#include "detail/BluetoothCommandFence.h"
 // Explicit consumer dependency: h2zero/NimBLE-Arduino@2.5.1.
 #include <NimBLEDevice.h>
 #include <freertos/FreeRTOS.h>
@@ -16,7 +17,7 @@
 #include <mutex>
 
 namespace cm {
-// Static lifetime only. All public methods except pause/resume run in the application loop.
+// Static lifetime only. Except pause/resume/cancelPendingCommands, public methods run in the application loop.
 class BluetoothManager {
 public:
   using EnabledSetting=detail::BluetoothEnabledSetting<Config<bool>,Preferences>;
@@ -91,6 +92,9 @@ public:
     detail::BleCommand cmd{};
     return detail::makeWriteCommand(cmd,data,size,generation()) && enqueue(cmd);
   }
+  // Thread-safe. Fence buffered commands; an already-started backend write completes before return.
+  // The existing generation-change lifecycle recovers the link without changing configuration or pause ownership.
+  void cancelPendingCommands() { commandFence_.cancel(scheduler_); }
   // Acknowledge only a fully validated response, never a partial notification.
   bool completeQuery() {
     if(!worker_ || !scheduler_.queryPending() || isPaused())return false;
@@ -242,7 +246,7 @@ private:
           if(scheduler_.connected())emit(BleEventType::Connected,nullptr,0,generation());
         } else if(cmd.type==detail::BleCommandType::CompleteQuery) {
           scheduler_.completeQuery(cmd.queryId,cmd.generation);
-        } else if(!scheduler_.write(cmd.data,cmd.size,now)) {
+        } else if(commandFence_.writeIfCurrent(scheduler_,cmd,now)==detail::BleWriteResult::Failed) {
           lastError_=-1003;emit(BleEventType::Error,nullptr,0,generation(),-1003);
         }
       }
@@ -273,6 +277,7 @@ private:
   detail::BoundedBleQueue<detail::BleCommand,8> commands_;
   detail::BleConfiguration desired_{},workerConfig_{};
   std::mutex peerMutex_;
+  detail::BluetoothCommandFence commandFence_;
   ScanCallbacks scanCallbacks_;ClientCallbacks clientCallbacks_;
   NimBLEClient* client_=nullptr;
   NimBLERemoteCharacteristic* writeCharacteristic_=nullptr;

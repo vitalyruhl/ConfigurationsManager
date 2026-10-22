@@ -44,7 +44,7 @@ No real device identifiers or payload history are exposed through runtime values
 ## Ownership and execution
 
 All APIs and the event handler run in the application loop, except
-`requestPause`/`requestResume`, which atomically combine independent `Ota` and
+`cancelPendingCommands()` and `requestPause`/`requestResume`. Pause/resume atomically combine independent `Ota` and
 `Configuration` reasons from callbacks/tasks. Resuming one reason preserves the
 other. Do not destroy the manager, change the handler from another task, or invoke
 NimBLE separately. The worker alone initializes/uses the scanner/client and
@@ -99,6 +99,13 @@ with backend internal retries disabled. Discovery remains on the worker; target
 latency and cancellation require hardware validation. Only one query is active;
 protocol validation and device-specific write allowlists belong to the consumer.
 `writeCommand()` returning true means queued, not acknowledged by the peer.
+`cancelPendingCommands()` is thread-safe and invalidates buffered commands under
+the same mutex as the final worker write admission. The worker rechecks each
+write's generation inside that mutex. A backend write already holding the fence
+completes before cancellation returns; it cannot be recalled. Cancellation does
+not change peer configuration or pause reasons. Its generation change follows
+the existing reconnect/requalification lifecycle; fresh reads can continue after
+normal link recovery. Consumer gates must also prevent new command admission.
 Call `bool completeQuery()` synchronously inside the notification event handler,
 only after validating the complete response. `BleEvent::queryId` records the
 outstanding query at reception, before callback-buffer reuse. Completion enqueues

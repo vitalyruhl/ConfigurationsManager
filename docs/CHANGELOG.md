@@ -2,6 +2,12 @@
 
 This changelog is a curated overview.
 
+## 4.8.0 - Unreleased
+
+- Add thread-safe BLE `cancelPendingCommands()` to fence buffered writes before
+  backend dispatch. Already-started writes complete before cancellation returns;
+  peer configuration and independent pause reasons remain unchanged.
+
 ## 4.7.1 - Unreleased
 
 - Serialize CM runtime JSON generation across HTTP and WebSocket builds. HTTP

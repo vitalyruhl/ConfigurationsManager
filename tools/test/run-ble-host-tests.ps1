@@ -17,6 +17,7 @@ foreach ($item in $suites) {
   $source = if ($item -eq 'ota') { 'ota_lifecycle_test.cpp' } else { 'bluetooth_transport_test.cpp' }
   Invoke-HostCheck $item $source
   if ($item -eq 'bluetooth') {
+    Invoke-HostCheck 'bluetooth-command-fence' 'bluetooth_command_fence_test.cpp'
     Invoke-HostCheck 'bluetooth-memory' 'bluetooth_memory_test.cpp'
     Invoke-HostCheck 'bluetooth-tx9' $source @('-DCM_BLE_TX_MAX_BYTES=9')
     Invoke-HostCheck 'bluetooth-memory-tx9' 'bluetooth_memory_test.cpp' @('-DCM_BLE_TX_MAX_BYTES=9')
