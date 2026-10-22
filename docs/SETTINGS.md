@@ -7,7 +7,7 @@ This document describes how to declare, register, persist and display configurat
 - Persistence: loadAll() on startup, saveAll() (or individual save) after changes.
 - Visibility: showIf predicate determines whether a setting appears in the web UI JSON.
 
-## Core WiFi recovery settings (4.8.0 Unreleased)
+## Core WiFi recovery settings (4.8.0)
 
 The optional `cm::CoreWiFiSettings` bundle adds `WiFiProbe` (`off`, `gateway`, or
 strict unicast IPv4) and retains `WiFiRb` (whole minutes 0..9999, default 1; 0

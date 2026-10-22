@@ -78,4 +78,4 @@
 
 ## Status Notes
 
-- The current HTTP/WebSocket iteration is operator-accepted; optional historical overload research is deferred. The separate MQTT verbose-logging item remains open. CM 4.8.0 is unreleased on the consolidated development branch.
+- The current HTTP/WebSocket iteration is operator-accepted; optional historical overload research is deferred. The separate MQTT verbose-logging item remains open. CM 4.8.0 release preparation is authorized, subject to green CI and the integration/release gates.

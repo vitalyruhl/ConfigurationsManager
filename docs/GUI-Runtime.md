@@ -11,7 +11,7 @@ Runtime values are served by the Web UI using:
 - `/live_layout.json` for the optional page/card/group layout
 - `/user_theme.css` for optional global CSS
 
-### Demand-driven updates (4.8.0 Unreleased)
+### Demand-driven updates (4.8.0)
 
 `/runtime.json` without a selector remains a full snapshot. Pass a URL-encoded
 JSON array in `groups`, for example `groups=%5B%22sensors%22%5D`, to evaluate only

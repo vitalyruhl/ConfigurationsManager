@@ -233,7 +233,12 @@ private:
         lastError_=-1001;emit(BleEventType::Error,nullptr,0,generation(),-1001);
         scheduler_.disconnected(now);
       }
-      if(observed!=generation()){scheduler_.cancel();scheduler_.disconnected(now);observed=generation();}
+      const auto current=generation();
+      if(observed!=current) {
+        scheduler_.cancel();scheduler_.disconnected(now);
+        // A cancellation during cleanup must remain pending for the next pass.
+        observed=current;
+      }
       auto applyConfiguration=[this](const detail::BleConfiguration& config) {
         std::lock_guard<std::mutex> lock(peerMutex_);workerConfig_=config;
       };
@@ -263,7 +268,6 @@ private:
         lastError_=-1004;emit(BleEventType::Error,nullptr,0,generation(),-1004);
       }
       highWaterBytes_=uxTaskGetStackHighWaterMark(nullptr);
-      observed=generation();
       vTaskDelay(pdMS_TO_TICKS(10));
     }
   }

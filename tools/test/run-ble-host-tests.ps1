@@ -19,6 +19,11 @@ foreach ($item in $suites) {
   if ($item -eq 'bluetooth') {
     Invoke-HostCheck 'bluetooth-command-fence' 'bluetooth_command_fence_test.cpp'
     Invoke-HostCheck 'bluetooth-memory' 'bluetooth_memory_test.cpp'
+    Invoke-HostCheck 'bluetooth-manager-epoch' 'bluetooth_manager_epoch_test.cpp' @('-I', (Join-Path $repo 'test/host/bluetooth_manager_stubs'))
+    foreach ($scenario in @('cleanup','timeout','pause')) {
+      & (Join-Path $outDir 'bluetooth-manager-epoch.exe') $scenario
+      if ($LASTEXITCODE -ne 0) { throw "Host assertions failed: bluetooth-manager-epoch $scenario" }
+    }
     Invoke-HostCheck 'bluetooth-tx9' $source @('-DCM_BLE_TX_MAX_BYTES=9')
     Invoke-HostCheck 'bluetooth-memory-tx9' 'bluetooth_memory_test.cpp' @('-DCM_BLE_TX_MAX_BYTES=9')
   }

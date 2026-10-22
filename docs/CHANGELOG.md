@@ -1,9 +1,9 @@
 # Changelog
 
-This changelog is a curated overview. Unpublished development versions 4.5.0
-through 4.7.1 are consolidated below; they were not separate releases.
+This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
+are consolidated into 4.8.0; they were not separate releases.
 
-## 4.8.0 - Unreleased
+## 4.8.0 - 2026-10-22
 
 - Add an opt-in BLE transport with consumer-supplied NimBLE, persisted enable
   setting, runtime diagnostics, a dedicated worker and bounded command/event
@@ -12,6 +12,11 @@ through 4.7.1 are consolidated below; they were not separate releases.
   outgoing payload limit through `CM_BLE_TX_MAX_BYTES` (default 272 bytes).
   Add thread-safe `cancelPendingCommands()` to fence buffered backend writes;
   already-started writes finish before cancellation returns.
+  Cancellation also recovers stale connection/scan state so fresh telemetry can
+  resume ([#83](https://github.com/vitalyruhl/ConfigurationsManager/issues/83)).
+  Remove one advertisement/GATT peer independently and select acknowledged or
+  unacknowledged GATT writes from the characteristic's supported properties;
+  reject non-writable targets.
 - Add independent Arduino/HTTP OTA lifecycle observation and session ownership
   so optional transports can pause and recover without replacing existing reboot
   or logging callbacks. Preserve successful HTTP acknowledgement/reboot handoff
@@ -53,8 +58,8 @@ through 4.7.1 are consolidated below; they were not separate releases.
   faster and without observed crashes, closing this development iteration's
   HTTP/WebSocket item. Earlier diagnostic/overload failures remain recorded in
   [the investigation history](todo_http_delivery_panic.md); their causes and
-  overload recovery are not claimed resolved. This is not a release or a full
-  repository validation result.
+  overload recovery are not claimed resolved. This operator acceptance does not
+  establish a full repository validation result.
 
 ## 4.4.10 - 2026-08-09
 
@@ -283,9 +288,3 @@ through 4.7.1 are consolidated below; they were not separate releases.
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
 | _none_ | - | Changelog only; no dedicated public API in this document. | See topic docs for API details. |
-
-
-### Additional unreleased 4.6.0 BLE support
-
-- Remove an individual advertisement or GATT peer without disabling the other source.
-- Select an acknowledged or unacknowledged GATT write according to characteristic properties; reject non-writable targets.
