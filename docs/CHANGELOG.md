@@ -3,7 +3,7 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
-## 4.9.0 - Unreleased
+## 4.9.0 - 2026-10-23
 
 - Update development-only `shell-quote` to 1.12.0 and `brace-expansion` to
   1.1.21/5.0.12 for local command parsing and file matching.

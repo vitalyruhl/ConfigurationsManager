@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.9.0 (Unreleased)
+> Version 4.9.0
 
 ## Preview Before Installing
 

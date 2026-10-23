@@ -33,7 +33,7 @@ below; `library.json` does not install that hook automatically.
 
 If your project still defines removed flags, the build will fail with a clear `#error` message so you can remove them (example: `CM_ENABLE_WS_PUSH`).
 
-## Live and Settings combinations (4.9.0 Unreleased)
+## Live and Settings combinations (4.9.0)
 
 Both switches default to `1`; unsupported values produce a compile error.
 They remove the corresponding backend and frontend paths at build time, including
