@@ -25,9 +25,15 @@ String ConfigManagerClass::normalizeLayoutName(const String& value) const {
 }
 
 void ConfigManagerClass::logLayoutWarningOnce(const String& key, const String& message) {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
   if (layoutWarnings.insert(key).second) {
     CM_CORE_LOG("[WARNING] %s", message.c_str());
   }
+
+#else
+
+#endif
 }
 
 ConfigManagerClass::LayoutPage* ConfigManagerClass::findLayoutPage(std::vector<LayoutPage>& pages, const String& normalized) {
@@ -128,41 +134,73 @@ ConfigManagerClass::LayoutGroup& ConfigManagerClass::ensureLayoutGroup(LayoutCar
 }
 
 void ConfigManagerClass::addSettingsPage(const char* pageName, int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   ensureLayoutPage(settingsPages, pageName, order, false);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addSettingsCard(const char* pageName, const char* cardName, int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
   String normalizedPage = normalizeLayoutName(resolvedPageName);
   bool pageExists = findLayoutPage(settingsPages, normalizedPage) != nullptr;
   LayoutPage& page = ensureLayoutPage(settingsPages, pageName, -1, !pageExists);
   ensureLayoutCard(page, cardName, order, page.name, false);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addSettingsGroup(const char* pageName, const char* cardName, const char* groupName, int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
   String normalizedPage = normalizeLayoutName(resolvedPageName);
   bool pageExists = findLayoutPage(settingsPages, normalizedPage) != nullptr;
   LayoutPage& page = ensureLayoutPage(settingsPages, pageName, -1, !pageExists);
   LayoutCard& card = ensureLayoutCard(page, cardName, -1, page.name, false);
   ensureLayoutGroup(card, groupName, order, card.name, false);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addLivePage(const char* pageName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   liveLayoutEnabled = true;
   ensureLayoutPage(livePages, pageName, order, false);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addLiveCard(const char* pageName, const char* cardName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   liveLayoutEnabled = true;
   String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
   String normalizedPage = normalizeLayoutName(resolvedPageName);
   bool pageExists = findLayoutPage(livePages, normalizedPage) != nullptr;
   LayoutPage& page = ensureLayoutPage(livePages, pageName, -1, !pageExists);
   ensureLayoutCard(page, cardName, order, String(DEFAULT_LIVE_CARD_NAME), false);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addLiveGroup(const char* pageName, const char* cardName, const char* groupName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   liveLayoutEnabled = true;
   String resolvedPageName = resolveLayoutLabel(pageName, String(DEFAULT_LAYOUT_NAME));
   String normalizedPage = normalizeLayoutName(resolvedPageName);
@@ -170,9 +208,15 @@ void ConfigManagerClass::addLiveGroup(const char* pageName, const char* cardName
   LayoutPage& page = ensureLayoutPage(livePages, pageName, -1, !pageExists);
   LayoutCard& card = ensureLayoutCard(page, cardName, -1, String(DEFAULT_LIVE_CARD_NAME), false);
   ensureLayoutGroup(card, groupName, order, card.name, false);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::setCategoryLayoutOverride(const char* category, const char* page, const char* card, const char* group, int order) {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
   if (!category || category[0] == '\0')
     return;
 
@@ -182,9 +226,15 @@ void ConfigManagerClass::setCategoryLayoutOverride(const char* category, const c
   overrideEntry.group = (group && group[0]) ? String(group) : String();
   overrideEntry.order = order;
   categoryLayoutOverrides[String(category)] = overrideEntry;
+
+#else
+
+#endif
 }
 
 const ConfigManagerClass::CategoryLayoutOverride* ConfigManagerClass::getCategoryLayoutOverride(const char* category) const {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
   if (!category || category[0] == '\0') {
     return nullptr;
   }
@@ -193,11 +243,17 @@ const ConfigManagerClass::CategoryLayoutOverride* ConfigManagerClass::getCategor
     return nullptr;
   }
   return &it->second;
+
+#else
+  return nullptr;
+#endif
 }
 
 // Cppcheck rationale: Preserve the mutable callback and extension contract.
 // cppcheck-suppress constParameterPointer
 void ConfigManagerClass::registerSettingPlacement(BaseSetting* setting) {
+#if CM_ENABLE_SETTINGS_UI
+
   if (!setting || !setting->shouldShowInWeb()) {
     return;
   }
@@ -225,6 +281,10 @@ void ConfigManagerClass::registerSettingPlacement(BaseSetting* setting) {
   addSettingsCard(pageName.c_str(), cardName.c_str(), setting->getCardOrder());
   addSettingsGroup(pageName.c_str(), cardName.c_str(), groupName.c_str(), setting->getSortOrder());
   addToSettingsGroup(setting->getKey(), pageName.c_str(), cardName.c_str(), groupName.c_str(), setting->getSortOrder());
+
+#else
+
+#endif
 }
 
 namespace {
@@ -236,49 +296,99 @@ String resolvePlacementName(const char* provided, const char* fallback) {
 } // namespace
 
 void ConfigManagerClass::addToSettings(const char* itemId, const char* pageName, int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   addToSettingsGroup(itemId, pageName, pageName, pageName, order);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addToSettingsGroup(const char* itemId, const char* pageName, const char* groupName, int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   addToSettingsGroup(itemId, pageName, pageName, groupName, order);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addToSettingsGroup(const char* itemId, const char* pageName, const char* cardName, const char* groupName, int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   String resolvedPage = resolvePlacementName(pageName, DEFAULT_LAYOUT_NAME);
   String resolvedCard = resolvePlacementName(cardName, resolvedPage.c_str());
   String resolvedGroup = resolvePlacementName(groupName, resolvedCard.c_str());
   addSettingsGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
   settingsPlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addToLive(const char* itemId, const char* pageName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   addToLiveGroup(itemId, pageName, DEFAULT_LIVE_CARD_NAME, DEFAULT_LIVE_CARD_NAME, order);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addToLiveCard(const char* itemId, const char* pageName, const char* cardName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   String resolvedPage = resolvePlacementName(pageName, DEFAULT_LAYOUT_NAME);
   String resolvedCard = resolvePlacementName(cardName, DEFAULT_LIVE_CARD_NAME);
   addLiveCard(resolvedPage.c_str(), resolvedCard.c_str(), order);
   livePlacements.push_back({itemId, resolvedPage, resolvedCard, String(), order});
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addToLiveGroup(const char* itemId, const char* pageName, const char* groupName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   addToLiveGroup(itemId, pageName, DEFAULT_LIVE_CARD_NAME, groupName, order);
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::addToLiveGroup(const char* itemId, const char* pageName, const char* cardName, const char* groupName, int order) {
+#if CM_ENABLE_LIVE_UI
+
   String resolvedPage = resolvePlacementName(pageName, DEFAULT_LAYOUT_NAME);
   String resolvedCard = resolvePlacementName(cardName, DEFAULT_LIVE_CARD_NAME);
   String resolvedGroup = resolvePlacementName(groupName, resolvedCard.c_str());
   addLiveGroup(resolvedPage.c_str(), resolvedCard.c_str(), resolvedGroup.c_str(), order);
   livePlacements.push_back({itemId, resolvedPage, resolvedCard, resolvedGroup, order});
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::registerLivePlacement(const RuntimeFieldMeta& meta) {
+#if CM_ENABLE_LIVE_UI
+
   registerLivePlacement(cm::RuntimeMetaView(meta));
+
+#else
+
+#endif
 }
 
 void ConfigManagerClass::registerLivePlacement(const cm::RuntimeMetaView& meta) {
+#if CM_ENABLE_LIVE_UI
+
   if (meta.key.isEmpty()) {
     return;
   }
@@ -385,6 +495,10 @@ void ConfigManagerClass::registerLivePlacement(const cm::RuntimeMetaView& meta) 
   }
 
   livePlacements.push_back({meta.key, resolvedPage, resolvedCard, resolvedGroup, meta.order, identitySource});
+
+#else
+
+#endif
 }
 
 // Cppcheck rationale: Retain the established runtime-group terminology in this API.
@@ -393,6 +507,8 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
                                                const String& key,
                                                const String& label,
                                                int order) {
+#if CM_ENABLE_LIVE_UI
+
   if (key.isEmpty()) {
     return;
   }
@@ -502,18 +618,30 @@ void ConfigManagerClass::registerLivePlacement(const String& liveGroup,
   }
 
   livePlacements.push_back({key, resolvedPage, resolvedCard, resolvedLayoutGroup, order});
+
+#else
+
+#endif
 }
 
 bool ConfigManagerClass::supportsLivePageSelection() const {
+#if CM_ENABLE_LIVE_UI
+
   if (!liveLayoutEnabled)
     return false;
   return std::all_of(livePages.begin(), livePages.end(), [this](const auto& page) {
     const String key = normalizeLayoutName(page.name);
     return key.length() && key.length() <= 256 && key != "__unassigned__";
   });
+
+#else
+  return false;
+#endif
 }
 
 String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const String& sourceGroup) const {
+#if CM_ENABLE_LIVE_UI
+
   const UiPlacement* selected = cm::findLivePlacement(livePlacements, fieldKey.c_str(), sourceGroup.c_str());
   if (selected) {
     const String key = normalizeLayoutName(selected->page);
@@ -521,9 +649,15 @@ String ConfigManagerClass::livePageKeyForField(const String& fieldKey, const Str
       return key;
   }
   return "__unassigned__";
+
+#else
+  return {};
+#endif
 }
 
 bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
+#if CM_ENABLE_LIVE_UI
+
   if (!supportsLivePageSelection())
     return false;
   if (std::any_of(livePages.begin(), livePages.end(), [&](const auto& page) { return normalizeLayoutName(page.name) == pageKey; }))
@@ -531,9 +665,15 @@ bool ConfigManagerClass::hasLivePageKey(const String& pageKey) const {
   return pageKey == "__unassigned__" && runtimeManager.hasRuntimeMetaView([&](const cm::RuntimeMetaView& meta) {
     return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
   });
+
+#else
+  return false;
+#endif
 }
 
 String ConfigManagerClass::buildLivePageIndexJSON() const {
+#if CM_ENABLE_LIVE_UI
+
   const bool scoped = supportsLivePageSelection();
   const bool hasContent = !livePages.empty() || runtimeManager.hasRuntimeMeta();
   const bool hasUnassigned = scoped && hasLivePageKey("__unassigned__");
@@ -545,22 +685,46 @@ String ConfigManagerClass::buildLivePageIndexJSON() const {
   if (!cm::buildJsonOutput(emitIndex, output))
     return String();
   return output;
+
+#else
+  return {};
+#endif
 }
 
 String ConfigManagerClass::buildLivePageMetadataJSON(const String& pageKey) {
+#if CM_ENABLE_LIVE_UI
+
   return runtimeManager.runtimeMetaToJSONView([&](const cm::RuntimeMetaView& meta) {
     return livePageKeyForField(meta.key, meta.sourceGroup.length() ? meta.sourceGroup : meta.group) == pageKey;
   });
+
+#else
+  return {};
+#endif
 }
 
 String ConfigManagerClass::buildLiveLayoutJSON() const {
+#if CM_ENABLE_LIVE_UI
+
   return buildLiveLayoutJSONImpl(nullptr);
+
+#else
+  return {};
+#endif
 }
 String ConfigManagerClass::buildLiveLayoutJSON(const String& pageKey) const {
+#if CM_ENABLE_LIVE_UI
+
   return buildLiveLayoutJSONImpl(&pageKey);
+
+#else
+  return {};
+#endif
 }
 
 String ConfigManagerClass::buildLiveLayoutJSONImpl(const String* pageKey) const {
+#if CM_ENABLE_LIVE_UI
+
   const auto normalize = [this](const String& value) { return normalizeLayoutName(value); };
   const auto emitLayout = [&](auto& sink) {
     return cm::writeLiveLayoutJson(sink, livePages, livePlacements, liveLayoutEnabled, pageKey, normalize);
@@ -569,4 +733,8 @@ String ConfigManagerClass::buildLiveLayoutJSONImpl(const String* pageKey) const 
   if (!cm::buildJsonOutput(emitLayout, output))
     return String();
   return output;
+
+#else
+  return {};
+#endif
 }

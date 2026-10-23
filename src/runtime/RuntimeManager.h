@@ -131,6 +131,7 @@ private:
   // Metadata mutations take cacheMutex before this mutex; cache rebuilds only
   // hold this mutex while traversing mutable metadata.
   mutable std::mutex runtimeDataMutex;
+  #if CM_ENABLE_LIVE_UI
   std::recursive_mutex runtimeGenerationMutex;
   mutable std::mutex runtimeMetaCacheMutex;
 
@@ -140,7 +141,7 @@ private:
   bool runtimeMetaJsonCacheBuildInProgress = false;
   std::atomic<uint32_t> runtimeMetaRevision{0};
 
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+#if defined(CM_RUNTIME_META_TEST_INSTRUMENTATION) && CM_ENABLE_LIVE_UI
   bool runtimeMetaSerializationFailureForTest = false;
   std::atomic<size_t> runtimeMetaSerializationBuildCount{0};
 #endif
@@ -163,10 +164,11 @@ private:
   std::vector<RuntimeIntInput> runtimeIntInputs;
   std::vector<RuntimeFloatInput> runtimeFloatInputs;
 
+  #endif
   std::vector<RuntimeAlarm> runtimeAlarms;
 
   // System provider data
-#if CM_ENABLE_SYSTEM_PROVIDER
+#if CM_ENABLE_LIVE_UI && CM_ENABLE_SYSTEM_PROVIDER
   bool builtinSystemProviderEnabled;
   bool builtinSystemProviderRegistered;
   unsigned long loopWindowStart;
@@ -247,12 +249,17 @@ public:
   // JSON generation
   // HTTP waits only for generation; main-loop WS ticks use a nonblocking claim.
   std::unique_lock<std::recursive_mutex> acquireRuntimeGeneration(bool wait = true) {
+#if CM_ENABLE_LIVE_UI
     std::unique_lock<std::recursive_mutex> lock(runtimeGenerationMutex, std::defer_lock);
     if (wait)
       lock.lock();
     else
       (void)lock.try_lock();
     return lock;
+#else
+    (void)wait;
+    return {};
+#endif
   }
   String runtimeValuesToJSON();
   String runtimeValuesToJSON(const cm::RuntimeSelection& selection);
@@ -265,7 +272,7 @@ public:
   bool hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>& include = {}) const;
   std::shared_ptr<const String> runtimeMetaJsonPayload();
 
-#ifdef CM_RUNTIME_META_TEST_INSTRUMENTATION
+#if defined(CM_RUNTIME_META_TEST_INSTRUMENTATION) && CM_ENABLE_LIVE_UI
   struct RuntimeMetaStatsForTest {
     size_t retainedBytes = 0, legacyCapacityBytes = 0, legacyOwnedBytes = 0;
     size_t stateBytes = 0, storeBytes = 0, orderCapacityBytes = 0;
@@ -287,7 +294,7 @@ public:
 #endif
 
   // System provider
-#if CM_ENABLE_SYSTEM_PROVIDER
+#if CM_ENABLE_LIVE_UI && CM_ENABLE_SYSTEM_PROVIDER
   void enableBuiltinSystemProvider();
   void updateLoopTiming();
   double getLoopAverage() const {
@@ -315,7 +322,7 @@ public:
   std::vector<String> getActiveAlarms() const;
 
   // Development support
-#ifdef development
+#if defined(development) && CM_ENABLE_LIVE_UI
   std::vector<RuntimeFieldMeta> runtimeMetaOverride;
   bool runtimeMetaOverrideActive = false;
   void setRuntimeMetaOverride(const std::vector<RuntimeFieldMeta>& override);

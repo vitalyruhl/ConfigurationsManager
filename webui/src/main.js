@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
-import App from './App.vue';
-import './assets/styles/runtime-controls.css';
+import App from '#cm-app';
+import './assets/styles/theme.css';
+import '#cm-controls-styles';
 
 createApp(App).mount('#app');

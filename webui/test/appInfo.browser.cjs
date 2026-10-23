@@ -38,6 +38,7 @@ const html = zlib.gunzipSync(Buffer.from([...array.matchAll(/0x([0-9a-f]{2})/gi)
         return offline ? route.abort('connectionreset') : route.fulfill({ contentType: 'text/plain', body: 'SolarBatteryTelemetry 1.0.0' });
       }
       if (url.pathname === '/live_pages.json') return json({ pageScoped: true, hasLiveContent: false, pages: [], defaultPage: '' });
+      if (url.pathname === '/ui_capabilities') return json({ live: true, settings: true, otaEnabled: false, otaActive: false, otaHasPassword: true, settingsAuthRequired: false });
       if (url.pathname === '/user_theme.css') return route.fulfill({ contentType: 'text/css', body: '' });
       if (url.pathname === '/runtime.json') return json({ system: { otaActive: false, otaHasPassword: true } });
       return json({});

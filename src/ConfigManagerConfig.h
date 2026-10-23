@@ -4,6 +4,8 @@
 // The library provides a single default feature set (WebUI, OTA, runtime controls, styling).
 // Supported build flags (defaults shown):
 // - CM_EMBED_WEBUI (1)
+// - CM_ENABLE_LIVE_UI (1)
+// - CM_ENABLE_SETTINGS_UI (1)
 // - CM_ENABLE_LOGGING (0)
 // - CM_ENABLE_VERBOSE_LOGGING (0)
 // - CM_DISABLE_GUI_LOGGING (0)
@@ -25,6 +27,17 @@
 #define CM_EMBED_WEBUI 1
 #endif
 #define CM_ENABLE_WS_PUSH 1
+
+// Independent web areas. Operational settings and alarms remain available.
+#ifndef CM_ENABLE_LIVE_UI
+#define CM_ENABLE_LIVE_UI 1
+#endif
+#ifndef CM_ENABLE_SETTINGS_UI
+#define CM_ENABLE_SETTINGS_UI 1
+#endif
+#if (CM_ENABLE_LIVE_UI != 0 && CM_ENABLE_LIVE_UI != 1) || (CM_ENABLE_SETTINGS_UI != 0 && CM_ENABLE_SETTINGS_UI != 1)
+#error "CM_ENABLE_LIVE_UI and CM_ENABLE_SETTINGS_UI must be 0 or 1."
+#endif
 
 #ifndef CM_ENABLE_SYSTEM_PROVIDER
 #define CM_ENABLE_SYSTEM_PROVIDER 1

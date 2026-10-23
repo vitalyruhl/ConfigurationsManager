@@ -61,7 +61,7 @@ while ($end -lt $cmSource.Length -and $depth -gt 0) {
 if ($start -lt 0 -or $depth -ne 0) { throw 'Production runtime push method not found.' }
 [IO.File]::WriteAllText((Join-Path $outDir 'runtime-push.inc'), $cmSource.Substring($start, $end - $start), [Text.UTF8Encoding]::new($false))
 $backpressureExe = Join-Path $outDir 'runtime-backpressure.exe'
-& $compiler -std=c++17 -Wall -Wextra -Werror -I (Join-Path $repo 'test/host/ws_stubs') -I (Join-Path $repo 'src') -I $outDir -I $ArduinoJsonInclude (Join-Path $repo 'test/host/runtime_backpressure_test.cpp') -o $backpressureExe
+& $compiler -std=c++17 -Wall -Wextra -Werror -DCM_ENABLE_LIVE_UI=1 -I (Join-Path $repo 'test/host/ws_stubs') -I (Join-Path $repo 'src') -I $outDir -I $ArduinoJsonInclude (Join-Path $repo 'test/host/runtime_backpressure_test.cpp') -o $backpressureExe
 if ($LASTEXITCODE -ne 0) { throw 'Runtime backpressure host compile failed.' }
 & $backpressureExe
 if ($LASTEXITCODE -ne 0) { throw 'Runtime backpressure assertions failed.' }

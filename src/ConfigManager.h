@@ -60,7 +60,7 @@ public:
 #include "runtime/detail/RuntimeMessage.h"
 #endif
 
-#define CONFIGMANAGER_VERSION "4.8.0" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.9.0" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -313,7 +313,9 @@ inline const char* toString(ValidationSeverity severity) {
 // BaseSetting class (updated for new ConfigOptions structure)
 class BaseSetting {
 protected:
+#if CM_ENABLE_SETTINGS_UI
   bool showInWeb;
+#endif
   bool isPassword;
   bool modified = false;
   bool persistSetting = true;
@@ -321,12 +323,14 @@ protected:
   const char* storageKeyPtr = nullptr;
   const char* category;
   const char* displayName;
+#if CM_ENABLE_SETTINGS_UI
   const char* categoryPrettyName = nullptr;
   const char* cardName = nullptr;
   const char* cardPrettyName = nullptr;
   int cardOrder = 100;
-  SettingType type;
   int sortOrder = 100;
+#endif
+  SettingType type;
   bool hasKeyLengthError = false;
   String keyLengthErrorMsg;
   inline static std::set<String> registeredStorageKeys;
@@ -413,9 +417,12 @@ public:
 
   // New constructor for ConfigOptions-based initialization
   BaseSetting(const char* key, const char* name, const char* category, SettingType type, bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr, const char* card = nullptr, const char* cardPretty = nullptr, int cardOrder = 100)
-      : displayName(nullptr), category(nullptr), categoryPrettyName(categoryPretty),
-        cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder), type(type),
-        showInWeb(showInWeb), isPassword(isPassword), sortOrder(sortOrder) {
+      : displayName(nullptr), category(nullptr), type(type), isPassword(isPassword)
+#if CM_ENABLE_SETTINGS_UI
+        , categoryPrettyName(categoryPretty), cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder),
+        showInWeb(showInWeb), sortOrder(sortOrder)
+#endif
+  {
     const char* fallbackName = "Default";
     const char* resolvedCategory = (category && category[0] != '\0') ? category : fallbackName;
     const char* resolvedName = (name && name[0] != '\0')
@@ -424,9 +431,11 @@ public:
 
     displayName = resolvedName;
     this->category = resolvedCategory;
+#if CM_ENABLE_SETTINGS_UI
     if (!categoryPrettyName) {
       categoryPrettyName = resolvedCategory;
     }
+#endif
 
     String keyHint;
     if (key && key[0] != '\0') {
@@ -453,8 +462,14 @@ public:
   virtual void toJSON(JsonObject& obj) const = 0;
   virtual bool fromJSON(const JsonVariant& value) = 0;
   virtual bool isVisible() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return showInWeb;
-  }
+
+#else
+    return false;
+#endif
+}
 
   const char* getDisplayName() const {
     return displayName;
@@ -466,29 +481,65 @@ public:
     return category;
   }
   const char* getCategoryPretty() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return categoryPrettyName ? categoryPrettyName : category;
-  }
+
+#else
+    return category;
+#endif
+}
   const char* getCard() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return cardName;
-  }
+
+#else
+    return nullptr;
+#endif
+}
   const char* getCardPretty() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return cardPrettyName ? cardPrettyName : cardName;
-  }
+
+#else
+    return nullptr;
+#endif
+}
   int getCardOrder() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return cardOrder;
-  }
+
+#else
+    return 100;
+#endif
+}
   const char* getName() const {
     return storageKeyPtr;
   }
   int getSortOrder() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return sortOrder;
-  }
+
+#else
+    return 100;
+#endif
+}
   bool isSecret() const {
     return isPassword;
   }
   bool shouldShowInWeb() const {
+#if CM_ENABLE_SETTINGS_UI
+
     return showInWeb;
-  }
+
+#else
+    return false;
+#endif
+}
   bool needsSave() const {
     return modified;
   }
@@ -503,10 +554,30 @@ private:
   std::function<void(T)> callback = nullptr;
 
 public:
+#if CM_ENABLE_SETTINGS_UI
   std::function<bool()> showIfFunc = nullptr;
+#else
+  // Preserve assignment syntax without retaining presentation callbacks.
+  struct DisabledVisibility {
+    DisabledVisibility(std::nullptr_t = nullptr) {}
+    DisabledVisibility(const std::function<bool()>&) {}
+    template <typename F> DisabledVisibility& operator=(F&&) { return *this; }
+    explicit operator bool() const { return false; }
+    bool operator()() const { return false; }
+    bool operator==(std::nullptr_t) const { return true; }
+    bool operator!=(std::nullptr_t) const { return false; }
+  };
+  DisabledVisibility showIfFunc;
+#endif
   bool isVisible() const override {
+#if CM_ENABLE_SETTINGS_UI
+
     return showIfFunc ? showIfFunc() : BaseSetting::isVisible();
-  }
+
+#else
+    return false;
+#endif
+}
 
   // New primary constructor for ConfigOptions
   explicit Config(const ConfigOptions<T>& opts)
@@ -656,6 +727,8 @@ public:
   }
 
   void toJSON(JsonObject& obj) const override {
+#if CM_ENABLE_SETTINGS_UI
+
     const char* jsonKey = getKey();
     JsonObject settingObj = obj.createNestedObject(jsonKey);
 
@@ -676,7 +749,11 @@ public:
     if (showIfFunc != nullptr) {
       settingObj["showIf"] = showIfFunc();
     }
-  }
+
+#else
+    (void)obj;
+#endif
+}
 
   bool fromJSON(const JsonVariant& jsonValue) override {
     if (jsonValue.isNull()) {
@@ -869,6 +946,7 @@ public:
     DotOnAlarm
   };
 
+#if CM_ENABLE_LIVE_UI
   class LiveFieldBuilder {
   public:
     LiveFieldBuilder(ConfigManagerRuntime& runtime,
@@ -1334,6 +1412,54 @@ public:
     int groupOrder = -1;
   };
 
+#else
+  // Keep fluent registration source-compatible without constructing metadata,
+  // styles, Strings, or type-erased callbacks for an excluded web area.
+  class LiveFieldBuilder {
+  public:
+    LiveFieldBuilder() = default;
+    LiveFieldBuilder(ConfigManagerRuntime&, const RuntimeFieldMeta&, std::function<void(JsonObject&)>, const String&, std::function<void(ConfigManagerRuntime&)> = nullptr) {}
+    LiveFieldBuilder(const LiveFieldBuilder&) = delete;
+    LiveFieldBuilder& operator=(const LiveFieldBuilder&) = delete;
+    LiveFieldBuilder(LiveFieldBuilder&&) = default;
+#define CM_DISABLED_LIVE_CHAIN(method) template <typename... Args> LiveFieldBuilder& method(Args&&...) { return *this; }
+    CM_DISABLED_LIVE_CHAIN(label)
+    CM_DISABLED_LIVE_CHAIN(unit)
+    CM_DISABLED_LIVE_CHAIN(precision)
+    CM_DISABLED_LIVE_CHAIN(addCSSClass)
+    CM_DISABLED_LIVE_CHAIN(order)
+    CM_DISABLED_LIVE_CHAIN(onLabel)
+    CM_DISABLED_LIVE_CHAIN(offLabel)
+    CM_DISABLED_LIVE_CHAIN(alarmOnTrue)
+    CM_DISABLED_LIVE_CHAIN(warnMin)
+    CM_DISABLED_LIVE_CHAIN(warnMax)
+    CM_DISABLED_LIVE_CHAIN(alarmMin)
+    CM_DISABLED_LIVE_CHAIN(alarmMax)
+    CM_DISABLED_LIVE_CHAIN(staticValue)
+#undef CM_DISABLED_LIVE_CHAIN
+  };
+  class LiveGroupBuilder {
+  public:
+    LiveGroupBuilder(ConfigManagerClass&, const char*) {}
+    template <typename... Args> LiveGroupBuilder& page(Args&&...) { return *this; }
+    template <typename... Args> LiveGroupBuilder& card(Args&&...) { return *this; }
+    template <typename... Args> LiveGroupBuilder& group(Args&&...) { return *this; }
+#define CM_DISABLED_LIVE_FIELD(method) template <typename... Args> LiveFieldBuilder method(Args&&...) { return {}; }
+    CM_DISABLED_LIVE_FIELD(divider)
+    CM_DISABLED_LIVE_FIELD(value)
+    CM_DISABLED_LIVE_FIELD(boolValue)
+    CM_DISABLED_LIVE_FIELD(button)
+    CM_DISABLED_LIVE_FIELD(checkbox)
+    CM_DISABLED_LIVE_FIELD(stateButton)
+    CM_DISABLED_LIVE_FIELD(momentaryButton)
+    CM_DISABLED_LIVE_FIELD(intSlider)
+    CM_DISABLED_LIVE_FIELD(floatSlider)
+    CM_DISABLED_LIVE_FIELD(intInput)
+    CM_DISABLED_LIVE_FIELD(floatInput)
+#undef CM_DISABLED_LIVE_FIELD
+  };
+#endif
+
   static constexpr const char* DEFAULT_LAYOUT_NAME = "Default";
   static constexpr int DEFAULT_LAYOUT_ORDER = 100;
   static constexpr const char* DEFAULT_LIVE_CARD_NAME = "Live Values";
@@ -1351,8 +1477,10 @@ private:
   std::map<String, cm::io::IOPinRole> ioPinRoles;
   std::vector<ConfigRequestContext> requestContextStack;
   ConfigRequestContext fallbackRequestContext;
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
   uint32_t guiMessageCounter = 0;
   std::map<String, std::map<String, GuiMessageCallback>> guiMessageCallbacks;
+#endif
 
   void sendGUIMessage(const char* type,
                       const String& title,
@@ -1360,6 +1488,8 @@ private:
                       const String& details,
                       const std::vector<GUIMessageAction>& actions,
                       std::function<void(JsonObject&)> contextBuilder) {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
     DynamicJsonDocument doc(1024);
     JsonObject root = doc.to<JsonObject>();
     root["type"] = type;
@@ -1384,7 +1514,11 @@ private:
     if (!sendWebSocketPayload(payload)) {
       CM_CORE_LOG("[CM] WebSocket payload not delivered: %s", payload.c_str());
     }
-  }
+
+#else
+
+#endif
+}
 
   void sendSeverityMessage(const char* type,
                            const String& title,
@@ -1395,6 +1529,8 @@ private:
                            GuiMessageCallback cbCancel,
                            GuiMessageCallback cbRetry,
                            std::function<void(JsonObject&)> contextBuilder) {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
     const String messageId = allocateGuiMessageId();
     const std::vector<GUIMessageAction> actions = buildGuiMessageActions(buttons);
     registerGuiMessageCallbacks(messageId, actions, cbOk, cbCancel, cbRetry);
@@ -1405,7 +1541,11 @@ private:
         contextBuilder(obj);
       }
     });
-  }
+
+#else
+
+#endif
+}
 
   // Cppcheck rationale: Preserve the existing instance API for source compatibility.
   // cppcheck-suppress functionStatic
@@ -1436,6 +1576,8 @@ private:
                                    const GuiMessageCallback& cbOk,
                                    const GuiMessageCallback& cbCancel,
                                    const GuiMessageCallback& cbRetry) {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
     auto& callbacks = guiMessageCallbacks[messageId];
     for (const auto& action : actions) {
       if (action.id == "ok" && cbOk) {
@@ -1446,12 +1588,22 @@ private:
         callbacks[action.id] = cbRetry;
       }
     }
-  }
+
+#else
+
+#endif
+}
 
   String allocateGuiMessageId() {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
     ++guiMessageCounter;
     return String("gui_msg_") + String(guiMessageCounter, DEC);
-  }
+
+#else
+    return {};
+#endif
+}
 
   IOPinValidationResult validateIOPinSetting(const String& key, const String& value) const {
     IOPinValidationResult result;
@@ -1714,11 +1866,17 @@ private:
     std::vector<LayoutCard> cards;
   };
 
+#if CM_ENABLE_SETTINGS_UI
   std::vector<LayoutPage> settingsPages;
+#endif
+#if CM_ENABLE_LIVE_UI
   std::vector<LayoutPage> livePages;
   bool liveLayoutEnabled = false;
+#endif
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
   std::set<String> layoutWarnings;
   std::map<String, CategoryLayoutOverride> categoryLayoutOverrides;
+#endif
 
   LayoutPage* findLayoutPage(std::vector<LayoutPage>& pages, const String& normalized);
   LayoutCard* findLayoutCard(LayoutPage& page, const String& normalized);
@@ -1741,7 +1899,7 @@ public:
   const CategoryLayoutOverride* getCategoryLayoutOverride(const char* category) const;
 
   // WebSocket support
-#if CM_ENABLE_WS_PUSH
+#if CM_ENABLE_WS_PUSH && CM_ENABLE_LIVE_UI
   AsyncWebSocket* ws = nullptr;
   bool wsInitialized = false;
   bool wsEnabled = false;
@@ -1796,6 +1954,9 @@ public:
     }
     ws->cleanupClients();
   }
+#elif CM_ENABLE_SETTINGS_UI
+  AsyncWebSocket* eventSocket = nullptr;
+  bool eventSocketEnabled = false;
 #endif
 
 public:
@@ -1922,8 +2083,12 @@ public:
     String sourceGroup; // Optional internal identity; empty preserves explicit global overrides.
   };
 
+#if CM_ENABLE_SETTINGS_UI
   std::vector<UiPlacement> settingsPlacements;
+#endif
+#if CM_ENABLE_LIVE_UI
   std::vector<UiPlacement> livePlacements;
+#endif
 
   void addToSettings(const char* itemId, const char* pageName, int order);
   void addToSettingsGroup(const char* itemId, const char* pageName, const char* groupName, int order);
@@ -2297,6 +2462,8 @@ public:
   }
 
   bool handleGuiAction(const String& messageId, const String& actionId) {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+
     if (messageId.isEmpty() || actionId.isEmpty()) {
       return false;
     }
@@ -2311,7 +2478,11 @@ public:
       cbIt->second();
     }
     return true;
-  }
+
+#else
+    return false;
+#endif
+}
 
   // App management
   void setAppName(const String& name) {
@@ -2818,6 +2989,8 @@ public:
 
   // JSON export
   String toJSON(bool includeSecrets = false) {
+#if CM_ENABLE_SETTINGS_UI
+
     JsonDocument doc;
     JsonObject root = doc.to<JsonObject>();
 
@@ -2922,7 +3095,12 @@ public:
     String output;
     serializeJsonPretty(doc, output);
     return output;
-  }
+
+#else
+    (void)includeSecrets;
+    return {};
+#endif
+}
 
   String buildLiveLayoutJSON() const;
   String buildLiveLayoutJSON(const String& pageKey) const;
@@ -2974,8 +3152,18 @@ public:
     runtimeManager.updateLoopTiming();
   }
 
+  // Small operational event; never constructs a runtime snapshot or registry.
+  void notifyOTAStatus() {
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
+    char payload[128];
+    snprintf(payload, sizeof(payload), "{\"type\":\"otaStatus\",\"otaActive\":%s,\"otaEnabled\":%s,\"otaHasPassword\":%s}",
+             otaManager.isActive() ? "true" : "false", otaManager.isEnabled() ? "true" : "false", otaManager.hasPassword() ? "true" : "false");
+    sendWebSocketText(String(payload));
+#endif
+  }
+
   // WebSocket push
-#if CM_ENABLE_WS_PUSH
+#if CM_ENABLE_WS_PUSH && CM_ENABLE_LIVE_UI
   void addWebSocketConnectListener(std::function<void(AsyncWebSocketClient*)> cb) {
     wsConnectCallbacks.push_back(std::move(cb));
   }
@@ -3216,9 +3404,52 @@ public:
 #endif
   }
 #else
-  void handleWebsocketPush() {}
-  void enableWebSocketPush(uint32_t = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {}
-  void disableWebSocketPush() {}
+  void addWebSocketConnectListener(std::function<void(AsyncWebSocketClient*)>) {}
+  void addWebSocketDisconnectListener(std::function<void(AsyncWebSocketClient*)>) {}
+  bool sendWebSocketText(const String& payload) {
+#if CM_ENABLE_SETTINGS_UI
+    if (eventSocketEnabled && eventSocket && eventSocket->availableForWriteAll()) {
+      eventSocket->textAll(payload);
+      return true;
+    }
+#endif
+    return false;
+  }
+  bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload) {
+    if (!client || client->queueIsFull()) return false;
+    client->text(payload);
+    return true;
+  }
+  size_t getWebSocketClientCount() const {
+#if CM_ENABLE_SETTINGS_UI
+    return eventSocket ? eventSocket->count() : 0;
+#else
+    return 0;
+#endif
+  }
+  void handleWebsocketPush() {
+#if CM_ENABLE_SETTINGS_UI
+    if (eventSocket) eventSocket->cleanupClients();
+#endif
+  }
+  void enableWebSocketPush(uint32_t = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {
+#if CM_ENABLE_SETTINGS_UI
+    eventSocketEnabled = true;
+    if (!eventSocket && webManager.getServer()) {
+      eventSocket = new AsyncWebSocket("/ws");
+      webManager.getServer()->addHandler(eventSocket);
+    }
+#endif
+  }
+  void disableWebSocketPush() {
+#if CM_ENABLE_SETTINGS_UI
+    eventSocketEnabled = false;
+    if (eventSocket) eventSocket->closeAll();
+#endif
+  }
+  void WebSocketPush(bool enable = true, uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {
+    if (enable) enableWebSocketPush(intervalMs); else disableWebSocketPush();
+  }
   void setWebSocketInterval(uint32_t) {}
   void setPushOnConnect(bool) {}
   void setCustomLivePayloadBuilder(std::function<String()>) {}

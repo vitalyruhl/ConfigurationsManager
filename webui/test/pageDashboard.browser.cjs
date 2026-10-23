@@ -26,7 +26,7 @@ const assert=require('node:assert/strict');
      return Promise.resolve({ok:false,status:503});
     }
    }
-   if(String(resource).startsWith('/runtime.json?groups=%5B%5D'))window.__runtimeSafetyReads++;
+   if(String(resource).startsWith('/ui_capabilities'))window.__runtimeSafetyReads++;
    const path=new URL(String(resource),location.href).pathname;
    window.__startupEvents.push(path+":start");
    return originalFetch(resource,options).then(response=>{
@@ -40,13 +40,14 @@ const assert=require('node:assert/strict');
    });
   };
  });
- let firstRuntime=true;
+ let firstRuntime=true, otaBusy=true;
  const entries=[{key:'bms',name:'BMS',title:'BMS',order:1},{key:'victron page!',name:'Victron',title:'Victron',order:2},{key:'empty',name:'Empty',title:'Empty',order:3},{key:'slow',name:'Slow',title:'Slow',order:4},{key:'retry',name:'Retry',title:'Retry',order:5}];
  await page.route(`${testUrl}/**`,async route=>{
   const u=new URL(route.request().url());
   if(u.pathname==='/'||u.pathname.startsWith('/src/')||u.pathname.startsWith('/node_modules/')||u.pathname.startsWith('/@')||u.pathname.endsWith('.svg'))return route.continue();
   requests.push(u.pathname+u.search);
   const json=value=>route.fulfill({contentType:'application/json',body:JSON.stringify(value)});
+  if(u.pathname==='/ui_capabilities')return json({live:true,settings:true,otaEnabled:false,otaActive:otaBusy,otaHasPassword:true,settingsAuthRequired:false});
   if(u.pathname==='/live_pages.json')return json({pageScoped:true,hasLiveContent:true,pages:entries,defaultPage:'bms'});
   const key=u.searchParams.get('page');
   if(u.pathname==='/live_layout.json'){
@@ -82,13 +83,16 @@ const assert=require('node:assert/strict');
  before('/appinfo:end','/live_pages.json:start');
  before('/live_pages.json:end','/live_layout.json:start');
  before('/live_layout.json:end','/runtime_meta.json:start');
- before('/runtime_meta.json:end','/ota_update:start');
- before('/ota_update:end','/runtime.json:start');
+ before('/ui_capabilities:end','/live_pages.json:start');
+ before('/runtime_meta.json:end','/runtime.json:start');
  before('/runtime.json:end','socket:selected');
- before('socket-open:selected','socket:none');
+ before('/ui_capabilities:end','socket:none');
  const startupSafety=await page.evaluate(()=>window.__startupSafety.find(item=>item.url.includes('runtime=selected')));
  assert.equal(startupSafety.settingsDisabled,true,'initial OTA-active snapshot must guard Settings before sockets');
  assert.equal(startupSafety.otaOverlay,true);
+ otaBusy=false;
+ await page.evaluate(()=>window.__sockets.find(s=>s.url.includes('runtime=none')).onmessage({data:JSON.stringify({type:'otaStatus',otaActive:false,otaEnabled:false,otaHasPassword:true})}));
+ await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Settings').disabled);
  assert.equal(requests.filter(x=>x==='/config.json').length,0);
  for(const entry of entries)await page.getByRole('button',{name:entry.title,exact:true}).waitFor();
  await page.getByRole('button',{name:'Victron',exact:true}).click();
@@ -110,9 +114,11 @@ const assert=require('node:assert/strict');
  assert.equal(await page.getByText('waiting_for_advertisement',{exact:true}).count(),0);
  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
  await page.waitForFunction(()=>JSON.stringify(window.__subscriptions.at(-1))==='[]');
- await page.evaluate(()=>window.__sockets.find(s=>s.url.includes('runtime=selected')).onmessage({data:JSON.stringify({_runtimeGroups:[],system:{otaActive:true,otaHasPassword:true}})}));
+ otaBusy=true;
+ await page.evaluate(()=>window.__sockets.find(s=>s.url.includes('runtime=none')).onmessage({data:JSON.stringify({type:'otaStatus',otaActive:true,otaEnabled:false,otaHasPassword:true})}));
  await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Settings').disabled);
- await page.evaluate(()=>window.__sockets.find(s=>s.url.includes('runtime=selected')).onmessage({data:JSON.stringify({_runtimeGroups:[],system:{otaActive:false,otaHasPassword:true}})}));
+ otaBusy=false;
+ await page.evaluate(()=>window.__sockets.find(s=>s.url.includes('runtime=none')).onmessage({data:JSON.stringify({type:'otaStatus',otaActive:false,otaEnabled:false,otaHasPassword:true})}));
  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
  await page.waitForFunction(()=>JSON.stringify(window.__subscriptions.at(-1))==='["bms"]');
  await page.getByRole('button',{name:'Retry',exact:true}).click();

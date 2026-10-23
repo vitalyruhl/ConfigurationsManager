@@ -32,15 +32,21 @@ private:
   bool serverStarted;
 
   // Callbacks for ConfigManager integration
+#if CM_ENABLE_SETTINGS_UI
   JsonProvider configJsonProvider;
+#endif
+#if CM_ENABLE_LIVE_UI
   JsonProvider runtimeJsonProvider;
   std::function<String(const cm::RuntimeSelection&)> selectedRuntimeJsonProvider;
   RuntimeMetaProvider runtimeMetaJsonProvider;
   std::atomic<uint32_t> runtimeMetaActiveRequests{0};
+#endif
   SimpleCallback rebootCallback;
+#if CM_ENABLE_SETTINGS_UI
   SimpleCallback resetCallback;
   SettingUpdateCallback settingUpdateCallback;
   SettingUpdateCallback settingApplyCallback; // For apply-only operations
+#endif
 
   // Web content
   bool embedWebUI;
@@ -87,7 +93,11 @@ public:
   ~ConfigManagerWeb();
 
   void setSelectedRuntimeJsonProvider(std::function<String(const cm::RuntimeSelection&)> provider) {
+#if CM_ENABLE_LIVE_UI
     selectedRuntimeJsonProvider = std::move(provider);
+#else
+    (void)provider;
+#endif
   }
 
   // Initialization

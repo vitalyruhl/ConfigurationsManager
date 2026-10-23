@@ -129,14 +129,15 @@
       </div>
     </div>
 
+    <OtaController ref="otaController" @can-flash-change="handleCanFlashChange"
+      @ota-active-change="handleOtaActiveChange" @capabilities-change="handleCapabilitiesChange" />
     <RuntimeDashboard
       v-if="hasLiveContent && startupReady"
       v-show="activeTab !== 'settings'"
       ref="runtimeDashboard"
+      :ota-state="otaState"
       :config="config"
       :view="activeTab"
-      @can-flash-change="handleCanFlashChange"
-      @ota-active-change="handleOtaActiveChange"
       @bootstrap-complete="handleDashboardBootstrap"
     />
     <section v-if="activeTab === 'settings' && settingsAuthenticated" class="settings-view">
@@ -192,8 +193,11 @@
 <script setup>
 import { ref, onBeforeUnmount, onMounted, provide, nextTick, computed, watch } from "vue";
 import Category from "./components/Category.vue";
-import { readJson, loadRuntimeMeta, loadRuntimeDiscovery, loadLivePages } from "./runtimeDataClient.mjs";
-import RuntimeDashboard from "./components/RuntimeDashboard.vue";
+import { readJson } from "./jsonHttp.mjs";
+import { loadRuntimeMeta, loadRuntimeDiscovery, loadLivePages } from "#cm-live-client";
+import RuntimeDashboard from "#cm-live-dashboard";
+import OtaController from "./components/OtaController.vue";
+const LIVE_UI = import.meta.env.VITE_CM_ENABLE_LIVE_UI !== "0";
 import { createAppInfoRecovery } from "./appInfoClient.mjs";
 import { readTextResponse } from "./startupHttp.mjs";
 
@@ -506,6 +510,8 @@ function extractSettingsCardsFromCategory(categoryKey, settingsObj) {
 
 const activeTab = ref("live");
 const runtimeDashboard = ref(null);
+const otaController = ref(null);
+const otaState = ref({});
 const canFlash = ref(false);
 const externalOtaActive = ref(false);
 const guiLoggingEnabled = ref(false);
@@ -517,10 +523,12 @@ const httpOnlyHintUrl = ref('');
 const HTTP_ONLY_HINT_STORAGE_KEY = 'cm.dismiss.httpOnlyHint.v1';
 
 // Detect if there is any live UI content available
-const hasLiveContent = ref(true);
+const hasLiveContent = ref(LIVE_UI);
 const startupReady = ref(false);
 const startupComplete = ref(false);
 let startupDisposed = false;
+let identityReady = false;
+let safetyReady = false;
 const startupController = new AbortController();
 
 const guiPopup = ref(null);
@@ -1023,6 +1031,7 @@ function handleGuiWsMessage(event) {
   try {
     const parsed = JSON.parse(event.data);
     if (!parsed || typeof parsed !== "object") return;
+    if (parsed.type === 'otaStatus') { otaController.value?.applyOtaStatus(parsed); return; }
     queueGuiPopupMessage(parsed);
   } catch (e) {
     // Ignore malformed frames
@@ -1087,6 +1096,7 @@ function loadSettings() {
 }
 
 async function checkLiveContent() {
+  if (!LIVE_UI) { await switchToSettings(); return; }
   try {
     let index;
     try { index = await loadLivePages(); }
@@ -1190,10 +1200,18 @@ const appInfoRecovery = createAppInfoRecovery({
 // Keep identity retry timers from competing with initial dashboard schema loads.
 appInfoRecovery.pauseRetries();
 function handleDashboardBootstrap() {
-  if (startupDisposed) return;
+  if (startupDisposed || startupComplete.value || !identityReady || !safetyReady) return;
+  startupReady.value = true;
   startupComplete.value = true;
   appInfoRecovery.resumeRetries();
   initGuiWebSocket();
+  void checkLiveContent();
+}
+function handleCapabilitiesChange(value) {
+  otaState.value = value;
+  if (!safetyReady) externalOtaActive.value = value.otaActive === true;
+  safetyReady = true;
+  handleDashboardBootstrap();
 }
 let guiHasConnected = false;
 function injectVersion() {
@@ -1447,10 +1465,10 @@ function rebootDevice() {
 async function waitForFlashReady(timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (runtimeDashboard.value && canFlash.value) return true;
+    if (otaController.value && canFlash.value) return true;
     await new Promise((r) => setTimeout(r, 120));
   }
-  return runtimeDashboard.value && canFlash.value;
+  return otaController.value && canFlash.value;
 }
 
 async function startFlash() {
@@ -1466,17 +1484,8 @@ async function startFlash() {
     return;
   }
 
-  // Ensure RuntimeDashboard is mounted (only on 'live' tab)
-  if (activeTab.value !== "live") {
-    activeTab.value = "live";
-    await nextTick();
-  }
-  // Wait briefly for canFlash to resolve after mount
   const ready = await waitForFlashReady(2000);
-  if (!ready) {
-    notify("Preparing Flash UI… please try again in a moment", "info");
-    return;
-  }
+  if (!ready) { notify("Preparing Flash UI. Please try again in a moment", "info"); return; }
 
   let flashOptions = {};
   try {
@@ -1489,7 +1498,7 @@ async function startFlash() {
       allowPasswordPrompt: false,
     };
   }
-  runtimeDashboard.value?.startFlash(flashOptions);
+  otaController.value?.startFlash(flashOptions);
 }
 function handleCanFlashChange(v) {
   canFlash.value = !!v;
@@ -1523,10 +1532,9 @@ onMounted(async () => {
   if (startupDisposed) return;
   await injectVersion();
   if (startupDisposed) return;
-  await checkLiveContent();
-  if (startupDisposed) return;
-  startupReady.value = true;
-  if (!hasLiveContent.value) handleDashboardBootstrap();
+  identityReady = true;
+  await otaController.value?.refreshCapabilities();
+  handleDashboardBootstrap();
 });
 onBeforeUnmount(() => {
   startupDisposed = true;

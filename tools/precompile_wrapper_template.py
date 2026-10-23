@@ -25,7 +25,7 @@ def main():
         print("[precompile_wrapper] Starting precompile wrapper...")
     
     # Get the project directory
-    project_dir = Path(__file__).parent.parent
+    project_dir = Path(str(env.get('PROJECT_DIR'))) if SCONS_AVAILABLE else Path(__file__).parent.parent
     
     if not SCONS_AVAILABLE:
         print(f"[precompile_wrapper] Project directory: {project_dir}")
@@ -61,6 +61,21 @@ def main():
     try:
         # Set environment variables that the script might need
         env_vars = os.environ.copy()
+        for feature in ('CM_ENABLE_LIVE_UI', 'CM_ENABLE_SETTINGS_UI', 'CM_EMBED_WEBUI'):
+            value = '1'
+            if SCONS_AVAILABLE and env is not None:
+                defines = list(env.get('CPPDEFINES', []))
+                defines = list(env.ParseFlags(env.get('BUILD_FLAGS', '')).get('CPPDEFINES', [])) + defines
+                for define in defines:
+                    if isinstance(define, (tuple, list)) and len(define) == 2 and define[0] == feature:
+                        value = str(define[1])
+                    elif define == feature:
+                        value = '1'
+            if value not in ('0', '1'):
+                raise RuntimeError(f'{feature} must be 0 or 1')
+            env_vars[feature] = value
+            env_vars['VITE_' + feature] = value
+
         env_vars['PIOENV'] = active_env
         env_vars['PLATFORMIO_ENV'] = active_env
         env_vars['PROJECT_DIR'] = str(project_dir)
@@ -86,5 +101,5 @@ def main():
     finally:
         os.chdir(original_cwd)
 
-if __name__ == "__main__":
+if SCONS_AVAILABLE or __name__ == "__main__":
     main()

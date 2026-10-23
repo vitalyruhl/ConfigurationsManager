@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.8.0
+> Version 4.9.0 (Unreleased)
 
 ## Preview Before Installing
 
@@ -75,6 +75,19 @@ ConfigurationsManager is a C++17 helper library and example firmware for ESP32 p
 
 Version 4.8.0 includes opt-in small field definitions while retaining the legacy API.
 See [Runtime metadata](docs/runtime-metadata.md) for typed registration, sparse extensions, promotion and memory measurements.
+
+### Select Live and Settings at build time
+
+`CM_ENABLE_LIVE_UI` and `CM_ENABLE_SETTINGS_UI` each default to `1`. Set either
+to `0` to compile out that area's UI, data models, JSON routes and serialization.
+Choose Live + Settings + Flash, Settings + Flash, Live + Flash, or a minimal
+identity/authentication/Flash interface. Flash remains subject to `CM_ENABLE_OTA`
+and the configured authentication. Configuration storage, NVS, MQTT, validators,
+callbacks and operational alarms remain available in every combination.
+
+The same flags select the Vue bundle, so disabled components and their JS/CSS
+are excluded from the embedded page. See [Feature flags](docs/FEATURE_FLAGS.md)
+for the mode/route matrix, compatible UI-registration no-ops and build-cache rules.
 
 ### Connectivity and loop recovery
 

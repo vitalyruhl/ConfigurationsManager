@@ -1,6 +1,6 @@
 {
   "name": "esp32-config-webui",
-  "version": "4.8.0",
+  "version": "4.9.0",
   "private": true,
   "engines": {
     "node": ">=22.12.0"

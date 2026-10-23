@@ -1,4 +1,5 @@
 #include "RuntimeManager.h"
+#if CM_ENABLE_LIVE_UI
 #include "detail/RuntimeMetaJson.h"
 #include "detail/BuiltinSystemMetadata.h"
 #include "../ConfigManager.h"
@@ -10,8 +11,16 @@
 
 // Logging support
 #define RUNTIME_LOG(...) CM_LOG("[Runtime] " __VA_ARGS__)
+#elif CM_ENABLE_LOGGING
+// Alarm diagnostics remain operational even when the Live web area is absent.
+#include "../ConfigManager.h"
+#define RUNTIME_LOG(...) CM_LOG("[Runtime] " __VA_ARGS__)
+#else
+#define RUNTIME_LOG(...) ((void)0)
+#endif
 
 namespace {
+#if CM_ENABLE_LIVE_UI
 
 void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes, size_t fieldCount) {
   RUNTIME_LOG("[W] Runtime meta unavailable: %s need=%u free=%u min=%u largest=%u fields=%u",
@@ -23,12 +32,14 @@ void logRuntimeMetaSerializationFailure(const char* reason, size_t requiredBytes
               static_cast<unsigned>(fieldCount));
 }
 
+#endif
 } // namespace
 
 void ConfigManagerRuntime::setLogCallback(LogCallback logger) {
   logCallback = logger;
 }
 
+#if CM_ENABLE_LIVE_UI
 void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider& provider) {
   {
     std::lock_guard<std::mutex> lock(runtimeDataMutex);
@@ -40,6 +51,11 @@ void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider& provid
 void ConfigManagerRuntime::addRuntimeProvider(const String& name, std::function<void(JsonObject&)> fillFunc, int order) {
   addRuntimeProvider(RuntimeValueProvider(name, fillFunc, order));
 }
+
+#else
+void ConfigManagerRuntime::addRuntimeProvider(const RuntimeValueProvider&) {}
+void ConfigManagerRuntime::addRuntimeProvider(const String&, std::function<void(JsonObject&)>, int) {}
+#endif
 
 RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) {
   for (auto& alarm : runtimeAlarms) {
@@ -63,6 +79,7 @@ const RuntimeAlarm* ConfigManagerRuntime::findAlarm(const String& name) const {
   return nullptr;
 }
 
+#if CM_ENABLE_LIVE_UI
 String ConfigManagerRuntime::runtimeValuesToJSON() {
   return runtimeValuesToJSON(cm::RuntimeSelection::everything());
 }
@@ -392,6 +409,12 @@ void ConfigManagerRuntime::updateLoopTiming() {
 
 #endif // CM_ENABLE_SYSTEM_PROVIDER
 
+#else
+String ConfigManagerRuntime::runtimeValuesToJSON() { return {}; }
+String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection&) { return {}; }
+void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject, const cm::RuntimeSelection&) {}
+#endif
+
 void ConfigManagerRuntime::addRuntimeAlarm(const String& name, std::function<bool()> checkFunction) {
   RuntimeAlarm alarm;
   alarm.name = name;
@@ -602,6 +625,7 @@ std::vector<String> ConfigManagerRuntime::getActiveAlarms() const {
 
 // Interactive runtime control implementations
 
+#if CM_ENABLE_LIVE_UI
 void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label, std::function<void()> onPress, const String& card, int order) {
   RuntimeFieldMeta meta;
   meta.group = group;
@@ -833,3 +857,32 @@ void ConfigManagerRuntime::logRuntimeMetaAdded(const String& group, const String
 void ConfigManagerRuntime::logRuntimeMetaEvent(const char* message, size_t count) const {
   RUNTIME_LOG("%s (%u)", message, static_cast<unsigned>(count));
 }
+
+#endif
+
+#if !CM_ENABLE_LIVE_UI
+void ConfigManagerRuntime::defineRuntimeButton(const String& group, const String& key, const String& label, std::function<void()> onPress, const String& card, int order) {}
+void ConfigManagerRuntime::handleButtonPress(const String& group, const String& key) {}
+void ConfigManagerRuntime::defineRuntimeCheckbox(const String& group, const String& key, const String& label, std::function<bool()> getter, std::function<void(bool)> setter, const String& card, int order) {}
+void ConfigManagerRuntime::handleCheckboxChange(const String& group, const String& key, bool value) {}
+void ConfigManagerRuntime::defineRuntimeStateButton(const String& group, const String& key, const String& label, std::function<bool()> getter, std::function<void(bool)> setter, bool initState, const String& card, int order, const String& onLabel, const String& offLabel) {}
+void ConfigManagerRuntime::defineRuntimeMomentaryButton(const String& group, const String& key, const String& label, std::function<bool()> getter, std::function<void(bool)> setter, const String& card, int order, const String& onLabel, const String& offLabel) {}
+void ConfigManagerRuntime::handleStateButtonToggle(const String& group, const String& key) {}
+void ConfigManagerRuntime::handleStateButtonSet(const String& group, const String& key, bool value) {}
+void ConfigManagerRuntime::defineRuntimeIntSlider(const String& group, const String& key, const String& label, int minValue, int maxValue, int initValue, std::function<int()> getter, std::function<void(int)> setter, const String& unit, const String& card, int order) {}
+void ConfigManagerRuntime::handleIntSliderChange(const String& group, const String& key, int value) {}
+void ConfigManagerRuntime::defineRuntimeFloatSlider(const String& group, const String& key, const String& label, float minValue, float maxValue, float initValue, int precision, std::function<float()> getter, std::function<void(float)> setter, const String& unit, const String& card, int order) {}
+void ConfigManagerRuntime::handleFloatSliderChange(const String& group, const String& key, float value) {}
+void ConfigManagerRuntime::defineRuntimeIntValue(const String& group, const String& key, const String& label, int minValue, int maxValue, int initValue, std::function<int()> getter, std::function<void(int)> setter, const String& unit, const String& card, int order) {}
+void ConfigManagerRuntime::handleIntInputChange(const String& group, const String& key, int value) {}
+void ConfigManagerRuntime::defineRuntimeFloatValue(const String& group, const String& key, const String& label, float minValue, float maxValue, float initValue, int precision, std::function<float()> getter, std::function<void(float)> setter, const String& unit, const String& card, int order) {}
+void ConfigManagerRuntime::handleFloatInputChange(const String& group, const String& key, float value) {}
+void ConfigManagerRuntime::registerRuntimeButton(const String& group, const String& key, std::function<void()> onPress) {}
+void ConfigManagerRuntime::registerRuntimeCheckbox(const String& group, const String& key, std::function<bool()> getter, std::function<void(bool)> setter) {}
+void ConfigManagerRuntime::registerRuntimeStateButton(const String& group, const String& key, std::function<bool()> getter, std::function<void(bool)> setter) {}
+void ConfigManagerRuntime::registerRuntimeMomentaryButton(const String& group, const String& key, std::function<bool()> getter, std::function<void(bool)> setter) {}
+void ConfigManagerRuntime::registerRuntimeIntSlider(const String& group, const String& key, std::function<int()> getter, std::function<void(int)> setter, int minValue, int maxValue) {}
+void ConfigManagerRuntime::registerRuntimeFloatSlider(const String& group, const String& key, std::function<float()> getter, std::function<void(float)> setter, float minValue, float maxValue) {}
+void ConfigManagerRuntime::registerRuntimeIntInput(const String& group, const String& key, std::function<int()> getter, std::function<void(int)> setter, int minValue, int maxValue) {}
+void ConfigManagerRuntime::registerRuntimeFloatInput(const String& group, const String& key, std::function<float()> getter, std::function<void(float)> setter, float minValue, float maxValue) {}
+#endif
