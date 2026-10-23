@@ -36,6 +36,9 @@ public:
     };
 
     virtual ~Output() = default;
+    virtual bool enabledForBuild() const {
+      return true;
+    }
     virtual void log(Level level, const char* tag, const char* message, unsigned long timestampMs) = 0;
     virtual void tick(unsigned long nowMs) {
       (void)nowMs;
@@ -139,19 +142,31 @@ public:
     // Cppcheck rationale: Preserve implicit construction used by existing callers.
     // cppcheck-suppress noExplicitConstructor
     GuiOutput(ConfigManagerClass& configManager, size_t startupBufferSize = 30);
+    bool enabledForBuild() const override {
+      return CM_ENABLE_LIVE_UI;
+    }
     void addTimestamp(TimestampMode mode) {
       setTimestampMode(mode);
     }
     void log(Level level, const char* tag, const char* message, unsigned long timestampMs) override;
     void tick(unsigned long nowMs) override;
     void setMaxQueue(size_t limit) {
+#if CM_ENABLE_LIVE_UI
       pendingLimit_ = limit;
+#else
+      (void)limit;
+#endif
     }
     void setMaxPerTick(size_t count) {
+#if CM_ENABLE_LIVE_UI
       maxPerTick_ = count;
+#else
+      (void)count;
+#endif
     }
 
   private:
+#if CM_ENABLE_LIVE_UI
     ConfigManagerClass& configManager_;
     size_t bufferLimit_ = 30;
     bool bufferEnabled_ = true;
@@ -165,6 +180,7 @@ public:
     void flushToClient_(AsyncWebSocketClient* client);
     static String escapeJson_(const char* value);
     String makePayload_(Level level, const char* tag, const char* message, unsigned long timestampMs) const;
+#endif
   };
 #endif
 

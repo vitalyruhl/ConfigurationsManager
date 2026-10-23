@@ -3,6 +3,26 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.9.0 - 2026-10-23
+
+- Update development-only `shell-quote` to 1.12.0 and `brace-expansion` to
+  1.1.21/5.0.12 for local command parsing and file matching.
+- Update the Web UI build toolchain to Vite 8.3.4 and its locked bundler/CSS
+  dependencies. Regenerate the default embedded page.
+- Add independent `CM_ENABLE_LIVE_UI` and `CM_ENABLE_SETTINGS_UI` build switches,
+  both enabled by default. Compile out each disabled area's UI, presentation/data
+  models, registration storage, JSON serialization and web routes. Support Live
+  and Settings together, either area alone with Flash, or a minimal Flash
+  interface. Preserve operational configuration/NVS, MQTT, validators, callbacks
+  and alarms; disabled UI registration APIs remain compatible no-ops.
+- Add a small `/ui_capabilities` response for enabled areas and OTA/authentication
+  status without provider evaluation or configuration/password serialization.
+  Preserve Flash authentication when Settings is disabled, remove configuration
+  read/write/password-reveal routes, and retain OTA controls independently of Live.
+- Propagate both switches to Vue/Vite and exclude disabled component graphs and
+  their JS/CSS from the embedded page. Key generated-UI reuse by feature values,
+  source inputs and header identity; reject mismatched compiler/bundle UI flags.
+
 ## 4.8.0 - 2026-10-22
 
 - Add an opt-in BLE transport with consumer-supplied NimBLE, persisted enable

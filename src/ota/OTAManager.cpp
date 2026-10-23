@@ -34,6 +34,7 @@ void ConfigManagerOTA::markActivity() {
 
 void ConfigManagerOTA::notifyActivityState() {
   if (configManager) {
+    configManager->notifyOTAStatus();
     configManager->pushRuntimeSnapshot();
   }
 }

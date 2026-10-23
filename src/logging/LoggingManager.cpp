@@ -77,7 +77,7 @@ void LoggingManager::SerialOutput::log(Level level, const char* tag, const char*
   serial_.println(message ? message : "");
 }
 
-#if !CM_DISABLE_GUI_LOGGING
+#if !CM_DISABLE_GUI_LOGGING && CM_ENABLE_LIVE_UI
 LoggingManager::GuiOutput::GuiOutput(ConfigManagerClass& configManager, size_t startupBufferSize)
     : configManager_(configManager), bufferLimit_(startupBufferSize) {
   configManager_.setGuiLoggingEnabled(true);
@@ -258,7 +258,15 @@ String LoggingManager::GuiOutput::makePayload_(Level level, const char* tag, con
 }
 #endif
 
+#if !CM_DISABLE_GUI_LOGGING && !CM_ENABLE_LIVE_UI
+LoggingManager::GuiOutput::GuiOutput(ConfigManagerClass&, size_t) {}
+void LoggingManager::GuiOutput::log(Level, const char*, const char*, unsigned long) {}
+void LoggingManager::GuiOutput::tick(unsigned long) {}
+#endif
+
 void LoggingManager::addOutput(std::unique_ptr<Output> output) {
+  if (output && !output->enabledForBuild())
+    return;
   if (!output) {
     return;
   }

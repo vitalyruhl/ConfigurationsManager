@@ -98,7 +98,13 @@ async function buildHeader() {
   const gzArray = toCArray(gz);
 
   // make the Header (gzipped content)
-  let header = `#pragma once\n#include <pgmspace.h>\n\n`;
+  const live = process.env.VITE_CM_ENABLE_LIVE_UI ?? '1';
+  const settings = process.env.VITE_CM_ENABLE_SETTINGS_UI ?? '1';
+  if (!['0', '1'].includes(live) || !['0', '1'].includes(settings)) throw new Error('UI feature flags must be 0 or 1');
+  let header = `#pragma once\n#include <pgmspace.h>\n#include "ConfigManagerConfig.h"\n\n`;
+  header += `#define CM_WEBUI_LIVE_UI ${live}\n#define CM_WEBUI_SETTINGS_UI ${settings}\n`;
+  header += `#if CM_EMBED_WEBUI && (CM_ENABLE_LIVE_UI != CM_WEBUI_LIVE_UI || CM_ENABLE_SETTINGS_UI != CM_WEBUI_SETTINGS_UI)\n`;
+  header += `#error "Embedded WebUI feature flags do not match this build. Regenerate with tools/preCompile_script.py."\n#endif\n\n`;
   header += `// Gzipped embedded Web UI (index.html with inlined CSS/JS)\n`;
   header += `const uint8_t WEB_HTML_GZ[] PROGMEM = {\n    ${gzArray}\n};\n`;
   header += `const size_t WEB_HTML_GZ_LEN = ${gz.length};\n`;

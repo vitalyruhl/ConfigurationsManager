@@ -117,13 +117,19 @@ void ConfigManagerWeb::setCallbacks(
   SimpleCallback reset,
   SettingUpdateCallback settingUpdate,
   SettingUpdateCallback settingApply) {
+#if CM_ENABLE_SETTINGS_UI
   configJsonProvider = configJson;
+#endif
+#if CM_ENABLE_LIVE_UI
   runtimeJsonProvider = runtimeJson;
   runtimeMetaJsonProvider = runtimeMetaJson;
+#endif
   rebootCallback = reboot;
+#if CM_ENABLE_SETTINGS_UI
   resetCallback = reset;
   settingUpdateCallback = settingUpdate;
   settingApplyCallback = settingApply;
+#endif
 }
 
 void ConfigManagerWeb::setCallbacks(
@@ -172,7 +178,9 @@ void ConfigManagerWeb::defineAllRoutes() {
   if (!routesDefined) {
     setupStaticRoutes();
     setupAPIRoutes();
+#if CM_ENABLE_LIVE_UI
     setupRuntimeRoutes();
+#endif
     routesDefined = true;
 
     WEB_LOG("[I] All routes defined");
@@ -334,6 +342,17 @@ void ConfigManagerWeb::setupAPIRoutes() {
     CM_HTTP_HEAP_TRACE("/appinfo", "send");
     request->send(response);
   });
+  server->on("/ui_capabilities", HTTP_GET, [this](AsyncWebServerRequest* request) {
+    const auto* ota = configManager ? &configManager->getOTAManager() : nullptr;
+    char body[256];
+    snprintf(body, sizeof(body), "{\"live\":%s,\"settings\":%s,\"otaEnabled\":%s,\"otaActive\":%s,\"otaHasPassword\":%s,\"settingsAuthRequired\":%s}", CM_ENABLE_LIVE_UI ? "true" : "false", CM_ENABLE_SETTINGS_UI ? "true" : "false", ota && ota->isEnabled() ? "true" : "false", ota && ota->isActive() ? "true" : "false", ota && ota->hasPassword() ? "true" : "false", isSettingsAuthRequired() ? "true" : "false");
+    auto* response = request->beginResponse(200, "application/json", body);
+    response->addHeader("Cache-Control", "no-store");
+    enableCORS(response);
+    request->send(response);
+  });
+
+#if CM_ENABLE_SETTINGS_UI
   // Debug route to catch any config requests with body handling
   server->on("/config_raw", HTTP_ANY, [this](AsyncWebServerRequest* request) {
             // Response sent in body handler for POST requests
@@ -438,6 +457,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     }
   });
 
+#endif
+#if CM_ENABLE_LIVE_UI
   server->on("/live_pages.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
     CM_HTTP_HEAP_TRACE("/live_pages.json", "start");
     if (!configManager) {
@@ -487,6 +508,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     request->send(response);
   });
 
+#endif
+#if CM_ENABLE_SETTINGS_UI
   // Settings update endpoint - /config/apply (matches frontend expectations)
   // Use AsyncCallbackJsonWebHandler to avoid edge cases with raw body accumulation.
   {
@@ -566,6 +589,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     server->addHandler(handler);
   }
 
+#endif
+#if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
   server->on("/gui/action", HTTP_POST, [this](AsyncWebServerRequest* request) {
     auto readParam = [request](const char* name) -> String {
       AsyncWebParameter* param = request->getParam(name, false);
@@ -587,6 +612,8 @@ void ConfigManagerWeb::setupAPIRoutes() {
     request->send(response);
   });
 
+#endif
+#if CM_ENABLE_SETTINGS_UI
   // Settings save endpoint - /config/save (saves individual setting to flash)
   // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
   {
@@ -678,6 +705,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     server->addHandler(handler);
   }
 
+#endif
   // Settings authentication endpoint - /config/auth
   // Issues a short-lived token required for password reveal.
   // Use AsyncCallbackJsonWebHandler to avoid edge cases with chunked/unknown body sizes.
@@ -724,6 +752,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     server->addHandler(handler);
   }
 
+#if CM_ENABLE_SETTINGS_UI
   // Password fetch endpoint - /config/password (returns actual password value)
   // Requires a valid auth token returned by /config/auth.
   server->on("/config/password", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -963,6 +992,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
     }
   });
 
+#endif
   // Reboot endpoint
   server->on("/reboot", HTTP_POST, [this](AsyncWebServerRequest* request) {
     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", "{\"status\":\"rebooting\"}");
@@ -1152,8 +1182,9 @@ void ConfigManagerWeb::enableCORSForAll(bool enable) {
   }
 }
 
-#ifdef development
+#if defined(development)
 void ConfigManagerWeb::addDevelopmentRoutes() {
+#if CM_ENABLE_SETTINGS_UI
   WEB_LOG("Adding development routes");
 
   // Development export route
@@ -1168,10 +1199,12 @@ void ConfigManagerWeb::addDevelopmentRoutes() {
       request->send(500, "application/json", "{\"error\":\"no_provider\"}");
     }
   });
+#endif
 }
 #endif
 
 void ConfigManagerWeb::setupRuntimeRoutes() {
+#if CM_ENABLE_LIVE_UI
   WEB_LOG("Setting up runtime routes");
 
   // Runtime JSON endpoint
@@ -1265,6 +1298,7 @@ void ConfigManagerWeb::setupRuntimeRoutes() {
 #endif
 
   setupRuntimeActionRoutes();
+#endif
 }
 
 // Cppcheck rationale: Preserve the existing instance API for source compatibility.

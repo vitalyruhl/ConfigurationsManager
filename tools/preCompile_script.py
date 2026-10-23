@@ -2,6 +2,9 @@ import os
 import subprocess
 import gzip
 import shutil
+import sys
+import json
+import hashlib
 
 from pathlib import Path
 
@@ -20,8 +23,6 @@ def _find_executable(*names: str) -> str:
 	raise RuntimeError(f"Required executable not found on PATH: {', '.join(names)}")
 
 
-npm_cmd = _find_executable('npm.cmd', 'npm')
-node_exe = _find_executable('node.exe', 'node')
 
 def _resolve_repo_root() -> Path:
 	"""Resolve repository root in a PlatformIO/SCons-friendly way.
@@ -67,21 +68,34 @@ def _get_define_from_scons(name: str, default: str) -> str:
 	return default
 
 
-# v3.x: WebUI is always built as a full bundle.
-# Only logging-related settings are optionally forwarded to the frontend build.
+# Resolve the same compiler values in SCons and wrapper subprocesses.
+sys.path.insert(0, str(ROOT_DIR / 'tools'))
+from webui_features import feature_values, source_fingerprint
+features = feature_values(env)
 FEATURE_ENV = {
 	'VITE_CM_ENABLE_LOGGING': _get_define_from_scons('CM_ENABLE_LOGGING', '1'),
 	'VITE_CM_ENABLE_VERBOSE_LOGGING': _get_define_from_scons('CM_ENABLE_VERBOSE_LOGGING', '0'),
 }
+FEATURE_ENV.update({'VITE_' + key: value for key, value in features.items()})
 
 
-# Always embed/build the WebUI bundle (no feature pruning).
-EMBED_WEBUI = True
+EMBED_WEBUI = features['CM_EMBED_WEBUI'] == '1'
+CACHE_PATH = ROOT_DIR / '.pio' / 'cm-webui-build.json'
+fingerprint = source_fingerprint(ROOT_DIR, {**features, 'NODE_ENV': os.environ.get('NODE_ENV', 'production')})
+try:
+	cached = json.loads(CACHE_PATH.read_text())
+except (OSError, ValueError):
+	cached = {}
+header_hash = hashlib.sha256(HEADER_PATH.read_bytes()).hexdigest() if HEADER_PATH.exists() else None
+CACHE_MATCH = cached.get('fingerprint') == fingerprint and cached.get('header_sha256') == header_hash
 
 
-if EMBED_WEBUI:
+if EMBED_WEBUI and not CACHE_MATCH:
+	npm_cmd = _find_executable('npm.cmd', 'npm')
+	node_exe = _find_executable('node.exe', 'node')
 	# Ensure node modules present only when embedding
-	subprocess.run([npm_cmd, 'ci'], cwd=str(WEBUI_DIR), check=True)
+	if not (WEBUI_DIR / 'node_modules' / 'vite' / 'bin' / 'vite.js').exists():
+		subprocess.run([npm_cmd, 'ci'], cwd=str(WEBUI_DIR), check=True)
 
 	# Prepare environment
 	env_vars = os.environ.copy()
@@ -108,9 +122,14 @@ if EMBED_WEBUI:
 			raise FileNotFoundError(f"Header generator not found at {generator}")
 		# Pass environment variables to header generator
 		subprocess.run([node_exe, str(generator)], cwd=str(root_dir), check=True, env=env_vars)
+		CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+		CACHE_PATH.write_text(json.dumps({'fingerprint': fingerprint, 'features': features,
+			'header_sha256': hashlib.sha256(HEADER_PATH.read_bytes()).hexdigest()}, indent=2) + '\n')
 	except Exception as e:
 		raise RuntimeError(f"Failed to run webui_to_header.js: {e}")
 
+elif EMBED_WEBUI:
+	print('[I] Embedded UI cache matches source, compiler flags, and generated header.')
 else:
 	stub = (
 		"#pragma once\n"

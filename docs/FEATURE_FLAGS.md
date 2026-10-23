@@ -4,11 +4,19 @@
 
 Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*` build flags or PlatformIO `extra_scripts` to build.
 
+The default embedded UI is supplied with the library. Selecting a different
+Live/Settings combination requires the explicit regeneration hook described
+below; `library.json` does not install that hook automatically.
+
 - WebUI, OTA, runtime controls, WebSocket push, theming/styling are compiled in by default.
 - **Supported build-time options**:
   - `CM_EMBED_WEBUI` (default: `1`)
     - `1`: embed the WebUI HTML into the firmware image (serves on `/`)
-    - `0`: do not embed the WebUI HTML (saves flash); API routes stay available
+    - `0`: do not embed the WebUI HTML (saves flash); enabled API routes stay available
+  - `CM_ENABLE_LIVE_UI` (default: `1`, accepts `0` or `1`)
+    - `0`: compile out Live UI, runtime providers/metadata, Live layout and runtime JSON/control routes
+  - `CM_ENABLE_SETTINGS_UI` (default: `1`, accepts `0` or `1`)
+    - `0`: compile out Settings UI, presentation/layout data and configuration read/write/password-reveal routes
   - `CM_ENABLE_LOGGING` (default: `0`, core/library logs only)
   - `CM_ENABLE_VERBOSE_LOGGING` (default: `0`)
   - `CM_DISABLE_GUI_LOGGING` (default: `0`)
@@ -24,6 +32,99 @@ Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*`
   - `CM_ENABLE_THEMING` (default: `1`)
 
 If your project still defines removed flags, the build will fail with a clear `#error` message so you can remove them (example: `CM_ENABLE_WS_PUSH`).
+
+## Live and Settings combinations (4.9.0)
+
+Both switches default to `1`; unsupported values produce a compile error.
+They remove the corresponding backend and frontend paths at build time, including
+UI models, maps, registration storage and JSON serialization. They do not merely
+hide navigation buttons.
+
+| `CM_ENABLE_LIVE_UI` | `CM_ENABLE_SETTINGS_UI` | Available interface | WebSocket behavior |
+|---|---|---|---|
+| `1` | `1` | Live, Settings and Flash | Runtime subscriptions and GUI events |
+| `0` | `1` | Settings and Flash | GUI events only; no runtime subscriptions |
+| `1` | `0` | Live and Flash | Runtime subscriptions and GUI events |
+| `0` | `0` | Minimal identity, authentication, OTA status and Flash | No WebSocket |
+
+Flash/upload availability still follows `CM_ENABLE_OTA`, runtime OTA enablement
+and authentication. With `CM_EMBED_WEBUI=0`, no interface is embedded; the same
+Live/Settings switches still control which backend APIs exist.
+
+Define both switches globally in the consumer environment's `build_flags`, so
+the same values reach the application and every CM translation unit. A `#define`
+in the sketch alone is insufficient and can create inconsistent class layouts
+or a frontend/backend mismatch.
+
+For example, keep Settings and Flash while removing Live. This consumer example
+uses a project-local `tools/precompile_wrapper.py`:
+
+```ini
+build_flags =
+    -DCM_ENABLE_LIVE_UI=0
+    -DCM_ENABLE_SETTINGS_UI=1
+extra_scripts =
+    pre:tools/precompile_wrapper.py
+```
+
+Copy the supplied `tools/precompile_wrapper_template.py` into that consumer path
+and make its `lib_path` point to the actual installed CM directory if a custom
+`libdeps_dir` or local dependency is used. The wrapper runs the library's
+`tools/preCompile_script.py` before firmware compilation, with the selected
+compiler flags. Repository examples inside the CM checkout can register that
+script directly, as `examples/minimal/platformio.ini` does. Retain any other
+project build flags and hooks when adding these entries.
+
+### Retained application behavior
+
+Disabling Settings preserves registered operational configuration: keys/types,
+values/defaults, NVS load/save, programmatic access, validators, callbacks and
+MQTT use. Only GUI presentation/layout state and web configuration serialization
+are removed. UI-placement/registration calls remain source-compatible no-ops for
+the disabled area; they do not retain its CM-owned UI data.
+
+Disabling Live prevents runtime provider evaluation and removes its metadata,
+layout and web control registration storage. Operational alarm state, locking,
+logging and application callbacks remain; disabling both areas does not imply
+zero retained runtime memory. The flags do not disable the underlying application
+or its device controls outside these web interfaces. Alarm diagnostics still
+follow `CM_ENABLE_LOGGING`; disabling Live does not independently silence them.
+
+### Routes, authentication and OTA status
+
+- Live disabled: `/live_pages.json`, `/live_layout.json`, `/runtime.json`,
+  `/runtime_meta.json` and runtime-action aliases are not registered.
+- Settings disabled: `/config_raw`, `/config.json`, configuration apply/save/reset
+  routes, `/config/password`, `/config/settings_password` and `/dev/export` are
+  not registered. Configuration values and stored passwords cannot be fetched
+  through those removed routes.
+- `/config/auth` remains available for Flash authentication and issues a
+  short-lived token. It does not reveal passwords. Settings authentication and
+  the OTA upload password remain separate; with Settings disabled, Flash asks
+  for the OTA password directly rather than fetching it from configuration.
+- `/ui_capabilities` returns only `live`, `settings`, `otaEnabled`, `otaActive`,
+  `otaHasPassword` and `settingsAuthRequired`, with `Cache-Control: no-store`.
+  It reads OTA/authentication state directly, without running Live providers or
+  configuration serializers, and returns no secret values.
+- Shared identity/static routes and the existing reboot/OTA controls remain
+  subject to their own enablement and security checks. `/gui/action` and generic
+  GUI notifications remain when either Live or Settings is enabled; both are
+  removed when both switches are `0`.
+
+### Matching the embedded frontend
+
+The precompile wrappers pass the compiler flags into Vue/Vite as
+`VITE_CM_ENABLE_LIVE_UI` and `VITE_CM_ENABLE_SETTINGS_UI`. Disabled component
+graphs and their JS/CSS are excluded from the generated embedded gzip. Use the
+same values when building the frontend separately.
+
+The `.pio/cm-webui-build.json` cache depends on the resolved feature values,
+frontend/generator inputs and generated-header SHA-256. Changing a mode or its
+source inputs regenerates the embedded page. The generated header records both
+UI flags and rejects a compiler/bundle mismatch when embedding is enabled.
+`CM_EMBED_WEBUI` remains an independent switch. Compare actual firmware/assets
+for the intended target before quoting savings; no fixed flash/RAM reduction is
+guaranteed for these combinations.
 
 ## Optional BLE transport
 
@@ -41,7 +142,7 @@ For real numbers, build your target with and without each flag and compare the f
 - `CM_EMBED_WEBUI=0`
   - Flash: large savings (WebUI bundle is typically the biggest single chunk).
   - RAM: small savings (less static data kept by the UI).
-  - Behavior: `/` serves a tiny stub page; REST API stays available.
+  - Behavior: `/` serves a tiny stub page; enabled REST API routes stay available.
 
 - `CM_ENABLE_OTA=0`
   - Flash/RAM: medium savings (removes OTA routes and handler code).

@@ -99,6 +99,21 @@ def main():
     try:
         # Set environment variables that the script might need
         env_vars = os.environ.copy()
+        for feature in ('CM_ENABLE_LIVE_UI', 'CM_ENABLE_SETTINGS_UI', 'CM_EMBED_WEBUI'):
+            value = '1'
+            if SCONS_AVAILABLE and env is not None:
+                defines = list(env.get('CPPDEFINES', []))
+                defines = list(env.ParseFlags(env.get('BUILD_FLAGS', '')).get('CPPDEFINES', [])) + defines
+                for define in defines:
+                    if isinstance(define, (tuple, list)) and len(define) == 2 and define[0] == feature:
+                        value = str(define[1])
+                    elif define == feature:
+                        value = '1'
+            if value not in ('0', '1'):
+                raise RuntimeError(f'{feature} must be 0 or 1')
+            env_vars[feature] = value
+            env_vars['VITE_' + feature] = value
+
         env_vars['PIOENV'] = active_env
         env_vars['PLATFORMIO_ENV'] = active_env
         env_vars['PROJECT_DIR'] = str(project_dir)
@@ -274,6 +289,16 @@ def main():
             synced = _sync_cpp_sources(lib_path)
             if synced:
                 print("[precompile_wrapper] Using local backend sources")
+                # Keep the matching frontend build logic and its small helper together.
+                for local_path in _collect_local_lib_paths(project_dir / 'platformio.ini'):
+                    if not (local_path / 'src').is_dir():
+                        continue
+                    import shutil
+                    for filename in ('preCompile_script.py', 'webui_features.py', 'webui_to_header.js'):
+                        source = local_path / 'tools' / filename
+                        if source.is_file():
+                            shutil.copy2(source, lib_path / 'tools' / filename)
+                    break
         except Exception as e_sync:
             print(f"[precompile_wrapper] Note: C++ source sync step failed: {e_sync}")
 

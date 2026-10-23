@@ -1,4 +1,5 @@
 #include "WebServer.h"
+#if CM_ENABLE_LIVE_UI
 #include "../ConfigManager.h"
 #include "WebRequestBodyBuffer.h"
 
@@ -222,3 +223,5 @@ void ConfigManagerWeb::setupRuntimeActionRoutes() {
   registerRoute("/runtime_action/int_input", RuntimeActionKind::IntInput);
   registerRoute("/runtime_action/float_input", RuntimeActionKind::FloatInput);
 }
+
+#endif

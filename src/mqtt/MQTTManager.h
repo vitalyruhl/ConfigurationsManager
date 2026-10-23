@@ -414,15 +414,19 @@ private:
     String label;
     ValueType type = ValueType::String;
 
+#if CM_ENABLE_LIVE_UI
     std::unique_ptr<char[]> idKeyC;
     std::unique_ptr<char[]> labelC;
+#endif
     std::unique_ptr<char[]> topicKeyC;
     std::unique_ptr<char[]> topicNameC;
     std::unique_ptr<char[]> jsonKeyKeyC;
     std::unique_ptr<char[]> jsonKeyNameC;
 
+#if CM_ENABLE_SETTINGS_UI
     std::unique_ptr<char[]> cardKeyC;
     std::unique_ptr<char[]> cardPrettyC;
+#endif
 
     Config<String>* topic = nullptr;
     Config<String>* jsonKeyPath = nullptr;
@@ -430,15 +434,21 @@ private:
     String jsonKeyPathValue;
     String lastSubscribedTopic;
     bool settingsRegistered = false;
+#if CM_ENABLE_SETTINGS_UI
     int settingsCardOrder = 0;
+#endif
 
+#if CM_ENABLE_LIVE_UI
     const char* unit = nullptr;
-    int precision = 2;
+#endif
+    int precision = 2; // Also required by operational MQTT receive-value publishing.
 
     void* target = nullptr;
 
     // Runtime ordering inside the MQTT card.
+#if CM_ENABLE_LIVE_UI
     int runtimeOrder = 0;
+#endif
   };
 
   WiFiClient wifiClient_;
@@ -447,9 +457,11 @@ private:
   Settings settings_;
   ConfigManagerClass* configManager_ = nullptr;
   bool settingsRegistered_ = false;
+#if CM_ENABLE_LIVE_UI
   bool runtimeProviderRegistered_ = false;
   String runtimeGroupName_ = "mqtt";
   bool systemGuiRegistered_ = false;
+#endif
 
   // Connection behavior
   uint16_t keepAliveSec_ = 60;
@@ -475,8 +487,12 @@ private:
 
   // Topic registry
   std::vector<ReceiveItem> receiveItems_;
+#if CM_ENABLE_SETTINGS_UI
   int nextReceiveSortOrder_ = 200; // after baseline settings
+#endif
+#if CM_ENABLE_LIVE_UI
   int nextReceiveRuntimeOrder_ = 200;
+#endif
 
   // Callbacks
   ConnectedCallback onConnected_;
@@ -793,6 +809,8 @@ inline void MQTTManager::attach(ConfigManagerClass& configManager, const char* b
 }
 
 inline void MQTTManager::registerDefaultLayout_(ConfigManagerClass& configManager, const char* basePageName) {
+#if CM_ENABLE_SETTINGS_UI
+
   const char* resolvedBase = (basePageName && basePageName[0]) ? basePageName : DEFAULT_SETTINGS_PAGE;
   const String topicsPage = String(resolvedBase) + "-Topics";
 
@@ -811,6 +829,10 @@ inline void MQTTManager::registerDefaultLayout_(ConfigManagerClass& configManage
   configManager.addSettingsGroup(resolvedBase, resolvedBase, DEFAULT_SETTINGS_GROUP, DEFAULT_SETTINGS_ORDER);
   configManager.addSettingsPage(topicsPage.c_str(), DEFAULT_TOPICS_ORDER);
   configManager.addSettingsGroup(topicsPage.c_str(), topicsPage.c_str(), DEFAULT_TOPICS_GROUP, DEFAULT_TOPICS_ORDER);
+
+#else
+
+#endif
 }
 
 inline void MQTTManager::registerMqttSettings_(ConfigManagerClass& configManager) {
@@ -833,6 +855,8 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
                                                      const char* runtimeGroup,
                                                      int providerOrder,
                                                      int baseOrder) {
+#if CM_ENABLE_LIVE_UI
+
   (void)baseOrder;
 
   if (!configManager_) {
@@ -919,6 +943,11 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
 
     systemGuiRegistered_ = true;
   }
+
+#else
+  if (!configManager_)
+    configManager_ = &configManager;
+#endif
 }
 
 inline void MQTTManager::addMqttSettingsToSettingsGroup(ConfigManagerClass& configManager,
@@ -1006,7 +1035,14 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
                                                  const char* pageName,
                                                  const char* cardName,
                                                  int order) {
+#if CM_ENABLE_LIVE_UI
+
   addMqttTopicToLiveGroup(configManager, topicId, pageName, cardName, nullptr, order);
+
+#else
+  if (!configManager_)
+    configManager_ = &configManager;
+#endif
 }
 
 inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManager,
@@ -1015,6 +1051,8 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
                                                  const char* cardName,
                                                  const char* groupName,
                                                  int order) {
+#if CM_ENABLE_LIVE_UI
+
   if (!configManager_) {
     configManager_ = &configManager;
   }
@@ -1054,6 +1092,11 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
   } else {
     configManager.addToLiveCard(itemKey, effectivePage, effectiveCard, resolvedOrder);
   }
+
+#else
+  if (!configManager_)
+    configManager_ = &configManager;
+#endif
 }
 
 inline const char* MQTTManager::mqttStateToString(ConnectionState state) {
@@ -1089,6 +1132,8 @@ inline void MQTTManager::addLastTopicToGUI(ConfigManagerClass& configManager,
                                            int order,
                                            const char* label,
                                            const char* card) {
+#if CM_ENABLE_LIVE_UI
+
   const bool updated = configManager.getRuntime().updateRuntimeMeta(
     runtimeGroup, "lastTopic", [&](RuntimeFieldMeta& existing) {
       existing.label = label;
@@ -1110,6 +1155,10 @@ inline void MQTTManager::addLastTopicToGUI(ConfigManagerClass& configManager,
     lastTopicMeta.card = card;
   }
   configManager.getRuntime().addRuntimeMeta(lastTopicMeta);
+
+#else
+
+#endif
 }
 
 inline void MQTTManager::addLastPayloadToGUI(ConfigManagerClass& configManager,
@@ -1117,6 +1166,8 @@ inline void MQTTManager::addLastPayloadToGUI(ConfigManagerClass& configManager,
                                              int order,
                                              const char* label,
                                              const char* card) {
+#if CM_ENABLE_LIVE_UI
+
   const bool updated = configManager.getRuntime().updateRuntimeMeta(
     runtimeGroup, "lastPayload", [&](RuntimeFieldMeta& existing) {
       existing.label = label;
@@ -1140,6 +1191,10 @@ inline void MQTTManager::addLastPayloadToGUI(ConfigManagerClass& configManager,
     lastPayloadMeta.card = card;
   }
   configManager.getRuntime().addRuntimeMeta(lastPayloadMeta);
+
+#else
+
+#endif
 }
 
 inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManager,
@@ -1148,6 +1203,8 @@ inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManage
                                                 const char* label,
                                                 const char* unit,
                                                 const char* card) {
+#if CM_ENABLE_LIVE_UI
+
   const bool updated = configManager.getRuntime().updateRuntimeMeta(
     runtimeGroup, "lastMsgAgeMs", [&](RuntimeFieldMeta& existing) {
       existing.label = label;
@@ -1175,6 +1232,10 @@ inline void MQTTManager::addLastMessageAgeToGUI(ConfigManagerClass& configManage
     lastAgeMeta.card = card;
   }
   configManager.getRuntime().addRuntimeMeta(lastAgeMeta);
+
+#else
+
+#endif
 }
 
 inline bool MQTTManager::publishTopic(const char* id) {
@@ -1752,15 +1813,21 @@ inline void MQTTManager::addTopicReceiveFloat(const char* id,
   item.id = id ? String(id) : String();
   item.label = label ? String(label) : item.id;
   item.type = ValueType::Float;
+#if CM_ENABLE_LIVE_UI
   item.unit = unit;
+#endif
   item.precision = precision;
   item.target = target;
+#if CM_ENABLE_LIVE_UI
   item.runtimeOrder = nextReceiveRuntimeOrder_++;
+#endif
   item.topicValue = String(defaultTopic ? defaultTopic : "");
   item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
+#if CM_ENABLE_LIVE_UI
   item.idKeyC = makeCString_(item.id);
   item.labelC = makeCString_(item.label);
+#endif
   item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
   item.topicNameC = makeCString_(item.label + String(" Topic"));
   item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
@@ -1779,15 +1846,21 @@ inline void MQTTManager::addTopicReceiveInt(const char* id,
   item.id = id ? String(id) : String();
   item.label = label ? String(label) : item.id;
   item.type = ValueType::Int;
+#if CM_ENABLE_LIVE_UI
   item.unit = unit;
+#endif
   item.precision = 0;
   item.target = target;
+#if CM_ENABLE_LIVE_UI
   item.runtimeOrder = nextReceiveRuntimeOrder_++;
+#endif
   item.topicValue = String(defaultTopic ? defaultTopic : "");
   item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
+#if CM_ENABLE_LIVE_UI
   item.idKeyC = makeCString_(item.id);
   item.labelC = makeCString_(item.label);
+#endif
   item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
   item.topicNameC = makeCString_(item.label + String(" Topic"));
   item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
@@ -1806,12 +1879,16 @@ inline void MQTTManager::addTopicReceiveBool(const char* id,
   item.label = label ? String(label) : item.id;
   item.type = ValueType::Bool;
   item.target = target;
+#if CM_ENABLE_LIVE_UI
   item.runtimeOrder = nextReceiveRuntimeOrder_++;
+#endif
   item.topicValue = String(defaultTopic ? defaultTopic : "");
   item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
+#if CM_ENABLE_LIVE_UI
   item.idKeyC = makeCString_(item.id);
   item.labelC = makeCString_(item.label);
+#endif
   item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
   item.topicNameC = makeCString_(item.label + String(" Topic"));
   item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
@@ -1830,12 +1907,16 @@ inline void MQTTManager::addTopicReceiveString(const char* id,
   item.label = label ? String(label) : item.id;
   item.type = ValueType::String;
   item.target = target;
+#if CM_ENABLE_LIVE_UI
   item.runtimeOrder = nextReceiveRuntimeOrder_++;
+#endif
   item.topicValue = String(defaultTopic ? defaultTopic : "");
   item.jsonKeyPathValue = String(defaultJsonKeyPath ? defaultJsonKeyPath : "none");
 
+#if CM_ENABLE_LIVE_UI
   item.idKeyC = makeCString_(item.id);
   item.labelC = makeCString_(item.label);
+#endif
   item.topicKeyC = makeCString_(makeReceiveKey_("MQTTRT_", item.id));
   item.topicNameC = makeCString_(item.label + String(" Topic"));
   item.jsonKeyKeyC = makeCString_(makeReceiveKey_("MQTTRK_", item.id));
@@ -2443,22 +2524,32 @@ inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item,
   }
 
   if (!item.settingsRegistered) {
+#if CM_ENABLE_SETTINGS_UI
     const String cardKey = (cardName && cardName[0]) ? String(cardName) : String(pageName ? pageName : DEFAULT_TOPICS_CATEGORY);
     const String cardPretty = (groupName && groupName[0]) ? String(groupName) : cardKey;
     item.cardKeyC = makeCString_(cardKey);
     item.cardPrettyC = makeCString_(cardPretty);
     item.settingsCardOrder = order;
+#endif
 
     item.topic = &configManager_->addSettingString(item.topicKeyC.get())
                     .name(item.topicNameC.get())
                     .category(DEFAULT_TOPICS_CATEGORY)
                     .defaultValue(item.topicValue)
                     .showInWeb(true)
+
+#if CM_ENABLE_SETTINGS_UI
                     .sortOrder(nextReceiveSortOrder_++)
+#endif
+
                     .categoryPretty(DEFAULT_TOPICS_GROUP)
+
+#if CM_ENABLE_SETTINGS_UI
                     .card(item.cardKeyC.get())
                     .cardPretty(item.cardPrettyC.get())
                     .cardOrder(order)
+#endif
+
                     .build();
 
     item.jsonKeyPath = &configManager_->addSettingString(item.jsonKeyKeyC.get())
@@ -2466,11 +2557,19 @@ inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item,
                           .category(DEFAULT_TOPICS_CATEGORY)
                           .defaultValue(item.jsonKeyPathValue.length() ? item.jsonKeyPathValue : String("none"))
                           .showInWeb(true)
+
+#if CM_ENABLE_SETTINGS_UI
                           .sortOrder(nextReceiveSortOrder_++)
+#endif
+
                           .categoryPretty(DEFAULT_TOPICS_GROUP)
+
+#if CM_ENABLE_SETTINGS_UI
                           .card(item.cardKeyC.get())
                           .cardPretty(item.cardPrettyC.get())
                           .cardOrder(order)
+#endif
+
                           .build();
 
     CM_LOG_VERBOSE("[INFO] Registered receive setting keys: %s / %s",
@@ -2492,6 +2591,8 @@ inline void MQTTManager::ensureSettingsLayout_(ConfigManagerClass& configManager
                                                const char* cardName,
                                                const char* groupName,
                                                int order) {
+#if CM_ENABLE_SETTINGS_UI
+
   if (!pageName || !pageName[0]) {
     return;
   }
@@ -2500,6 +2601,10 @@ inline void MQTTManager::ensureSettingsLayout_(ConfigManagerClass& configManager
   configManager.addSettingsPage(pageName, order);
   configManager.addSettingsCard(pageName, effectiveCard, order);
   configManager.addSettingsGroup(pageName, effectiveCard, effectiveGroup, order);
+
+#else
+
+#endif
 }
 
 inline void MQTTManager::ensureLiveLayout_(ConfigManagerClass& configManager,
@@ -2507,6 +2612,8 @@ inline void MQTTManager::ensureLiveLayout_(ConfigManagerClass& configManager,
                                            const char* cardName,
                                            const char* groupName,
                                            int order) {
+#if CM_ENABLE_LIVE_UI
+
   if (!pageName || !pageName[0]) {
     return;
   }
@@ -2515,6 +2622,10 @@ inline void MQTTManager::ensureLiveLayout_(ConfigManagerClass& configManager,
   configManager.addLivePage(pageName, order);
   configManager.addLiveCard(pageName, effectiveCard, order);
   configManager.addLiveGroup(pageName, effectiveCard, effectiveGroup, order);
+
+#else
+
+#endif
 }
 
 inline void MQTTManager::registerSettingPlacement_(ConfigManagerClass& configManager,
@@ -2522,6 +2633,8 @@ inline void MQTTManager::registerSettingPlacement_(ConfigManagerClass& configMan
                                                    const char* pageName,
                                                    const char* cardName,
                                                    const char* groupName) {
+#if CM_ENABLE_SETTINGS_UI
+
   if (!setting) {
     return;
   }
@@ -2530,6 +2643,10 @@ inline void MQTTManager::registerSettingPlacement_(ConfigManagerClass& configMan
                                    cardName,
                                    groupName,
                                    setting->getSortOrder());
+
+#else
+
+#endif
 }
 
 inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& configManager,
@@ -2539,6 +2656,8 @@ inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& con
                                                          const char* page,
                                                          const char* card,
                                                          const char* group) {
+#if CM_ENABLE_LIVE_UI
+
   const char* key = item.idKeyC ? item.idKeyC.get() : item.id.c_str();
   const bool updated = configManager.getRuntime().updateRuntimeMeta(
     runtimeGroup, key, [&](RuntimeFieldMeta& existing) {
@@ -2590,6 +2709,10 @@ inline void MQTTManager::registerReceiveItemRuntimeMeta_(ConfigManagerClass& con
     meta.card = card;
   }
   configManager.getRuntime().addRuntimeMeta(meta);
+
+#else
+
+#endif
 }
 
 inline MQTTManager::PublishStamp* MQTTManager::getPublishStamp_(const String& key) {
