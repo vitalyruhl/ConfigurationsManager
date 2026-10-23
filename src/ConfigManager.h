@@ -419,7 +419,8 @@ public:
   BaseSetting(const char* key, const char* name, const char* category, SettingType type, bool showInWeb = true, bool isPassword = false, int sortOrder = 100, const char* categoryPretty = nullptr, const char* card = nullptr, const char* cardPretty = nullptr, int cardOrder = 100)
       : displayName(nullptr), category(nullptr), type(type), isPassword(isPassword)
 #if CM_ENABLE_SETTINGS_UI
-        , categoryPrettyName(categoryPretty), cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder),
+        ,
+        categoryPrettyName(categoryPretty), cardName(card), cardPrettyName(cardPretty), cardOrder(cardOrder),
         showInWeb(showInWeb), sortOrder(sortOrder)
 #endif
   {
@@ -469,7 +470,7 @@ public:
 #else
     return false;
 #endif
-}
+  }
 
   const char* getDisplayName() const {
     return displayName;
@@ -488,7 +489,7 @@ public:
 #else
     return category;
 #endif
-}
+  }
   const char* getCard() const {
 #if CM_ENABLE_SETTINGS_UI
 
@@ -497,7 +498,7 @@ public:
 #else
     return nullptr;
 #endif
-}
+  }
   const char* getCardPretty() const {
 #if CM_ENABLE_SETTINGS_UI
 
@@ -506,7 +507,7 @@ public:
 #else
     return nullptr;
 #endif
-}
+  }
   int getCardOrder() const {
 #if CM_ENABLE_SETTINGS_UI
 
@@ -515,7 +516,7 @@ public:
 #else
     return 100;
 #endif
-}
+  }
   const char* getName() const {
     return storageKeyPtr;
   }
@@ -527,7 +528,7 @@ public:
 #else
     return 100;
 #endif
-}
+  }
   bool isSecret() const {
     return isPassword;
   }
@@ -539,7 +540,7 @@ public:
 #else
     return false;
 #endif
-}
+  }
   bool needsSave() const {
     return modified;
   }
@@ -561,11 +562,22 @@ public:
   struct DisabledVisibility {
     DisabledVisibility(std::nullptr_t = nullptr) {}
     DisabledVisibility(const std::function<bool()>&) {}
-    template <typename F> DisabledVisibility& operator=(F&&) { return *this; }
-    explicit operator bool() const { return false; }
-    bool operator()() const { return false; }
-    bool operator==(std::nullptr_t) const { return true; }
-    bool operator!=(std::nullptr_t) const { return false; }
+    template <typename F>
+    DisabledVisibility& operator=(F&&) {
+      return *this;
+    }
+    explicit operator bool() const {
+      return false;
+    }
+    bool operator()() const {
+      return false;
+    }
+    bool operator==(std::nullptr_t) const {
+      return true;
+    }
+    bool operator!=(std::nullptr_t) const {
+      return false;
+    }
   };
   DisabledVisibility showIfFunc;
 #endif
@@ -577,7 +589,7 @@ public:
 #else
     return false;
 #endif
-}
+  }
 
   // New primary constructor for ConfigOptions
   explicit Config(const ConfigOptions<T>& opts)
@@ -753,7 +765,7 @@ public:
 #else
     (void)obj;
 #endif
-}
+  }
 
   bool fromJSON(const JsonVariant& jsonValue) override {
     if (jsonValue.isNull()) {
@@ -1422,7 +1434,11 @@ public:
     LiveFieldBuilder(const LiveFieldBuilder&) = delete;
     LiveFieldBuilder& operator=(const LiveFieldBuilder&) = delete;
     LiveFieldBuilder(LiveFieldBuilder&&) = default;
-#define CM_DISABLED_LIVE_CHAIN(method) template <typename... Args> LiveFieldBuilder& method(Args&&...) { return *this; }
+#define CM_DISABLED_LIVE_CHAIN(method)  \
+  template <typename... Args>           \
+  LiveFieldBuilder& method(Args&&...) { \
+    return *this;                       \
+  }
     CM_DISABLED_LIVE_CHAIN(label)
     CM_DISABLED_LIVE_CHAIN(unit)
     CM_DISABLED_LIVE_CHAIN(precision)
@@ -1441,10 +1457,23 @@ public:
   class LiveGroupBuilder {
   public:
     LiveGroupBuilder(ConfigManagerClass&, const char*) {}
-    template <typename... Args> LiveGroupBuilder& page(Args&&...) { return *this; }
-    template <typename... Args> LiveGroupBuilder& card(Args&&...) { return *this; }
-    template <typename... Args> LiveGroupBuilder& group(Args&&...) { return *this; }
-#define CM_DISABLED_LIVE_FIELD(method) template <typename... Args> LiveFieldBuilder method(Args&&...) { return {}; }
+    template <typename... Args>
+    LiveGroupBuilder& page(Args&&...) {
+      return *this;
+    }
+    template <typename... Args>
+    LiveGroupBuilder& card(Args&&...) {
+      return *this;
+    }
+    template <typename... Args>
+    LiveGroupBuilder& group(Args&&...) {
+      return *this;
+    }
+#define CM_DISABLED_LIVE_FIELD(method) \
+  template <typename... Args>          \
+  LiveFieldBuilder method(Args&&...) { \
+    return {};                         \
+  }
     CM_DISABLED_LIVE_FIELD(divider)
     CM_DISABLED_LIVE_FIELD(value)
     CM_DISABLED_LIVE_FIELD(boolValue)
@@ -1518,7 +1547,7 @@ private:
 #else
 
 #endif
-}
+  }
 
   void sendSeverityMessage(const char* type,
                            const String& title,
@@ -1545,7 +1574,7 @@ private:
 #else
 
 #endif
-}
+  }
 
   // Cppcheck rationale: Preserve the existing instance API for source compatibility.
   // cppcheck-suppress functionStatic
@@ -1592,7 +1621,7 @@ private:
 #else
 
 #endif
-}
+  }
 
   String allocateGuiMessageId() {
 #if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
@@ -1603,7 +1632,7 @@ private:
 #else
     return {};
 #endif
-}
+  }
 
   IOPinValidationResult validateIOPinSetting(const String& key, const String& value) const {
     IOPinValidationResult result;
@@ -2482,7 +2511,7 @@ public:
 #else
     return false;
 #endif
-}
+  }
 
   // App management
   void setAppName(const String& name) {
@@ -3100,7 +3129,7 @@ public:
     (void)includeSecrets;
     return {};
 #endif
-}
+  }
 
   String buildLiveLayoutJSON() const;
   String buildLiveLayoutJSON(const String& pageKey) const;
@@ -3156,8 +3185,7 @@ public:
   void notifyOTAStatus() {
 #if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
     char payload[128];
-    snprintf(payload, sizeof(payload), "{\"type\":\"otaStatus\",\"otaActive\":%s,\"otaEnabled\":%s,\"otaHasPassword\":%s}",
-             otaManager.isActive() ? "true" : "false", otaManager.isEnabled() ? "true" : "false", otaManager.hasPassword() ? "true" : "false");
+    snprintf(payload, sizeof(payload), "{\"type\":\"otaStatus\",\"otaActive\":%s,\"otaEnabled\":%s,\"otaHasPassword\":%s}", otaManager.isActive() ? "true" : "false", otaManager.isEnabled() ? "true" : "false", otaManager.hasPassword() ? "true" : "false");
     sendWebSocketText(String(payload));
 #endif
   }
@@ -3416,7 +3444,8 @@ public:
     return false;
   }
   bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload) {
-    if (!client || client->queueIsFull()) return false;
+    if (!client || client->queueIsFull())
+      return false;
     client->text(payload);
     return true;
   }
@@ -3429,7 +3458,8 @@ public:
   }
   void handleWebsocketPush() {
 #if CM_ENABLE_SETTINGS_UI
-    if (eventSocket) eventSocket->cleanupClients();
+    if (eventSocket)
+      eventSocket->cleanupClients();
 #endif
   }
   void enableWebSocketPush(uint32_t = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {
@@ -3444,11 +3474,15 @@ public:
   void disableWebSocketPush() {
 #if CM_ENABLE_SETTINGS_UI
     eventSocketEnabled = false;
-    if (eventSocket) eventSocket->closeAll();
+    if (eventSocket)
+      eventSocket->closeAll();
 #endif
   }
   void WebSocketPush(bool enable = true, uint32_t intervalMs = CM_WS_PUSH_INTERVAL_DEFAULT_MS) {
-    if (enable) enableWebSocketPush(intervalMs); else disableWebSocketPush();
+    if (enable)
+      enableWebSocketPush(intervalMs);
+    else
+      disableWebSocketPush();
   }
   void setWebSocketInterval(uint32_t) {}
   void setPushOnConnect(bool) {}

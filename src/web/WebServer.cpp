@@ -345,11 +345,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
   server->on("/ui_capabilities", HTTP_GET, [this](AsyncWebServerRequest* request) {
     const auto* ota = configManager ? &configManager->getOTAManager() : nullptr;
     char body[256];
-    snprintf(body, sizeof(body),
-             "{\"live\":%s,\"settings\":%s,\"otaEnabled\":%s,\"otaActive\":%s,\"otaHasPassword\":%s,\"settingsAuthRequired\":%s}",
-             CM_ENABLE_LIVE_UI ? "true" : "false", CM_ENABLE_SETTINGS_UI ? "true" : "false",
-             ota && ota->isEnabled() ? "true" : "false", ota && ota->isActive() ? "true" : "false",
-             ota && ota->hasPassword() ? "true" : "false", isSettingsAuthRequired() ? "true" : "false");
+    snprintf(body, sizeof(body), "{\"live\":%s,\"settings\":%s,\"otaEnabled\":%s,\"otaActive\":%s,\"otaHasPassword\":%s,\"settingsAuthRequired\":%s}", CM_ENABLE_LIVE_UI ? "true" : "false", CM_ENABLE_SETTINGS_UI ? "true" : "false", ota && ota->isEnabled() ? "true" : "false", ota && ota->isActive() ? "true" : "false", ota && ota->hasPassword() ? "true" : "false", isSettingsAuthRequired() ? "true" : "false");
     auto* response = request->beginResponse(200, "application/json", body);
     response->addHeader("Cache-Control", "no-store");
     enableCORS(response);

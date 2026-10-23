@@ -29,8 +29,7 @@ int main() {
   runtime.addRuntimeAlarm("operational", [&] { return active; }, [&] {
     assert(runtime.isRuntimeAlarmActive("operational"));
     runtime.registerRuntimeAlarm("reentrant");
-    ++triggered;
-  }, [&] { assert(!runtime.isRuntimeAlarmActive("operational")); ++cleared; });
+    ++triggered; }, [&] { assert(!runtime.isRuntimeAlarmActive("operational")); ++cleared; });
   active = true;
   runtime.updateAlarms();
   runtime.updateAlarms();

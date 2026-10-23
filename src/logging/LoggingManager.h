@@ -36,7 +36,9 @@ public:
     };
 
     virtual ~Output() = default;
-    virtual bool enabledForBuild() const { return true; }
+    virtual bool enabledForBuild() const {
+      return true;
+    }
     virtual void log(Level level, const char* tag, const char* message, unsigned long timestampMs) = 0;
     virtual void tick(unsigned long nowMs) {
       (void)nowMs;
@@ -140,7 +142,9 @@ public:
     // Cppcheck rationale: Preserve implicit construction used by existing callers.
     // cppcheck-suppress noExplicitConstructor
     GuiOutput(ConfigManagerClass& configManager, size_t startupBufferSize = 30);
-    bool enabledForBuild() const override { return CM_ENABLE_LIVE_UI; }
+    bool enabledForBuild() const override {
+      return CM_ENABLE_LIVE_UI;
+    }
     void addTimestamp(TimestampMode mode) {
       setTimestampMode(mode);
     }

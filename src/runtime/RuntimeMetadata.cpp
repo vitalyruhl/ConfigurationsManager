@@ -584,13 +584,20 @@ ConfigManagerRuntime::RuntimeMetaStatsForTest ConfigManagerRuntime::getRuntimeMe
 #endif
 
 #else
-ConfigManagerRuntime::ConfigManagerRuntime() : configManager(nullptr) {}
+ConfigManagerRuntime::ConfigManagerRuntime()
+    : configManager(nullptr) {}
 ConfigManagerRuntime::~ConfigManagerRuntime() = default;
-void ConfigManagerRuntime::begin(ConfigManagerClass* cm) { configManager = cm; }
+void ConfigManagerRuntime::begin(ConfigManagerClass* cm) {
+  configManager = cm;
+}
 void ConfigManagerRuntime::addRuntimeMeta(const RuntimeFieldMeta&) {}
-#define CM_DISABLED_META(T) \
-  RuntimeFieldId ConfigManagerRuntime::addRuntimeMeta(const T&) { return {}; } \
-  bool ConfigManagerRuntime::updateRuntimeMeta(RuntimeFieldId, const std::function<void(T&)>&) { return false; }
+#define CM_DISABLED_META(T)                                                                      \
+  RuntimeFieldId ConfigManagerRuntime::addRuntimeMeta(const T&) {                                \
+    return {};                                                                                   \
+  }                                                                                              \
+  bool ConfigManagerRuntime::updateRuntimeMeta(RuntimeFieldId, const std::function<void(T&)>&) { \
+    return false;                                                                                \
+  }
 CM_DISABLED_META(RuntimeFloatMeta)
 CM_DISABLED_META(RuntimeIntMeta)
 CM_DISABLED_META(RuntimeBoolMeta)
@@ -605,20 +612,38 @@ CM_DISABLED_META(RuntimeIntInputMeta)
 CM_DISABLED_META(RuntimeFloatSliderMeta)
 CM_DISABLED_META(RuntimeFloatInputMeta)
 #undef CM_DISABLED_META
-#define CM_DISABLED_EXTENSION(method, T) \
-  bool ConfigManagerRuntime::method(RuntimeFieldId, const T&) { return false; }
+#define CM_DISABLED_EXTENSION(method, T)                        \
+  bool ConfigManagerRuntime::method(RuntimeFieldId, const T&) { \
+    return false;                                               \
+  }
 CM_DISABLED_EXTENSION(setRuntimeNumericAlarm, RuntimeNumericAlarm)
 CM_DISABLED_EXTENSION(setRuntimeBoolAlarm, RuntimeBoolAlarm)
 CM_DISABLED_EXTENSION(setRuntimeStateLabels, RuntimeStateLabels)
 CM_DISABLED_EXTENSION(setRuntimeFieldStyle, RuntimeFieldStyle)
 CM_DISABLED_EXTENSION(setRuntimeStaticText, String)
 #undef CM_DISABLED_EXTENSION
-bool ConfigManagerRuntime::updateRuntimeMeta(const String&, const String&, const std::function<void(RuntimeFieldMeta&)>&) { return false; }
-RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String&, const String&) { return nullptr; }
-bool ConfigManagerRuntime::hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>&) const { return false; }
-bool ConfigManagerRuntime::hasRuntimeMetaView(const std::function<bool(const cm::RuntimeMetaView&)>&) const { return false; }
-String ConfigManagerRuntime::runtimeMetaToJSON() { return {}; }
-String ConfigManagerRuntime::runtimeMetaToJSON(const std::function<bool(const RuntimeFieldMeta&)>&) { return {}; }
-String ConfigManagerRuntime::runtimeMetaToJSONView(const std::function<bool(const cm::RuntimeMetaView&)>&) { return {}; }
-std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() { return {}; }
+bool ConfigManagerRuntime::updateRuntimeMeta(const String&, const String&, const std::function<void(RuntimeFieldMeta&)>&) {
+  return false;
+}
+RuntimeFieldMeta* ConfigManagerRuntime::findRuntimeMeta(const String&, const String&) {
+  return nullptr;
+}
+bool ConfigManagerRuntime::hasRuntimeMeta(const std::function<bool(const RuntimeFieldMeta&)>&) const {
+  return false;
+}
+bool ConfigManagerRuntime::hasRuntimeMetaView(const std::function<bool(const cm::RuntimeMetaView&)>&) const {
+  return false;
+}
+String ConfigManagerRuntime::runtimeMetaToJSON() {
+  return {};
+}
+String ConfigManagerRuntime::runtimeMetaToJSON(const std::function<bool(const RuntimeFieldMeta&)>&) {
+  return {};
+}
+String ConfigManagerRuntime::runtimeMetaToJSONView(const std::function<bool(const cm::RuntimeMetaView&)>&) {
+  return {};
+}
+std::shared_ptr<const String> ConfigManagerRuntime::runtimeMetaJsonPayload() {
+  return {};
+}
 #endif

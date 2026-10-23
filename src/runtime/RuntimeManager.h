@@ -131,7 +131,7 @@ private:
   // Metadata mutations take cacheMutex before this mutex; cache rebuilds only
   // hold this mutex while traversing mutable metadata.
   mutable std::mutex runtimeDataMutex;
-  #if CM_ENABLE_LIVE_UI
+#if CM_ENABLE_LIVE_UI
   std::recursive_mutex runtimeGenerationMutex;
   mutable std::mutex runtimeMetaCacheMutex;
 
@@ -164,7 +164,7 @@ private:
   std::vector<RuntimeIntInput> runtimeIntInputs;
   std::vector<RuntimeFloatInput> runtimeFloatInputs;
 
-  #endif
+#endif
   std::vector<RuntimeAlarm> runtimeAlarms;
 
   // System provider data

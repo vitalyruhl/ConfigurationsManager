@@ -945,7 +945,8 @@ inline void MQTTManager::addMQTTRuntimeProviderToGUI(ConfigManagerClass& configM
   }
 
 #else
-  if (!configManager_) configManager_ = &configManager;
+  if (!configManager_)
+    configManager_ = &configManager;
 #endif
 }
 
@@ -1039,7 +1040,8 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
   addMqttTopicToLiveGroup(configManager, topicId, pageName, cardName, nullptr, order);
 
 #else
-  if (!configManager_) configManager_ = &configManager;
+  if (!configManager_)
+    configManager_ = &configManager;
 #endif
 }
 
@@ -1092,7 +1094,8 @@ inline void MQTTManager::addMqttTopicToLiveGroup(ConfigManagerClass& configManag
   }
 
 #else
-  if (!configManager_) configManager_ = &configManager;
+  if (!configManager_)
+    configManager_ = &configManager;
 #endif
 }
 
@@ -2556,13 +2559,13 @@ inline void MQTTManager::registerReceiveItemSettings_(ReceiveItem& item,
                           .showInWeb(true)
 
 #if CM_ENABLE_SETTINGS_UI
-                    .sortOrder(nextReceiveSortOrder_++)
+                          .sortOrder(nextReceiveSortOrder_++)
 #endif
 
                           .categoryPretty(DEFAULT_TOPICS_GROUP)
 
 #if CM_ENABLE_SETTINGS_UI
-                    .card(item.cardKeyC.get())
+                          .card(item.cardKeyC.get())
                           .cardPretty(item.cardPrettyC.get())
                           .cardOrder(order)
 #endif

@@ -265,7 +265,8 @@ void LoggingManager::GuiOutput::tick(unsigned long) {}
 #endif
 
 void LoggingManager::addOutput(std::unique_ptr<Output> output) {
-  if (output && !output->enabledForBuild()) return;
+  if (output && !output->enabledForBuild())
+    return;
   if (!output) {
     return;
   }

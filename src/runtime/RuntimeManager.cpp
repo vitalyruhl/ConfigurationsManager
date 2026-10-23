@@ -410,8 +410,12 @@ void ConfigManagerRuntime::updateLoopTiming() {
 #endif // CM_ENABLE_SYSTEM_PROVIDER
 
 #else
-String ConfigManagerRuntime::runtimeValuesToJSON() { return {}; }
-String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection&) { return {}; }
+String ConfigManagerRuntime::runtimeValuesToJSON() {
+  return {};
+}
+String ConfigManagerRuntime::runtimeValuesToJSON(const cm::RuntimeSelection&) {
+  return {};
+}
 void ConfigManagerRuntime::fillRuntimeSnapshot(JsonObject, const cm::RuntimeSelection&) {}
 #endif
 
