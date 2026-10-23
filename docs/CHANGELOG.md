@@ -6,8 +6,9 @@ are consolidated into 4.8.0; they were not separate releases.
 ## 4.9.0 - Unreleased
 
 - Update development-only `shell-quote` to 1.12.0 and `brace-expansion` to
-  1.1.21/5.0.12 for local command parsing and file matching. Keep Vite at 8.2.0
-  pending validation of the updated bundler across all four UI feature modes.
+  1.1.21/5.0.12 for local command parsing and file matching.
+- Update the Web UI build toolchain to Vite 8.3.4 and its locked bundler/CSS
+  dependencies. Regenerate the default embedded page.
 - Add independent `CM_ENABLE_LIVE_UI` and `CM_ENABLE_SETTINGS_UI` build switches,
   both enabled by default. Compile out each disabled area's UI, presentation/data
   models, registration storage, JSON serialization and web routes. Support Live
