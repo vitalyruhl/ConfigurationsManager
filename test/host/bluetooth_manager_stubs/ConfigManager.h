@@ -50,6 +50,15 @@ private:
   std::function<void(T)> callback_;
 };
 struct ConfigManagerClass {
+  // [MOCKED!] Loop coordinator acknowledgment; no real radio calls in the stub.
+  unsigned coexistenceRequests = 0;
+  bool coexistenceReady = false;
+  void requestWiFiBleCoexistence() {
+    ++coexistenceRequests;
+  }
+  bool isWiFiBleCoexistenceReady() const {
+    return coexistenceReady;
+  }
   struct Runtime {
     template <class F>
     void addRuntimeProvider(const char*, F, int) {}

@@ -6,6 +6,9 @@
 
 #include <WiFi.h>
 #include <functional>
+#include <mutex>
+#include <atomic>
+#include <esp_err.h>
 #include "ConnectivitySocket.h"
 
 // WiFi connection states
@@ -21,6 +24,17 @@ enum WiFiManagerState {
 typedef std::function<void()> WiFiConnectedCallback;
 typedef std::function<void()> WiFiDisconnectedCallback;
 typedef std::function<void()> WiFiAPModeCallback;
+
+// A failed driver read is unknown (-1), never inferred from the requested mode.
+struct WiFiPowerSaveDiagnostics {
+  bool requested = CM_WIFI_POWER_SAVE_DEFAULT != 0;
+  bool bleCoexistenceRequired = false;
+  int effectiveMode = -1;
+  esp_err_t readError = ESP_ERR_INVALID_STATE;
+  bool applyAttempted = false;
+  bool applySucceeded = false;
+  esp_err_t applyError = ESP_ERR_INVALID_STATE;
+};
 
 class ConfigManagerWiFi {
 private:
@@ -92,6 +106,12 @@ private:
   cm::detail::ConnectivitySocket connectivitySocket_;
   void updateConnectivity_(uint32_t now, bool stationHealthy, bool suspended);
 
+  mutable std::mutex powerSaveMutex_;
+  WiFiPowerSaveDiagnostics powerSaveDiagnostics_;
+  std::atomic<bool> bleCoexistenceReady_{false};
+  uint32_t bleCoexistenceAttemptMs_ = 0; // Application-loop owned, rollover-safe retry clock.
+  void applyPowerSave_();
+
   // Private methods
   void transitionToState(WiFiManagerState newState);
   void handleReconnection();
@@ -131,6 +151,17 @@ public:
   bool isConnecting() const;
   unsigned long getLastConnectionTime() const;
   unsigned long getTimeSinceLastConnection() const;
+
+  // Call the setter only from the loop owner; ConfigManager queues cross-task changes.
+  // This changes runtime state only and does not write NVS.
+  void setPowerSave(bool enabled);
+  // Loop-owner only. The CM BLE controller has no shutdown path; retain until reboot.
+  void requireBleCoexistence();
+  void retryBleCoexistence();
+  bool isBleCoexistenceReady() const {
+    return bleCoexistenceReady_.load();
+  }
+  WiFiPowerSaveDiagnostics getPowerSaveDiagnostics() const;
 
   // Control functions
   void enableAutoReboot(bool enable);

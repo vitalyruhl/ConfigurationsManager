@@ -284,9 +284,22 @@ private:
       return;
     emit(BleEventType::Advertisement, reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), epoch, 0, device->getRSSI(), true);
   }
-  void ensureRadio() {
+  bool prepareRadioCoexistence_() {
+#if CM_ENABLE_WIFI
+    if (!coexistenceRequested_) {
+      cm_->requestWiFiBleCoexistence();
+      coexistenceRequested_ = true;
+    }
+    return cm_->isWiFiBleCoexistenceReady();
+#else
+    return true;
+#endif
+  }
+  bool ensureRadio() {
     if (radioInitialized_)
-      return;
+      return true;
+    if (!prepareRadioCoexistence_())
+      return false;
     NimBLEDevice::init("");
     auto* scanner = NimBLEDevice::getScan();
     scanner->setScanCallbacks(&scanCallbacks_, true);
@@ -299,10 +312,12 @@ private:
       client_->setConnectRetries(0);
     }
     radioInitialized_ = true;
+    return true;
   }
   // Backend operations below are used only by the one worker through BluetoothScheduler.
   void scan() {
-    ensureRadio();
+    if (!ensureRadio())
+      return;
     scanGeneration_ = generation();
     NimBLEDevice::getScan()->start(1000, false, true);
   }
@@ -311,7 +326,8 @@ private:
       NimBLEDevice::getScan()->stop();
   }
   bool connect() {
-    ensureRadio();
+    if (!ensureRadio())
+      return false;
     ++reconnects_;
     linkGeneration_ = generation();
     writeCharacteristic_ = nullptr;
@@ -374,6 +390,13 @@ private:
         workerConfig_ = config;
       };
       dispatch_.dispatchConfiguration(scheduler_, now, applyConfiguration);
+      // Do not consume radio commands or let the scheduler start scanning until
+      // the application loop has acknowledged this controller's WiFi policy.
+      if (!radioInitialized_ && workerConfig_.enabled &&
+          (workerConfig_.hasAdvertisement || workerConfig_.hasGatt) && !prepareRadioCoexistence_()) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        continue;
+      }
       detail::BleCommand cmd{};
       for (size_t i = 0; i < 8 && !dispatch_.configurationPending() && commands_.pop(cmd); ++i) {
         if (cmd.generation != generation() || dispatch_.configurationPending())
@@ -431,6 +454,9 @@ private:
   TaskHandle_t worker_ = nullptr;
   std::function<void(const BleEvent&)> handler_;
   bool enabledCached_ = false, runtimeRegistered_ = false, radioInitialized_ = false;
+#if CM_ENABLE_WIFI
+  bool coexistenceRequested_ = false; // Worker-owned; never released without controller deinit.
+#endif
   std::atomic<bool> overflow_{false}, radioConnected_{false};
   std::atomic<uint32_t> scanGeneration_{0}, linkGeneration_{0}, lateEvents_{0}, oversized_{0}, reconnects_{0}, highWaterBytes_{0};
   std::atomic<int> lastError_{0};

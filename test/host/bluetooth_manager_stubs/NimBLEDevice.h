@@ -121,7 +121,13 @@ public:
 };
 class NimBLEDevice {
 public:
-  static void init(const char*) {}
+  inline static unsigned initCalls = 0;
+  inline static std::function<void()> beforeInit;
+  static void init(const char*) {
+    if (beforeInit)
+      beforeInit();
+    ++initCalls;
+  }
   static NimBLEScan* getScan() {
     return &scan;
   }

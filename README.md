@@ -1,14 +1,105 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.9.1 (unpublished development)
+> Version 4.10.1 (unpublished development)
 
 The opt-in `CM_MQTT_BOUNDED_IO=1` transport assembles complete MQTT frames without
 waiting in the application loop, expires partial frames after 30 seconds, and
-closes the connection on malformed frames or incomplete socket writes. This mode
+closes the connection on malformed frames. A fixed 4608-byte transmit FIFO retains
+unsent bytes across transient send pressure and positive short writes, preserving
+byte order without allocating heap memory. Pending bytes expire after five seconds;
+queue overflow, a zero-byte send, or a definitive socket error closes the connection
+and clears its pending bytes. Transmit pumping shares at most 64 send attempts and
+1000 microseconds per application loop, separately from the receive budget. During
+the synchronous CONNACK wait, retries renew once per elapsed 1000-microsecond
+epoch, rather than once per poll. These budgets bound work between nonblocking
+socket calls; they are not a hard real-time guarantee for the socket implementation. This mode
 requires a numeric IPv4 broker address and bounds TCP connect to 100 ms plus up to
 one second for CONNACK. The legacy transport remains the default. ESP System-Info
 includes `resetReason`; `CM_MQTT_WIFI_UPTIME=0` removes the duplicate ESP uptime
 from WiFi System-Info while keeping the public default unchanged.
+
+The transmit counters distinguish recovered pressure/short writes from fatal
+failures, expiry, and overflow. This does not establish that graceful socket close
+cancels bytes already queued in the TCP stack; delayed CONNECT/session replacement
+remains a separate field investigation.
+
+## Development checkpoint and reproduction limits
+
+This branch checkpoint is not a Registry release. The independently frozen CM
+4.10.1 package contains 188 files; its manifest SHA256 is
+`6c04701572f9d45e10277ea6aa8eefa9763ab98d57bd6d6676ff3308ad1a6fe7`.
+All 188 files matched the checkout before the later documentation-only rollout
+notes. The frozen package and firmware artifacts remain unchanged; this commit's
+README/changelog are later records, not byte-identical frozen package inputs.
+
+SBT 1.4.8 uses that freeze. Its owner-authorized OTA on 2026-10-25 was followed by
+verified Settings-only policy and real BMS/Victron progress. SIL 5.4.3 deliberately
+retains the separate CM 4.10.0 WiFi-only freeze. Both consumer pins reference
+ignored local packages. Each consumer now preserves its exact original source
+ZIP, SHA256 and manifest under `dependencies/cm/`, with manual verified restore
+instructions. These are source snapshots, not Registry releases. The current CM
+checkout cannot substitute for SIL's historical 4.10.0 package. No firmware
+binaries, tags or Registry release are published by this checkpoint. Repeated MQTT interruptions
+remain open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
+the bounded device observations do not establish long-term stability.
+
+## WiFi power saving
+
+WiFi now defaults to modem power saving **off** (`WIFI_PS_NONE`) for mains-powered
+applications. `cm::CoreWiFiSettings::powerSave`, attached with the core WiFi bundle,
+is a boolean Settings control with key hint `WiFiPowerSave`. Saving it persists the
+choice; the switch shows the configured choice. The diagnostic text below it is a
+snapshot of the separately requested runtime state, actual `esp_wifi_get_ps` mode,
+and last apply/read result. Reload Settings for a fresh snapshot. This information
+is included in `/config.json` even with `CM_ENABLE_LIVE_UI=0`; read failure shows
+an unknown driver mode, never an inferred On or Off state.
+
+Precedence and lifecycle:
+
+1. `CM_WIFI_POWER_SAVE_DEFAULT` accepts only `0` (default) or `1` (MIN_MODEM).
+   It initializes a missing setting once; an existing NVS choice takes precedence.
+   Without the core bundle it is the WiFi manager's fallback.
+2. Loaded settings are applied before the first station connection. Reconnects and
+   stack resets reapply the current requested value.
+3. `ConfigManager.setWiFiPowerSave(bool)` queues a **non-persistent** runtime
+   override. The last queued API or Settings change wins when `handleClient()`
+   runs. It does not modify the stored switch value. Reloading/resetting Settings
+   queues their values again; reboot restores the saved choice.
+
+The low-level `getWiFiManager().setPowerSave(bool)` belongs to the application loop;
+use the queued ConfigManager API from callbacks or other tasks. Diagnostics are
+available through `getWiFiManager().getPowerSaveDiagnostics()` with fields
+`requested`, `effectiveMode` (`-1` on read failure), `readError`, `applyAttempted`,
+`applySucceeded`, and `applyError`. Reading diagnostics does not change the radio.
+Before station startup a request remains pending until a connect path applies it.
+Arduino's cached sleep request is synchronized, then `esp_wifi_set_ps` applies the
+mode explicitly: after native WiFi reset, the cache may match while the driver
+has reverted to its default. A changed mode can therefore cause two SDK calls;
+only the explicit native result determines apply success.
+
+Before the first CM BLE scan or GATT operation, its worker queues a coexistence
+lease and waits for the application loop to confirm native `WIFI_PS_MIN_MODEM`.
+ESP32/ESP-IDF 4.4.7 does not support `WIFI_PS_NONE` in WiFi/Bluetooth coexistence:
+see [Espressif's power-saving constraints](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-guides/wifi.html#esp32-wi-fi-power-saving-mode).
+A prior successful MIN read is not a lease acknowledgment. Native apply/read
+failure leaves BLE startup pending and retries from the application loop at most
+once per second (never during a WiFi stack reset); the explicit WiFi-uninitialized case may
+proceed after synchronizing Arduino's cache to MIN. Subsequent station starts
+and stack resets always reapply the lease before normal radio work.
+
+The saved preference remains unchanged. While the lease is active, requested
+false yields effective MIN with `reason=ble_coexistence`; requested true has
+`reason=requested`. Settings JSON exposes `bleCoexistenceRequired` independently.
+An applied coexistence override is not an apply error. The CM BLE manager does
+not shut down its controller, so pause, disable, disconnect, removed peers or a
+cancelled startup cannot release the lease: MIN remains required until reboot.
+Do not infer controller shutdown from the Bluetooth Enabled setting. WiFi-only
+applications retain their requested policy, including the default NONE.
+
+The optional CM Bluetooth manager still requires the consumer's NimBLE dependency.
+Actual BLE acquisition/coexistence remains a device acceptance requirement; the
+first-start host tests do not establish RF performance or long-term stability.
+Short WiFi-only measurements do not prove that power saving causes MQTT stalls.
 
 ## Preview Before Installing
 

@@ -3,6 +3,44 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.10.1 - Unpublished development
+
+- Gate the CM Bluetooth controller's first scan/GATT startup on a fresh WiFi
+  coordinator acknowledgment. Apply native MIN_MODEM for ESP32 WiFi/BLE
+  coexistence before NimBLE initialization; settings callbacks and WiFi resets
+  cannot restore NONE while the controller lease remains active.
+- Preserve the saved WiFi power preference and show the effective BLE coexistence
+  override in Settings-only diagnostics. Bluetooth disable/pause does not imply
+  controller shutdown; retain the lease until reboot because CM has no controller
+  deinitialization lifecycle. WiFi-only default-off behavior is unchanged.
+- Add first-start, stale-ACK, native failure, callback/reset and BLE-only startup
+  regressions, including bounded loop-side retry after a transient native error.
+  Hardware confirmed the 4.10.0 native-NONE/controller-start abort;
+  the owner-authorized SBT 1.4.8 rollout subsequently confirmed native MIN_MODEM
+  coexistence and advancing real BMS/Victron samples. This bounded observation
+  does not establish long-term stability or resolve the separate MQTT issue #89.
+
+## 4.10.0 - Unpublished development
+
+- Default WiFi modem power saving to off for mains-powered applications. Expose
+  `CoreWiFiSettings.powerSave` (`WiFiPowerSave`) with an optional
+  `CM_WIFI_POWER_SAVE_DEFAULT=1` fallback. Preserve saved choices across boots,
+  reconnects and WiFi stack resets; do not override the choice when Bluetooth starts.
+- Add the thread-safe, non-persistent `ConfigManager.setWiFiPowerSave(bool)` API.
+  Apply requests from the application loop. Show requested state, actual driver
+  mode and apply/read status in Settings even when Live UI is disabled.
+- BLE coexistence and the cause of observed network stalls remain hardware
+  acceptance questions; the configurable policy does not establish their resolution.
+
+## 4.9.2 - Unpublished development
+
+- Keep pending bytes in a fixed-memory FIFO when the opt-in bounded MQTT transport
+  encounters temporary send pressure or a positive short write. Preserve byte
+  order, bound pending age to five seconds, and discard pending bytes at a session
+  boundary. Definitive socket failures and queue overflow still close the session.
+- Expose separate cumulative counters for send pressure, short writes, transmit
+  expiry, and queue overflow. The default legacy MQTT transport is unchanged.
+
 ## 4.9.1 - Unpublished development
 
 - Add an opt-in bounded MQTT transport for numeric IPv4 brokers. Partial frames

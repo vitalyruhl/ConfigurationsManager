@@ -54,6 +54,30 @@ public:
   }
 };
 
+class WiFiPowerSaveSetting : public Config<bool> {
+public:
+  WiFiPowerSaveSetting()
+      : Config<bool>(ConfigOptions<bool>{.key = "WiFiPowerSave", .name = "WiFi power saving", .category = CoreCategories::WiFi, .defaultValue = CM_WIFI_POWER_SAVE_DEFAULT != 0, .showInWeb = true, .sortOrder = 18}) {}
+  std::function<WiFiPowerSaveDiagnostics()> diagnostics;
+  void toJSON(JsonObject& obj) const override {
+    Config<bool>::toJSON(obj);
+#if CM_ENABLE_SETTINGS_UI
+    if (!diagnostics)
+      return;
+    const auto snapshot = diagnostics();
+    JsonObject status = obj[getKey()]["powerSave"].to<JsonObject>();
+    status["requested"] = snapshot.requested;
+    status["bleCoexistenceRequired"] = snapshot.bleCoexistenceRequired;
+    status["reason"] = !snapshot.requested && snapshot.bleCoexistenceRequired ? "ble_coexistence" : "requested";
+    status["effectiveMode"] = snapshot.effectiveMode;
+    status["readError"] = snapshot.readError;
+    status["applyAttempted"] = snapshot.applyAttempted;
+    status["applySucceeded"] = snapshot.applySucceeded;
+    status["applyError"] = snapshot.applyError;
+#endif
+  }
+};
+
 struct CoreWiFiSettings {
   Config<String> wifiSsid{ConfigOptions<String>{.key = "WiFiSSID", .name = "WiFi SSID", .category = CoreCategories::WiFi, .defaultValue = String(""), .showInWeb = true, .sortOrder = 1}};
   Config<String> wifiPassword{ConfigOptions<String>{.key = "WiFiPassword", .name = "WiFi Password", .category = CoreCategories::WiFi, .defaultValue = String(""), .showInWeb = true, .isPassword = true, .sortOrder = 2}};
@@ -65,6 +89,7 @@ struct CoreWiFiSettings {
   Config<String> dnsPrimary{ConfigOptions<String>{.key = "WiFiDNS1", .name = "Primary DNS", .category = CoreCategories::WiFi, .defaultValue = String("192.168.0.1"), .showInWeb = true, .sortOrder = 7}};
   Config<String> dnsSecondary{ConfigOptions<String>{.key = "WiFiDNS2", .name = "Secondary DNS", .category = CoreCategories::WiFi, .defaultValue = String("8.8.8.8"), .showInWeb = true, .sortOrder = 8}};
 
+  WiFiPowerSaveSetting powerSave;
   ConnectivityTargetSetting connectivityTarget;
   WiFiRebootTimeoutSetting rebootTimeoutMin;
 
@@ -77,8 +102,11 @@ struct CoreWiFiSettings {
     cfg.addSetting(&subnet);
     cfg.addSetting(&dnsPrimary);
     cfg.addSetting(&dnsSecondary);
+    cfg.addSetting(&powerSave);
     cfg.addSetting(&connectivityTarget);
     cfg.addSetting(&rebootTimeoutMin);
+    powerSave.setCallback([&cfg](bool enabled) { cfg.setWiFiPowerSave(enabled); });
+    powerSave.diagnostics = [&cfg]() { return cfg.getWiFiManager().getPowerSaveDiagnostics(); };
     connectivityTarget.setCallback([&cfg](const String& value) { cfg.setConnectivityCheckTarget(value); });
     rebootTimeoutMin.setCallback([&cfg](int minutes) { cfg.setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes))); });
 

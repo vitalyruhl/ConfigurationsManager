@@ -10,6 +10,7 @@
 // - CM_ENABLE_VERBOSE_LOGGING (0)
 // - CM_DISABLE_GUI_LOGGING (0)
 // - CM_ENABLE_WIFI (1)
+// - CM_WIFI_POWER_SAVE_DEFAULT (0)
 // - CM_ENABLE_OTA (1)
 // - CM_ENABLE_SYSTEM_PROVIDER (1)
 // - CM_ENABLE_SYSTEM_TIME (1)
@@ -65,6 +66,14 @@
 
 #ifndef CM_ENABLE_WIFI
 #define CM_ENABLE_WIFI 1
+#endif
+
+// Fallback only: a registered, persisted WiFiPowerSave setting takes precedence.
+#ifndef CM_WIFI_POWER_SAVE_DEFAULT
+#define CM_WIFI_POWER_SAVE_DEFAULT 0
+#endif
+#if CM_WIFI_POWER_SAVE_DEFAULT != 0 && CM_WIFI_POWER_SAVE_DEFAULT != 1
+#error "CM_WIFI_POWER_SAVE_DEFAULT must be 0 or 1."
 #endif
 
 // --- Core/library logging flags (still configurable) ---

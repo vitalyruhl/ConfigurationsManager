@@ -22,7 +22,8 @@ struct String : std::string {
     return p == npos ? -1 : static_cast<int>(p);
   }
 };
-enum class SettingType { INT,
+enum class SettingType { BOOL,
+                         INT,
                          STRING };
 struct Preferences {
   bool available = true;
@@ -64,7 +65,7 @@ struct Config : BaseSetting {
     saved = value;
   }
   SettingType getType() const override {
-    return std::is_same<T, int>::value ? SettingType::INT : SettingType::STRING;
+    return std::is_same<T, bool>::value ? SettingType::BOOL : (std::is_same<T, int>::value ? SettingType::INT : SettingType::STRING);
   }
   const char* getKeyHint() const override {
     return key;
@@ -90,6 +91,9 @@ struct Harness {
   void setWiFiAutoRebootTimeout(uint32_t minutes) {
     assert(mailbox.setTimeoutMinutes(minutes));
   }
+  void setWiFiPowerSave(bool enabled) {
+    mailbox.setPowerSave(enabled);
+  }
   void setConnectivityCheckTarget(const String& target) {
     assert(mailbox.setTarget(target.c_str()));
   }
@@ -106,23 +110,27 @@ int main() {
   using namespace wifi_health_reset_fixture;
   Config<int> timeout("WiFiRb", 5, 1);
   Config<String> target("WiFiProbe", String("gateway"), String("off"));
+  Config<bool> powerSave("WiFiPowerSave", true, false);
   Harness manager;
-  manager.settings = {&timeout, &target};
+  manager.settings = {&timeout, &target, &powerSave};
   // A queued Apply must be replaced by the reset values, never resurrected on the next loop.
   manager.setWiFiAutoRebootTimeout(1);
   manager.setConnectivityCheckTarget("192.0.2.77");
+  manager.setWiFiPowerSave(true);
   manager.resetDefaults();
   assert(manager.saves == 1 && timeout.saved == 1 && target.saved == "off");
   cm::detail::WiFiHealthConfig update;
   assert(manager.mailbox.take(update));
-  assert(update.targetChanged && update.timeoutChanged);
+  assert(update.targetChanged && update.timeoutChanged && update.powerSaveChanged && !update.powerSave);
   assert(update.timeoutMinutes == 1 && std::strcmp(update.target.data(), "off") == 0);
   assert(!manager.mailbox.take(update));
+  powerSave.saved = true;
   timeout.saved = 120;
   target.saved = "gateway";
   manager.loadAll();
-  assert(timeout.value == 120 && target.value == "gateway");
+  assert(timeout.value == 120 && target.value == "gateway" && powerSave.value);
   assert(manager.mailbox.take(update) && update.timeoutChanged && update.targetChanged);
+  assert(update.powerSaveChanged && update.powerSave);
   assert(update.timeoutMinutes == 120 && std::strcmp(update.target.data(), "gateway") == 0);
   manager.prefs.available = false;
   bool failed = false;

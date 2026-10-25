@@ -9,6 +9,9 @@ namespace detail {
 struct WiFiHealthConfig {
   std::array<char, 16> target{};
   uint32_t timeoutMinutes = 0;
+  bool bleCoexistenceRequired = false;
+  bool powerSave = false;
+  bool powerSaveChanged = false;
   bool targetChanged = false;
   bool timeoutChanged = false;
 };
@@ -35,12 +38,21 @@ public:
     pending_.timeoutChanged = true;
     return true;
   }
+  void setPowerSave(bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pending_.powerSave = enabled;
+    pending_.powerSaveChanged = true;
+  }
+  void requireBleCoexistence() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pending_.bleCoexistenceRequired = true;
+  }
   bool take(WiFiHealthConfig& output) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!pending_.targetChanged && !pending_.timeoutChanged)
+    if (!pending_.targetChanged && !pending_.timeoutChanged && !pending_.powerSaveChanged && !pending_.bleCoexistenceRequired)
       return false;
     output = pending_;
-    pending_.targetChanged = pending_.timeoutChanged = false;
+    pending_.targetChanged = pending_.timeoutChanged = pending_.powerSaveChanged = pending_.bleCoexistenceRequired = false;
     return true;
   }
 };
