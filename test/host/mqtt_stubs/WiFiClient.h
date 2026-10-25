@@ -32,7 +32,7 @@ public:
   uint8_t operator[](int) const {
     return 192;
   }
-  bool fromString(const char* text) {
+  static bool fromString(const char* text) {
     return text && std::strcmp(text, "192.0.2.1") == 0;
   }
 };
@@ -53,7 +53,7 @@ class Client : public Stream {
 public:
   virtual int connect(IPAddress, uint16_t) = 0;
   virtual int connect(const char*, uint16_t) = 0;
-  virtual int read() = 0;
+  int read() override = 0;
   virtual int read(uint8_t*, size_t) = 0;
   virtual void stop() = 0;
   virtual uint8_t connected() = 0;

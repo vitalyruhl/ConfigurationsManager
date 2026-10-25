@@ -17,7 +17,8 @@ static void connect(cm::detail::BoundedMqttClient& client) {
   mockSendResult = -2;
   mockRecvCostUs = 0;
   mockRecvMillisCost = 0;
-  assert(client.connect(IPAddress(), 1883) == 1);
+  const int connectResult = client.connect(IPAddress(), 1883);
+  assert(connectResult == 1);
   feed(client, {0x20, 2, 0, 0});
   uint8_t connack[4]{};
   assert(client.read(connack, sizeof(connack)) == 4);
@@ -93,7 +94,8 @@ int main() {
     client.beginLoop();
     client.pump();
     assert(!client.connected());
-    assert(client.stats().rxMalformed == ++expectedMalformed);
+    ++expectedMalformed;
+    assert(client.stats().rxMalformed == expectedMalformed);
   }
 
   // The pump handles at most 256 input bytes in one application-loop budget.
