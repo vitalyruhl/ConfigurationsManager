@@ -8,8 +8,14 @@
 inline uint32_t mockNowMs = 0;
 inline uint32_t mockMillisAdvance = 0;
 inline uint32_t mockMicroNow = 0;
-inline uint32_t millis() { const uint32_t result = mockNowMs; mockNowMs += mockMillisAdvance; return result; }
-inline uint32_t micros() { return mockMicroNow; }
+inline uint32_t millis() {
+  const uint32_t result = mockNowMs;
+  mockNowMs += mockMillisAdvance;
+  return result;
+}
+inline uint32_t micros() {
+  return mockMicroNow;
+}
 inline int mockConnectTimeout = 0;
 inline int mockSendResult = -2;
 inline int mockLastSendFlags = 0;
@@ -23,8 +29,12 @@ public:
   IPAddress() = default;
   IPAddress(uint8_t, uint8_t, uint8_t, uint8_t) {}
   explicit IPAddress(const uint8_t*) {}
-  uint8_t operator[](int) const { return 192; }
-  bool fromString(const char* text) { return text && std::strcmp(text, "192.0.2.1") == 0; }
+  uint8_t operator[](int) const {
+    return 192;
+  }
+  bool fromString(const char* text) {
+    return text && std::strcmp(text, "192.0.2.1") == 0;
+  }
 };
 class Print {
 public:
@@ -51,9 +61,20 @@ public:
 };
 class WiFiClient {
   bool live_ = false;
+
 public:
-  int connect(IPAddress, uint16_t, int timeout) { mockConnectTimeout = timeout; live_ = true; return 1; }
-  int fd() const { return live_ ? 7 : -1; }
-  uint8_t connected() { return live_; }
-  void stop() { live_ = false; }
+  int connect(IPAddress, uint16_t, int timeout) {
+    mockConnectTimeout = timeout;
+    live_ = true;
+    return 1;
+  }
+  int fd() const {
+    return live_ ? 7 : -1;
+  }
+  uint8_t connected() {
+    return live_;
+  }
+  void stop() {
+    live_ = false;
+  }
 };

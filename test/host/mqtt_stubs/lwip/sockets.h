@@ -9,8 +9,12 @@ inline int recv(int, void* output, size_t size, int flags) {
   if (mockIncoming.empty() && !mockDelayedIncoming.empty() && mockNowMs >= mockDeliverAtMs) {
     mockIncoming.swap(mockDelayedIncoming);
   }
-  if (flags != MSG_DONTWAIT) return -1;
-  if (mockIncoming.empty()) { errno = EAGAIN; return -1; }
+  if (flags != MSG_DONTWAIT)
+    return -1;
+  if (mockIncoming.empty()) {
+    errno = EAGAIN;
+    return -1;
+  }
   const size_t count = std::min(size, mockIncoming.size());
   std::memcpy(output, mockIncoming.data(), count);
   mockIncoming.erase(mockIncoming.begin(), mockIncoming.begin() + count);

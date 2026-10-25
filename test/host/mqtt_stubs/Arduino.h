@@ -4,5 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 using boolean = bool;
-inline void yield() { ++mockNowMs; }
+inline void yield() {
+  ++mockNowMs;
+}
 #define pgm_read_byte_near(pointer) (*reinterpret_cast<const uint8_t*>(pointer))

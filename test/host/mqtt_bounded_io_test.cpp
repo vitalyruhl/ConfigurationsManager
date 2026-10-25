@@ -53,7 +53,8 @@ int main() {
   mockNowMs = 0xfffffff0u;
   feed(client, {0x30});
   mockNowMs = static_cast<uint32_t>(0xfffffff0u + 30000u);
-  client.beginLoop(); client.pump();
+  client.beginLoop();
+  client.pump();
   assert(!client.connected() && client.stats().rxTimeouts == 2);
 
   // Crossing the deadline during a pump must reject even an immediately finishing frame.
@@ -69,9 +70,11 @@ int main() {
   mockRecvCostUs = 1000;
   feed(client, {0x30, 4, 0, 1, 't', 'x'});
   assert(client.pendingBytes() == 1 && client.available() == 0);
-  client.beginLoop(); client.pump();
+  client.beginLoop();
+  client.pump();
   assert(client.pendingBytes() == 2 && client.available() == 0);
-  client.beginLoop(); client.pump();
+  client.beginLoop();
+  client.pump();
   assert(client.available() == 6);
 
   // Oversized length is rejected before reading or allocating the payload.
@@ -82,16 +85,13 @@ int main() {
 
   // Malformed lengths, flags, topics and missing QoS packet IDs never reach PubSubClient.
   const std::vector<std::vector<uint8_t>> malformed = {
-    {0x30, 0}, {0x30, 2, 0, 99}, {0x32, 3, 0, 1, 't'},
-    {0x36, 0}, {0x20, 1, 0}, {0xd1, 0},
-    {0x30, 0x80, 0x80, 0x80, 0x80}, {0x30, 0x80, 0},
-    {0x30, 3, 0, 1, 0}
-  };
+    {0x30, 0}, {0x30, 2, 0, 99}, {0x32, 3, 0, 1, 't'}, {0x36, 0}, {0x20, 1, 0}, {0xd1, 0}, {0x30, 0x80, 0x80, 0x80, 0x80}, {0x30, 0x80, 0}, {0x30, 3, 0, 1, 0}};
   uint32_t expectedMalformed = 0;
   for (const auto& bytes : malformed) {
     connect(client);
     mockIncoming = bytes;
-    client.beginLoop(); client.pump();
+    client.beginLoop();
+    client.pump();
     assert(!client.connected());
     assert(client.stats().rxMalformed == ++expectedMalformed);
   }
@@ -101,9 +101,11 @@ int main() {
   client.setFrameCapacity(2304);
   mockIncoming = {0x30, 0x82, 0x02, 0, 1, 't'}; // 258-byte body, 261-byte packet
   mockIncoming.resize(261, 'x');
-  client.beginLoop(); client.pump();
+  client.beginLoop();
+  client.pump();
   assert(client.available() == 0 && client.pendingBytes() == 256);
-  client.beginLoop(); client.pump();
+  client.beginLoop();
+  client.pump();
   assert(client.available() == 261);
   client.stop();
   assert(client.pendingBytes() == 0 && client.available() == 0);

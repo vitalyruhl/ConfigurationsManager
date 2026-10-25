@@ -147,11 +147,12 @@ void run(bool espResult, bool wifiResult, bool optional, bool connectedValue, bo
   const std::string ssid = longStrings ? std::string(600, 'x') : "WiFi\\\"\\\\\\n";
   const std::string expectedWifi =
 #if CM_MQTT_WIFI_UPTIME
-      "{\"uptimeMs\":4294967295,\"uptimeHuman\":\"49d 17h 2m 47s\","
+    "{\"uptimeMs\":4294967295,\"uptimeHuman\":\"49d 17h 2m 47s\","
 #else
-      "{"
+    "{"
 #endif
-      "\"hostname\":\"host\\tname\",\"ssid\":\"" + ssid + "\",\"rssi\":-127,\"ip\":\"192.0.2.1\",\"mac\":\"AA:BB:CC:DD:EE:FF\",\"connected\":" + (connectedValue ? "true}" : "false}");
+    "\"hostname\":\"host\\tname\",\"ssid\":\"" +
+    ssid + "\",\"rssi\":-127,\"ip\":\"192.0.2.1\",\"mac\":\"AA:BB:CC:DD:EE:FF\",\"connected\":" + (connectedValue ? "true}" : "false}");
   check(payloads[1] == expectedWifi, "WiFi exact JSON schema/order/numbers/escaping/connection state");
   std::cout << "host-only ArduinoJson allocations: peak=" << allocation::peak
             << " calls=" << allocation::calls << " optional=" << optional

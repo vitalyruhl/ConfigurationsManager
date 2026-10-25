@@ -1597,7 +1597,8 @@ inline bool MQTTManager::begin() {
     settings_.clientId.set(cid);
   }
 
-  if (!configureServer_()) return false;
+  if (!configureServer_())
+    return false;
   setState_(ConnectionState::Disconnected);
   currentRetry_ = 0;
   lastConnectionAttemptMs_ = 0;
