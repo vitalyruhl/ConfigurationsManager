@@ -1,6 +1,14 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.9.0
+> Version 4.9.1 (unpublished development)
+
+The opt-in `CM_MQTT_BOUNDED_IO=1` transport assembles complete MQTT frames without
+waiting in the application loop, expires partial frames after 30 seconds, and
+closes the connection on malformed frames or incomplete socket writes. This mode
+requires a numeric IPv4 broker address and bounds TCP connect to 100 ms plus up to
+one second for CONNACK. The legacy transport remains the default. ESP System-Info
+includes `resetReason`; `CM_MQTT_WIFI_UPTIME=0` removes the duplicate ESP uptime
+from WiFi System-Info while keeping the public default unchanged.
 
 ## Preview Before Installing
 

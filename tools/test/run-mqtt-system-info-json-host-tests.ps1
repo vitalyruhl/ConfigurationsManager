@@ -11,3 +11,7 @@ $exe = Join-Path $outDir 'mqtt-system-info-json.exe'
 if ($LASTEXITCODE -ne 0) { throw 'MQTT System-Info JSON host compile failed.' }
 & $exe
 if ($LASTEXITCODE -ne 0) { throw 'MQTT System-Info JSON host assertions failed.' }
+& $compiler -std=c++17 -Wall -Wextra -Werror -DCM_MQTT_WIFI_UPTIME=0 -I (Join-Path $repo 'src') -I $ArduinoJsonInclude (Join-Path $repo 'test/host/mqtt_system_info_json_test.cpp') -o $exe
+if ($LASTEXITCODE -ne 0) { throw 'Compact MQTT System-Info host compile failed.' }
+& $exe
+if ($LASTEXITCODE -ne 0) { throw 'Compact MQTT System-Info host assertions failed.' }
