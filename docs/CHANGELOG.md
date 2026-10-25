@@ -3,6 +3,15 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.9.1 - Unpublished development
+
+- Add an opt-in bounded MQTT transport for numeric IPv4 brokers. Partial frames
+  expire after 30 seconds without blocking the application loop; malformed frames
+  and incomplete writes close the socket before reconnecting.
+- Add the reset reason to ESP System-Info and an optional switch to omit the
+  duplicate uptime from WiFi System-Info. Existing transport and WiFi schema
+  defaults remain compatible.
+
 ## 4.9.0 - 2026-10-23
 
 - Update development-only `shell-quote` to 1.12.0 and `brace-expansion` to

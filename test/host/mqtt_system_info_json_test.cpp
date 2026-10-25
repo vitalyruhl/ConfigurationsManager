@@ -101,7 +101,7 @@ struct Info {
   uint32_t uptimeMs = 4294967295U, freeHeap = 123456, minFreeHeap = 123,
            maxAllocHeap = 456, flashSizeBytes = 4194304, cpuFreqMHz = 240;
   HostString chipModel = "ESP\"32\\chip", sdkVersion = "sdk\nline";
-  uint32_t chipRevision = 3;
+  uint32_t chipRevision = 3, resetReason = 4;
   HostString hostname = "host\tname", ssid = "WiFi\"\\\n", ip = "192.0.2.1",
              mac = "AA:BB:CC:DD:EE:FF";
   int32_t rssi = -127;
@@ -142,10 +142,16 @@ void run(bool espResult, bool wifiResult, bool optional, bool connectedValue, bo
   std::string expectedEsp = "{\"uptimeMs\":4294967295,\"uptimeHuman\":\"49d 17h 2m 47s\",\"freeHeap\":123456";
   if (optional)
     expectedEsp += ",\"minFreeHeap\":123,\"maxAllocHeap\":456";
-  expectedEsp += ",\"flashSizeBytes\":4194304,\"cpuFreqMHz\":240,\"chipModel\":\"ESP\\\"32\\\\chip\",\"chipRevision\":3,\"sdkVersion\":\"sdk\\nline\"}";
+  expectedEsp += ",\"flashSizeBytes\":4194304,\"cpuFreqMHz\":240,\"chipModel\":\"ESP\\\"32\\\\chip\",\"chipRevision\":3,\"sdkVersion\":\"sdk\\nline\",\"resetReason\":4}";
   check(payloads[0] == expectedEsp, "ESP exact JSON schema/order/numbers/escaping/optional fields");
   const std::string ssid = longStrings ? std::string(600, 'x') : "WiFi\\\"\\\\\\n";
-  const std::string expectedWifi = "{\"uptimeMs\":4294967295,\"uptimeHuman\":\"49d 17h 2m 47s\",\"hostname\":\"host\\tname\",\"ssid\":\"" + ssid + "\",\"rssi\":-127,\"ip\":\"192.0.2.1\",\"mac\":\"AA:BB:CC:DD:EE:FF\",\"connected\":" + (connectedValue ? "true}" : "false}");
+  const std::string expectedWifi =
+#if CM_MQTT_WIFI_UPTIME
+      "{\"uptimeMs\":4294967295,\"uptimeHuman\":\"49d 17h 2m 47s\","
+#else
+      "{"
+#endif
+      "\"hostname\":\"host\\tname\",\"ssid\":\"" + ssid + "\",\"rssi\":-127,\"ip\":\"192.0.2.1\",\"mac\":\"AA:BB:CC:DD:EE:FF\",\"connected\":" + (connectedValue ? "true}" : "false}");
   check(payloads[1] == expectedWifi, "WiFi exact JSON schema/order/numbers/escaping/connection state");
   std::cout << "host-only ArduinoJson allocations: peak=" << allocation::peak
             << " calls=" << allocation::calls << " optional=" << optional

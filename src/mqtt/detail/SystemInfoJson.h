@@ -1,6 +1,9 @@
 #pragma once
 
 #include <ArduinoJson.h>
+#ifndef CM_MQTT_WIFI_UPTIME
+#define CM_MQTT_WIFI_UPTIME 1
+#endif
 
 namespace cm {
 namespace detail {
@@ -25,6 +28,7 @@ bool publishSystemInfoPayloads(const Info& info, const Text& baseTopic, const Te
       espDoc["chipModel"] = info.chipModel;
       espDoc["chipRevision"] = info.chipRevision;
       espDoc["sdkVersion"] = info.sdkVersion;
+      espDoc["resetReason"] = info.resetReason;
       serializeJson(espDoc, espPayload);
     } // Release the document before allocating the topic or writing to MQTT.
     const Text espTopic = baseTopic + "/ESP";
@@ -36,8 +40,10 @@ bool publishSystemInfoPayloads(const Info& info, const Text& baseTopic, const Te
     Text wifiPayload;
     {
       JsonDocument wifiDoc;
+#if CM_MQTT_WIFI_UPTIME
       wifiDoc["uptimeMs"] = info.uptimeMs;
       wifiDoc["uptimeHuman"] = uptimeHuman;
+#endif
       wifiDoc["hostname"] = info.hostname;
       wifiDoc["ssid"] = info.ssid;
       wifiDoc["rssi"] = info.rssi;

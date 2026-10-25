@@ -18,6 +18,18 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "detail/SystemInfoJson.h"
+#include "detail/BoundedMqttStats.h"
+#if defined(ESP32)
+#include <esp_system.h>
+#endif
+
+// Opt in per consumer; legacy consumers keep the existing WiFiClient transport.
+#ifndef CM_MQTT_BOUNDED_IO
+#define CM_MQTT_BOUNDED_IO 0
+#endif
+#if CM_MQTT_BOUNDED_IO
+#include "detail/BoundedMqttClient.h"
+#endif
 
 namespace cm {
 
@@ -315,6 +327,14 @@ public:
   uint32_t getReconnectCount() const {
     return reconnectCount_;
   }
+  const MqttBoundedIoStats& getBoundedIoStats() const {
+#if CM_MQTT_BOUNDED_IO
+    return wifiClient_.stats();
+#else
+    static const MqttBoundedIoStats disabled;
+    return disabled;
+#endif
+  }
 
   const String& getLastTopic() const {
     return lastTopic_;
@@ -335,6 +355,7 @@ public:
     uint32_t cpuFreqMHz = 0;
     String chipModel;
     uint32_t chipRevision = 0;
+    uint32_t resetReason = 0;
     String sdkVersion;
 
     String hostname;
@@ -451,7 +472,11 @@ private:
 #endif
   };
 
+#if CM_MQTT_BOUNDED_IO
+  detail::BoundedMqttClient wifiClient_;
+#else
   WiFiClient wifiClient_;
+#endif
   PubSubClient mqttClient_;
 
   Settings settings_;
@@ -514,6 +539,7 @@ private:
   void maybeClientLoop_();
 
   void attemptConnection_();
+  bool configureServer_();
   void handleConnection_();
   void handleDisconnection_();
   void setState_(ConnectionState newState);
@@ -782,14 +808,10 @@ inline MQTTManager::MQTTManager()
     MQTT_LOG("[WARNING] Multiple instances detected; callbacks will target the last created instance");
   }
   instanceForCallback_ = this;
-  const bool bufferOk = mqttClient_.setBufferSize(static_cast<uint16_t>(CM_MQTT_DEFAULT_BUFFER_SIZE));
-  if (!bufferOk) {
-    MQTT_LOG("[W] Failed to set default buffer size to %u",
-             static_cast<unsigned>(CM_MQTT_DEFAULT_BUFFER_SIZE));
-  } else {
-    CM_LOG_VERBOSE("[MQTT] Default buffer size: %u",
-                   static_cast<unsigned>(mqttClient_.getBufferSize()));
-  }
+  setBufferSize(static_cast<uint16_t>(CM_MQTT_DEFAULT_BUFFER_SIZE));
+#if CM_MQTT_BOUNDED_IO
+  mqttClient_.setSocketTimeout(1);
+#endif
   mqttClient_.setCallback(&MQTTManager::mqttCallbackTrampoline_);
 }
 
@@ -1499,7 +1521,7 @@ inline bool MQTTManager::publishExtraTopicLazyInternal_(const char* id,
 inline void MQTTManager::setServer(const char* server, uint16_t port) {
   settings_.server.set(server ? String(server) : String());
   settings_.port.set(static_cast<int>(port));
-  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+  configureServer_();
 }
 
 inline void MQTTManager::setCredentials(const char* username, const char* password) {
@@ -1542,8 +1564,14 @@ inline void MQTTManager::setRetryInterval(unsigned long retryIntervalMs) {
 }
 
 inline void MQTTManager::setBufferSize(uint16_t size) {
-  const bool ok = mqttClient_.setBufferSize(size);
+#if CM_MQTT_BOUNDED_IO
+  size = std::max<uint16_t>(8, std::min<uint16_t>(size, detail::BoundedMqttClient::MaxFrameBytes));
+#endif
+  const bool ok = size == mqttClient_.getBufferSize() || mqttClient_.setBufferSize(size);
   const uint16_t actual = mqttClient_.getBufferSize();
+#if CM_MQTT_BOUNDED_IO
+  wifiClient_.setFrameCapacity(actual);
+#endif
   if (ok) {
     CM_LOG_VERBOSE("[MQTT] Buffer size set to %u (actual=%u)",
                    static_cast<unsigned>(size),
@@ -1569,7 +1597,7 @@ inline bool MQTTManager::begin() {
     settings_.clientId.set(cid);
   }
 
-  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+  if (!configureServer_()) return false;
   setState_(ConnectionState::Disconnected);
   currentRetry_ = 0;
   lastConnectionAttemptMs_ = 0;
@@ -1581,6 +1609,11 @@ inline void MQTTManager::update() {
 }
 
 inline void MQTTManager::loop() {
+#if CM_MQTT_BOUNDED_IO
+  // Service partial frames even when the application selected a long listen interval.
+  wifiClient_.beginLoop();
+  wifiClient_.pump();
+#endif
   if (!settings_.enableMQTT.get()) {
     if (state_ != ConnectionState::Disconnected) {
       disconnect();
@@ -1645,6 +1678,9 @@ inline void MQTTManager::disconnect() {
   if (mqttClient_.connected()) {
     mqttClient_.disconnect();
   }
+#if CM_MQTT_BOUNDED_IO
+  wifiClient_.stop();
+#endif
   setState_(ConnectionState::Disconnected);
   currentRetry_ = 0;
 }
@@ -1705,6 +1741,7 @@ inline MQTTManager::SystemInfo MQTTManager::collectSystemInfo() const {
 #if defined(ESP32)
   info.minFreeHeap = static_cast<uint32_t>(ESP.getMinFreeHeap());
   info.maxAllocHeap = static_cast<uint32_t>(ESP.getMaxAllocHeap());
+  info.resetReason = static_cast<uint32_t>(esp_reset_reason());
 #endif
   info.flashSizeBytes = static_cast<uint32_t>(ESP.getFlashChipSize());
   info.cpuFreqMHz = static_cast<uint32_t>(ESP.getCpuFreqMHz());
@@ -1744,7 +1781,7 @@ inline bool MQTTManager::publishSystemInfo(const SystemInfo& info, bool retained
       const size_t capped = desired > 2048 ? 2048 : desired;
       const uint16_t current = mqttClient_.getBufferSize();
       if (capped > static_cast<size_t>(current)) {
-        mqttClient_.setBufferSize(static_cast<uint16_t>(capped));
+        setBufferSize(static_cast<uint16_t>(capped));
       }
     }
     return publishWithQos_(topic.c_str(), payload.c_str(), retained, 0);
@@ -1926,7 +1963,7 @@ inline void MQTTManager::addTopicReceiveString(const char* id,
 }
 
 inline void MQTTManager::configureFromSettings_() {
-  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+  configureServer_();
 
   if (!settings_.enableMQTT.get()) {
     return;
@@ -2035,9 +2072,30 @@ inline void MQTTManager::resetPublishSchedule_() {
   }
 }
 
+inline bool MQTTManager::configureServer_() {
+#if CM_MQTT_BOUNDED_IO
+  IPAddress ip;
+  const String server = settings_.server.get();
+  if (!ip.fromString(server.c_str())) {
+    wifiClient_.rejectHost();
+    MQTT_LOG("[W] Bounded MQTT transport requires a numeric IPv4 broker address");
+    return false;
+  }
+  mqttClient_.setServer(ip, static_cast<uint16_t>(settings_.port.get()));
+#else
+  mqttClient_.setServer(settings_.server.get().c_str(), static_cast<uint16_t>(settings_.port.get()));
+#endif
+  return true;
+}
+
 inline void MQTTManager::attemptConnection_() {
   setState_(ConnectionState::Connecting);
   lastConnectionAttemptMs_ = millis();
+  if (!configureServer_()) {
+    ++currentRetry_;
+    setState_(ConnectionState::Disconnected);
+    return;
+  }
 
   CM_LOG_VERBOSE("[MQTT] Connecting to %s:%d (clientId=%s)",
                  settings_.server.get().c_str(),
