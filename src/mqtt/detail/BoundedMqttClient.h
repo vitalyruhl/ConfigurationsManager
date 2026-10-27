@@ -20,6 +20,8 @@ public:
   static constexpr uint32_t PumpTimeBudgetUs = 1000;
   static constexpr uint32_t FrameLifetimeMs = 30000;
   static constexpr uint16_t TxCapacity = 2 * MaxFrameBytes;
+  // No positive TCP send for five seconds expires pending bytes. This is not a
+  // packet-age or broker-delivery deadline; enqueue and transient errors do not renew it.
   static constexpr uint32_t TxLifetimeMs = 5000;
   static constexpr uint16_t TxCallBudget = 64;
   static constexpr uint32_t TxTimeBudgetUs = 1000;
@@ -173,7 +175,7 @@ public:
       return 0;
     }
     if (!txUsed_)
-      txStartedMs_ = millis();
+      txProgressMs_ = millis();
     const uint16_t tail = static_cast<uint16_t>((txHead_ + txUsed_) % TxCapacity);
     const size_t first = std::min<size_t>(count, TxCapacity - tail);
     std::memcpy(tx_ + tail, bytes, first);
@@ -189,7 +191,7 @@ public:
     socket_.stop();
     clearFrame_();
     txUsed_ = txHead_ = 0;
-    txStartedMs_ = 0;
+    txProgressMs_ = 0;
     txBlocked_ = false;
     awaitingConnack_ = false;
   }
@@ -209,7 +211,7 @@ private:
   uint16_t txCallsLeft_ = TxCallBudget;
   uint32_t txTimeLeftUs_ = TxTimeBudgetUs;
   uint32_t txEpochUs_ = 0;
-  uint32_t txStartedMs_ = 0;
+  uint32_t txProgressMs_ = 0;
   bool txBlocked_ = false;
   MqttBoundedIoStats stats_;
   uint32_t startedMs_ = 0;
@@ -232,7 +234,7 @@ private:
   }
 
   bool expireTx_() {
-    if (txUsed_ && static_cast<uint32_t>(millis() - txStartedMs_) >= TxLifetimeMs) {
+    if (txUsed_ && static_cast<uint32_t>(millis() - txProgressMs_) >= TxLifetimeMs) {
       ++stats_.txTimeouts;
       reject_(stats_.txFailures);
       return true;
@@ -263,9 +265,10 @@ private:
         ++stats_.txPartialWrites;
       txHead_ = static_cast<uint16_t>((txHead_ + sent) % TxCapacity);
       txUsed_ -= static_cast<uint16_t>(sent);
+      txProgressMs_ = millis();
       if (!txUsed_) {
         txHead_ = 0;
-        txStartedMs_ = 0;
+        txProgressMs_ = 0;
       }
     }
     const uint32_t elapsed = static_cast<uint32_t>(micros() - startedUs);

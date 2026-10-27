@@ -60,6 +60,14 @@
 #define CM_ENABLE_THEMING 1
 #endif
 
+// Test-only bounded UART phase markers; disabled in production by default.
+#ifndef CM_TEST_RESTART_PHASES
+#define CM_TEST_RESTART_PHASES 0
+#endif
+#if CM_TEST_RESTART_PHASES != 0 && CM_TEST_RESTART_PHASES != 1
+#error "CM_TEST_RESTART_PHASES must be 0 or 1"
+#endif
+
 #ifndef CM_ENABLE_OTA
 #define CM_ENABLE_OTA 1
 #endif

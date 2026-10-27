@@ -28,6 +28,83 @@ static void connect(cm::detail::BoundedMqttClient& client) {
   assert(client.read(connack, sizeof(connack)) == 4);
 }
 
+// [MOCKED!] Continuous forward progress must not expire a nonempty FIFO epoch.
+static void progressingQueueDoesNotTimeout() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  const int id = mockSockets.back().id;
+  std::vector<uint8_t> expected(1024, 'a');
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  assert(client.write(expected.data(), expected.size()) == expected.size());
+  for (unsigned tick = 1; tick <= 100; ++tick) {
+    mockNowMs = tick * 100;
+    mockSendSteps = {{64, 0}, {-1, EAGAIN}};
+    mockSendStepCursor = 0;
+    const size_t callsBefore = mockSendEvents.size();
+    client.beginLoop();
+    client.pump();
+    if (!client.connected()) {
+      std::fprintf(stderr, "[MOCKED!] Progressing FIFO closed at %u ms after %zu accepted bytes; txTimeouts=%u\n", mockNowMs, mockSocket(id)->acceptedBytes().size(), client.stats().txTimeouts);
+    }
+    assert(client.connected());
+    const std::vector<uint8_t> next(64, static_cast<uint8_t>(tick));
+    assert(client.write(next.data(), next.size()) == next.size());
+    expected.insert(expected.end(), next.begin(), next.end());
+    assert(mockSendEvents.size() - callsBefore == 2);
+    assert(mockSocket(id)->acceptedBytes().size() == tick * 64);
+  }
+  mockSendResult = -2;
+  client.beginLoop();
+  client.pump();
+  assert(mockSocket(id)->acceptedBytes() == expected);
+  assert(client.stats().txTimeouts == 0 && client.stats().txFailures == 0);
+  assert(mockCloseEvents.empty());
+  std::puts("[MOCKED!] Nonempty FIFO with progress for 10 seconds: exact ordered bytes, no timeout.");
+}
+
+// [MOCKED!] Only positive sends renew the deadline, including uint32 rollover.
+static void noProgressDeadlineAfterPartialSend() {
+  for (uint32_t start : {100u, 0xfffffc00u}) {
+    for (int transient : {EAGAIN, EWOULDBLOCK, EINTR}) {
+      mockResetNetwork();
+      cm::detail::BoundedMqttClient client;
+      connect(client);
+      const int id = mockSockets.back().id;
+      mockNowMs = start;
+      mockSendResult = -1;
+      mockSendError = transient;
+      const uint8_t bytes[] = {1, 2, 3, 4, 5, 6};
+      assert(client.write(bytes, sizeof(bytes)) == sizeof(bytes));
+      for (uint32_t elapsed : {4000u, 8000u, 12000u}) {
+        mockNowMs = start + elapsed;
+        mockSendSteps = {{1, 0}, {-1, transient}};
+        mockSendStepCursor = 0;
+        client.beginLoop();
+        client.pump();
+        assert(client.connected());
+      }
+      assert(mockSocket(id)->acceptedBytes() == std::vector<uint8_t>({1, 2, 3}));
+      mockNowMs = start + 16999u;
+      client.beginLoop();
+      client.pump();
+      assert(client.connected());
+      assert(client.write(bytes, sizeof(bytes)) == sizeof(bytes));
+      const size_t callsBefore = mockSendEvents.size();
+      mockNowMs = start + 17000u;
+      client.beginLoop();
+      client.pump();
+      assert(!client.connected());
+      assert(mockSendEvents.size() == callsBefore);
+      assert(mockCloseEvents == std::vector<int>({id}));
+      assert(client.stats().txTimeouts == 1 && client.stats().txFailures == 1);
+      assert(client.stats().txBackpressure == 5 && client.stats().txPartialWrites == 3);
+    }
+  }
+  std::puts("[MOCKED!] Five seconds without positive send expires; enqueue/transients cannot renew; wrap safe.");
+}
+
 // [MOCKED!] These contracts target the real adapter, not a second TX implementation.
 static void recoveryBoundaries() {
   mockResetNetwork();
@@ -82,7 +159,7 @@ static void recoveryBoundaries() {
   assert(nextId != id && newResult == 2);
   assert(mockSocket(nextId)->acceptedBytes() == std::vector<uint8_t>({0xc0, 0}));
 
-  // Oldest pending byte expires at five seconds, including uint32 wrap.
+  // Pending bytes with no send progress expire at five seconds, including uint32 wrap.
   for (uint32_t start : {100u, 0xfffffc00u}) {
     connect(client);
     mockNowMs = start;
@@ -98,7 +175,7 @@ static void recoveryBoundaries() {
     mockNowMs = start + 5000u;
     client.beginLoop();
     client.pump();
-    assert(!client.connected()); // Appending did not renew the oldest byte's deadline.
+    assert(!client.connected()); // Appending did not renew the no-progress deadline.
   }
 
   assert(client.stats().txTimeouts == 2 && client.stats().txFailures == 3);
@@ -282,4 +359,6 @@ int main() {
   assert(client.stats().rejectedHosts == 1 && !client.connected());
   std::printf("[MOCKED!] Bounded MQTT transport tests passed (object bytes=%zu).\n", sizeof(client));
   recoveryBoundaries();
+  progressingQueueDoesNotTimeout();
+  noProgressDeadlineAfterPartialSend();
 }

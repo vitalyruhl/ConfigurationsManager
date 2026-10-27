@@ -1,8 +1,10 @@
 #pragma once
 #include <cstddef>
+#include <cassert>
 #include <cstdint>
 #include <functional>
 #include <string>
+#include "esp_bt.h"
 // [MOCKED!] NimBLE radio boundary. Callbacks retain the production subscription epoch.
 class NimBLEAddress {
 public:
@@ -121,12 +123,34 @@ public:
 };
 class NimBLEDevice {
 public:
-  inline static unsigned initCalls = 0;
+  inline static unsigned initCalls = 0, deinitCalls = 0, stopCalls = 0, cleanupCalls = 0;
+  inline static bool initialized = false, deinitResult = true, nativeStaysEnabled = false, hostStaysInitialized = false, cleanupResult = true, objectsDeleted = false;
+  static bool isInitialized() {
+    return initialized;
+  }
+  static bool deinit(bool clearAll) {
+    ++deinitCalls;
+    if (clearAll) {
+      ++cleanupCalls;
+      objectsDeleted = cleanupResult;
+      return cleanupResult;
+    }
+    ++stopCalls;
+    if (deinitResult) {
+      if (!hostStaysInitialized)
+        initialized = false;
+      if (!nativeStaysEnabled)
+        nativeControllerStatus = ESP_BT_CONTROLLER_STATUS_IDLE;
+    }
+    return deinitResult;
+  }
   inline static std::function<void()> beforeInit;
   static void init(const char*) {
     if (beforeInit)
       beforeInit();
     ++initCalls;
+    initialized = true;
+    nativeControllerStatus = ESP_BT_CONTROLLER_STATUS_ENABLED;
   }
   static NimBLEScan* getScan() {
     return &scan;

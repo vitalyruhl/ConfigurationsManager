@@ -73,6 +73,8 @@ struct ConfigManagerClass {
     return runtime;
   }
 };
+inline bool createFailure = false;
+inline unsigned restartMarkers = 0;
 inline uint32_t now = 0;
 inline int iteration = 0;
 inline std::function<void()> watermark, delay, cancelConnect;
@@ -88,3 +90,12 @@ using ble_host::Preferences;
 inline uint32_t millis() {
   return ble_host::now;
 }
+
+struct RestartHostSerial {
+  template <class... Args>
+  int printf(const char*, Args...) {
+    ++ble_host::restartMarkers;
+    return 0;
+  }
+};
+inline RestartHostSerial Serial;

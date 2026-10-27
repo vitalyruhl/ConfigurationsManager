@@ -227,11 +227,59 @@ static void handshakeAndHealthyBurst() {
               mockMicroNow);
 }
 
+// [MOCKED!] Isolate a 142/165-byte CONNECT prefix from the independent FIFO stall timeout.
+static void partialConnectWaitPumpsUntilConnackDeadline() {
+  for (bool remainsBlocked : {false, true}) {
+    mockResetNetwork();
+    cm::detail::BoundedMqttClient transport;
+    PubSubClient mqtt(transport);
+    mqtt.setServer(IPAddress(), 1883);
+    mqtt.setSocketTimeout(1);
+    const std::string clientId(150, 'm');
+    mockSendSteps = {{142, 0}, {-1, EAGAIN}};
+    mockSendResult = remainsBlocked ? -1 : -2;
+    mockSendError = remainsBlocked ? EAGAIN : 0;
+    mockMillisAdvance = 1;
+    mockRecvCostUs = 100;
+    mockDelayedIncoming = {0x20, 2, 0, 0};
+    mockDeliverAtMs = 50;
+    mockDeliverAfterSentBytes = 165;
+    const bool connected = mqtt.connect(clientId.c_str());
+    const auto& accepted = mockSockets.front().acceptedBytes();
+    std::vector<uint8_t> expected{0x10, 0xa2, 1, 0, 4, 'M', 'Q', 'T', 'T', 4, 2, 0, 15, 0, 150};
+    expected.insert(expected.end(), 150, 'm');
+    requireCase(transport.stats().txTimeouts == 0 && transport.stats().txFailures == 0,
+                "one-second handshake failure is not a five-second TX stall");
+    if (remainsBlocked) {
+      requireCase(!connected && mqtt.state() == MQTT_CONNECTION_TIMEOUT,
+                  "sustained CONNECT pressure reaches PubSub deadline");
+      requireCase(mockNowMs >= 1000 && mockNowMs <= 1020 && accepted.size() == 142,
+                  "CONNECT prefix remains incomplete at handshake timeout");
+      requireCase(mockSendEvents.size() > 2 && mockCloseEvents.size() == 1,
+                  "available polls retry TX before one close");
+      expected.resize(142);
+    } else {
+      requireCase(connected && mockNowMs >= 50 && mockNowMs < 1000,
+                  "partial CONNECT resumes inside synchronous available wait");
+      requireCase(mockSendEvents.size() == 3 && mockCloseEvents.empty(),
+                  "partial CONNECT has one short send, one EAGAIN, one remainder");
+    }
+    requireCase(accepted == expected, "CONNECT wire prefix/order/no duplication");
+    std::printf("[MOCKED!] CONNECT 142/165 pressure=%s live=%d accepted=%zu sends=%zu elapsed=%u ms; no TCP-stack cause claim\n",
+                remainsBlocked ? "sustained" : "transient",
+                connected,
+                accepted.size(),
+                mockSendEvents.size(),
+                mockNowMs);
+  }
+}
+
 static int runRecoveryMatrix(bool recoveryContract) {
   const unsigned failures = characterizeTx(recoveryContract);
   characterizeKeepalive();
   characterizeLateConnackAndCounters();
   handshakeAndHealthyBurst();
+  partialConnectWaitPumpsUntilConnackDeadline();
   std::printf("[MOCKED!] Recovery contract mode=%d failures=%u adapterBytes=%zu; no heap/TCP-stack/HIL claim\n",
               recoveryContract,
               failures,

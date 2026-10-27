@@ -13,6 +13,8 @@
 #include <atomic>
 #include "detail/OtaLifecycleState.h"
 #include "detail/OtaUploadGate.h"
+#include "detail/HttpOtaRebootRequest.h"
+#include "detail/HttpRebootPreparation.h"
 
 // Forward declaration
 class ConfigManagerClass;
@@ -50,6 +52,9 @@ private:
 
   cm::detail::OtaLifecycleState lifecycle;
   cm::detail::OtaUploadGate uploadGate{lifecycle};
+  cm::detail::HttpOtaRebootRequest httpReboot;
+  cm::detail::HttpRebootPreparation httpRebootPreparation;
+  std::function<bool()> rebootPreparation;
   uint32_t arduinoSessionId = 0;
   std::atomic<uint32_t> pendingAbortSession{0};
   std::atomic<bool> disablePending{false};
@@ -76,6 +81,14 @@ public:
   // Initialization
   void begin(ConfigManagerClass* cm);
   void setCallbacks(RebootCallback reboot, LogCallback logger);
+  // HTTP only. Register before uploads; callback must only request/poll bounded work.
+  // Preserved across setup() and setCallbacks(); false delays restart for at most10s.
+  void setRebootPreparation(std::function<bool()> prepare) {
+    rebootPreparation = std::move(prepare);
+  }
+  bool rebootPreparationBlocked() const {
+    return httpRebootPreparation.blocked();
+  }
   // Register before uploads; preserved across setup() and setCallbacks().
   void setLifecycleObserver(std::function<void(const OtaLifecycleEvent&)> observer) {
     lifecycle.setObserver(std::move(observer));

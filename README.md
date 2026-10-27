@@ -1,12 +1,16 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.10.1 (unpublished development)
+> Version 4.10.5 (unpublished development)
 
 The opt-in `CM_MQTT_BOUNDED_IO=1` transport assembles complete MQTT frames without
 waiting in the application loop, expires partial frames after 30 seconds, and
 closes the connection on malformed frames. A fixed 4608-byte transmit FIFO retains
 unsent bytes across transient send pressure and positive short writes, preserving
-byte order without allocating heap memory. Pending bytes expire after five seconds;
+byte order without allocating heap memory. Pending bytes expire after five seconds
+without a positive TCP send. A successful partial send renews this stall deadline;
+newly queued bytes and transient errors do not. Continuous progress may keep the
+queue nonempty longer than five seconds: this is neither an absolute packet-age
+limit nor a broker-delivery guarantee. The fixed queue capacity remains unchanged;
 queue overflow, a zero-byte send, or a definitive socket error closes the connection
 and clears its pending bytes. Transmit pumping shares at most 64 send attempts and
 1000 microseconds per application loop, separately from the receive budget. During
@@ -22,6 +26,43 @@ The transmit counters distinguish recovered pressure/short writes from fatal
 failures, expiry, and overflow. This does not establish that graceful socket close
 cancels bytes already queued in the TCP stack; delayed CONNECT/session replacement
 remains a separate field investigation.
+
+HTTP OTA can optionally prepare a restart through
+`getOTAManager().setRebootPreparation(std::function<bool()>)`, installed before
+web initialization. Register a nonblocking callback that requests/polls terminal
+work; it is retained across setup and callback registration. It runs after the
+500ms disconnect delay and has a terminal ten-second preparation deadline.
+Timeout blocks automatic restart and sets `rebootPreparationBlocked()`; it does
+not force reset, disable watchdogs, or retry cleanup. ArduinoOTA is unchanged.
+
+The optional BLE integration uses `requestShutdownForRestart()` and
+`isShutdownForRestartComplete()` (or `isShutdownForRestartFailed()`). Only the
+existing BLE worker stops the host/controller with `deinit(false)`, confirms
+host uninitialized and native controller IDLE, then clears objects with
+`deinit(true)` and reconfirms both conditions. Failure retains a terminal fence;
+no new acquisition/configuration or cleanup retry is admitted. A missing worker
+can acknowledge only an uninitialized, native-IDLE radio without another CM
+owner, using read-only checks. Consumer test profiles may set
+`CM_TEST_RESTART_PHASES=1` for a few UART phase markers; the default is0. The
+coexistence lease stays conservative until restart. This is a controlled
+BLE-active OTA candidate; native SDK calls can still block and require HIL.
+
+Successful HTTP OTA disconnect callbacks only publish a fixed-size atomic
+reboot request. The application loop services it once after 500ms, before OTA
+maintenance locks or disabled/uninitialized early returns. Duplicate callbacks
+cannot extend that deadline or repeat the reboot. No request/context pointer is
+retained. This keeps restart/shutdown work out of the watchdog-subscribed
+AsyncTCP callback; actual BLE-active OTA acceptance remains a hardware gate.
+ArduinoOTA reboot handling, authentication and settings are unchanged.
+
+Full WiFi stack recovery uses Arduino's `WiFi.mode(WIFI_OFF)` and
+`WiFi.mode(WIFI_STA)` lifecycle exclusively. Arduino therefore applies its own
+runtime `WiFi.useStaticBuffers()` preference and initial TX/RX buffer policy;
+the manager no longer mixes direct native stop/deinit/init calls into recovery.
+A failed shutdown or station-mode transition aborts that reset attempt without
+reporting completion. Further attempts use the existing reconnect cadence.
+This does not establish the cause of the observed SBT panic or of a TCP outage;
+hardware verification of reconnect and recovered heap remains required.
 
 ## Development checkpoint and reproduction limits
 

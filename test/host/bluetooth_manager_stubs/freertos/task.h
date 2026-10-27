@@ -3,6 +3,8 @@
 #include "ConfigManager.h"
 // [MOCKED!] Execute the real worker synchronously with deterministic task-boundary interleavings.
 inline int xTaskCreate(void (*entry)(void*), const char*, unsigned, void* value, int, TaskHandle_t* handle) {
+  if (ble_host::createFailure)
+    return 0;
   ble_host::entry = entry;
   ble_host::entryValue = value;
   *handle = value;

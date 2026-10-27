@@ -343,8 +343,14 @@ void ConfigManagerWiFi::startStackReset_() {
 
   bleCoexistenceReady_ = false;
   WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  WiFi.disconnect(false);
+  if (!WiFi.mode(WIFI_OFF)) {
+    WIFI_LOG("[E] WiFi shutdown failed");
+    stackResetStep = 0;
+    stackResetStepAtMs = 0;
+    connectAfterStackReset = false;
+    return;
+  }
   stackResetInProgress = true;
   stackResetStep = 1;
   stackResetStepAtMs = millis() + 500UL;
@@ -365,20 +371,23 @@ bool ConfigManagerWiFi::advanceStackReset_() {
 
   switch (stackResetStep) {
     case 1:
-      esp_wifi_stop();
-      esp_wifi_deinit();
+      // Arduino owns driver shutdown and initialization, including its buffer policy.
       stackResetStep = 2;
       stackResetStepAtMs = now + 200UL;
       return false;
-    case 2: {
-      wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-      esp_wifi_init(&cfg);
+    case 2:
       stackResetStep = 3;
       stackResetStepAtMs = now + 200UL;
       return false;
-    }
     case 3:
-      WiFi.mode(WIFI_STA);
+      if (!WiFi.mode(WIFI_STA)) {
+        WIFI_LOG("[E] WiFi initialization failed");
+        stackResetInProgress = false;
+        stackResetStep = 0;
+        stackResetStepAtMs = 0;
+        connectAfterStackReset = false;
+        return false;
+      }
       stackResetStep = 4;
       stackResetStepAtMs = now + 100UL;
       return false;

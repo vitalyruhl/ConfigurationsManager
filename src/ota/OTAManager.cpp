@@ -205,6 +205,33 @@ void ConfigManagerOTA::setHostname(const String& hostname) {
 }
 
 void ConfigManagerOTA::handle() {
+  // HTTP only: preparation and restart remain outside upload locks and callback tasks.
+  if (httpReboot.takeIfDue(millis())) {
+    httpRebootPreparation.begin(millis());
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE HTTP_PREPARE_BEGIN ms=%lu\n", static_cast<unsigned long>(millis()));
+#endif
+  }
+  const auto prepared = httpRebootPreparation.poll(millis(), [this]() {
+    return !rebootPreparation || rebootPreparation();
+  });
+  if (prepared == cm::detail::HttpRebootPreparation::Result::Waiting)
+    return;
+  if (prepared == cm::detail::HttpRebootPreparation::Result::TimedOut) {
+    OTA_LOG("[E] HTTP reboot preparation timed out; automatic restart blocked");
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE HTTP_PREPARE_TIMEOUT ms=%lu\n", static_cast<unsigned long>(millis()));
+#endif
+    return;
+  }
+  if (prepared == cm::detail::HttpRebootPreparation::Result::Ready) {
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE ESP_RESTART_BEGIN ms=%lu\n", static_cast<unsigned long>(millis()));
+#endif
+    if (rebootCallback)
+      rebootCallback();
+    return;
+  }
   const bool stale = otaActive && uint32_t(millis() - otaLastActivityMs.load()) >= OTA_STALE_TIMEOUT_MS;
   const auto active = lifecycle.activeSessionId();
   auto pendingAbort = pendingAbortSession.load();
@@ -332,11 +359,7 @@ void ConfigManagerOTA::sendHttpSuccess(AsyncWebServerRequest* request, const Ota
   response->addHeader("Connection", "close");
 
   request->onDisconnect([this]() {
-    OTA_LOG("HTTP client disconnected, rebooting...");
-    delay(500);
-    if (rebootCallback) {
-      rebootCallback();
-    }
+    httpReboot.request(millis());
   });
 
   // Cppcheck rationale: The value is consumed by a compile-time logging macro in enabled builds.

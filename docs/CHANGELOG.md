@@ -3,6 +3,66 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.10.5 - Unpublished development
+
+- Add optional HTTP-only restart preparation before the loop-owned reboot.
+  A nonblocking consumer hook can wait for terminal resource cleanup; it is
+  preserved across setup/callback registration. Preparation times out after
+  ten seconds and permanently blocks automatic reboot instead of bypassing
+  the safety acknowledgement or retrying cleanup. ArduinoOTA is unchanged.
+- Add terminal worker-owned BLE shutdown: fence generations/commands, stop
+  without object deletion, confirm host/native-IDLE state, then clear objects
+  and reconfirm shutdown. Failed stop never deletes objects; failed cleanup
+  never acknowledges readiness. No worker reinitialization follows the request.
+- Handle absent/failed workers through read-only idle checks, without touching
+  another CM owner's controller. Add optional test-only restart phase markers,
+  disabled by default. No NVS, pin, credential or watchdog policy changes.
+- Host checks cover real worker and HTTP wiring, timeout/wrap, late events,
+  pending configuration, pause/disabled states, no-worker and failed-stop/cleanup
+  boundaries. Real BLE-active HTTP OTA remains a required acceptance gate.
+
+## 4.10.4 - Unpublished development
+
+- Defer the successful HTTP OTA reboot to normal application-loop servicing.
+  The network disconnect callback only publishes an atomic timestamped request;
+  it no longer delays or invokes restart/shutdown while AsyncTCP subscribes the
+  callback task to its watchdog.
+- Keep the existing 500ms delay as a one-shot deadline from the first request.
+  Duplicate callbacks cannot extend it or repeat the reboot. Service committed
+  success before upload-lock and disabled/uninitialized early returns.
+- Cover the actual production callback/service wiring, request/context lifetime,
+  stale/failed/unauthorized owners, disabled OTA, wrap and concurrent handoff with
+  host regressions. Authentication, settings and ArduinoOTA remain unchanged.
+  BLE-active OTA acceptance remains required before deployment qualification.
+
+## 4.10.3 - Unpublished development
+
+- Use Arduino-owned OFF/STA transitions for full WiFi stack recovery instead
+  of mixing native stop/deinit/init calls with Arduino state. This preserves
+  Arduino's runtime `WiFi.useStaticBuffers()` choice and startup buffer policy.
+- Abort a reset attempt if either Arduino mode transition fails; do not report
+  false completion or introduce a new retry loop. Preserve the OTA guard,
+  phased delays, and existing reconnect cadence.
+- Host regressions exercise the production reset in both buffer modes, reject
+  direct native lifecycle calls, and cover failed OFF/STA transitions followed
+  by a separately requested successful reset. Actual TCP/heap recovery and the
+  unrelated SBT panic cause remain hardware investigation questions.
+
+## 4.10.2 - Unpublished development
+
+- Correct the opt-in bounded MQTT transmit timeout to measure five seconds
+  without a positive TCP send. Previously a continuously nonempty FIFO could
+  expire despite regular progress. Enqueue and transient errors do not extend
+  the deadline; successful partial sends do. Keep the fixed 4608-byte queue,
+  per-loop call/time limits, overflow policy and session cleanup unchanged.
+- This stall deadline does not guarantee absolute packet age or MQTT delivery.
+  Host regressions cover continuous progress, later stalls, clock wrap and exact
+  byte order. Real PubSubClient 2.8 characterization confirms that a partial
+  CONNECT is retried during its existing one-second CONNACK wait; sustained
+  pressure can still end that handshake. The field cause of socket pressure and
+  delayed CONNECT/session replacement remains open in issue #89. No hardware
+  acceptance is claimed for this candidate.
+
 ## 4.10.1 - Unpublished development
 
 - Gate the CM Bluetooth controller's first scan/GATT startup on a fresh WiFi
