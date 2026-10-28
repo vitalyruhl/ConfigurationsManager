@@ -14,7 +14,7 @@
     "test": "npm-run-all --parallel mock-server dev"
   },
   "dependencies": {
-    "vue": "^3.5.40"
+    "vue": "^3.5.44"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
