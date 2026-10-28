@@ -1,6 +1,6 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.10.5 (unpublished development)
+> Version 4.10.5
 
 The opt-in `CM_MQTT_BOUNDED_IO=1` transport assembles complete MQTT frames without
 waiting in the application loop, expires partial frames after 30 seconds, and
@@ -44,15 +44,18 @@ no new acquisition/configuration or cleanup retry is admitted. A missing worker
 can acknowledge only an uninitialized, native-IDLE radio without another CM
 owner, using read-only checks. Consumer test profiles may set
 `CM_TEST_RESTART_PHASES=1` for a few UART phase markers; the default is0. The
-coexistence lease stays conservative until restart. This is a controlled
-BLE-active OTA candidate; native SDK calls can still block and require HIL.
+coexistence lease stays conservative until restart. The BLE-active HTTP OTA
+correction has bounded isolated and production acceptance in SBT 1.4.12; native SDK calls can still block. See the
+[acceptance record](docs/acceptance/2026-10-27-http-ota-ble-shutdown.md) for exact
+source identity, observations and limits.
 
 Successful HTTP OTA disconnect callbacks only publish a fixed-size atomic
 reboot request. The application loop services it once after 500ms, before OTA
 maintenance locks or disabled/uninitialized early returns. Duplicate callbacks
 cannot extend that deadline or repeat the reboot. No request/context pointer is
 retained. This keeps restart/shutdown work out of the watchdog-subscribed
-AsyncTCP callback; actual BLE-active OTA acceptance remains a hardware gate.
+AsyncTCP callback. The linked acceptance record covers initialized-BLE
+same-image HTTP OTA on both the isolated fixture and production SBT.
 ArduinoOTA reboot handling, authentication and settings are unchanged.
 
 Full WiFi stack recovery uses Arduino's `WiFi.mode(WIFI_OFF)` and
@@ -64,10 +67,10 @@ reporting completion. Further attempts use the existing reconnect cadence.
 This does not establish the cause of the observed SBT panic or of a TCP outage;
 hardware verification of reconnect and recovered heap remains required.
 
-## Development checkpoint and reproduction limits
+## Historical development checkpoints and reproduction limits
 
-This branch checkpoint is not a Registry release. The independently frozen CM
-4.10.1 package contains 188 files; its manifest SHA256 is
+The earlier branch checkpoints were not Registry releases. The independently
+frozen CM 4.10.1 package contains 188 files; its manifest SHA256 is
 `6c04701572f9d45e10277ea6aa8eefa9763ab98d57bd6d6676ff3308ad1a6fe7`.
 All 188 files matched the checkout before the later documentation-only rollout
 notes. The frozen package and firmware artifacts remain unchanged; this commit's
@@ -79,9 +82,10 @@ retains the separate CM 4.10.0 WiFi-only freeze. Both consumer pins reference
 ignored local packages. Each consumer now preserves its exact original source
 ZIP, SHA256 and manifest under `dependencies/cm/`, with manual verified restore
 instructions. These are source snapshots, not Registry releases. The current CM
-checkout cannot substitute for SIL's historical 4.10.0 package. No firmware
-binaries, tags or Registry release are published by this checkpoint. Repeated MQTT interruptions
-remain open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
+checkout cannot substitute for SIL's historical 4.10.0 package. Those historical
+checkpoints did not publish firmware binaries, tags or a Registry release. The 4.10.5 release includes the later Vue dependency update;
+its regenerated UI is covered by the release CI rather than the earlier device
+observation. Repeated MQTT interruptions remain open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
 the bounded device observations do not establish long-term stability.
 
 ## WiFi power saving
@@ -131,15 +135,17 @@ and stack resets always reapply the lease before normal radio work.
 The saved preference remains unchanged. While the lease is active, requested
 false yields effective MIN with `reason=ble_coexistence`; requested true has
 `reason=requested`. Settings JSON exposes `bleCoexistenceRequired` independently.
-An applied coexistence override is not an apply error. The CM BLE manager does
-not shut down its controller, so pause, disable, disconnect, removed peers or a
-cancelled startup cannot release the lease: MIN remains required until reboot.
+An applied coexistence override is not an apply error. Ordinary CM BLE pause,
+disable, disconnect, removed peers or cancelled startup do not shut down its controller and cannot release the lease: MIN remains
+required until reboot. The explicit terminal restart-shutdown path described
+above also retains the lease conservatively until reboot.
 Do not infer controller shutdown from the Bluetooth Enabled setting. WiFi-only
 applications retain their requested policy, including the default NONE.
 
 The optional CM Bluetooth manager still requires the consumer's NimBLE dependency.
-Actual BLE acquisition/coexistence remains a device acceptance requirement; the
-first-start host tests do not establish RF performance or long-term stability.
+The bounded SBT acceptance records cover real BLE acquisition/coexistence and
+HTTP OTA shutdown; first-start host tests alone do not establish RF performance
+or long-term stability.
 Short WiFi-only measurements do not prove that power saving causes MQTT stalls.
 
 ## Preview Before Installing

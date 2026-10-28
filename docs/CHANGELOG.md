@@ -3,112 +3,41 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
-## 4.10.5 - Unpublished development
+## 4.10.5 - 2026-10-28
 
-- Add optional HTTP-only restart preparation before the loop-owned reboot.
-  A nonblocking consumer hook can wait for terminal resource cleanup; it is
-  preserved across setup/callback registration. Preparation times out after
-  ten seconds and permanently blocks automatic reboot instead of bypassing
-  the safety acknowledgement or retrying cleanup. ArduinoOTA is unchanged.
-- Add terminal worker-owned BLE shutdown: fence generations/commands, stop
-  without object deletion, confirm host/native-IDLE state, then clear objects
-  and reconfirm shutdown. Failed stop never deletes objects; failed cleanup
-  never acknowledges readiness. No worker reinitialization follows the request.
-- Handle absent/failed workers through read-only idle checks, without touching
-  another CM owner's controller. Add optional test-only restart phase markers,
-  disabled by default. No NVS, pin, credential or watchdog policy changes.
-- Host checks cover real worker and HTTP wiring, timeout/wrap, late events,
-  pending configuration, pause/disabled states, no-worker and failed-stop/cleanup
-  boundaries. Real BLE-active HTTP OTA remains a required acceptance gate.
+Development versions 4.9.1, 4.9.2 and 4.10.0 through 4.10.4 are consolidated
+into this release; they were not separate releases.
 
-## 4.10.4 - Unpublished development
-
-- Defer the successful HTTP OTA reboot to normal application-loop servicing.
-  The network disconnect callback only publishes an atomic timestamped request;
-  it no longer delays or invokes restart/shutdown while AsyncTCP subscribes the
-  callback task to its watchdog.
-- Keep the existing 500ms delay as a one-shot deadline from the first request.
-  Duplicate callbacks cannot extend it or repeat the reboot. Service committed
-  success before upload-lock and disabled/uninitialized early returns.
-- Cover the actual production callback/service wiring, request/context lifetime,
-  stale/failed/unauthorized owners, disabled OTA, wrap and concurrent handoff with
-  host regressions. Authentication, settings and ArduinoOTA remain unchanged.
-  BLE-active OTA acceptance remains required before deployment qualification.
-
-## 4.10.3 - Unpublished development
-
-- Use Arduino-owned OFF/STA transitions for full WiFi stack recovery instead
-  of mixing native stop/deinit/init calls with Arduino state. This preserves
-  Arduino's runtime `WiFi.useStaticBuffers()` choice and startup buffer policy.
-- Abort a reset attempt if either Arduino mode transition fails; do not report
-  false completion or introduce a new retry loop. Preserve the OTA guard,
-  phased delays, and existing reconnect cadence.
-- Host regressions exercise the production reset in both buffer modes, reject
-  direct native lifecycle calls, and cover failed OFF/STA transitions followed
-  by a separately requested successful reset. Actual TCP/heap recovery and the
-  unrelated SBT panic cause remain hardware investigation questions.
-
-## 4.10.2 - Unpublished development
-
-- Correct the opt-in bounded MQTT transmit timeout to measure five seconds
-  without a positive TCP send. Previously a continuously nonempty FIFO could
-  expire despite regular progress. Enqueue and transient errors do not extend
-  the deadline; successful partial sends do. Keep the fixed 4608-byte queue,
-  per-loop call/time limits, overflow policy and session cleanup unchanged.
-- This stall deadline does not guarantee absolute packet age or MQTT delivery.
-  Host regressions cover continuous progress, later stalls, clock wrap and exact
-  byte order. Real PubSubClient 2.8 characterization confirms that a partial
-  CONNECT is retried during its existing one-second CONNACK wait; sustained
-  pressure can still end that handshake. The field cause of socket pressure and
-  delayed CONNECT/session replacement remains open in issue #89. No hardware
-  acceptance is claimed for this candidate.
-
-## 4.10.1 - Unpublished development
-
-- Gate the CM Bluetooth controller's first scan/GATT startup on a fresh WiFi
-  coordinator acknowledgment. Apply native MIN_MODEM for ESP32 WiFi/BLE
-  coexistence before NimBLE initialization; settings callbacks and WiFi resets
-  cannot restore NONE while the controller lease remains active.
-- Preserve the saved WiFi power preference and show the effective BLE coexistence
-  override in Settings-only diagnostics. Bluetooth disable/pause does not imply
-  controller shutdown; retain the lease until reboot because CM has no controller
-  deinitialization lifecycle. WiFi-only default-off behavior is unchanged.
-- Add first-start, stale-ACK, native failure, callback/reset and BLE-only startup
-  regressions, including bounded loop-side retry after a transient native error.
-  Hardware confirmed the 4.10.0 native-NONE/controller-start abort;
-  the owner-authorized SBT 1.4.8 rollout subsequently confirmed native MIN_MODEM
-  coexistence and advancing real BMS/Victron samples. This bounded observation
-  does not establish long-term stability or resolve the separate MQTT issue #89.
-
-## 4.10.0 - Unpublished development
-
-- Default WiFi modem power saving to off for mains-powered applications. Expose
-  `CoreWiFiSettings.powerSave` (`WiFiPowerSave`) with an optional
-  `CM_WIFI_POWER_SAVE_DEFAULT=1` fallback. Preserve saved choices across boots,
-  reconnects and WiFi stack resets; do not override the choice when Bluetooth starts.
-- Add the thread-safe, non-persistent `ConfigManager.setWiFiPowerSave(bool)` API.
-  Apply requests from the application loop. Show requested state, actual driver
-  mode and apply/read status in Settings even when Live UI is disabled.
-- BLE coexistence and the cause of observed network stalls remain hardware
-  acceptance questions; the configurable policy does not establish their resolution.
-
-## 4.9.2 - Unpublished development
-
-- Keep pending bytes in a fixed-memory FIFO when the opt-in bounded MQTT transport
-  encounters temporary send pressure or a positive short write. Preserve byte
-  order, bound pending age to five seconds, and discard pending bytes at a session
-  boundary. Definitive socket failures and queue overflow still close the session.
-- Expose separate cumulative counters for send pressure, short writes, transmit
-  expiry, and queue overflow. The default legacy MQTT transport is unchanged.
-
-## 4.9.1 - Unpublished development
-
-- Add an opt-in bounded MQTT transport for numeric IPv4 brokers. Partial frames
-  expire after 30 seconds without blocking the application loop; malformed frames
-  and incomplete writes close the socket before reconnecting.
-- Add the reset reason to ESP System-Info and an optional switch to omit the
-  duplicate uptime from WiFi System-Info. Existing transport and WiFi schema
-  defaults remain compatible.
+- Add an opt-in bounded MQTT transport for numeric IPv4 brokers, with bounded
+  connection/loop work, complete-frame receive handling and a fixed 4608-byte
+  transmit FIFO. Preserve byte order across temporary pressure and short writes;
+  expire transmission only after five seconds without a positive TCP send.
+  The legacy transport remains the default. Add compact transport counters,
+  ESP reset reason and an optional switch to omit duplicate WiFi uptime.
+- Add persisted WiFi power-saving preferences, defaulting to off for WiFi-only
+  applications, a thread-safe runtime override and Settings diagnostics. Before
+  CM starts BLE, require a fresh acknowledgment of native MIN_MODEM coexistence;
+  preserve the saved preference and reapply the effective policy on reconnects
+  and resets. Ordinary BLE pause/disable does not release the controller lease.
+- Recover the WiFi stack through Arduino-owned OFF/STA transitions, preserving
+  the runtime buffer policy and aborting failed transitions without false success.
+- Move successful HTTP OTA restart work out of the AsyncTCP disconnect callback
+  into the application loop. Keep a one-shot 500ms delay and support optional
+  nonblocking reboot preparation. Terminal BLE shutdown runs only in its worker;
+  confirm stopped host/native IDLE before object cleanup and restart. Failure or
+  a ten-second preparation timeout blocks automatic restart. ArduinoOTA,
+  authentication, saved settings and watchdog policy are unchanged.
+- Update Vue and its locked renderer/compiler dependencies to 3.5.44, including
+  compatible locked parser/source-map updates, and regenerate the embedded page
+  ([#86](https://github.com/vitalyruhl/ConfigurationsManager/pull/86)).
+- Validate the HTTP/BLE shutdown correction with focused host regressions and
+  isolated plus production same-image SBT 1.4.12 OTA. Production restarted with
+  SDK reason 3, restored BMS/Victron samples and preserved all 33 settings; the
+  following 900-second observation had no new reboot or offline transition.
+  See the [bounded acceptance record](acceptance/2026-10-27-http-ota-ble-shutdown.md).
+  This is not long-run stability qualification. MQTT reconnect/session replacement
+  remains open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
+  no root cause, thermal explanation or general TCP/heap recovery is claimed.
 
 ## 4.9.0 - 2026-10-23
 
