@@ -174,7 +174,7 @@ struct Config : BaseSetting {
 #include "wifi-power-config.inc"
 };
 #include "wifi-power-setting.inc"
-struct ConfigManagerClass {
+struct PowerSaveTestConfigManager {
   cm::detail::WiFiHealthConfigMailbox wifiHealthConfig;
   ConfigManagerWiFi wifiManager;
   BaseSetting* sleepSetting = nullptr;
@@ -223,7 +223,7 @@ int main() {
   d = driver.getPowerSaveDiagnostics();
   assert(d.readError == 123 && d.effectiveMode == -1); // Never infer ON/OFF after failed readback.
   readError = 0;
-  ConfigManagerClass owner;
+  PowerSaveTestConfigManager owner;
   owner.setWiFiPowerSave(true);
   owner.setWiFiPowerSave(false);
   cm::detail::WiFiHealthConfig update;
@@ -256,7 +256,7 @@ int main() {
   owner.wifiManager.applyPowerSave_();
   assert(owner.wifiManager.getPowerSaveDiagnostics().effectiveMode == (!setting.get() ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE));
   // No registered bundle: build default applies, without creating a setting or touching NVS.
-  ConfigManagerClass minimal;
+  PowerSaveTestConfigManager minimal;
   minimal.initializeWiFiHealthConfig();
   assert(minimal.wifiManager.getPowerSaveDiagnostics().requested == bool(EXPECTED_DEFAULT));
   JsonDocument doc;
@@ -274,7 +274,7 @@ int main() {
   assert(obj["WiFiPowerSave"]["powerSave"]["effectiveMode"] == -1);
   assert(obj["WiFiPowerSave"]["powerSave"]["readError"] == 123);
   // An earlier successful MIN is not an acknowledgment of a new BLE lease.
-  ConfigManagerClass coex;
+  PowerSaveTestConfigManager coex;
   WiFi.mode = WIFI_MODE_STA;
   WiFi.success = true;
   readError = 0;
@@ -312,7 +312,7 @@ int main() {
   assert(coex.isWiFiBleCoexistenceReady());
   // Failed first-start native Set or Get recovers without reconnect, at bounded cadence.
   for (bool failedRead : {false, true}) {
-    ConfigManagerClass recovering;
+    PowerSaveTestConfigManager recovering;
     fakeMillis = UINT32_MAX - 500u;
     nativeSetError = failedRead ? 0 : 124;
     readError = failedRead ? 123 : 0;
@@ -336,7 +336,7 @@ int main() {
     assert(nativeSetCalls == attempts + 1); // Acknowledged state is not continually reapplied.
   }
   // BLE-only safe case: both native calls confirm NOT_INIT and WiFi mode is NULL.
-  ConfigManagerClass bleOnly;
+  PowerSaveTestConfigManager bleOnly;
   nativeSetError = readError = ESP_ERR_WIFI_NOT_INIT;
   WiFi.mode = WIFI_MODE_STA;
   bleOnly.requestWiFiBleCoexistence();

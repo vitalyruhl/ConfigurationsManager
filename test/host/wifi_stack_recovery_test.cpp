@@ -46,7 +46,7 @@ void esp_wifi_deinit() {
 }
 static wifi_init_config_t arduinoBootBufferConfig();
 
-struct FakeWiFi {
+struct StackRecoveryTestWiFi {
   bool staticBuffers = false;
   unsigned modeCalls = 0;
   int failedMode = -1;
@@ -95,15 +95,20 @@ struct ConfigManagerWiFi {
 };
 #include "wifi-stack-recovery.inc"
 
+static void expectResetAdvance(ConfigManagerWiFi& reset, bool expected) {
+  const bool complete = reset.advanceStackReset_();
+  assert(complete == expected);
+}
+
 static void runSuccess(ConfigManagerWiFi& reset) {
   clockMs += 500;
-  assert(!reset.advanceStackReset_());
+  expectResetAdvance(reset, false);
   clockMs += 200;
-  assert(!reset.advanceStackReset_());
+  expectResetAdvance(reset, false);
   clockMs += 200;
-  assert(!reset.advanceStackReset_());
+  expectResetAdvance(reset, false);
   clockMs += 100;
-  assert(reset.advanceStackReset_());
+  expectResetAdvance(reset, true);
   assert(!reset.stackResetInProgress && reset.policyCalls == 1);
 }
 
@@ -139,17 +144,17 @@ static void checkFailure(int failedMode) {
   failed.startStackReset_();
   if (failedMode == WIFI_STA) {
     clockMs += 500;
-    assert(!failed.advanceStackReset_());
+    expectResetAdvance(failed, false);
     clockMs += 200;
-    assert(!failed.advanceStackReset_());
+    expectResetAdvance(failed, false);
     clockMs += 200;
-    assert(!failed.advanceStackReset_());
+    expectResetAdvance(failed, false);
   }
   assert(!failed.stackResetInProgress && failed.stackResetStep == 0);
   assert(!failed.connectAfterStackReset && failed.stackResetStepAtMs == 0);
   const auto attempts = WiFi.modeCalls;
   clockMs += 10000;
-  assert(!failed.advanceStackReset_());
+  expectResetAdvance(failed, false);
   assert(WiFi.modeCalls == attempts && failed.policyCalls == 0);
   WiFi.failedMode = -1;
   failed.startStackReset_();
@@ -171,6 +176,7 @@ int main(int argc, char**) {
   guarded.startStackReset_();
   assert(!guarded.stackResetInProgress && WiFi.modeCalls == 0);
   guarded.stackResetInProgress = true;
-  assert(!guarded.advanceStackReset_() && WiFi.modeCalls == 0);
+  expectResetAdvance(guarded, false);
+  assert(WiFi.modeCalls == 0);
   std::cout << "[MOCKED!] Arduino-owned recovery preserves buffer choice; mode failures never complete; OTA guarded\n";
 }

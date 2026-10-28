@@ -11,6 +11,8 @@
 #include <iostream>
 #include <string>
 
+namespace http_reboot_test {
+
 template <typename... Args>
 void fakeLog(Args...) {}
 #define OTA_LOG(...) fakeLog(__VA_ARGS__)
@@ -71,12 +73,12 @@ struct {
     ++polls;
   }
 } ArduinoOTA;
+constexpr uint32_t OTA_STALE_TIMEOUT_MS = 120000;
 struct ConfigManagerOTA {
   using RebootCallback = std::function<void()>;
   using LogCallback = std::function<void(const char*)>;
   LogCallback logCallback;
   void setCallbacks(RebootCallback, LogCallback);
-  static constexpr uint32_t OTA_STALE_TIMEOUT_MS = 120000;
   std::atomic<bool> otaEnabled{true}, otaInitialized{true}, otaActive{false}, disablePending{false};
   std::atomic<uint32_t> otaLastActivityMs{0}, pendingAbortSession{0};
   cm::detail::OtaLifecycleState lifecycle;
@@ -112,16 +114,19 @@ static std::function<void()> completeSuccess(ConfigManagerOTA& ota) {
   assert(request.sent == 1 && request.disconnected && !request._tempObject);
   return request.disconnected; // Request and success context no longer exist.
 }
+} // namespace http_reboot_test
+
 int main() {
+  using namespace http_reboot_test;
   ConfigManagerOTA ota;
   unsigned reboots = 0;
-  bool insideDisconnect = false;
-  ota.rebootCallback = [&] { assert(!insideDisconnect);++reboots; };
+  std::atomic<bool> insideDisconnect{false};
+  ota.rebootCallback = [&] { assert(!insideDisconnect.load());++reboots; };
   clockMs = 1000;
   auto disconnect = completeSuccess(ota);
-  insideDisconnect = true;
+  insideDisconnect.store(true);
   disconnect();
-  insideDisconnect = false;
+  insideDisconnect.store(false);
   assert(delays == 0 && reboots == 0);
   clockMs = 1400;
   disconnect();
