@@ -24,7 +24,10 @@ foreach ($item in $suites) {
       & (Join-Path $outDir 'bluetooth-manager-epoch.exe') $scenario
       if ($LASTEXITCODE -ne 0) { throw "Host assertions failed: bluetooth-manager-epoch $scenario" }
     }
-    Invoke-HostCheck 'bluetooth-tx9' $source @('-DCM_BLE_TX_MAX_BYTES=9')
+    Invoke-HostCheck 'bluetooth-coexistence' 'bluetooth_coexistence_test.cpp' @('-DCM_ENABLE_WIFI=1', '-I', (Join-Path $repo 'test/host/bluetooth_manager_stubs'))
+    & (Join-Path $outDir 'bluetooth-coexistence.exe') gatt
+    if ($LASTEXITCODE -ne 0) { throw 'Host assertions failed: bluetooth-coexistence GATT' }
+    Invoke-HostCheck 'bluetooth-tx9'  $source @('-DCM_BLE_TX_MAX_BYTES=9')
     Invoke-HostCheck 'bluetooth-memory-tx9' 'bluetooth_memory_test.cpp' @('-DCM_BLE_TX_MAX_BYTES=9')
   }
 }

@@ -9,6 +9,7 @@
 #include "detail/BluetoothCommandFence.h"
 // Explicit consumer dependency: h2zero/NimBLE-Arduino@2.5.1.
 #include <NimBLEDevice.h>
+#include <esp_bt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <atomic>
@@ -19,6 +20,13 @@
 namespace cm {
 // Static lifetime only. Except pause/resume/cancelPendingCommands, public methods run in the application loop.
 class BluetoothManager {
+  enum class RestartShutdown { Idle,
+                               Publishing,
+                               Requested,
+                               Working,
+                               Ready,
+                               Failed };
+
 public:
   using EnabledSetting = detail::BluetoothEnabledSetting<Config<bool>, Preferences>;
   struct Settings {
@@ -63,6 +71,8 @@ public:
       data["workerStackHighWaterBytes"] = highWaterBytes_.load(); }, providerOrder);
   }
   bool begin() {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     if (!cm_)
       return false;
     if (worker_)
@@ -83,6 +93,8 @@ public:
     return true;
   }
   bool configureAdvertisementPeer(const BleAddress& address) {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     if (!valid(address))
       return false;
     desired_.advertisement = address;
@@ -90,6 +102,8 @@ public:
     return !worker_ || queueConfiguration();
   }
   bool configureGattPeer(const BleAddress& address, uint16_t service, uint16_t notify, uint16_t writeUuid) {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     if (!valid(address) || !service || !notify || !writeUuid)
       return false;
     desired_.gatt = address;
@@ -101,10 +115,14 @@ public:
   }
   // Remove only this source; the other peer remains configured.
   bool clearAdvertisementPeer() {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     desired_.hasAdvertisement = false;
     return !worker_ || queueConfiguration();
   }
   bool clearGattPeer() {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     desired_.hasGatt = false;
     return !worker_ || queueConfiguration();
   }
@@ -134,14 +152,38 @@ public:
     detail::BleCommand cmd{};
     return dispatch_.makeCompletion(generation(), cmd) && enqueue(cmd);
   }
+  // Application-loop request; the existing worker alone owns radio stop/cleanup.
+  void requestShutdownForRestart() {
+    auto expected = RestartShutdown::Idle;
+    if (!restartShutdown_.compare_exchange_strong(expected, RestartShutdown::Publishing))
+      return;
+    scheduler_.requestPause(BlePauseReason::Ota);
+    scheduler_.invalidate(); // Fence even when OTA already owns the pause bit.
+    if (!worker_) {
+      const auto owner = owner_.load();
+      const bool idle = (!owner || owner == this) && !radioInitialized_ &&
+                        !NimBLEDevice::isInitialized() && esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
+      restartShutdown_.store(idle ? RestartShutdown::Ready : RestartShutdown::Failed);
+      return;
+    }
+    restartShutdown_.store(RestartShutdown::Requested, std::memory_order_release);
+  }
+  bool isShutdownForRestartComplete() const {
+    return restartShutdown_.load() == RestartShutdown::Ready;
+  }
+  bool isShutdownForRestartFailed() const {
+    return restartShutdown_.load() == RestartShutdown::Failed;
+  }
   void requestPause(BlePauseReason reason) {
     scheduler_.requestPause(reason);
   }
   void requestResume(BlePauseReason reason) {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return;
     scheduler_.requestResume(reason);
   }
   bool isPaused() const {
-    return scheduler_.isPaused();
+    return restartShutdown_.load() != RestartShutdown::Idle || scheduler_.isPaused();
   }
   uint32_t generation() const {
     return scheduler_.generation();
@@ -150,6 +192,8 @@ public:
     handler_ = std::move(handler);
   }
   void loop(uint32_t nowMs) {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return;
     (void)nowMs;
     if (worker_ && dispatch_.enabled() != enabledCached_) {
       enabledCached_ = dispatch_.enabled();
@@ -215,6 +259,8 @@ private:
     return true;
   }
   bool enqueue(const detail::BleCommand& cmd) {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     if (commands_.push(cmd))
       return true;
     overflow_ = true;
@@ -284,9 +330,24 @@ private:
       return;
     emit(BleEventType::Advertisement, reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), epoch, 0, device->getRSSI(), true);
   }
-  void ensureRadio() {
+  bool prepareRadioCoexistence_() {
+#if CM_ENABLE_WIFI
+    if (!coexistenceRequested_) {
+      cm_->requestWiFiBleCoexistence();
+      coexistenceRequested_ = true;
+    }
+    return cm_->isWiFiBleCoexistenceReady();
+#else
+    return true;
+#endif
+  }
+  bool ensureRadio() {
+    if (restartShutdown_.load() != RestartShutdown::Idle)
+      return false;
     if (radioInitialized_)
-      return;
+      return true;
+    if (!prepareRadioCoexistence_())
+      return false;
     NimBLEDevice::init("");
     auto* scanner = NimBLEDevice::getScan();
     scanner->setScanCallbacks(&scanCallbacks_, true);
@@ -299,10 +360,12 @@ private:
       client_->setConnectRetries(0);
     }
     radioInitialized_ = true;
+    return true;
   }
   // Backend operations below are used only by the one worker through BluetoothScheduler.
   void scan() {
-    ensureRadio();
+    if (!ensureRadio())
+      return;
     scanGeneration_ = generation();
     NimBLEDevice::getScan()->start(1000, false, true);
   }
@@ -311,7 +374,8 @@ private:
       NimBLEDevice::getScan()->stop();
   }
   bool connect() {
-    ensureRadio();
+    if (!ensureRadio())
+      return false;
     ++reconnects_;
     linkGeneration_ = generation();
     writeCharacteristic_ = nullptr;
@@ -344,12 +408,65 @@ private:
   bool write(const uint8_t* data, size_t size) {
     return detail::writeCharacteristic(writeCharacteristic_, data, size);
   }
+  bool serviceRestartShutdown_() {
+    auto state = restartShutdown_.load(std::memory_order_acquire);
+    if (state == RestartShutdown::Idle)
+      return false;
+    if (state != RestartShutdown::Requested ||
+        !restartShutdown_.compare_exchange_strong(state, RestartShutdown::Working))
+      return true;
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE BLE_SHUTDOWN_BEGIN ms=%lu\n", static_cast<unsigned long>(millis()));
+#endif
+    scheduler_.cancel();
+    commands_.clear();
+    events_.clear();
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE BLE_CANCEL_DONE ms=%lu\n", static_cast<unsigned long>(millis()));
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE BLE_STOP_BEGIN ms=%lu\n", static_cast<unsigned long>(millis()));
+#endif
+    // Stop without deleting objects: failed host/controller shutdown must retain them.
+    const bool stopped = !radioInitialized_ || NimBLEDevice::deinit(false);
+    const bool hostStopped = !NimBLEDevice::isInitialized();
+    const auto native = esp_bt_controller_get_status();
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE BLE_STOP_END ms=%lu ok=%d host=%d native=%d\n", static_cast<unsigned long>(millis()), stopped, hostStopped, static_cast<int>(native));
+#endif
+    bool complete = stopped && hostStopped && native == ESP_BT_CONTROLLER_STATUS_IDLE;
+    if (complete && radioInitialized_) {
+#if CM_TEST_RESTART_PHASES
+      Serial.printf("[I] [MOCKED!] RESTART_PHASE BLE_CLEANUP_BEGIN ms=%lu\n", static_cast<unsigned long>(millis()));
+#endif
+      // clearAll is safe only after the native controller and host are confirmed stopped.
+      complete = NimBLEDevice::deinit(true);
+      client_ = nullptr;
+      writeCharacteristic_ = nullptr;
+      complete = complete && !NimBLEDevice::isInitialized() &&
+                 esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
+    }
+    if (complete) {
+      radioInitialized_ = false;
+      radioConnected_ = false;
+    } else {
+      lastError_ = -1006;
+    }
+    restartShutdown_.store(complete ? RestartShutdown::Ready : RestartShutdown::Failed, std::memory_order_release);
+#if CM_TEST_RESTART_PHASES
+    Serial.printf("[I] [MOCKED!] RESTART_PHASE BLE_SHUTDOWN_RESULT ms=%lu ack=%d\n", static_cast<unsigned long>(millis()), complete);
+#endif
+    return true;
+  }
   static void workerEntry(void* value) {
     static_cast<BluetoothManager*>(value)->run();
   }
   void run() {
     uint32_t observed = generation();
     for (;;) {
+      // Must precede every paused/disabled/configuration branch. Terminal means no reinit.
+      if (serviceRestartShutdown_()) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        continue;
+      }
       uint32_t now = millis();
       if (overflow_.load()) {
         scheduler_.invalidate();
@@ -374,6 +491,13 @@ private:
         workerConfig_ = config;
       };
       dispatch_.dispatchConfiguration(scheduler_, now, applyConfiguration);
+      // Do not consume radio commands or let the scheduler start scanning until
+      // the application loop has acknowledged this controller's WiFi policy.
+      if (!radioInitialized_ && workerConfig_.enabled &&
+          (workerConfig_.hasAdvertisement || workerConfig_.hasGatt) && !prepareRadioCoexistence_()) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        continue;
+      }
       detail::BleCommand cmd{};
       for (size_t i = 0; i < 8 && !dispatch_.configurationPending() && commands_.pop(cmd); ++i) {
         if (cmd.generation != generation() || dispatch_.configurationPending())
@@ -431,6 +555,10 @@ private:
   TaskHandle_t worker_ = nullptr;
   std::function<void(const BleEvent&)> handler_;
   bool enabledCached_ = false, runtimeRegistered_ = false, radioInitialized_ = false;
+#if CM_ENABLE_WIFI
+  bool coexistenceRequested_ = false; // Worker-owned; never released without controller deinit.
+#endif
+  std::atomic<RestartShutdown> restartShutdown_{RestartShutdown::Idle};
   std::atomic<bool> overflow_{false}, radioConnected_{false};
   std::atomic<uint32_t> scanGeneration_{0}, linkGeneration_{0}, lateEvents_{0}, oversized_{0}, reconnects_{0}, highWaterBytes_{0};
   std::atomic<int> lastError_{0};

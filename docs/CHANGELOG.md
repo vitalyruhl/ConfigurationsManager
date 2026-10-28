@@ -3,14 +3,41 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
-## 4.9.1 - Unpublished development
+## 4.10.5 - 2026-10-28
 
-- Add an opt-in bounded MQTT transport for numeric IPv4 brokers. Partial frames
-  expire after 30 seconds without blocking the application loop; malformed frames
-  and incomplete writes close the socket before reconnecting.
-- Add the reset reason to ESP System-Info and an optional switch to omit the
-  duplicate uptime from WiFi System-Info. Existing transport and WiFi schema
-  defaults remain compatible.
+Development versions 4.9.1, 4.9.2 and 4.10.0 through 4.10.4 are consolidated
+into this release; they were not separate releases.
+
+- Add an opt-in bounded MQTT transport for numeric IPv4 brokers, with bounded
+  connection/loop work, complete-frame receive handling and a fixed 4608-byte
+  transmit FIFO. Preserve byte order across temporary pressure and short writes;
+  expire transmission only after five seconds without a positive TCP send.
+  The legacy transport remains the default. Add compact transport counters,
+  ESP reset reason and an optional switch to omit duplicate WiFi uptime.
+- Add persisted WiFi power-saving preferences, defaulting to off for WiFi-only
+  applications, a thread-safe runtime override and Settings diagnostics. Before
+  CM starts BLE, require a fresh acknowledgment of native MIN_MODEM coexistence;
+  preserve the saved preference and reapply the effective policy on reconnects
+  and resets. Ordinary BLE pause/disable does not release the controller lease.
+- Recover the WiFi stack through Arduino-owned OFF/STA transitions, preserving
+  the runtime buffer policy and aborting failed transitions without false success.
+- Move successful HTTP OTA restart work out of the AsyncTCP disconnect callback
+  into the application loop. Keep a one-shot 500ms delay and support optional
+  nonblocking reboot preparation. Terminal BLE shutdown runs only in its worker;
+  confirm stopped host/native IDLE before object cleanup and restart. Failure or
+  a ten-second preparation timeout blocks automatic restart. ArduinoOTA,
+  authentication, saved settings and watchdog policy are unchanged.
+- Update Vue and its locked renderer/compiler dependencies to 3.5.44, including
+  compatible locked parser/source-map updates, and regenerate the embedded page
+  ([#86](https://github.com/vitalyruhl/ConfigurationsManager/pull/86)).
+- Validate the HTTP/BLE shutdown correction with focused host regressions and
+  isolated plus production same-image SBT 1.4.12 OTA. Production restarted with
+  SDK reason 3, restored BMS/Victron samples and preserved all 33 settings; the
+  following 900-second observation had no new reboot or offline transition.
+  See the [bounded acceptance record](acceptance/2026-10-27-http-ota-ble-shutdown.md).
+  This is not long-run stability qualification. MQTT reconnect/session replacement
+  remains open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
+  no root cause, thermal explanation or general TCP/heap recovery is claimed.
 
 ## 4.9.0 - 2026-10-23
 

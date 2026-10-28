@@ -60,7 +60,7 @@ public:
 #include "runtime/detail/RuntimeMessage.h"
 #endif
 
-#define CONFIGMANAGER_VERSION "4.9.1" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.10.5" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1833,16 +1833,29 @@ private:
     if (setting && setting->getType() == SettingType::STRING) {
       wifiManager.setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
     }
+    setting = findSettingByKeyHint("WiFi", "WiFiPowerSave");
+    if (setting && setting->getType() == SettingType::BOOL)
+      wifiManager.setPowerSave(static_cast<Config<bool>*>(setting)->get());
+    // loadAll() queued stored values; a later explicit request may supersede them.
+    applyWiFiHealthConfig();
   }
 
   void applyWiFiHealthConfig() {
+    // A failed first-start acknowledgment retries at most once per second here,
+    // never from the BLE worker and never in a tight driver-call loop.
+    wifiManager.retryBleCoexistence();
     cm::detail::WiFiHealthConfig update;
     if (!wifiHealthConfig.take(update))
       return;
+    // Pin coexistence before applying a simultaneous user request for NONE.
+    if (update.bleCoexistenceRequired)
+      wifiManager.requireBleCoexistence();
     if (update.timeoutChanged)
       wifiManager.setAutoRebootTimeout(update.timeoutMinutes);
     if (update.targetChanged)
       wifiManager.setConnectivityCheckTarget(String(update.target.data()));
+    if (update.powerSaveChanged)
+      wifiManager.setPowerSave(update.powerSave);
   }
 
   void queueWiFiHealthSetting(BaseSetting* setting) {
@@ -1853,11 +1866,14 @@ private:
       setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes)));
     } else if (setting == findSettingByKeyHint("WiFi", "WiFiProbe") && setting->getType() == SettingType::STRING) {
       setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
+    } else if (setting == findSettingByKeyHint("WiFi", "WiFiPowerSave") && setting->getType() == SettingType::BOOL) {
+      setWiFiPowerSave(static_cast<Config<bool>*>(setting)->get());
     }
   }
   void queueWiFiHealthSettings() {
     queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiRb"));
     queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiProbe"));
+    queueWiFiHealthSetting(findSettingByKeyHint("WiFi", "WiFiPowerSave"));
   }
 #endif
   ConfigManagerWeb webManager;
@@ -2881,6 +2897,21 @@ public:
     if (!cm::detail::isConnectivityTarget(target.c_str()))
       return false;
     return wifiHealthConfig.setTarget(target.c_str());
+  }
+
+  // Thread-safe BLE startup handshake. No controller shutdown exists, so the
+  // lease is monotone until reboot; settings, pause and disconnect cannot release it.
+  void requestWiFiBleCoexistence() {
+    wifiHealthConfig.requireBleCoexistence();
+  }
+  bool isWiFiBleCoexistenceReady() const {
+    return wifiManager.isBleCoexistenceReady();
+  }
+
+  // Thread-safe, non-persistent request. Last queued request wins at the next loop.
+  // To persist a choice, save the registered CoreWiFiSettings.powerSave setting.
+  void setWiFiPowerSave(bool enabled) {
+    wifiHealthConfig.setPowerSave(enabled);
   }
 
   bool setWiFiAutoRebootTimeout(uint32_t minutes) {

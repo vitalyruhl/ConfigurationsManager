@@ -1,4 +1,4 @@
-param([string]$PubSubSource = '')
+param([string]$PubSubSource = '', [switch]$RecoveryContract)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $outDir = [IO.Path]::GetFullPath((Join-Path $repo ('.local/mqtt-bounded-io-host-' + [guid]::NewGuid().ToString('N'))))
@@ -27,7 +27,7 @@ $upstreamObject = Join-Path $outDir 'PubSubClient.o'
 if ($LASTEXITCODE -ne 0) { throw 'Upstream PubSubClient host compile failed.' }
 & $compiler -std=c++17 -Wall -Wextra -Werror -DESP32 -I (Join-Path $repo 'test/host/mqtt_stubs') -I (Join-Path $repo 'src') -I $PubSubSource (Join-Path $repo 'test/host/mqtt_pubsub_integration_test.cpp') $upstreamObject -o $integrationExe
 if ($LASTEXITCODE -ne 0) { throw 'PubSubClient bounded transport integration compile failed.' }
-& $integrationExe
+if ($RecoveryContract) { & $integrationExe --recovery-contract } else { & $integrationExe }
 if ($LASTEXITCODE -ne 0) { throw 'PubSubClient bounded transport integration assertions failed.' }
 } finally {
     $resolvedOutput = (Resolve-Path -LiteralPath $outDir).Path

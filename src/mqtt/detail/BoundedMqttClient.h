@@ -19,10 +19,17 @@ public:
   static constexpr uint16_t PumpByteBudget = 256;
   static constexpr uint32_t PumpTimeBudgetUs = 1000;
   static constexpr uint32_t FrameLifetimeMs = 30000;
+  static constexpr uint16_t TxCapacity = 2 * MaxFrameBytes;
+  // No positive TCP send for five seconds expires pending bytes. This is not a
+  // packet-age or broker-delivery deadline; enqueue and transient errors do not renew it.
+  static constexpr uint32_t TxLifetimeMs = 5000;
+  static constexpr uint16_t TxCallBudget = 64;
+  static constexpr uint32_t TxTimeBudgetUs = 1000;
 
   void beginLoop() {
     budget_ = PumpByteBudget;
     timeBudgetUs_ = PumpTimeBudgetUs;
+    beginTxBudget_();
   }
 
   void setFrameCapacity(uint16_t bytes) {
@@ -61,6 +68,7 @@ public:
   }
 
   void pump() {
+    pumpTx_();
     const uint32_t startedUs = micros();
     pump_(startedUs);
     const uint32_t elapsed = static_cast<uint32_t>(micros() - startedUs);
@@ -119,8 +127,13 @@ public:
     // PubSubClient waits synchronously here (socket timeout: 1 second), so no
     // outer CM loop can replenish the budget for a delayed/fragmented CONNACK.
     // Only this four-byte handshake frame may replenish its per-poll budget.
-    if (awaitingConnack_)
-      beginLoop();
+    if (awaitingConnack_) {
+      budget_ = PumpByteBudget;
+      timeBudgetUs_ = PumpTimeBudgetUs;
+      // TX retries share one real-time epoch; polling cannot manufacture budget.
+      if (static_cast<uint32_t>(micros() - txEpochUs_) >= TxTimeBudgetUs)
+        beginTxBudget_();
+    }
     pump();
     return ready_ ? used_ - cursor_ : 0;
   }
@@ -151,19 +164,35 @@ public:
   size_t write(const uint8_t* bytes, size_t count) override {
     if (!count)
       return 0;
-    const int fd = socket_.fd();
-    const int sent = fd < 0 ? -1 : ::send(fd, bytes, count, MSG_DONTWAIT);
-    if (sent < 0 || static_cast<size_t>(sent) != count) {
+    if (!bytes || socket_.fd() < 0)
+      return 0;
+    pumpTx_();
+    if (socket_.fd() < 0)
+      return 0;
+    if (count > static_cast<size_t>(TxCapacity - txUsed_)) {
+      ++stats_.txOverflows;
       reject_(stats_.txFailures);
       return 0;
     }
-    return count;
+    if (!txUsed_)
+      txProgressMs_ = millis();
+    const uint16_t tail = static_cast<uint16_t>((txHead_ + txUsed_) % TxCapacity);
+    const size_t first = std::min<size_t>(count, TxCapacity - tail);
+    std::memcpy(tx_ + tail, bytes, first);
+    std::memcpy(tx_, bytes + first, count - first);
+    txUsed_ += static_cast<uint16_t>(count);
+    pumpTx_();
+    // Success means ownership of the complete chunk, not a broker acknowledgement.
+    return socket_.fd() >= 0 ? count : 0;
   }
   // PubSubClient calls flush() before stop(); never wait for pending TCP data.
   void flush() override {}
   void stop() override {
     socket_.stop();
     clearFrame_();
+    txUsed_ = txHead_ = 0;
+    txProgressMs_ = 0;
+    txBlocked_ = false;
     awaitingConnack_ = false;
   }
   uint8_t connected() override {
@@ -176,6 +205,14 @@ public:
 private:
   WiFiClient socket_;
   uint8_t frame_[MaxFrameBytes]{};
+  uint8_t tx_[TxCapacity]{};
+  uint16_t txHead_ = 0;
+  uint16_t txUsed_ = 0;
+  uint16_t txCallsLeft_ = TxCallBudget;
+  uint32_t txTimeLeftUs_ = TxTimeBudgetUs;
+  uint32_t txEpochUs_ = 0;
+  uint32_t txProgressMs_ = 0;
+  bool txBlocked_ = false;
   MqttBoundedIoStats stats_;
   uint32_t startedMs_ = 0;
   uint32_t remaining_ = 0;
@@ -188,6 +225,55 @@ private:
   uint8_t headerBytes_ = 0;
   bool ready_ = false;
   bool awaitingConnack_ = false;
+
+  void beginTxBudget_() {
+    txCallsLeft_ = TxCallBudget;
+    txTimeLeftUs_ = TxTimeBudgetUs;
+    txEpochUs_ = micros();
+    txBlocked_ = false;
+  }
+
+  bool expireTx_() {
+    if (txUsed_ && static_cast<uint32_t>(millis() - txProgressMs_) >= TxLifetimeMs) {
+      ++stats_.txTimeouts;
+      reject_(stats_.txFailures);
+      return true;
+    }
+    return false;
+  }
+
+  void pumpTx_() {
+    if (expireTx_() || !txUsed_ || txBlocked_)
+      return;
+    const uint32_t startedUs = micros();
+    while (txUsed_ && txCallsLeft_ && static_cast<uint32_t>(micros() - startedUs) < txTimeLeftUs_) {
+      if (expireTx_())
+        break;
+      const uint16_t count = std::min<uint16_t>(txUsed_, TxCapacity - txHead_);
+      --txCallsLeft_;
+      const int sent = ::send(socket_.fd(), tx_ + txHead_, count, MSG_DONTWAIT);
+      if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+        ++stats_.txBackpressure;
+        txBlocked_ = true;
+        break;
+      }
+      if (sent <= 0 || sent > count) {
+        reject_(stats_.txFailures);
+        break;
+      }
+      if (sent < count)
+        ++stats_.txPartialWrites;
+      txHead_ = static_cast<uint16_t>((txHead_ + sent) % TxCapacity);
+      txUsed_ -= static_cast<uint16_t>(sent);
+      txProgressMs_ = millis();
+      if (!txUsed_) {
+        txHead_ = 0;
+        txProgressMs_ = 0;
+      }
+    }
+    const uint32_t elapsed = static_cast<uint32_t>(micros() - startedUs);
+    txTimeLeftUs_ = elapsed >= txTimeLeftUs_ ? 0 : txTimeLeftUs_ - elapsed;
+  }
 
   void clearFrame_() {
     used_ = cursor_ = total_ = 0;

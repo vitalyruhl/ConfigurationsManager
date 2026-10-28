@@ -93,6 +93,74 @@ ConfigManagerWiFi::ConfigManagerWiFi()
       connectAttempts(0), lastNoSsidScanMillis(0), noSsidScanStartMillis(0), transientStatusActive(false), transientStatusCode(WL_IDLE_STATUS), transientStatusStartedMillis(0), transientStatusLastLogMillis(0), roamingReconnectPending(false), roamingReconnectAtMs(0), roamingTargetBSSID(""), stackResetInProgress(false), connectAfterStackReset(false), stackResetStep(0), stackResetStepAtMs(0) {
 }
 
+void ConfigManagerWiFi::setPowerSave(bool enabled) {
+  {
+    std::lock_guard<std::mutex> lock(powerSaveMutex_);
+    powerSaveDiagnostics_.requested = enabled;
+    powerSaveDiagnostics_.applyAttempted = false;
+    powerSaveDiagnostics_.applySucceeded = false;
+    powerSaveDiagnostics_.applyError = ESP_ERR_INVALID_STATE;
+  }
+  if (!stackResetInProgress && (WiFi.getMode() & WIFI_MODE_STA))
+    applyPowerSave_();
+}
+
+void ConfigManagerWiFi::requireBleCoexistence() {
+  bleCoexistenceReady_ = false;
+  {
+    std::lock_guard<std::mutex> lock(powerSaveMutex_);
+    powerSaveDiagnostics_.bleCoexistenceRequired = true;
+  }
+  // Even an unchanged MIN request requires a fresh native acknowledgment for
+  // this lease. A reset in progress will acknowledge from its final apply step.
+  if (!stackResetInProgress)
+    applyPowerSave_();
+}
+
+void ConfigManagerWiFi::retryBleCoexistence() {
+  if (stackResetInProgress || bleCoexistenceReady_.load())
+    return;
+  {
+    std::lock_guard<std::mutex> lock(powerSaveMutex_);
+    if (!powerSaveDiagnostics_.bleCoexistenceRequired)
+      return;
+  }
+  if (uint32_t(millis() - bleCoexistenceAttemptMs_) >= 1000u)
+    applyPowerSave_();
+}
+
+void ConfigManagerWiFi::applyPowerSave_() {
+  std::lock_guard<std::mutex> lock(powerSaveMutex_);
+  powerSaveDiagnostics_.applyAttempted = true;
+  const wifi_ps_type_t target = (powerSaveDiagnostics_.requested || powerSaveDiagnostics_.bleCoexistenceRequired) ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE;
+  // Arduino caches the request and skips the SDK call when it is unchanged.
+  // A native stack reset can reset PS without resetting that cache. Synchronize
+  // Arduino, then always apply natively; its boolean return is not an error code.
+  WiFi.setSleep(target);
+  powerSaveDiagnostics_.applyError = esp_wifi_set_ps(target);
+  powerSaveDiagnostics_.applySucceeded = powerSaveDiagnostics_.applyError == ESP_OK;
+  if (powerSaveDiagnostics_.bleCoexistenceRequired) {
+    bleCoexistenceAttemptMs_ = millis();
+    wifi_ps_type_t nativeMode = WIFI_PS_NONE;
+    const esp_err_t readError = esp_wifi_get_ps(&nativeMode);
+    const bool confirmed = powerSaveDiagnostics_.applySucceeded && readError == ESP_OK && nativeMode == WIFI_PS_MIN_MODEM;
+    // BLE-only startup is safe when WiFi is genuinely uninitialized. Its Arduino
+    // cache is already MIN, and every later CM station start reapplies the lease.
+    const bool wifiAbsent = powerSaveDiagnostics_.applyError == ESP_ERR_WIFI_NOT_INIT &&
+                            readError == ESP_ERR_WIFI_NOT_INIT && WiFi.getMode() == WIFI_MODE_NULL;
+    bleCoexistenceReady_ = confirmed || wifiAbsent;
+  }
+}
+
+WiFiPowerSaveDiagnostics ConfigManagerWiFi::getPowerSaveDiagnostics() const {
+  std::lock_guard<std::mutex> lock(powerSaveMutex_);
+  WiFiPowerSaveDiagnostics snapshot = powerSaveDiagnostics_;
+  wifi_ps_type_t mode = WIFI_PS_NONE;
+  snapshot.readError = esp_wifi_get_ps(&mode);
+  snapshot.effectiveMode = snapshot.readError == ESP_OK ? static_cast<int>(mode) : -1;
+  return snapshot;
+}
+
 void ConfigManagerWiFi::begin(unsigned long reconnectIntervalMs, unsigned long autoRebootTimeoutMin) {
   const esp_reset_reason_t rr = esp_reset_reason();
   WIFI_LOG_VERBOSE("Reset reason: %s (%d)", resetReasonToStr(rr), static_cast<int>(rr));
@@ -273,9 +341,16 @@ void ConfigManagerWiFi::startStackReset_() {
     return;
   }
 
+  bleCoexistenceReady_ = false;
   WIFI_LOG("Performing complete WiFi stack reset for connectivity fix...");
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+  WiFi.disconnect(false);
+  if (!WiFi.mode(WIFI_OFF)) {
+    WIFI_LOG("[E] WiFi shutdown failed");
+    stackResetStep = 0;
+    stackResetStepAtMs = 0;
+    connectAfterStackReset = false;
+    return;
+  }
   stackResetInProgress = true;
   stackResetStep = 1;
   stackResetStepAtMs = millis() + 500UL;
@@ -296,26 +371,29 @@ bool ConfigManagerWiFi::advanceStackReset_() {
 
   switch (stackResetStep) {
     case 1:
-      esp_wifi_stop();
-      esp_wifi_deinit();
+      // Arduino owns driver shutdown and initialization, including its buffer policy.
       stackResetStep = 2;
       stackResetStepAtMs = now + 200UL;
       return false;
-    case 2: {
-      wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-      esp_wifi_init(&cfg);
+    case 2:
       stackResetStep = 3;
       stackResetStepAtMs = now + 200UL;
       return false;
-    }
     case 3:
-      WiFi.mode(WIFI_STA);
+      if (!WiFi.mode(WIFI_STA)) {
+        WIFI_LOG("[E] WiFi initialization failed");
+        stackResetInProgress = false;
+        stackResetStep = 0;
+        stackResetStepAtMs = 0;
+        connectAfterStackReset = false;
+        return false;
+      }
       stackResetStep = 4;
       stackResetStepAtMs = now + 100UL;
       return false;
     case 4:
       // Set additional WiFi parameters for stability
-      WiFi.setSleep(WIFI_PS_MIN_MODEM);    // Required for WiFi/Bluetooth coexistence
+      applyPowerSave_();
       WiFi.setAutoReconnect(true);         // Enable auto-reconnect
       WiFi.persistent(true);               // Store WiFi configuration in flash
       WiFi.setTxPower(WIFI_POWER_19_5dBm); // Set specific power level
@@ -907,7 +985,7 @@ void ConfigManagerWiFi::attemptConnect() {
   if (phase == 0) {
     WIFI_LOG_VERBOSE("Attempt 1: normal connect (no stack reset)");
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(WIFI_PS_MIN_MODEM); // Required even if Bluetooth starts later.
+    applyPowerSave_();
     WiFi.setAutoReconnect(true);
     WiFi.persistent(true);
   } else if (phase == 1) {
@@ -941,7 +1019,7 @@ void ConfigManagerWiFi::attemptConnect() {
     } else {
       // Ensure WiFi is in a sane STA config before calling begin() again.
       WiFi.mode(WIFI_STA);
-      WiFi.setSleep(WIFI_PS_MIN_MODEM); // Required even if Bluetooth starts later.
+      applyPowerSave_();
       WiFi.setAutoReconnect(true);
       WiFi.persistent(true);
     }

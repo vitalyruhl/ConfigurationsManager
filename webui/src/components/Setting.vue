@@ -108,12 +108,14 @@
         </button>
       </div>
     </div>
+    <p v-if="powerSaveStatus" class="wifi-power-status" role="status">{{ powerSaveStatus }}</p>
   </div>
 </template>
 
 <style scoped>
 .setting{margin:15px 0;padding:15px;background:var(--cm-card-bg);border:1px solid var(--cm-card-border);border-radius:5px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;color:var(--cm-fg)}.bool-setting{flex-direction:row;align-items:center;justify-content:space-between;gap:1.25rem;max-width:520px}.bool-setting .bool-label{font-weight:600;padding-right:2rem}label{font-weight:600;min-width:70px}.input-area{flex:2;display:flex;align-items:center;gap:.75rem}.input-area input[type=text],.input-area input[type=number],.input-area input[type=password]{flex:1}.pwd-toggle{background:var(--cm-bg);border:1px solid var(--cm-card-border);border-radius:4px;padding:0.4rem 0.6rem;cursor:pointer;font-size:1rem;transition:background-color 0.2s;flex-shrink:0;color:var(--cm-fg)}.pwd-toggle:hover{background:var(--cm-card-bg)}.pwd-toggle:active{background:var(--cm-bg)}.actions{display:flex;flex-direction:column;gap:5px;width:100%}.actions button{padding:8px 16px;font-size:14px;border:none;border-radius:4px;cursor:pointer;transition:.3s;width:100%;margin-bottom:5px;box-shadow:0 1px 3px rgba(0,0,0,.12)}.apply-btn{background:#3498db;color:#fff}.save-btn{background:#27ae60;color:#fff}.bool-actions{width:auto;align-items:flex-end}.bool-actions button{width:auto;margin-bottom:0}input,select{width:100%;padding:8px;border:1px solid var(--cm-card-border);border-radius:4px;font-size:14px;box-sizing:border-box;background:var(--cm-bg);color:var(--cm-fg)}
 
+.wifi-power-status{font-size:.875rem;margin:0 0 1rem;color:var(--cm-fg)}
 .connectivity-target{display:flex;flex:1;flex-direction:column;gap:.35rem}
 .connectivity-target input{width:100%}
 .connectivity-target input[aria-invalid=true]{border-color:#c0392b}
@@ -193,6 +195,7 @@ input:checked + .slider:before {
 
 <script setup>
 import { computed, ref, watch, inject } from 'vue';
+import { formatWiFiPowerSaveStatus } from '../wifiPowerSave.mjs';
 import { isConnectivityTargetSetting, isConnectivityTargetValue } from '../connectivityTarget.mjs';
 
 const props = defineProps({
@@ -202,6 +205,8 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
 });
+
+const powerSaveStatus = computed(() => formatWiFiPowerSaveStatus(props.settingData.powerSave));
 
 const emit = defineEmits(['apply', 'save']);
 
