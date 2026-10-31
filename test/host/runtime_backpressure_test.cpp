@@ -1,4 +1,4 @@
-// [MOCKED!] ACK-stalled public WebSocket shell; snapshot and push production bodies are real.
+// [MOCKED!] Queue-stalled public WebSocket shell; snapshot and push production bodies are real.
 #include <ArduinoJson.h>
 #include <cassert>
 #include <functional>
@@ -14,13 +14,7 @@
 #include "runtime/detail/RuntimeSnapshot.h"
 #include "runtime/detail/RuntimeMessage.h"
 namespace {
-struct Socket {
-  std::map<uint32_t, AsyncWebSocketClient> clients;
-  AsyncWebSocketClient* client(uint32_t id) {
-    auto i = clients.find(id);
-    return i == clients.end() ? nullptr : &i->second;
-  }
-};
+struct Socket : AsyncWebSocket {};
 static unsigned long millis() {
   return 100;
 }
@@ -94,7 +88,7 @@ static void stalledRuntime() {
   for (unsigned i = 0; i < 10000; ++i)
     h.pushRuntimeSnapshot();
   assert(h.runtimeManager.builds == 1 && h.socket.clients[1].queue.size() == 1);
-  h.socket.clients[1].queue.clear(); // Actual peer finally ACKs / transport releases message.
+  h.socket.clients[1].queue.clear(); // Transport finally releases its stalled message.
   assert(h.pushRuntimeSnapshot());
   assert(h.runtimeManager.builds == 2 && h.socket.clients[1].queue.size() == 1);
   std::cout << "Runtime backpressure: 10000 stalled ticks keep one message; fresh snapshot after release PASS\n";
@@ -128,53 +122,52 @@ static void customAndSelected() {
 static void lifetimeAndReject() {
   auto state = std::make_shared<cm::RuntimeDeliveryState>();
   std::weak_ptr<cm::RuntimeDeliveryState> weak = state;
-  AsyncWebSocketClient client;
+  AsyncWebSocket socket;
+  auto& client = socket.clients[1];
   {
     cm::RuntimeDeliveryReservation token(state);
     assert(token);
-    assert(cm::sendRuntimeMessage(&client, String("payload"), std::move(token)));
+    assert(cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
   }
   assert(state->busy.load());
-  AsyncWebSocketBasicMessage::onPayloadFree = [&] { assert(state->busy.load()); };
-  client.queue.clear(); // Token is released AFTER the copied payload is freed.
-  AsyncWebSocketBasicMessage::onPayloadFree = {};
+  AsyncWebSocketClient::beforeBufferRelease = [&] { assert(state->busy.load()); };
+  client.queue.clear(); // The slot stays reserved until transport buffer release.
+  AsyncWebSocketClient::beforeBufferRelease = {};
   assert(!state->busy.load());
   {
     cm::RuntimeDeliveryReservation token(state);
     client.rejectOnMessage = true;
-    cm::sendRuntimeMessage(&client, String("payload"), std::move(token));
+    assert(!cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
     assert(!state->busy.load());
   }
   client.rejectOnMessage = false;
   {
-    cm::RuntimeDeliveryReservation token(state);
-    AsyncWebSocketBasicMessage::failPayload = true;
-    assert(!cm::sendRuntimeMessage(&client, String("payload"), std::move(token)));
-    AsyncWebSocketBasicMessage::failPayload = false;
+    cm::RuntimeDeliveryReservation token(std::shared_ptr<cm::RuntimeDeliveryState>{});
+    assert(!cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
     assert(!state->busy.load());
   }
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(!cm::sendRuntimeMessage(nullptr, String("payload"), std::move(token)));
+    assert(!cm::sendRuntimeMessage(socket, 999, String("payload"), std::move(token)));
   }
   assert(!state->busy.load());
   for (unsigned i = 0; i < 32; ++i)
     client.queue.emplace_back(new AsyncWebSocketMessage);
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(!cm::sendRuntimeMessage(&client, String("payload"), std::move(token)));
+    assert(!cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
     assert(client.queue.size() == 32);
   }
   assert(!state->busy.load());
   client.queue.clear();
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(!cm::sendRuntimeMessage(&client, String(), std::move(token)));
+    assert(!cm::sendRuntimeMessage(socket, 1, String(), std::move(token)));
   }
   assert(!state->busy.load());
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(cm::sendRuntimeMessage(&client, String("payload"), std::move(token)));
+    assert(cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
   }
   state.reset(); // Subscription state disappears before transport destruction.
   assert(!weak.expired());
@@ -337,6 +330,19 @@ static void generationReleasedAtTransport() {
   assert(h.pushRuntimeSnapshot());
   AsyncWebSocketClient::onMessage = [] { assert(TrackedDocument::ownAlive == 0); };
 }
+
+static void releaseBeforeNetworkAck() {
+  Harness h;
+  assert(h.wsSubscriptions.connect(1, "", 0));
+  h.socket.clients[1];
+  assert(h.pushRuntimeSnapshot());
+  assert(h.socket.clients[1].queue.front()->send(nullptr) > 0);
+  assert(h.socket.clients[1].queue.front()->finished());
+  h.socket.clients[1].queue.clear(); // TCP has copied bytes; no network ACK was supplied.
+  assert(!h.wsSubscriptions.clients[0].delivery->busy.load());
+  assert(h.pushRuntimeSnapshot() && h.runtimeManager.builds == 2);
+  assert(h.socket.clients[1].queue.size() == 1);
+}
 } // namespace
 
 int main() {
@@ -350,6 +356,8 @@ int main() {
   singleSelectionEquivalent();
   generationConcurrency();
   generationReleasedAtTransport();
+  releaseBeforeNetworkAck();
+  std::cout << "Transport-copy release permits a next snapshot before network ACK PASS\n";
   std::cout << "Generation: document lifetime/SDK unlock, HTTP wait/WS skip, recursive custom, direct selection equivalence PASS\n";
-  std::cout << "Runtime delivery: selected/custom/events, ACK/free, reject/failure, shared lifetime/reentrant+atomic claim, slow/healthy isolation PASS\n";
+  std::cout << "Runtime delivery: selected/custom/events, buffer release, reject/failure, shared lifetime/reentrant+atomic claim, slow/healthy isolation PASS\n";
 }

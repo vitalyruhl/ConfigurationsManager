@@ -3,6 +3,16 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.10.6 - Unpublished test candidate
+
+- Replace borrowed runtime WebSocket client access with guarded server-by-ID
+  delivery, heartbeat closure, and queue checks. Keep the runtime delivery slot
+  reserved until the shared transport buffer is released.
+- Require the maintained ESP32Async WebSocket and TCP transports with mutexes
+  enabled. Reject legacy esphome transport headers explicitly.
+- Validate a connection disappearing between availability checks and delivery,
+  while retaining selected groups and per-client backpressure behavior.
+
 ## 4.10.5 - 2026-10-28
 
 Development versions 4.9.1, 4.9.2 and 4.10.0 through 4.10.4 are consolidated

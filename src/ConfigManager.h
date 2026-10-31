@@ -12,6 +12,9 @@
 #include <type_traits>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#if !defined(ASYNCWEBSERVER_FORK_ESP32Async) || ASYNCWEBSERVER_VERSION_NUM < 0x030C01 || !ASYNCWEBSERVER_USE_MUTEX
+#error "CM requires ESP32Async/ESPAsyncWebServer >= 3.12.1 with mutexes enabled; remove legacy esphome transport dependencies."
+#endif
 #include <exception>
 #include <stdexcept>
 #include <algorithm>
@@ -60,7 +63,7 @@ public:
 #include "runtime/detail/RuntimeMessage.h"
 #endif
 
-#define CONFIGMANAGER_VERSION "4.10.5" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.10.6" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1983,8 +1986,7 @@ public:
       clients = wsSubscriptions.clients;
     }
     for (const auto& client : clients) {
-      auto* connection = ws->client(client.id);
-      if (!connection)
+      if (!ws->hasClient(client.id))
         wsRemove(client.id);
       else {
         bool expired;
@@ -1994,7 +1996,7 @@ public:
           expired = wsSubscriptions.removeIfExpired(client.id, uint32_t(millis()), wsHeartbeatTimeout);
         }
         if (expired)
-          connection->close(); // Callback may re-enter after the claim lock is released.
+          ws->close(client.id); // Transport reserves the client; CM claim lock is released.
       }
     }
     ws->cleanupClients();
@@ -3246,11 +3248,9 @@ public:
     if (!client) {
       return false;
     }
-    if (client->queueIsFull()) {
-      return false;
-    }
-    client->text(payload);
-    return true;
+    auto* owner = client->server();
+    const uint32_t id = client->id(); // Callback-provided client is alive during this call.
+    return owner && owner->availableForWrite(id) && owner->text(id, payload);
   }
   size_t getWebSocketClientCount() const {
     std::lock_guard<std::mutex> lock(wsClientsMutex);
@@ -3283,8 +3283,7 @@ public:
     std::vector<cm::RuntimeDeliveryReservation> deliveries;
     for (auto client = subscriptions.clients.begin(); client != subscriptions.clients.end();) {
       cm::RuntimeDeliveryReservation reservation(client->delivery);
-      auto* connection = reservation ? ws->client(client->id) : nullptr;
-      if (client->mode == cm::RuntimeMode::Events || !reservation || !connection || connection->queueIsFull()) {
+      if (client->mode == cm::RuntimeMode::Events || !reservation || !ws->availableForWrite(client->id)) {
         client = subscriptions.clients.erase(client);
       } else {
         deliveries.push_back(std::move(reservation));
@@ -3348,7 +3347,7 @@ public:
       const auto& client = subscriptions.clients[i];
       const bool shared = custom || client.mode == cm::RuntimeMode::Legacy;
       const String& payload = shared ? fullPayload : selectedPayloads[i];
-      sent = cm::sendRuntimeMessage(ws->client(client.id), payload, std::move(deliveries[i])) || sent;
+      sent = cm::sendRuntimeMessage(*ws, client.id, payload, std::move(deliveries[i])) || sent;
       if (!shared)
         selectedPayloads[i] = String();
     }
@@ -3475,10 +3474,11 @@ public:
     return false;
   }
   bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload) {
-    if (!client || client->queueIsFull())
+    if (!client)
       return false;
-    client->text(payload);
-    return true;
+    auto* owner = client->server();
+    const uint32_t id = client->id();
+    return owner && owner->availableForWrite(id) && owner->text(id, payload);
   }
   size_t getWebSocketClientCount() const {
 #if CM_ENABLE_SETTINGS_UI

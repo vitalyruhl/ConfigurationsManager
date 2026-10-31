@@ -50,7 +50,7 @@ def main():
     packages = consumer / 'packages'
     library = packages / 'ESP32 Configuration Manager'
     library.mkdir(parents=True, exist_ok=True)
-    for dependency in ('ArduinoJson', 'AsyncTCP-esphome', 'ESPAsyncWebServer-esphome'):
+    for dependency in ('ArduinoJson', 'AsyncTCP', 'ESPAsyncWebServer'):
         source = args.dependencies / dependency
         if not source.is_dir():
             raise RuntimeError(f'Existing dependency missing: {source}')
@@ -68,7 +68,7 @@ def main():
     env = os.environ.copy()
     env['CM_LOCAL_LIB'] = str(ROOT)
     dependency_lines = '\n  '.join('file://' + (packages / name).as_posix() for name in
-        ('ArduinoJson', 'AsyncTCP-esphome', 'ESPAsyncWebServer-esphome', 'PubSubClient', 'ESP32 Configuration Manager'))
+        ('ArduinoJson', 'AsyncTCP', 'ESPAsyncWebServer', 'PubSubClient', 'ESP32 Configuration Manager'))
     library = libdeps / 'ESP32 Configuration Manager'
     source_files = list((ROOT / 'src').rglob('*.h')) + list((ROOT / 'src').rglob('*.cpp')) + list((ROOT / 'webui' / 'src').rglob('*'))
     source_files += [ROOT / 'webui' / 'vite.config.mjs', ROOT / 'webui' / 'package.json', ROOT / 'webui' / 'package-lock.json']

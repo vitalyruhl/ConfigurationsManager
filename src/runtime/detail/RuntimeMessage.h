@@ -2,45 +2,30 @@
 #include "RuntimeDelivery.h"
 #include <ESPAsyncWebServer.h>
 #include <new>
+#include <vector>
 
 namespace cm {
-// Only CM runtime snapshots use this wrapper. Transport owns it after message().
-class RuntimeMessage final : public AsyncWebSocketMessage {
-  RuntimeDeliveryReservation reservation_;
-  std::unique_ptr<AsyncWebSocketBasicMessage> message_;
+// Member destruction frees copied bytes before releasing the delivery slot.
+struct RuntimeOutgoingBuffer {
+  RuntimeDeliveryReservation reservation;
+  std::vector<uint8_t> bytes;
 
-public:
-  RuntimeMessage(const String& payload, RuntimeDeliveryReservation&& reservation)
-      : reservation_(std::move(reservation)),
-        message_(new(std::nothrow) AsyncWebSocketBasicMessage(payload.c_str(), payload.length())) {}
-  ~RuntimeMessage() override {
-    // Free copied payload before another tick may acquire this client's slot.
-    message_.reset();
-  }
-  bool valid() const {
-    return message_ && !message_->finished();
-  }
-  void ack(size_t len, uint32_t time) override {
-    if (message_)
-      message_->ack(len, time);
-  }
-  size_t send(AsyncClient* client) override {
-    return message_ ? message_->send(client) : 0;
-  }
-  bool finished() override {
-    return !message_ || message_->finished();
-  }
-  bool betweenFrames() const override {
-    return message_ && message_->betweenFrames();
-  }
+  RuntimeOutgoingBuffer(const String& payload, RuntimeDeliveryReservation&& claim)
+      : reservation(std::move(claim)), bytes(payload.c_str(), payload.c_str() + payload.length()) {}
 };
-inline bool sendRuntimeMessage(AsyncWebSocketClient* client, const String& payload, RuntimeDeliveryReservation&& reservation) {
-  if (!client || client->queueIsFull() || !payload.length())
+
+inline bool sendRuntimeMessage(AsyncWebSocket& socket, uint32_t clientId, const String& payload,
+                               RuntimeDeliveryReservation reservation) {
+  if (!reservation || !payload.length() || !socket.availableForWrite(clientId))
     return false;
-  std::unique_ptr<RuntimeMessage> message(new (std::nothrow) RuntimeMessage(payload, std::move(reservation)));
-  if (!message || !message->valid())
+  auto* allocation = new (std::nothrow) RuntimeOutgoingBuffer(payload, std::move(reservation));
+  if (!allocation)
     return false;
-  client->message(message.release()); // Includes synchronous destruction on queue reject.
-  return true;
+  std::shared_ptr<RuntimeOutgoingBuffer> owner(allocation);
+  // An aliasing shared_ptr lets the transport own bytes and their reservation together.
+  AsyncWebSocketSharedBuffer buffer(owner, &owner->bytes);
+  // The maintained server holds its client-list lock across lookup and enqueue.
+  // A disconnect after availableForWrite() simply makes this return false.
+  return socket.text(clientId, std::move(buffer));
 }
 } // namespace cm

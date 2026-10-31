@@ -1,6 +1,19 @@
 # ConfigurationsManager for ESP32
 
-> Version 4.10.5
+> Version 4.10.6 (unpublished test candidate)
+
+The local 4.10.6 candidate requires ESP32Async/ESPAsyncWebServer 3.12.1 and
+ESP32Async/AsyncTCP 3.5.0. Remove explicit legacy `esphome` transport dependencies
+from consumer projects before building this candidate. It uses guarded server
+operations by client ID and retains at most one outstanding runtime buffer per
+client. This repairs a verified connection-lifetime defect; the historical
+BoilerSaver panic remains unclassified without its backtrace. No production
+deployment is authorized by this candidate's test results.
+
+The maintained transport can release a runtime buffer after copying its bytes
+into TCP, before a network ACK. CM keeps at most one transport-owned runtime
+buffer per client; previously copied bytes remain bounded by the TCP window.
+This is not an application-level one-snapshot-per-network-ACK guarantee.
 
 The opt-in `CM_MQTT_BOUNDED_IO=1` transport assembles complete MQTT frames without
 waiting in the application loop, expires partial frames after 30 seconds, and

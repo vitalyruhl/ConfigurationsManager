@@ -1,6 +1,6 @@
 {
   "name": "ESP32 Configuration Manager",
-  "version": "4.10.5",
+  "version": "4.10.6",
   "keywords": "esp32, configuration, configurations, config, config-manager, configuration-manager, settings, settings-manager, wifi, wi-fi, web-server, web-ui, ota, nvs, preferences, iot, automation",
   "description": "Robust ESP32 config and configuration manager with web UI, WiFi setup, OTA, and persistent settings via NVS/Preferences.",
   "repository": {
@@ -73,7 +73,7 @@
   },
   "dependencies": {
     "bblanchon/ArduinoJson": "~7.4.3",
-    "esphome/ESPAsyncWebServer-esphome": "~3.4.0",
-    "esphome/AsyncTCP-esphome": "2.1.4"
+    "ESP32Async/ESPAsyncWebServer": "3.12.1",
+    "ESP32Async/AsyncTCP": "3.5.0"
   }
 }

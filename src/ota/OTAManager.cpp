@@ -402,7 +402,7 @@ void ConfigManagerOTA::handleOTAUploadData(AsyncWebServerRequest* request, Strin
     }
 
     if (!otaPassword.isEmpty()) {
-      AsyncWebHeader* hdr = request->getHeader("X-OTA-PASSWORD");
+      const AsyncWebHeader* hdr = request->getHeader("X-OTA-PASSWORD");
       if (!hdr) {
         ctx->hasError = true;
         ctx->statusCode = 401;

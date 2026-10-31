@@ -53,6 +53,8 @@ struct HeartbeatSocket {
     return found == peers.end() ? nullptr : &found->second;
   }
   void cleanupClients() {}
+  bool hasClient(uint32_t id) { return client(id) != nullptr; }
+  void close(uint32_t id) { if (auto* value = client(id)) value->close(); }
 };
 struct HeartbeatHarness {
   bool wsEnabled = true;
