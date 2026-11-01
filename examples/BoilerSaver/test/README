@@ -1,0 +1,10 @@
+BoilerSaver build-hook regression tests
+
+From the ConfigurationsManager repository root:
+
+    python -m unittest discover -s examples/BoilerSaver/test -p "test_*.py"
+
+The three host-side tests use explicitly marked [MOCKED!] CM hooks. They verify
+that only the selected package/source hook runs, that the declared original
+symlink source is honored, and that missing input fails closed. They do not
+upload firmware or validate hardware behavior.

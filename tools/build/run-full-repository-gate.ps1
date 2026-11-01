@@ -107,6 +107,19 @@ function Write-Summary {
     $results | Format-Table Name, Status, Seconds, LogPath, Detail -AutoSize
 }
 
+function Test-EmbeddedTestSources {
+    param([string]$ProjectDirectory)
+
+    $testRoot = Join-Path $ProjectDirectory 'test'
+    if (-not (Test-Path -LiteralPath $testRoot -PathType Container)) { return $false }
+    $sources = @(Get-ChildItem -LiteralPath $testRoot -File -Recurse |
+            Where-Object {
+                $_.Extension -in @('.c', '.cc', '.cpp', '.cxx', '.ino') -and
+                [IO.Path]::GetRelativePath($testRoot, $_.FullName) -notmatch '(?:^|[\\/])(?:host|native)[\\/]'
+            })
+    return $sources.Count -gt 0
+}
+
 function Get-PlatformIoMatrix {
     $excludedSegment = '(?:^|[\\/])(?:\.git|\.pio|\.Temp|\.local|node_modules|dist|libdeps)[\\/]'
     $projects = Get-ChildItem -Path $platformIoRoot -Filter 'platformio.ini' -File -Recurse |
@@ -133,7 +146,7 @@ function Get-PlatformIoMatrix {
                 ProjectDirectory = $project.Directory.FullName
                 Environment = $selection.Environment
                 SelectionReason = $selection.SelectionReason
-                HasEmbeddedTests = Test-Path -LiteralPath (Join-Path $project.Directory.FullName 'test')
+                HasEmbeddedTests = Test-EmbeddedTestSources -ProjectDirectory $project.Directory.FullName
             }
         }
     }

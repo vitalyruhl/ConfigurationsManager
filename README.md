@@ -248,6 +248,7 @@ Each example is a standalone PlatformIO project:
 - [examples/ChipInfo](examples/ChipInfo) - device/chip information demo
 - [examples/BoilerSaver](examples/BoilerSaver) - real-world boiler controller example
 - [examples/SolarInverterLimiter](examples/SolarInverterLimiter) - real-world larger project using this library
+- [examples/SolarBatteryTelemetry](examples/SolarBatteryTelemetry) - WiFi + OTA + BLE application with battery/solar telemetry
 
 Build an example:
 
@@ -265,7 +266,7 @@ If you use a fork / local clone of this repo, you can build and upload any examp
 
 If you want to consume the library as a local dependency in your own project, use a local `lib_deps = symlink://../ConfigurationsManager` setup.
 
-Note (Windows): these example projects set `[platformio] build_dir` and `libdeps_dir` outside the repo to prevent recursive local installs when using `lib_deps = symlink://../..`.
+Build and dependency-cache locations are declared in each example's `platformio.ini`; the linked CM source remains this checkout. See [the setup guide](docs/GETTING_STARTED.md#examples-platformio-setup-notes) for the cache layouts.
 
 Tips:
 

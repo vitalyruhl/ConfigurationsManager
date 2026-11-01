@@ -92,10 +92,15 @@
       "src/main.cpp",
       "**/secret/secrets.h",
       "**/secret/wifiSecret.h",
+      "platformio.local.ini",
+      "**/platformio.local.ini",
       ".vscode",
       ".idea",
       "*.code-workspace"
     ]
+  },
+  "build": {
+    "srcFilter": "+<*> -<main.cpp>"
   },
   "dependencies": {
     "bblanchon/ArduinoJson": "~7.4.3",

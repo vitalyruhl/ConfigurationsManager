@@ -6,6 +6,12 @@ The consumer must pin `h2zero/NimBLE-Arduino@2.5.1`. See `examples/bluetooth` fo
 WiFi, configuration UI and OTA integration using CoreSettings/CoreWiFiServices.
 No device address or protocol UUID is guessed by the example.
 
+For an application-level **WiFi + OTA + BLE** example, see
+[SolarBatteryTelemetry](../examples/SolarBatteryTelemetry/README.md). It shows
+network provisioning, configurable BLE battery/PV collectors, MQTT telemetry
+and firmware updates together. Its setup and hardware limitations are described
+in the example rather than assumed from a successful build.
+
 ## Registration and configuration
 
 Create one static-lifetime `cm::BluetoothManager`. Only one manager may own the

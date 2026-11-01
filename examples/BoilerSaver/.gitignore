@@ -1,0 +1,6 @@
+/.pio/
+/.Temp/
+/.local/
+/platformio.local.ini
+/src/secret/secrets.h
+**/__pycache__/

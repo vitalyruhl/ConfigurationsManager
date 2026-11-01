@@ -7,8 +7,14 @@ If you prefer a full working project, open one of the example projects in `examp
 ## Examples: PlatformIO setup notes
 
 The examples use this repository as a local library via
-`lib_deps = symlink://../..`. Per-example `build_dir` and `libdeps_dir` values
-under `${sysenv.HOME}/.pio/CM/ex/...` keep build outputs outside the repository.
+`lib_deps = symlink://../..`. Smaller examples use per-example caches under
+`${sysenv.HOME}/.pio/CM/ex/...`. BoilerSaver, SolarInverterLimiter and
+SolarBatteryTelemetry keep build outputs in their project-local `.pio/` and
+place registry dependencies in separate per-example caches under
+`${platformio.core_dir}/libdeps/ConfigurationsManager-examples/`. This keeps
+PlatformIO from treating nested dependency headers as part of the enclosing
+CM library. CM itself remains linked to this one checkout; no second CM source
+copy or working repository is created.
 
 Avoid using `lib_extra_dirs = ../..` for the workspace library. If a build ever seems to use stale local library code, run:
 
@@ -53,6 +59,11 @@ Settings/AP setup flow. A compiled example is not a device acceptance result;
 verify its board, ports, partitions and application behavior before uploading.
 
 ## Quick start (recommended)
+
+For a complete WiFi, OTA and BLE application, see
+[SolarBatteryTelemetry](../examples/SolarBatteryTelemetry/README.md). It combines
+network provisioning, configurable BLE battery/PV collectors and telemetry;
+its README explains hardware, public defaults and the stock-controller baseline.
 
 1. Clone this repository (or your fork).
 2. Pick an example in `examples/`.

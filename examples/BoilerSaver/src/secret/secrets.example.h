@@ -25,5 +25,5 @@
 #define SETTINGS_PASSWORD ""
 #define OTA_PASSWORD ""
 
-// dev-Station
-#define WIFI_FILTER_MAC_PRIORITY "60:B5:8D:4C:E1:D5"
+// Optional preferred access-point MAC; leave empty to use ordinary WiFi selection.
+#define WIFI_FILTER_MAC_PRIORITY ""

@@ -12,6 +12,12 @@ are consolidated into 4.8.0; they were not separate releases.
   enabled. Reject legacy esphome transport headers explicitly.
 - Validate a connection disappearing between availability checks and delivery,
   while retaining selected groups and per-client backpressure behavior.
+- Refresh the inverter and boiler application examples and add a battery/PV
+  telemetry example combining WiFi provisioning, OTA and CM-owned BLE with
+  safe public defaults and a direct binding to the enclosing source checkout.
+- Exclude the root firmware entry point when consuming CM as a source library,
+  isolate nested example dependency caches, and distinguish native host tests
+  from embedded firmware test targets.
 
 ## 4.10.5 - 2026-10-28
 

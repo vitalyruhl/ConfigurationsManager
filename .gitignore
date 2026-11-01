@@ -78,6 +78,7 @@ secrets.h
 /tools/governance/
 /dev-info/agent-new-prompts.md
 /.local/
+**/platformio.local.ini
 
 # Public GitHub files: workflows and project-specific collaboration templates.
 /.github/*
