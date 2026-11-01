@@ -33,9 +33,9 @@ function Invoke-GateSelfTest {
 }
 
 function Write-MatrixFixture {
-    param([string]$Name, [string[]]$Environments)
+    param([string]$Name, [string[]]$Environments, [string]$Parent = 'examples')
 
-    $fixtureDirectory = Join-Path (Join-Path $matrixRoot 'examples') $Name
+    $fixtureDirectory = Join-Path (Join-Path $matrixRoot $Parent) $Name
     New-Item -ItemType Directory -Path $fixtureDirectory -Force | Out-Null
     $content = $Environments | ForEach-Object { "[env:$_]" }
     Set-Content -LiteralPath (Join-Path $fixtureDirectory 'platformio.ini') -Value $content -Encoding utf8
@@ -47,11 +47,15 @@ $matrixRoot = Join-Path $testRoot 'matrix-fixtures'
 Write-MatrixFixture -Name 'ota-preferred' -Environments @('usb', 'ota', 'eth')
 Write-MatrixFixture -Name 'usb-fallback' -Environments @('eth', 'usb')
 Write-MatrixFixture -Name 'first-declared' -Environments @('eth', 'wifi')
+Write-MatrixFixture -Name 'local-only-consumer' -Environments @('usb') -Parent '.local'
+Write-MatrixFixture -Name 'temporary-build' -Environments @('ota') -Parent '.Temp'
+Write-MatrixFixture -Name 'nested-local-consumer' -Environments @('usb') -Parent 'examples/.local'
 $matrixOutput = & pwsh.exe -NoProfile -File $gateScript -DiscoverOnly -MatrixRoot $matrixRoot -LogRoot (Join-Path $testRoot 'matrix-discovery') 2>&1 | Out-String
 Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "Matrix discovery failed. Output: $matrixOutput"
 Assert-Condition -Condition ($matrixOutput -match 'Example ota-preferred: selected environment ota \(preferred\)') -Message 'The gate did not prefer ota.'
 Assert-Condition -Condition ($matrixOutput -match 'Example usb-fallback: selected environment usb \(fallback\)') -Message 'The gate did not select usb when ota was absent.'
 Assert-Condition -Condition ($matrixOutput -match 'Example first-declared: selected environment eth \(first declared environment\)') -Message 'The gate did not select the first declared environment.'
+Assert-Condition -Condition ($matrixOutput -notmatch 'local-only-consumer|nested-local-consumer|temporary-build') -Message 'The gate included ignored local or temporary projects in its public build matrix.'
 
 $passOutput = Invoke-GateSelfTest -Mode Pass -ExpectedExitCode 0
 Assert-Condition -Condition ($passOutput -match 'Full repository gate result: PASS') -Message 'Successful self-test did not report PASS.'

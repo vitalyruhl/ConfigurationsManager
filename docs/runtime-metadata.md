@@ -1,6 +1,6 @@
 # Runtime metadata: legacy and compact fields
 
-In 4.8.0, applications can opt into compact field metadata. Existing
+Applications can opt into compact field metadata. Existing
 RuntimeFieldMeta, live builders, providers, controls and JSON consumers remain
 supported. Compact metadata describes fields; providers/getters still supply
 values. Existing applications do not need conversion.
@@ -148,7 +148,9 @@ exclude text-table, handles, spare capacities and sparse payloads. The full
 actual-manager 64-Float host fixture accounts for these retained capacities:
 legacy43200->compact15184 bytes (64.85% less). Host ABI/String behavior differs
 from ESP32 and allocator bookkeeping is excluded. No device heap/fragmentation
-saving is claimed from those host numbers. See heap-memory-inventory.md.
+saving is claimed from those host numbers. See the
+[memory ownership reference](../dev-info/memory-ownership.md) for how to interpret
+retained storage, request peaks and target measurements.
 
 ## Built-in System fields
 
@@ -178,5 +180,5 @@ pio run -d examples/BME280-Temp-Sensor -e usb
 
 Native compatibility tests exercise the real registry/cache implementation but
 stub target placement/logging hooks. Embedded compilation is not hardware test
-execution. Only BME280-Temp-Sensor is migrated in this feature; SIL, SBT and
-other examples retain their current APIs until separate plans are approved.
+execution. [BME280-Temp-Sensor](../examples/BME280-Temp-Sensor) demonstrates
+compact field registration; existing applications can keep their legacy APIs.

@@ -44,7 +44,8 @@ into this release; they were not separate releases.
   isolated plus production same-image SBT 1.4.12 OTA. Production restarted with
   SDK reason 3, restored BMS/Victron samples and preserved all 33 settings; the
   following 900-second observation had no new reboot or offline transition.
-  See the [bounded acceptance record](acceptance/2026-10-27-http-ota-ble-shutdown.md).
+  See [HTTP OTA restart preparation](OTA.md#http-ota-restart-preparation)
+  for the supported integration behavior.
   This is not long-run stability qualification. MQTT reconnect/session replacement
   remains open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
   no root cause, thermal explanation or general TCP/heap recovery is claimed.
@@ -122,10 +123,10 @@ into this release; they were not separate releases.
   blocking transfer; asynchronous HTTP traffic cannot mask a blocked loop.
 - On 2026-10-22 the operator accepted normal SIL/SBT web access as substantially
   faster and without observed crashes, closing this development iteration's
-  HTTP/WebSocket item. Earlier diagnostic/overload failures remain recorded in
-  [the investigation history](todo_http_delivery_panic.md); their causes and
-  overload recovery are not claimed resolved. This operator acceptance does not
-  establish a full repository validation result.
+  HTTP/WebSocket item. Earlier diagnostic/overload failures remain historical
+  evidence; their causes and overload recovery are not claimed resolved. See
+  [runtime delivery boundaries](GUI-Runtime.md#delivery-and-backpressure).
+  This operator acceptance does not establish a full repository validation result.
 
 ## 4.4.10 - 2026-08-09
 

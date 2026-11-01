@@ -122,20 +122,56 @@ fragment inactivity checks also belong to the consumer and may be stricter.
 
 ## OTA integration
 
-Register one lifecycle observer before uploads; see `docs/OTA.md`. Starting
+Register one lifecycle observer before uploads; see [OTA](OTA.md). Starting
 requests `BlePauseReason::Ota`; failure/abort/timeout resumes only that reason.
 Success stays paused through reboot. Callback completion records pause intent,
 not proof of radio quiescence. Late callbacks are counted/discarded. The stack
-stays initialized; there is no Bluetooth memory-release or deinit/init workaround.
-If flash-time instability occurs during physical testing, stop release and review
-a pre-upload handshake rather than waiting inside an AsyncWeb callback.
+stays initialized during ordinary pause/resume; this does not release Bluetooth
+memory. The terminal restart path below is separate from ordinary pause/disable.
+Never wait for radio cleanup inside an asynchronous web callback.
+
+## WiFi coexistence
+
+CM's worker acquires a WiFi power-policy lease before its first BLE scan or GATT
+operation. The application loop must confirm native `WIFI_PS_MIN_MODEM` before
+radio work proceeds; an old driver read is insufficient. Keep servicing
+`ConfigManager.handleClient()` while startup is pending.
+
+The lease preserves the saved WiFi preference and overrides a requested NONE
+only while coexistence requires MIN. Ordinary pause, disabling the setting,
+disconnecting or removing peers does not deinitialize the controller. The lease
+therefore remains required until reboot, including after terminal restart
+shutdown. See [WiFi power saving](WIFI.md#power-saving-and-ble-coexistence) for
+diagnostics, retries and the exact preference/runtime distinction.
+
+## Terminal shutdown for HTTP OTA restart
+
+For HTTP OTA, the application can install a nonblocking
+[reboot-preparation callback](OTA.md#http-ota-restart-preparation) before web
+initialization. From that application-loop callback, request
+`requestShutdownForRestart()` and poll `isShutdownForRestartComplete()`.
+`isShutdownForRestartFailed()` identifies a terminal failure. This path is for
+an imminent restart; it cannot resume normal acquisition afterward.
+
+Only the existing BLE worker stops the host/controller with `deinit(false)`,
+confirms that the host is uninitialized and the native controller is IDLE,
+then clears objects with `deinit(true)` and reconfirms both conditions. Failure
+retains a terminal fence: no acquisition, configuration or cleanup retry is
+admitted. Without a worker, the request can acknowledge only an already
+uninitialized, native-IDLE radio with no other CM owner, using read-only checks.
+The WiFi coexistence lease remains conservative until reboot.
+
+Consumer test profiles can set `CM_TEST_RESTART_PHASES=1` for UART phase markers;
+the default is `0`. Native SDK calls can still block. Host tests do not establish
+flash-time timing, RF stability or the cause of an unrelated controller panic.
 
 ## Build and validation
 
 The opt-in example retains central and observer roles and disables unused
 peripheral/broadcaster roles with `CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED` and
 `CONFIG_BT_NIMBLE_ROLE_BROADCASTER_DISABLED`. These are consumer flags, not core
-library defaults. The consumer also trials `-flto` for size; the standard board dual-slot partition layout is retained.
+library defaults. The example uses `-flto` for size and retains the standard
+board dual-slot partition layout.
 
 Run `tools/test/run-ble-host-tests.ps1 -Suite all` for hardware-free tests of the
 same production lifecycle, scheduler and queues. Compile `pio run -d

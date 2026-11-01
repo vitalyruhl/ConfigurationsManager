@@ -7,7 +7,7 @@ This document describes how to declare, register, persist and display configurat
 - Persistence: loadAll() on startup, saveAll() (or individual save) after changes.
 - Visibility: showIf predicate determines whether a setting appears in the web UI JSON.
 
-## Core WiFi recovery settings (4.8.0)
+## Core WiFi recovery settings
 
 The optional `cm::CoreWiFiSettings` bundle adds `WiFiProbe` (`off`, `gateway`, or
 strict unicast IPv4) and retains `WiFiRb` (whole minutes 0..9999, default 1; 0
@@ -17,7 +17,7 @@ synchronize runtime recovery state. Validation checks syntax and range, not
 reachability; a saved unreachable target can cause repeated recovery restarts.
 See [WiFi](WIFI.md) for the complete behavior and recovery precautions.
 
-## Declaring a Setting (v2.7+)
+## Declaring a Setting
 
 ```cpp
 Config<int> sample(ConfigOptions<int>{
@@ -62,7 +62,7 @@ Internal storage key format: `<category>_<key>` truncated to 15 chars to satisfy
 
 Set `.isPassword = true` to mask in the UI. The backend stores the real value; the UI obscures it and only sends a new value when the field changes.
 
-## Reducing Boilerplate with OptionGroup (since 2.4.3)
+## Reducing Boilerplate with OptionGroup
 
 When many settings share the same category and pretty category, you can use `OptionGroup` to avoid repetition.
 

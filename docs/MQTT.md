@@ -151,7 +151,10 @@ void onMQTTConnected()
 - Payloads are split into two JSON messages:
   - `<base>/System-Info/ESP` (chip + memory)
   - `<base>/System-Info/WiFi` (connection info)
-- `uptimeMs` and `uptimeHuman` are included in each payload.
+- `uptimeMs` and `uptimeHuman` are included in each payload by default.
+- ESP System-Info includes `resetReason` from the SDK.
+- Set `CM_MQTT_WIFI_UPTIME=0` to omit duplicate uptime fields from WiFi
+  System-Info while retaining them in ESP System-Info; the default is `1`.
 
 ## Publish helpers
 
@@ -194,6 +197,39 @@ build_flags =
 Notes:
 - Runtime system-info publishing may grow the buffer if needed.
 - The module keeps the grown size and does not shrink it again during operation.
+
+## Optional bounded transport
+
+`CM_MQTT_BOUNDED_IO` defaults to `0`, retaining the legacy transport. Define it
+as `1` consistently in the consumer build to select complete-frame receive
+handling and a fixed transmit queue. This mode requires a numeric IPv4 broker
+address. TCP connect is bounded to 100 ms plus up to one second for CONNACK;
+it is not a DNS-capable transport.
+
+The receive path assembles complete MQTT frames without waiting in the
+application loop, expires partial frames after 30 seconds and closes malformed
+connections. A fixed 4608-byte transmit FIFO retains unsent bytes across
+transient pressure and positive short writes, preserving byte order without
+allocating heap storage for the queue.
+
+Pending bytes expire after five seconds without a positive TCP send. A
+successful partial send renews that stall deadline; newly queued bytes and
+transient errors do not. Continuous progress can therefore keep the queue
+nonempty for longer than five seconds. This is neither an absolute packet-age
+limit nor a broker-delivery guarantee. Queue overflow, a zero-byte send or a
+definitive socket error closes the connection and clears pending bytes.
+
+Transmit pumping shares at most 64 send attempts and 1000 microseconds per
+application loop, separately from the receive budget. During synchronous
+CONNACK wait, retries renew once per elapsed 1000-microsecond epoch rather than
+once per poll. These budgets bound work between nonblocking socket calls;
+they are not a hard real-time guarantee for the socket implementation.
+
+Transport counters distinguish recovered pressure/short writes from fatal
+failure, expiry and overflow. Closing a socket does not establish that bytes
+already queued in TCP have been cancelled. Session replacement and delayed
+CONNECT behavior require separate device/broker evidence. Neither this mode nor
+short device observations establish that every MQTT interruption is resolved.
 
 ## MQTT logging (LoggingManager)
 

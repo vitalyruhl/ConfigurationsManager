@@ -18,7 +18,8 @@ Workflow:
    - The SPA sends it as an `X-OTA-PASSWORD` header.
 4. Watch the upload progress popup.
    - The popup stays visible while the browser is actively uploading the firmware and warns before accidental page navigation.
-   - On success, the device reboots automatically.
+   - On success, the device schedules a restart; configured reboot preparation
+     must complete before an automatic restart can proceed.
 
 ## Backend behavior
 
@@ -85,6 +86,8 @@ See also `docs/GUI-Runtime.md`.
 | `ConfigManager.setupOTA` | `setupOTA(const String& hostname, const String& password = "")` | Initializes ArduinoOTA endpoint and callbacks. | Call after the active IP interface is ready. |
 | `ConfigManager.handleOTA` | `handleOTA()` | Processes OTA runtime events. | Must run regularly in `loop()`. |
 | `ConfigManager.enableOTA` | `enableOTA(bool enabled = true)` | Enables/disables OTA handling at runtime. | Runtime control for OTA availability. |
+| `ConfigManager.getOTAManager().setRebootPreparation` | `setRebootPreparation(std::function<bool()> prepare)` | Installs nonblocking HTTP restart preparation. | Register before web initialization; terminal ten-second deadline. |
+| `ConfigManager.getOTAManager().rebootPreparationBlocked` | `rebootPreparationBlocked()` | Reports a terminal HTTP preparation timeout. | Does not force a restart or retry cleanup. |
 
 
 ## Lifecycle observer for optional transports
@@ -153,7 +156,49 @@ recovery window. Synchronous ArduinoOTA records suspension before entering its
 blocking transfer, including the failed-transfer path. Its start/progress confirms
 loop work to the independent supervisor; asynchronous HTTP upload traffic does
 not feed that supervisor. Continue servicing `handleClient()` and keep the
-application loop responsive during HTTP uploads. See [WiFi recovery](WIFI.md)
-and the [bounded acceptance record](acceptance/2026-10-21-connectivity-watchdog.md)
-for the 30-second default, timeout API and tested slow/interrupted HTTP OTA cases.
-The recorded native ArduinoOTA receive failures remain a separate limitation.
+application loop responsive during HTTP uploads. See
+[WiFi recovery](WIFI.md#connectivity-checks-and-independent-loop-recovery) for
+the 30-second default and timeout API. Host tests and embedded builds do not
+validate every native ArduinoOTA transfer failure or target-device timing.
+
+## HTTP OTA restart preparation
+
+On successful HTTP OTA disconnect, the callback publishes a fixed-size atomic
+reboot request. `handleClient()` services it once after a 500 ms delay, before
+OTA maintenance locks or disabled/uninitialized early returns. Duplicate
+callbacks do not extend the delay or repeat the reboot. No request/context
+pointer is retained, so radio shutdown and restart work stay out of the
+watchdog-subscribed AsyncTCP callback.
+
+Install `getOTAManager().setRebootPreparation(std::function<bool()>)` before web
+initialization when an application must finish work before restarting. Setup
+and callback registration preserve the preparation callback. It runs in the
+application loop after the disconnect delay: return true when ready, or false
+to request another poll. The callback must only request/poll bounded work and
+must not wait for a worker or a network operation.
+
+Preparation has a terminal ten-second deadline. Timeout blocks automatic
+restart and sets `rebootPreparationBlocked()`; it does not force a reset,
+disable watchdogs or retry failed cleanup. A false result cannot postpone the
+restart indefinitely. ArduinoOTA uses its existing reboot handling and is not
+changed by this HTTP-only hook.
+
+With the optional Bluetooth transport, register the observer and preparation
+callback before uploads:
+
+```cpp
+ConfigManager.getOTAManager().setRebootPreparation([]() {
+  ble.requestShutdownForRestart();
+  return ble.isShutdownForRestartComplete();
+});
+```
+
+Here `ble` is the static-lifetime `cm::BluetoothManager` described in
+[Bluetooth registration](BLUETOOTH.md#registration-and-configuration).
+`isShutdownForRestartFailed()` reports terminal failure; no cleanup retry is
+admitted, and automatic restart stays blocked when preparation expires. Only
+the BLE worker performs native shutdown and verifies host/controller state.
+The WiFi coexistence lease remains conservative until reboot. See
+[terminal BLE shutdown](BLUETOOTH.md#terminal-shutdown-for-http-ota-restart)
+for ownership and limitations. Native SDK calls can still block, and this
+integration does not establish that every historical panic has been repaired.

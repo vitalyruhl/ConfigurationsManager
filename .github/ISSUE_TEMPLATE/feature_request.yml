@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an improvement to the ESP32 library, Web UI, examples, or documentation.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Describe the use case and current limitation. Do not include credentials or private configuration.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What ConfigurationsManager workflow or device behavior would this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Describe the desired behavior, API, or user interaction, if you have a proposal.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+      description: Describe any existing approach and why it is insufficient.
+  - type: textarea
+    id: context
+    attributes:
+      label: Project context and compatibility
+      description: Include the affected ESP32 model, framework, CM version, or Web UI context when relevant, and any API or stored-configuration implications.

@@ -20,6 +20,38 @@ pio run
 Some examples include `tools/pio_force_local_lib_refresh.py` to refresh local
 library metadata automatically. Set `CM_PIO_NO_LIB_REFRESH=1` to disable it.
 
+## Build and dependency compatibility
+
+Use C++17 or newer and remove the framework's `gnu++11` flag when necessary:
+
+```ini
+build_unflags = -std=gnu++11
+build_flags = -std=gnu++17
+```
+
+`library.json` defines the library's version and required dependency versions;
+each example's `platformio.ini` defines its board and build environments. The
+checkout uses the maintained `ESP32Async/ESPAsyncWebServer@3.12.1` and
+`ESP32Async/AsyncTCP@3.5.0` pair with transport mutexes enabled. Remove explicit
+legacy `esphome` transport dependencies from consumer projects before building
+this source. The web transport rejects legacy headers rather than silently
+combining incompatible ownership APIs. See
+[runtime delivery](GUI-Runtime.md#delivery-and-backpressure) for buffer lifetime
+and backpressure behavior.
+
+The default embedded Web UI ships in `src/html_content.*`; normal consumers do
+not need Node.js or a custom embed hook. Changing the Live/Settings build-time
+combination requires the regeneration hook in
+[Feature flags](FEATURE_FLAGS.md#matching-the-embedded-frontend). Rebuilding the
+frontend also requires the Node.js version declared in `webui/package.json` and
+the steps in [the Web UI guide](../webui/README.md).
+
+For example credentials, copy the selected example's
+`src/secret/secrets.example.h` to `src/secret/secrets.h` and edit local defaults.
+Do not commit credentials. If that optional file is absent, use the example's
+Settings/AP setup flow. A compiled example is not a device acceptance result;
+verify its board, ports, partitions and application behavior before uploading.
+
 ## Quick start (recommended)
 
 1. Clone this repository (or your fork).
@@ -193,7 +225,11 @@ void loop()
 
 ```
 
-        > **Note:** Every setting registered via `ConfigManager.addSetting()` now automatically gets a layout placement (page/card/group) derived from its category and Card name. If you need custom tabs or groups, call `ConfigManager.addSettingsPage()/addSettingsCard()/addSettingsGroup()` before `addSetting()` and then fine-tune placement with `ConfigManager.addToSettingsGroup(setting.getKey(), ...)`.
+Every setting registered via `ConfigManager.addSetting()` receives a layout
+placement derived from its category and card name. For custom tabs/groups,
+define pages/cards/groups before `addSetting()`, then adjust placement with
+`ConfigManager.addToSettingsGroup(setting.getKey(), ...)`. See
+[Settings](SETTINGS.md) for the layout APIs.
 
 ## Next
 

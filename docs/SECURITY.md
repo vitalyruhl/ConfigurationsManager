@@ -1,4 +1,4 @@
-# Security Notes (v3.0.0)
+# Security Notes
 
 ## Overview
 
