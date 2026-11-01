@@ -114,3 +114,36 @@ candidate on `fix/runtime-websocket-ownership`; this is a checkpoint, not main
 integration or a release. The known HTTP timeout and unproven historical panic
 attribution remain open. The owner did not authorize another production upload.
 Keep private build/evidence archives and local tool metadata outside Git.
+
+## Original-workspace recovery: 2026-11-01
+
+The owner required all active development to return to the original repository
+directories. The active CM checkout is now
+`C:\Daten\_Codding\ESP32\ConfigurationsManager` on
+`fix/runtime-websocket-ownership`, retaining published checkpoint
+`df2d2c2b1a360ac808ec659a1a95fe4304eba9eb`. The former temporary checkout is
+detached and must not be used for development. The older detached
+`ConfigurationsManager-demand-runtime` checkpoint is already an ancestor of
+`main`; it contains no separate unpublished product history.
+
+Local test inputs and evidence were copied into the original repository and
+verified by SHA-256 without overwriting different existing files:
+
+- `.local/ws-ownership/`: frozen package, package/build logs, and host executable.
+- `.local/ui-settings-check/01/`, `matrix.json`, and `source-freeze.json`: captured
+  Settings-only assets, firmware, symbols, and validation records. Rebuildable
+  consumer caches were not copied.
+- `.local/recovery/cm-ws-ownership-20261031/`: runtime-test fragments/executables
+  and the inspected upstream references.
+- `.local/recovery/cm-release-4.10.5-d5c63bd-20261028/`: existing release archives.
+
+The exact CM 4.10.6 package required by BoilerSaver's test profile is additionally
+versioned in that consumer under `test/fixtures/`, with the unchanged SHA-256
+recorded above. Its build no longer requires a package beneath `C:\Temp`.
+Other private evidence and generated binaries remain ignored and local.
+
+This recovery changes documentation and workspace placement only in CM. The
+library remains the unpublished 4.10.6 candidate; no version bump or public
+changelog entry is required. No new firmware/hardware validation, production
+upload, main integration, or release is part of this recovery. The historical
+HTTP timeout and unproven production-panic attribution remain open.
