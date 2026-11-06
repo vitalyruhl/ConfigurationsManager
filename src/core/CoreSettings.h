@@ -108,7 +108,7 @@ struct CoreWiFiSettings {
     powerSave.setCallback([&cfg](bool enabled) { cfg.setWiFiPowerSave(enabled); });
     powerSave.diagnostics = [&cfg]() { return cfg.getWiFiManager().getPowerSaveDiagnostics(); };
     connectivityTarget.setCallback([&cfg](const String& value) { cfg.setConnectivityCheckTarget(value); });
-    rebootTimeoutMin.setCallback([&cfg](int minutes) { cfg.setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes))); });
+    rebootTimeoutMin.setCallback([&cfg](int minutes) { cfg.setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min<uint32_t>(9999u, static_cast<uint32_t>(minutes))); });
 
     // Keep DHCP-dependent visibility consistent with the original demo pattern.
     staticIp.showIfFunc = [this]() { return !useDhcp.get(); };

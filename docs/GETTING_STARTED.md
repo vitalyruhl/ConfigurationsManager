@@ -242,6 +242,39 @@ define pages/cards/groups before `addSetting()`, then adjust placement with
 `ConfigManager.addToSettingsGroup(setting.getKey(), ...)`. See
 [Settings](SETTINGS.md) for the layout APIs.
 
+## Built-in LED pulses
+
+`cm::helpers::PulseOutput led;` selects the LED from the active Arduino board
+variant's `LED_BUILTIN`. A PlatformIO board profile may provide
+`-DCM_BUILTIN_LED_PIN=8` and `-DCM_BUILTIN_LED_ACTIVE_LOW=1` when that specific
+board uses an ordinary active-low LED on GPIO8. These values describe that board;
+they are not inferred from its ESP32 chip family. Without a polarity override,
+the built-in LED defaults to active-high. Arduino virtual RGB LED pins remain
+supported through the Arduino digital-output interface.
+
+```cpp
+#include <helpers/HelperModule.h>
+
+cm::helpers::PulseOutput led;
+
+void setup() {
+  led.stop();
+}
+
+void loop() {
+  led.loop();
+  // Call led.setPulse(1, 100) when an application event occurs.
+}
+```
+
+Construction and `setDefault()` do not access hardware, so global instances are
+safe to construct before Arduino starts. The first `loop()`, `stop()`, `force()`
+or pulse operation initializes the output at its inactive level before enabling
+output mode. Call these operations from `setup()` or later, after Arduino and
+its scheduler are ready. An explicit `PulseOutput(pin, ActiveLevel)` continues
+to use the supplied pin and polarity. If the board defines no LED pin, provide
+`CM_BUILTIN_LED_PIN` or use the explicit-pin constructor.
+
 ## Next
 
 - WiFi details and best practices: see `docs/WIFI.md`

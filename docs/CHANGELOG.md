@@ -3,6 +3,17 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.11.0 - Unpublished development candidate
+
+- Add board-aware default construction for `cm::helpers::PulseOutput`, using
+  `LED_BUILTIN` or explicit `CM_BUILTIN_LED_PIN` and
+  `CM_BUILTIN_LED_ACTIVE_LOW` board-profile overrides.
+- Defer pulse-output hardware initialization until runtime. Global helper
+  construction no longer invokes Arduino GPIO or virtual RGB/RMT drivers before
+  the scheduler starts; initialize the inactive level before enabling output.
+- Use explicit `uint32_t` timeout clamps so the same configuration headers
+  compile on ESP32-C3 toolchains where `uint32_t` aliases `unsigned long`.
+
 ## 4.10.6 - Unpublished test candidate
 
 - Replace borrowed runtime WebSocket client access with guarded server-by-ID

@@ -63,7 +63,7 @@ public:
 #include "runtime/detail/RuntimeMessage.h"
 #endif
 
-#define CONFIGMANAGER_VERSION "4.10.6" // Synced to library.json
+#define CONFIGMANAGER_VERSION "4.11.0" // Synced to library.json
 
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_DEFAULT_MS = 5000;
 static constexpr uint32_t CM_WS_PUSH_INTERVAL_MIN_MS = 550;
@@ -1866,7 +1866,7 @@ private:
       return;
     if (setting == findSettingByKeyHint("WiFi", "WiFiRb") && setting->getType() == SettingType::INT) {
       const int minutes = static_cast<Config<int>*>(setting)->get();
-      setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min(9999u, static_cast<uint32_t>(minutes)));
+      setWiFiAutoRebootTimeout(minutes < 0 ? 0u : std::min<uint32_t>(9999u, static_cast<uint32_t>(minutes)));
     } else if (setting == findSettingByKeyHint("WiFi", "WiFiProbe") && setting->getType() == SettingType::STRING) {
       setConnectivityCheckTarget(static_cast<Config<String>*>(setting)->get());
     } else if (setting == findSettingByKeyHint("WiFi", "WiFiPowerSave") && setting->getType() == SettingType::BOOL) {
