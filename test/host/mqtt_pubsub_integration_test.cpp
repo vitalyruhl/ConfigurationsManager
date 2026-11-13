@@ -28,6 +28,39 @@ static int establish(cm::detail::BoundedMqttClient& transport, PubSubClient& mqt
   return id;
 }
 
+// [MOCKED!] Actual PubSubClient packets survive oldest-first TX eviction.
+static void pubsubDropOldest() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient transport;
+  PubSubClient mqtt(transport);
+  const int id = establish(transport, mqtt);
+  requireCase(mqtt.setBufferSize(1024), "drop buffer");
+  transport.setDropOldestQueuedPublishes(true);
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  for (char value = 'a'; value <= 'e'; ++value) {
+    const std::string payload(990, value);
+    requireCase(transport.canQueuePublish(1, payload.size(), mqtt.getBufferSize()), "drop admission");
+    transport.beginApplicationPublish();
+    const bool accepted = mqtt.publish("t", payload.c_str(), value == 'b');
+    transport.endApplicationPublish();
+    requireCase(accepted && mqtt.connected(), "drop publish");
+  }
+  requireCase(transport.stats().txDroppedPublishes == 1 && transport.stats().txDroppedBytes == 996,
+              "drop counters");
+  mockSendResult = -2;
+  transport.beginLoop();
+  transport.pump();
+  std::vector<uint8_t> expected;
+  for (char value = 'b'; value <= 'e'; ++value) {
+    const uint8_t header[] = {static_cast<uint8_t>(value == 'b' ? 0x31 : 0x30), 0xe1, 0x07, 0, 1, 't'};
+    expected.insert(expected.end(), header, header + sizeof(header));
+    expected.insert(expected.end(), 990, static_cast<uint8_t>(value));
+  }
+  requireCase(mockSocket(id)->acceptedBytes() == expected, "drop exact mqtt packets");
+  std::puts("[MOCKED!] Real PubSubClient drop-oldest PUBLISH wire bytes passed.");
+}
+
 static bool serviceAt(uint32_t now, cm::detail::BoundedMqttClient& transport, PubSubClient& mqtt) {
   mockNowMs = now;
   transport.beginLoop();
@@ -363,6 +396,7 @@ int main(int argc, char** argv) {
   assert(!mqtt.connect("mock-device"));
   assert(!transport.connected() && transport.stats().rxMalformed == 2);
   std::puts("[MOCKED!] Real PubSubClient 2.8 bounded transport integration passed.");
+  pubsubDropOldest();
   if (argc > 1 && (argc != 2 || std::strcmp(argv[1], "--recovery-contract") != 0))
     return 2;
   return runRecoveryMatrix(true);

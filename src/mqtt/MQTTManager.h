@@ -33,6 +33,7 @@
 #error "CM_MQTT_BOUNDED_IO does not support MQTT_MAX_TRANSFER_SIZE"
 #endif
 #include "detail/BoundedMqttClient.h"
+#include "detail/DroppedPublishNotifications.h"
 #endif
 
 namespace cm {
@@ -114,6 +115,7 @@ public:
   using MessageCallback = std::function<void(const char* topic, const byte* payload, unsigned int length)>;
   using NewMessageCallback = std::function<void(const MqttMessageView&)>;
   using StateChangedCallback = std::function<void(ConnectionState)>;
+  using DroppedMessageCallback = std::function<void(uint32_t, uint32_t)>;
 
   // Option A: use the singleton and call attach() from setup().
   static MQTTManager& instance() {
@@ -343,6 +345,21 @@ public:
     return disabled;
 #endif
   }
+  void setDropOldestQueuedPublishes(bool enabled) {
+#if CM_MQTT_BOUNDED_IO
+    wifiClient_.setDropOldestQueuedPublishes(enabled);
+#else
+    (void)enabled;
+#endif
+  }
+  void onDroppedMessage(DroppedMessageCallback callback) {
+#if CM_MQTT_BOUNDED_IO
+    const auto& stats = wifiClient_.stats();
+    droppedNotifications_.setCallback(std::move(callback), stats.txDroppedPublishes, stats.txDroppedBytes);
+#else
+    (void)callback;
+#endif
+  }
   bool canPublish(size_t topicBytes, size_t payloadBytes) const {
     if (!isConnected())
       return false;
@@ -519,6 +536,8 @@ private:
 #if CM_MQTT_BOUNDED_IO
   uint32_t txResizeAttemptMs_ = 0;
   bool txResizeAttempted_ = false;
+  bool boundedLoopRunning_ = false;
+  detail::DroppedPublishNotifications droppedNotifications_;
   void applyBoundedSettings_();
 #endif
 #if CM_ENABLE_LIVE_UI
@@ -1673,10 +1692,19 @@ inline void MQTTManager::update() {
 
 inline void MQTTManager::loop() {
 #if CM_MQTT_BOUNDED_IO
+  if (boundedLoopRunning_)
+    return;
+  struct LoopGuard {
+    bool& active;
+    explicit LoopGuard(bool& flag) : active(flag) { active = true; }
+    ~LoopGuard() { active = false; }
+  } loopGuard(boundedLoopRunning_);
   // Service partial frames even when the application selected a long listen interval.
   wifiClient_.beginLoop();
   wifiClient_.pump();
   applyBoundedSettings_();
+  const auto& dropStats = wifiClient_.stats();
+  droppedNotifications_.dispatch(dropStats.txDroppedPublishes, dropStats.txDroppedBytes);
 #endif
   if (!settings_.enableMQTT.get()) {
     if (state_ != ConnectionState::Disconnected) {
@@ -1789,7 +1817,14 @@ inline bool MQTTManager::publish(const char* topic, const char* payload, bool re
     return false;
   }
 #endif
+#if CM_MQTT_BOUNDED_IO
+  wifiClient_.beginApplicationPublish();
+  const bool published = mqttClient_.publish(topic, payload, retained);
+  wifiClient_.endApplicationPublish();
+  return published;
+#else
   return mqttClient_.publish(topic, payload, retained);
+#endif
 }
 
 inline bool MQTTManager::publish(const char* topic, const String& payload, bool retained) {
@@ -1806,7 +1841,14 @@ inline bool MQTTManager::publishRaw(const char* topic, const char* payload, bool
     return false;
   }
 #endif
+#if CM_MQTT_BOUNDED_IO
+  wifiClient_.beginApplicationPublish();
+  const bool published = mqttClient_.publish(topic, payload, retained);
+  wifiClient_.endApplicationPublish();
+  return published;
+#else
   return mqttClient_.publish(topic, payload, retained);
+#endif
 }
 
 inline String MQTTManager::getSystemInfoTopic() const {

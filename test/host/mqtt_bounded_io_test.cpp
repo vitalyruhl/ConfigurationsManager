@@ -70,6 +70,198 @@ static void configurableQueueAndTimeout() {
 }
 
 // [MOCKED!] Admission must preserve room for control packets.
+static void dropOldestQueuedPublishes() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  const int id = mockSockets.back().id;
+  client.setDropOldestQueuedPublishes(true);
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  std::vector<std::vector<uint8_t>> packets;
+  for (uint8_t value = 0; value < 5; ++value) {
+    std::vector<uint8_t> packet(996, value);
+    packet[0] = 0x30; packet[1] = 0xe1; packet[2] = 0x07;
+    packet[3] = 0; packet[4] = 1; packet[5] = 't';
+    packets.push_back(packet);
+  }
+  for (int i = 0; i < 4; ++i) {
+    client.beginApplicationPublish();
+    assert(client.write(packets[i].data(), packets[i].size()) == packets[i].size());
+    client.endApplicationPublish();
+  }
+  assert(client.canQueuePublish(1, 990, 1024));
+  assert(client.stats().txDroppedPublishes == 0);
+  client.beginApplicationPublish();
+  assert(client.write(packets[4].data(), packets[4].size()) == packets[4].size());
+  client.endApplicationPublish();
+  assert(client.stats().txDroppedPublishes == 1);
+  assert(client.stats().txDroppedBytes == 996);
+  mockSendResult = -2;
+  client.beginLoop();
+  client.pump();
+  std::vector<uint8_t> expected;
+  for (int i = 1; i < 5; ++i)
+    expected.insert(expected.end(), packets[i].begin(), packets[i].end());
+  assert(mockSocket(id)->acceptedBytes() == expected);
+}
+
+// [MOCKED!] Partially transmitted packets and control bytes cannot be evicted.
+static void dropPreservesPartialAndControl() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  const int id = mockSockets.back().id;
+  client.setDropOldestQueuedPublishes(true);
+  mockSendSteps = {{3, 0}, {-1, EAGAIN}};
+  std::vector<std::vector<uint8_t>> packets;
+  for (uint8_t value = 0; value < 5; ++value) {
+    std::vector<uint8_t> packet(996, value);
+    packet[0] = 0x31; packet[1] = 0xe1; packet[2] = 0x07;
+    packet[3] = 0; packet[4] = 1; packet[5] = 't';
+    packets.push_back(packet);
+  }
+  auto publish = [&](size_t i) {
+    client.beginApplicationPublish();
+    const size_t result = client.write(packets[i].data(), packets[i].size());
+    client.endApplicationPublish();
+    assert(result == packets[i].size());
+  };
+  publish(0);
+  const uint8_t ping[] = {0xc0, 0};
+  assert(client.write(ping, sizeof(ping)) == sizeof(ping));
+  publish(1); publish(2); publish(3); publish(4);
+  assert(client.stats().txDroppedPublishes == 1);
+  assert(client.stats().txDroppedBytes == 996);
+  assert(!client.canQueuePublish(1, 5000, 8192));
+  assert(client.stats().txDroppedPublishes == 1);
+  client.beginLoop();
+  client.pump();
+  std::vector<uint8_t> expected = packets[0];
+  expected.insert(expected.end(), ping, ping + sizeof(ping));
+  for (int i = 2; i < 5; ++i)
+    expected.insert(expected.end(), packets[i].begin(), packets[i].end());
+  assert(mockSocket(id)->acceptedBytes() == expected);
+}
+
+// [MOCKED!] Metadata saturation never loses or misclassifies control traffic.
+static void dropMetadataLimitAndToggle() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  const int id = mockSockets.back().id;
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  const uint8_t opaque[] = {0xc0, 0};
+  assert(client.write(opaque, sizeof(opaque)) == sizeof(opaque));
+  client.setDropOldestQueuedPublishes(true); // Existing FIFO becomes protected.
+  const uint8_t publish[] = {0x30, 4, 0, 1, 't', 'x'};
+  for (unsigned i = 0; i < 63; ++i) {
+    client.beginApplicationPublish();
+    assert(client.write(publish, sizeof(publish)) == sizeof(publish));
+    client.endApplicationPublish();
+  }
+  assert(client.canQueuePublish(1, 1, 256));
+  client.beginApplicationPublish();
+  assert(client.write(publish, sizeof(publish)) == sizeof(publish));
+  client.endApplicationPublish();
+  assert(client.stats().txDroppedPublishes == 1);
+  assert(client.write(opaque, sizeof(opaque)) == sizeof(opaque));
+  assert(client.canQueuePublish(1, 1, 256));
+  client.setDropOldestQueuedPublishes(false);
+  client.setDropOldestQueuedPublishes(true); // All pending bytes protected again.
+  assert(client.stats().txDroppedPublishes == 1);
+  mockSendResult = -2;
+  client.beginLoop();
+  client.pump();
+  std::vector<uint8_t> expected(opaque, opaque + sizeof(opaque));
+  for (unsigned i = 0; i < 63; ++i)
+    expected.insert(expected.end(), publish, publish + sizeof(publish));
+  expected.insert(expected.end(), opaque, opaque + sizeof(opaque));
+  assert(mockSocket(id)->acceptedBytes() == expected);
+}
+
+// [MOCKED!] Wrapped compaction must preserve the exact stream after a short send.
+static void dropWrappedQueue() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  const int id = mockSockets.back().id;
+  client.setDropOldestQueuedPublishes(true);
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  std::vector<std::vector<uint8_t>> packets;
+  for (uint8_t value = 0; value < 7; ++value) {
+    std::vector<uint8_t> packet(996, value);
+    packet[0] = 0x30; packet[1] = 0xe1; packet[2] = 0x07;
+    packet[3] = 0; packet[4] = 1; packet[5] = 't';
+    packets.push_back(packet);
+  }
+  auto publish = [&](size_t i) {
+    client.beginApplicationPublish();
+    const auto written = client.write(packets[i].data(), packets[i].size());
+    client.endApplicationPublish();
+    assert(written == packets[i].size());
+  };
+  for (int i = 0; i < 4; ++i)
+    publish(i);
+  mockSendSteps = {{2000, 0}, {-1, EAGAIN}};
+  mockSendStepCursor = 0;
+  client.beginLoop();
+  client.pump();
+  assert(mockSocket(id)->acceptedBytes().size() == 2000);
+  publish(4); publish(5); publish(6);
+  assert(client.stats().txDroppedPublishes == 1);
+  mockSendResult = -2;
+  client.beginLoop();
+  client.pump();
+  std::vector<uint8_t> expected;
+  for (int i : {0, 1, 2, 4, 5, 6})
+    expected.insert(expected.end(), packets[i].begin(), packets[i].end());
+  assert(mockSocket(id)->acceptedBytes() == expected);
+}
+
+// [MOCKED!] A preflight candidate can become ineligible when the pre-write
+// pump partially sends it; rejection is counted once without closing.
+static void dropPreflightRaceCountsReject() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  client.setDropOldestQueuedPublishes(true);
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  std::vector<uint8_t> oldPacket(4000, 'a');
+  oldPacket[0] = 0x30; oldPacket[1] = 0x9d; oldPacket[2] = 0x1f;
+  oldPacket[3] = 0; oldPacket[4] = 1; oldPacket[5] = 't';
+  client.beginApplicationPublish();
+  assert(client.write(oldPacket.data(), oldPacket.size()) == oldPacket.size());
+  client.endApplicationPublish();
+  std::vector<uint8_t> nextPacket(996, 'b');
+  nextPacket[0] = 0x30; nextPacket[1] = 0xe1; nextPacket[2] = 0x07;
+  nextPacket[3] = 0; nextPacket[4] = 1; nextPacket[5] = 't';
+  assert(client.canQueuePublish(1, 990, 1024));
+  mockSendSteps = {{3, 0}, {-1, EAGAIN}};
+  mockSendStepCursor = 0;
+  client.beginLoop();
+  client.beginApplicationPublish();
+  assert(client.write(nextPacket.data(), nextPacket.size()) == 0);
+  client.endApplicationPublish();
+  assert(client.connected() && client.txUsed() == 3997);
+  assert(client.stats().txRejectedPublishes == 1);
+  assert(client.stats().txDroppedPublishes == 0);
+
+  // A definitive socket failure is a transport failure, not a second reject.
+  mockSendSteps = {{-1, ECONNRESET}};
+  mockSendStepCursor = 0;
+  client.beginLoop();
+  client.beginApplicationPublish();
+  assert(client.write(nextPacket.data(), nextPacket.size()) == 0);
+  client.endApplicationPublish();
+  assert(!client.connected());
+  assert(client.stats().txRejectedPublishes == 1);
+  assert(client.stats().txFailures == 1);
+}
+
 static void publishAdmission() {
   mockResetNetwork();
   cm::detail::BoundedMqttClient client;
@@ -313,6 +505,11 @@ static void recoveryBoundaries() {
 
 int main() {
   configurableQueueAndTimeout();
+  dropOldestQueuedPublishes();
+  dropPreservesPartialAndControl();
+  dropPreflightRaceCountsReject();
+  dropMetadataLimitAndToggle();
+  dropWrappedQueue();
   publishAdmission();
   cm::detail::BoundedMqttClient client;
   connect(client);

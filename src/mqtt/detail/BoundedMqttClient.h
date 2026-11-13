@@ -27,6 +27,8 @@ public:
   static constexpr uint32_t TxLifetimeMs = 5000;
   static constexpr uint16_t TxCallBudget = 64;
   static constexpr uint32_t TxTimeBudgetUs = 1000;
+  static constexpr uint8_t MaxTxSegments = 64;
+  static constexpr uint16_t TxControlReserve = 64;
 
   BoundedMqttClient() = default;
   BoundedMqttClient(const BoundedMqttClient&) = delete;
@@ -37,8 +39,19 @@ public:
   uint16_t txUsed() const { return txUsed_; }
   uint16_t txFree() const { return txCapacity_ - txUsed_; }
   void noteRejectedPublish() { ++stats_.txRejectedPublishes; }
+  void setDropOldestQueuedPublishes(bool enabled) {
+    if (enabled == dropOldest_)
+      return;
+    dropOldest_ = enabled;
+    txSegmentCount_ = 0;
+    if (enabled && txUsed_) {
+      txSegments_[0] = {txUsed_, false, true};
+      txSegmentCount_ = 1;
+    }
+  }
+  void beginApplicationPublish() { applicationPublish_ = true; }
+  void endApplicationPublish() { applicationPublish_ = false; }
   bool canQueuePublish(size_t topicBytes, size_t payloadBytes, size_t bufferBytes) const {
-    constexpr size_t reserve = 64;
     constexpr size_t maxHeader = 5;
     if (!topicBytes || topicBytes > 65535 || bufferBytes < maxHeader + 2 ||
         topicBytes > bufferBytes - maxHeader - 2 ||
@@ -50,7 +63,12 @@ public:
     for (size_t n = remaining; n >= 128; n /= 128)
       ++varintBytes;
     const size_t packetBytes = 1 + varintBytes + remaining;
-    return txFree() >= reserve && packetBytes <= txFree() - reserve;
+    if (packetBytes > MaxTxCapacity || packetBytes + TxControlReserve > txCapacity_)
+      return false;
+    if (!dropOldest_)
+      return txFree() >= TxControlReserve && packetBytes <= txFree() - TxControlReserve;
+    bool selected[MaxTxSegments]{};
+    return selectDrops_(packetBytes, selected);
   }
   bool setTxCapacity(uint16_t bytes) {
     if (bytes < TxCapacity || bytes > MaxTxCapacity)
@@ -218,6 +236,18 @@ public:
     pumpTx_();
     if (socket_.fd() < 0)
       return 0;
+    const bool appPacket = applicationPublish_;
+    if (dropOldest_ && appPacket) {
+      // A marked write must contain precisely one complete QoS 0 PUBLISH.
+      if (!isCompletePublish_(bytes, count))
+        return 0;
+      bool selected[MaxTxSegments]{};
+      if (!selectDrops_(count, selected)) {
+        ++stats_.txRejectedPublishes;
+        return 0;
+      }
+      compactDropped_(selected);
+    }
     if (count > static_cast<size_t>(txCapacity_ - txUsed_)) {
       ++stats_.txOverflows;
       reject_(stats_.txFailures);
@@ -230,6 +260,8 @@ public:
     uint8_t* tx = txExtra_ ? txExtra_ : tx_;
     std::memcpy(tx + tail, bytes, first);
     std::memcpy(tx, bytes + first, count - first);
+    if (dropOldest_)
+      appendSegment_(static_cast<uint16_t>(count), appPacket);
     txUsed_ += static_cast<uint16_t>(count);
     pumpTx_();
     // Success means ownership of the complete chunk, not a broker acknowledgement.
@@ -244,6 +276,8 @@ public:
     txProgressMs_ = 0;
     txBlocked_ = false;
     awaitingConnack_ = false;
+    txSegmentCount_ = 0;
+    applicationPublish_ = false;
   }
   uint8_t connected() override {
     return socket_.connected();
@@ -259,6 +293,15 @@ private:
   uint8_t* txExtra_ = nullptr;
   uint16_t txCapacity_ = TxCapacity;
   uint32_t txStallTimeoutMs_ = TxLifetimeMs;
+  struct TxSegment {
+    uint16_t bytes;
+    bool publish;
+    bool started;
+  };
+  TxSegment txSegments_[MaxTxSegments]{};
+  uint8_t txSegmentCount_ = 0;
+  bool dropOldest_ = false;
+  bool applicationPublish_ = false;
   uint16_t txHead_ = 0;
   uint16_t txUsed_ = 0;
   uint16_t txCallsLeft_ = TxCallBudget;
@@ -284,6 +327,109 @@ private:
     txTimeLeftUs_ = TxTimeBudgetUs;
     txEpochUs_ = micros();
     txBlocked_ = false;
+  }
+
+  static bool isCompletePublish_(const uint8_t* bytes, size_t count) {
+    if (count < 2 || (bytes[0] & 0xfe) != 0x30)
+      return false;
+    size_t remaining = 0;
+    size_t multiplier = 1;
+    for (size_t i = 1; i < count && i <= 4; ++i) {
+      const uint8_t digit = bytes[i];
+      remaining += static_cast<size_t>(digit & 127) * multiplier;
+      if (!(digit & 128))
+        return remaining == count - i - 1 && remaining >= 3;
+      multiplier *= 128;
+    }
+    return false;
+  }
+
+  bool selectDrops_(size_t bytes, bool* selected) const {
+    if (bytes > txCapacity_ || bytes + TxControlReserve > txCapacity_)
+      return false;
+    size_t available = txFree();
+    unsigned removed = 0;
+    const size_t required = bytes + TxControlReserve;
+    if (available >= required && txSegmentCount_ < MaxTxSegments)
+      return true;
+    for (uint8_t i = 0; i < txSegmentCount_; ++i) {
+      const TxSegment& segment = txSegments_[i];
+      if (segment.publish && !segment.started) {
+        selected[i] = true;
+        available += segment.bytes;
+        ++removed;
+        if (available >= required && txSegmentCount_ - removed < MaxTxSegments)
+          return true;
+      }
+    }
+    return false;
+  }
+
+  void compactDropped_(const bool* selected) {
+    bool any = false;
+    for (uint8_t i = 0; i < txSegmentCount_; ++i)
+      any = any || selected[i];
+    if (!any)
+      return;
+    uint8_t* tx = txExtra_ ? txExtra_ : tx_;
+    uint16_t writeOffset = 0;
+    uint16_t readIndex = txHead_;
+    uint16_t writeIndex = txHead_;
+    uint8_t output = 0;
+    for (uint8_t i = 0; i < txSegmentCount_; ++i) {
+      const TxSegment segment = txSegments_[i];
+      if (selected[i]) {
+        ++stats_.txDroppedPublishes;
+        stats_.txDroppedBytes += segment.bytes;
+        readIndex = static_cast<uint16_t>((readIndex + segment.bytes) % txCapacity_);
+        continue;
+      }
+      for (uint16_t j = 0; j < segment.bytes; ++j) {
+        if (readIndex != writeIndex)
+          tx[writeIndex] = tx[readIndex];
+        ++writeOffset;
+        if (++readIndex == txCapacity_)
+          readIndex = 0;
+        if (++writeIndex == txCapacity_)
+          writeIndex = 0;
+      }
+      txSegments_[output++] = segment;
+    }
+    txUsed_ = writeOffset;
+    txSegmentCount_ = output;
+  }
+
+  void appendSegment_(uint16_t bytes, bool publish) {
+    if (!publish && txSegmentCount_ && !txSegments_[txSegmentCount_ - 1].publish) {
+      txSegments_[txSegmentCount_ - 1].bytes += bytes;
+      return;
+    }
+    if (txSegmentCount_ == MaxTxSegments) {
+      // Control traffic cannot be dropped. Conservatively protect the entire
+      // existing stream if its exact descriptors cannot be retained.
+      txSegments_[0] = {txUsed_, false, true};
+      txSegmentCount_ = txUsed_ ? 1 : 0;
+      if (!publish && txSegmentCount_) {
+        txSegments_[0].bytes += bytes;
+        return;
+      }
+    }
+    txSegments_[txSegmentCount_++] = {bytes, publish, false};
+  }
+
+  void consumeSegments_(uint16_t bytes) {
+    while (bytes && txSegmentCount_) {
+      TxSegment& head = txSegments_[0];
+      if (bytes < head.bytes) {
+        head.bytes -= bytes;
+        head.started = true;
+        return;
+      }
+      bytes -= head.bytes;
+      for (uint8_t i = 1; i < txSegmentCount_; ++i)
+        txSegments_[i - 1] = txSegments_[i];
+      --txSegmentCount_;
+    }
   }
 
   bool expireTx_() {
@@ -317,6 +463,8 @@ private:
       }
       if (sent < count)
         ++stats_.txPartialWrites;
+      if (dropOldest_)
+        consumeSegments_(static_cast<uint16_t>(sent));
       txHead_ = static_cast<uint16_t>((txHead_ + sent) % txCapacity_);
       txUsed_ -= static_cast<uint16_t>(sent);
       txProgressMs_ = millis();

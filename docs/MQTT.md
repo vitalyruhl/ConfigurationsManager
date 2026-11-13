@@ -222,15 +222,87 @@ Pending bytes expire after the configured time without a positive TCP send. A
 successful partial send renews that stall deadline; newly queued bytes and
 transient errors do not. Continuous progress can therefore keep the queue
 nonempty for longer than the timeout. This is neither an absolute packet-age
-limit nor a broker-delivery guarantee. Application publishes are rejected
-before writing when the queue cannot hold the packet plus 64 bytes of control
-headroom. `canPublish(topicBytes, payloadBytes)` is an advisory snapshot;
-the publish result does not acknowledge broker delivery. Rejected publish
-attempts are counted by `txRejectedPublishes`, including invalid arguments or
-insufficient PubSubClient buffer space. Unexpected transport overflow, a
-zero-byte send or a definitive socket error closes the connection and clears
-pending bytes. Headroom does not guarantee timely control-packet delivery.
-Bounded mode does not support `MQTT_MAX_TRANSFER_SIZE`.
+limit nor a broker-delivery guarantee. By default, application publishes are
+rejected before writing when the queue cannot hold the packet plus 64 bytes of
+control headroom. `canPublish(topicBytes, payloadBytes)` is an advisory snapshot.
+Rejected publish attempts are counted by `txRejectedPublishes`, including
+invalid arguments or insufficient PubSubClient buffer space. Unexpected
+transport overflow, a zero-byte send or a definitive socket error closes the
+connection and clears pending bytes. Headroom does not guarantee timely
+control-packet delivery. Bounded mode does not support
+`MQTT_MAX_TRANSFER_SIZE`.
+
+### Optional discard of older queued publishes
+
+By default, the bounded transport keeps existing queued data and rejects a new
+publish when it cannot fit. Applications may instead explicitly allow older
+queued publishes to be discarded:
+
+```cpp
+// Call during setup. The default is false.
+mqtt.setDropOldestQueuedPublishes(true);
+```
+
+When enabled and the new publish needs queue space or a packet-tracking slot, the transport discards
+the oldest eligible, completely unsent PUBLISH packets across all topics until
+the new packet and control headroom fit. This applies to all publishes,
+including retained messages, events, command-like data and logs. Enabling or
+disabling the option does not itself discard any messages. The option only
+affects the bounded transport; it has no effect with the legacy transport.
+With dropping enabled, `canPublish(topicBytes, payloadBytes)` also considers
+space reclaimable from eligible packets. It does not discard anything or
+reserve space; the result may change before the actual publish.
+Tracking is limited to 64 queued segments; unknown existing data may be grouped
+as a protected segment and cannot be selected for dropping.
+
+Partially transmitted packets and MQTT control packets are preserved. If
+there are not enough safely removable packets or another capacity limit
+prevents admission, the new publish returns `false` and already queued data
+is retained. Once admission has discarded older packets and enqueued the new
+one, a subsequent TCP failure can still make that publish return `false`;
+the discarded packets cannot be recovered. Bytes already passed to TCP cannot
+be removed from the TCP stream. An independent socket failure or stall timeout
+can still close the connection.
+
+**A `true` publish result means accepted locally at that time, not received
+by the broker.** With this option enabled, a later publish can cause an older
+publish that already returned `true` to be discarded. Neither a `true`
+return nor this option guarantees broker delivery.
+
+`getBoundedIoStats().txDroppedPublishes` and `txDroppedBytes` count removed
+PUBLISH packets and their encoded MQTT packet bytes separately from
+`txRejectedPublishes`; as with the other transport counters, they are
+cumulative across reconnects. Applications that cannot lose messages should
+leave dropping disabled and handle `false` results, for example by retrying
+later. A larger TX queue is another option when heap capacity allows it.
+These counters are `uint32_t` and wrap after their maximum value.
+
+```cpp
+const auto& stats = mqtt.getBoundedIoStats();
+uint32_t rejected = stats.txRejectedPublishes;
+uint32_t dropped = stats.txDroppedPublishes;
+uint32_t droppedBytes = stats.txDroppedBytes;
+```
+
+For notification of drops after registration, an application can register a
+callback:
+
+```cpp
+mqtt.onDroppedMessage([](uint32_t messageCount, uint32_t byteCount) {
+  // Handle the count and encoded MQTT packet bytes discarded since the last notification.
+});
+```
+
+The callback runs deferred in `mqtt.loop()`, no earlier than the next call,
+and may combine several drops. It receives counts and encoded byte totals,
+not the affected topics or payloads. Historical drops before registration are
+not replayed; use the cumulative counters to inspect them. Publishing again
+from the callback is supported; any additional drops caused there are reported
+on a later `mqtt.loop()`. Registering or replacing a callback establishes a
+new notification baseline. Use `mqtt.onDroppedMessage({})` to unregister it.
+In legacy transport mode this callback has no effect. Keep callback work short
+and nonblocking. `MQTTManager` is not thread-safe: run `loop()`, publishes,
+setters and callback registration in the same application context.
 
 Transmit pumping shares at most 64 send attempts and 1000 microseconds per
 application loop, separately from the receive budget. During synchronous
