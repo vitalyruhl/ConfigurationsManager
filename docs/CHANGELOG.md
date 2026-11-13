@@ -3,10 +3,10 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
-## 4.12.0 - Unpublished development candidate
+## 4.12.0 - 2026-11-13
 
-- Move BoilerSaver, SolarInverterLimiter and SolarBatteryTelemetry examples to
-  their respective repositories; link to them from the documentation.
+- Move BoilerSaver, SolarInverterLimiter and SolarBatteryTelemetry into their
+  own repositories and update the documentation links.
 - Add configurable queue size and stall timeout for the optional bounded MQTT
   transport, and reject application publishes when TX headroom is unavailable.
 - Add an experimental opt-in policy for discarding older unsent MQTT publishes
@@ -19,24 +19,16 @@ are consolidated into 4.8.0; they were not separate releases.
 - Defer pulse-output hardware initialization until runtime. Global helper
   construction no longer invokes Arduino GPIO or virtual RGB/RMT drivers before
   the scheduler starts; initialize the inactive level before enabling output.
-- Use explicit `uint32_t` timeout clamps so the same configuration headers
-  compile on ESP32-C3 toolchains where `uint32_t` aliases `unsigned long`.
-
-## 4.10.6 - Unpublished test candidate
-
-- Replace borrowed runtime WebSocket client access with guarded server-by-ID
-  delivery, heartbeat closure, and queue checks. Keep the runtime delivery slot
-  reserved until the shared transport buffer is released.
+- Correct timeout clamps for ESP32-C3 toolchains where `uint32_t` aliases
+  `unsigned long`.
+- Guard runtime WebSocket delivery, heartbeat closure and queue checks by client
+  ID. Keep the runtime delivery slot reserved until the shared transport buffer
+  is released, including when a connection disappears during delivery.
 - Require the maintained ESP32Async WebSocket and TCP transports with mutexes
   enabled. Reject legacy esphome transport headers explicitly.
-- Validate a connection disappearing between availability checks and delivery,
-  while retaining selected groups and per-client backpressure behavior.
-- Refresh the inverter and boiler application examples and add a battery/PV
-  telemetry example combining WiFi provisioning, OTA and CM-owned BLE with
-  safe public defaults and a direct binding to the enclosing source checkout.
-- Exclude the root firmware entry point when consuming CM as a source library,
-  isolate nested example dependency caches, and distinguish native host tests
-  from embedded firmware test targets.
+- Exclude the root firmware entry point when consuming CM as a source library.
+  Keep example build files and dependency caches separate, and distinguish
+  native host tests from embedded firmware test targets.
 
 ## 4.10.5 - 2026-10-28
 
