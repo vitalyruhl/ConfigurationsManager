@@ -28,6 +28,65 @@ static void connect(cm::detail::BoundedMqttClient& client) {
   assert(client.read(connack, sizeof(connack)) == 4);
 }
 
+// [MOCKED!] A resize must never discard or reorder queued stream bytes.
+static void configurableQueueAndTimeout() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  const int id = mockSockets.back().id;
+  assert(client.txCapacity() == 4608);
+  assert(client.setTxCapacity(8192));
+  assert(client.txCapacity() == 8192);
+  client.setTxStallTimeoutMs(30000);
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  const std::vector<uint8_t> bytes(6000, 'x');
+  assert(client.write(bytes.data(), bytes.size()) == bytes.size());
+  assert(!client.setTxCapacity(4608));
+  mockNowMs = 5000;
+  client.beginLoop();
+  client.pump();
+  assert(client.connected());
+  mockSendResult = -2;
+  client.beginLoop();
+  client.pump();
+  assert(mockSocket(id)->acceptedBytes() == bytes);
+  assert(client.setTxCapacity(4608));
+  assert(client.txCapacity() == 4608);
+  assert(!client.setTxCapacity(4607));
+  assert(!client.setTxCapacity(16385));
+  mockNowMs = 0xfffffc00u;
+  mockSendResult = -1;
+  assert(client.write(bytes.data(), 2) == 2);
+  mockNowMs = static_cast<uint32_t>(0xfffffc00u + 29999u);
+  client.beginLoop();
+  client.pump();
+  assert(client.connected());
+  mockNowMs = static_cast<uint32_t>(0xfffffc00u + 30000u);
+  client.beginLoop();
+  client.pump();
+  assert(!client.connected());
+  assert(client.stats().txTimeouts == 1);
+}
+
+// [MOCKED!] Admission must preserve room for control packets.
+static void publishAdmission() {
+  mockResetNetwork();
+  cm::detail::BoundedMqttClient client;
+  connect(client);
+  assert(client.canQueuePublish(1, 100, 256));
+  assert(!client.canQueuePublish(1, 250, 256));
+  assert(!client.canQueuePublish(SIZE_MAX, 1, 256));
+  assert(!client.canQueuePublish(1, SIZE_MAX, SIZE_MAX));
+  mockSendResult = -1;
+  mockSendError = EAGAIN;
+  std::vector<uint8_t> fill(4500, 'x');
+  assert(client.write(fill.data(), fill.size()) == fill.size());
+  assert(!client.canQueuePublish(1, 100, 256));
+  assert(client.connected());
+  assert(client.txUsed() == fill.size());
+}
+
 // [MOCKED!] Continuous forward progress must not expire a nonempty FIFO epoch.
 static void progressingQueueDoesNotTimeout() {
   mockResetNetwork();
@@ -253,6 +312,8 @@ static void recoveryBoundaries() {
 }
 
 int main() {
+  configurableQueueAndTimeout();
+  publishAdmission();
   cm::detail::BoundedMqttClient client;
   connect(client);
   // A fragmented PUBLISH must remain invisible until payload completion.

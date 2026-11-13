@@ -202,22 +202,35 @@ Notes:
 
 `CM_MQTT_BOUNDED_IO` defaults to `0`, retaining the legacy transport. Define it
 as `1` consistently in the consumer build to select complete-frame receive
-handling and a fixed transmit queue. This mode requires a numeric IPv4 broker
+handling and a bounded transmit queue. This mode requires a numeric IPv4 broker
 address. TCP connect is bounded to 100 ms plus up to one second for CONNACK;
 it is not a DNS-capable transport.
 
 The receive path assembles complete MQTT frames without waiting in the
 application loop, expires partial frames after 30 seconds and closes malformed
-connections. A fixed 4608-byte transmit FIFO retains unsent bytes across
-transient pressure and positive short writes, preserving byte order without
-allocating heap storage for the queue.
+connections. The transmit FIFO retains unsent bytes across transient pressure
+and positive short writes. The MQTT settings expose `TX Queue Size (bytes)`
+(default 4608, effective range 4608-16384) and `TX Stall Timeout (ms)`
+(default 5000, effective range 2000-120000). Values outside these ranges are
+clamped when applied. The default queue uses fixed storage; a larger queue
+additionally allocates its configured size on the heap. Allocation failures
+retain the previous capacity and are retried; a resize waits until the FIFO is
+empty and never discards its pending bytes. Inspect the effective capacity as
+`getTxQueueUsed() + getTxQueueFree()`.
 
-Pending bytes expire after five seconds without a positive TCP send. A
+Pending bytes expire after the configured time without a positive TCP send. A
 successful partial send renews that stall deadline; newly queued bytes and
 transient errors do not. Continuous progress can therefore keep the queue
-nonempty for longer than five seconds. This is neither an absolute packet-age
-limit nor a broker-delivery guarantee. Queue overflow, a zero-byte send or a
-definitive socket error closes the connection and clears pending bytes.
+nonempty for longer than the timeout. This is neither an absolute packet-age
+limit nor a broker-delivery guarantee. Application publishes are rejected
+before writing when the queue cannot hold the packet plus 64 bytes of control
+headroom. `canPublish(topicBytes, payloadBytes)` is an advisory snapshot;
+the publish result does not acknowledge broker delivery. Rejected publish
+attempts are counted by `txRejectedPublishes`, including invalid arguments or
+insufficient PubSubClient buffer space. Unexpected transport overflow, a
+zero-byte send or a definitive socket error closes the connection and clears
+pending bytes. Headroom does not guarantee timely control-packet delivery.
+Bounded mode does not support `MQTT_MAX_TRANSFER_SIZE`.
 
 Transmit pumping shares at most 64 send attempts and 1000 microseconds per
 application loop, separately from the receive budget. During synchronous

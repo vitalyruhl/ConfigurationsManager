@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include "BoundedMqttStats.h"
 
@@ -20,11 +21,59 @@ public:
   static constexpr uint32_t PumpTimeBudgetUs = 1000;
   static constexpr uint32_t FrameLifetimeMs = 30000;
   static constexpr uint16_t TxCapacity = 2 * MaxFrameBytes;
+  static constexpr uint16_t MaxTxCapacity = 16384;
   // No positive TCP send for five seconds expires pending bytes. This is not a
   // packet-age or broker-delivery deadline; enqueue and transient errors do not renew it.
   static constexpr uint32_t TxLifetimeMs = 5000;
   static constexpr uint16_t TxCallBudget = 64;
   static constexpr uint32_t TxTimeBudgetUs = 1000;
+
+  BoundedMqttClient() = default;
+  BoundedMqttClient(const BoundedMqttClient&) = delete;
+  BoundedMqttClient& operator=(const BoundedMqttClient&) = delete;
+  ~BoundedMqttClient() override { std::free(txExtra_); }
+
+  uint16_t txCapacity() const { return txCapacity_; }
+  uint16_t txUsed() const { return txUsed_; }
+  uint16_t txFree() const { return txCapacity_ - txUsed_; }
+  void noteRejectedPublish() { ++stats_.txRejectedPublishes; }
+  bool canQueuePublish(size_t topicBytes, size_t payloadBytes, size_t bufferBytes) const {
+    constexpr size_t reserve = 64;
+    constexpr size_t maxHeader = 5;
+    if (!topicBytes || topicBytes > 65535 || bufferBytes < maxHeader + 2 ||
+        topicBytes > bufferBytes - maxHeader - 2 ||
+        payloadBytes > bufferBytes - maxHeader - 2 - topicBytes ||
+        payloadBytes > 268435455u - 2 - topicBytes)
+      return false;
+    const size_t remaining = 2 + topicBytes + payloadBytes;
+    size_t varintBytes = 1;
+    for (size_t n = remaining; n >= 128; n /= 128)
+      ++varintBytes;
+    const size_t packetBytes = 1 + varintBytes + remaining;
+    return txFree() >= reserve && packetBytes <= txFree() - reserve;
+  }
+  bool setTxCapacity(uint16_t bytes) {
+    if (bytes < TxCapacity || bytes > MaxTxCapacity)
+      return false;
+    if (bytes == txCapacity_)
+      return true;
+    if (txUsed_)
+      return false;
+    uint8_t* replacement = nullptr;
+    if (bytes != TxCapacity) {
+      replacement = static_cast<uint8_t*>(std::malloc(bytes));
+      if (!replacement)
+        return false;
+    }
+    std::free(txExtra_);
+    txExtra_ = replacement;
+    txCapacity_ = bytes;
+    txHead_ = 0;
+    return true;
+  }
+  void setTxStallTimeoutMs(uint32_t ms) {
+    txStallTimeoutMs_ = ms == 0 ? TxLifetimeMs : std::max<uint32_t>(2000, std::min<uint32_t>(ms, 120000));
+  }
 
   void beginLoop() {
     budget_ = PumpByteBudget;
@@ -169,17 +218,18 @@ public:
     pumpTx_();
     if (socket_.fd() < 0)
       return 0;
-    if (count > static_cast<size_t>(TxCapacity - txUsed_)) {
+    if (count > static_cast<size_t>(txCapacity_ - txUsed_)) {
       ++stats_.txOverflows;
       reject_(stats_.txFailures);
       return 0;
     }
     if (!txUsed_)
       txProgressMs_ = millis();
-    const uint16_t tail = static_cast<uint16_t>((txHead_ + txUsed_) % TxCapacity);
-    const size_t first = std::min<size_t>(count, TxCapacity - tail);
-    std::memcpy(tx_ + tail, bytes, first);
-    std::memcpy(tx_, bytes + first, count - first);
+    const uint16_t tail = static_cast<uint16_t>((txHead_ + txUsed_) % txCapacity_);
+    const size_t first = std::min<size_t>(count, txCapacity_ - tail);
+    uint8_t* tx = txExtra_ ? txExtra_ : tx_;
+    std::memcpy(tx + tail, bytes, first);
+    std::memcpy(tx, bytes + first, count - first);
     txUsed_ += static_cast<uint16_t>(count);
     pumpTx_();
     // Success means ownership of the complete chunk, not a broker acknowledgement.
@@ -206,6 +256,9 @@ private:
   WiFiClient socket_;
   uint8_t frame_[MaxFrameBytes]{};
   uint8_t tx_[TxCapacity]{};
+  uint8_t* txExtra_ = nullptr;
+  uint16_t txCapacity_ = TxCapacity;
+  uint32_t txStallTimeoutMs_ = TxLifetimeMs;
   uint16_t txHead_ = 0;
   uint16_t txUsed_ = 0;
   uint16_t txCallsLeft_ = TxCallBudget;
@@ -234,7 +287,7 @@ private:
   }
 
   bool expireTx_() {
-    if (txUsed_ && static_cast<uint32_t>(millis() - txProgressMs_) >= TxLifetimeMs) {
+    if (txUsed_ && static_cast<uint32_t>(millis() - txProgressMs_) >= txStallTimeoutMs_) {
       ++stats_.txTimeouts;
       reject_(stats_.txFailures);
       return true;
@@ -249,9 +302,10 @@ private:
     while (txUsed_ && txCallsLeft_ && static_cast<uint32_t>(micros() - startedUs) < txTimeLeftUs_) {
       if (expireTx_())
         break;
-      const uint16_t count = std::min<uint16_t>(txUsed_, TxCapacity - txHead_);
+      const uint16_t count = std::min<uint16_t>(txUsed_, txCapacity_ - txHead_);
       --txCallsLeft_;
-      const int sent = ::send(socket_.fd(), tx_ + txHead_, count, MSG_DONTWAIT);
+      const uint8_t* tx = txExtra_ ? txExtra_ : tx_;
+      const int sent = ::send(socket_.fd(), tx + txHead_, count, MSG_DONTWAIT);
       if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
         ++stats_.txBackpressure;
         txBlocked_ = true;
@@ -263,7 +317,7 @@ private:
       }
       if (sent < count)
         ++stats_.txPartialWrites;
-      txHead_ = static_cast<uint16_t>((txHead_ + sent) % TxCapacity);
+      txHead_ = static_cast<uint16_t>((txHead_ + sent) % txCapacity_);
       txUsed_ -= static_cast<uint16_t>(sent);
       txProgressMs_ = millis();
       if (!txUsed_) {

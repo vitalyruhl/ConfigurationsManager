@@ -3,7 +3,10 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
-## 4.11.0 - Unpublished development candidate
+## 4.12.0 - Unpublished development candidate
+
+- Add configurable queue size and stall timeout for the optional bounded MQTT
+  transport, and reject application publishes when TX headroom is unavailable.
 
 - Add board-aware default construction for `cm::helpers::PulseOutput`, using
   `LED_BUILTIN` or explicit `CM_BUILTIN_LED_PIN` and
