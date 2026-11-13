@@ -345,6 +345,8 @@ public:
     return disabled;
 #endif
   }
+  // Experimental: TX stalls have been observed under sustained load.
+  // Disabled by default; see docs/MQTT.md before enabling.
   void setDropOldestQueuedPublishes(bool enabled) {
 #if CM_MQTT_BOUNDED_IO
     wifiClient_.setDropOldestQueuedPublishes(enabled);

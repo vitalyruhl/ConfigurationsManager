@@ -1,9 +1,0 @@
-; Copy to ignored platformio.local.ini only when configuring an authorized OTA target.
-; Supply these environment variables locally; never commit passwords or device addresses.
-[env:ota]
-upload_port = ${sysenv.BOILERSAVER_OTA_HOST}
-upload_flags =
-    -a
-    ${sysenv.BOILERSAVER_OTA_PASSWORD}
-    -t
-    60

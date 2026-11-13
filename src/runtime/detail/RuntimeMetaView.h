@@ -23,9 +23,13 @@ struct RuntimePropertiesView {
   }
 };
 struct RuntimeRuleView {
+  // Aggregate views bind these members when constructed by RuntimeRulesView.
+  // cppcheck-suppress uninitMemberVarNoCtor
   const String& target;
   RuntimePropertiesView properties;
+  // cppcheck-suppress uninitMemberVarNoCtor
   bool hasVisible, visible;
+  // cppcheck-suppress uninitMemberVarNoCtor
   const String& className;
 };
 struct RuntimeRulesView {

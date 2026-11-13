@@ -6,15 +6,16 @@ If you prefer a full working project, open one of the example projects in `examp
 
 ## Examples: PlatformIO setup notes
 
-The examples use this repository as a local library via
-`lib_deps = symlink://../..`. Smaller examples use per-example caches under
-`${sysenv.HOME}/.pio/CM/ex/...`. BoilerSaver, SolarInverterLimiter and
-SolarBatteryTelemetry keep build outputs in their project-local `.pio/` and
-place registry dependencies in separate per-example caches under
-`${platformio.core_dir}/libdeps/ConfigurationsManager-examples/`. This keeps
-PlatformIO from treating nested dependency headers as part of the enclosing
-CM library. CM itself remains linked to this one checkout; no second CM source
-copy or working repository is created.
+The examples that use CM link to this repository via `lib_deps = symlink://../..`.
+Each example keeps build files and library dependencies in separate directories
+under `${sysenv.HOME}/.pio/CM/ex/...`. CM remains linked to this checkout; no
+second CM source copy or working repository is created. ChipInfo is a standalone
+example and does not depend on CM.
+
+The Bluetooth and Full-IO demos use `min_spiffs.csv` to provide larger dual OTA
+slots on 4 MB boards, leaving less space for SPIFFS. Changing the partition layout
+on an existing device can affect filesystem data and requires a suitable
+installation or migration procedure.
 
 Avoid using `lib_extra_dirs = ../..` for the workspace library. If a build ever seems to use stale local library code, run:
 
@@ -61,7 +62,8 @@ verify its board, ports, partitions and application behavior before uploading.
 ## Quick start (recommended)
 
 For a complete WiFi, OTA and BLE application, see
-[SolarBatteryTelemetry](../examples/SolarBatteryTelemetry/README.md). It combines
+[SolarBatteryTelemetry](https://github.com/vitalyruhl/SolarBatteryTelemetry)
+(repository access required). It combines
 network provisioning, configurable BLE battery/PV collectors and telemetry;
 its README explains hardware, public defaults and the stock-controller baseline.
 

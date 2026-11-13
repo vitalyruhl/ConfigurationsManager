@@ -302,7 +302,7 @@ int main() {
   dispatch.endDelivery();
   // [MOCKED!] Characteristic properties exercise the production write selector.
   struct Characteristic {
-    bool acknowledged, unacknowledged, response = false;
+    bool acknowledged = false, unacknowledged = false, response = false;
     int calls = 0;
     bool canWrite() const {
       return acknowledged;

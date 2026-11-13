@@ -1689,7 +1689,7 @@ private:
       return result;
     }
 
-    const String constraintHint = pinRules ? pinRules->describeConstraints(info.constraints) : String();
+    const String constraintHint = pinRules->describeConstraints(info.constraints);
     if (!constraintHint.isEmpty()) {
       result.reason = "Pin has hardware caveats";
       result.detail = String("Pin ") + String(result.pin) + " is usable but " + constraintHint;

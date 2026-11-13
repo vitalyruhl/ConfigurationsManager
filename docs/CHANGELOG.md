@@ -5,10 +5,13 @@ are consolidated into 4.8.0; they were not separate releases.
 
 ## 4.12.0 - Unpublished development candidate
 
+- Move BoilerSaver, SolarInverterLimiter and SolarBatteryTelemetry examples to
+  their respective repositories; link to them from the documentation.
 - Add configurable queue size and stall timeout for the optional bounded MQTT
   transport, and reject application publishes when TX headroom is unavailable.
-- Add an opt-in policy for discarding older unsent MQTT publishes when queue
-  space is needed, with separate drop counters and deferred notifications.
+- Add an experimental opt-in policy for discarding older unsent MQTT publishes
+  when queue space is needed, with separate drop counters and deferred
+  notifications. TX stalls under sustained load are being investigated.
 
 - Add board-aware default construction for `cm::helpers::PulseOutput`, using
   `LED_BUILTIN` or explicit `CM_BUILTIN_LED_PIN` and

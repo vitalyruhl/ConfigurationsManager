@@ -246,9 +246,12 @@ Each example is a standalone PlatformIO project:
 - [examples/Full-GUI-Demo](examples/Full-GUI-Demo) - full GUI demo
 - [examples/Full-IO-Demo](examples/Full-IO-Demo) - IOManager demo (incl. core settings templates)
 - [examples/ChipInfo](examples/ChipInfo) - device/chip information demo
-- [examples/BoilerSaver](examples/BoilerSaver) - real-world boiler controller example
-- [examples/SolarInverterLimiter](examples/SolarInverterLimiter) - real-world larger project using this library
-- [examples/SolarBatteryTelemetry](examples/SolarBatteryTelemetry) - WiFi + OTA + BLE application with battery/solar telemetry
+
+Other applications using this library:
+
+- [BoilerSaver](https://github.com/vitalyruhl/BoilerSaver) - boiler controller
+- [SolarInverterLimiter](https://github.com/vitalyruhl/SolarInverterLimiter) - solar inverter controller
+- [SolarBatteryTelemetry](https://github.com/vitalyruhl/SolarBatteryTelemetry) - WiFi, OTA and BLE battery/solar telemetry (repository access required)
 
 Build an example:
 

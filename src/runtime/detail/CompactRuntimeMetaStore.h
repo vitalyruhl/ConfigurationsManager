@@ -372,7 +372,7 @@ class CompactRuntimeMetaStore {
     }
   };
   template <class T>
-  bool prepare(const T& d, detail::StoredRecord<typename detail::MetaTraits<T>::Payload>& r, TextTransaction& tx) {
+  static bool prepare(const T& d, detail::StoredRecord<typename detail::MetaTraits<T>::Payload>& r, TextTransaction& tx) {
     if (!detail::copyRuntimeString(r.base.key, d.base.key) || !detail::copyRuntimeString(r.base.label, d.base.label))
       return false;
     r.base.order = d.base.order;

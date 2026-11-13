@@ -28,7 +28,11 @@ $arguments = @(
     '--std=c++17',
     '--language=c++',
     '-DPROGMEM=',
-    '-DARDUINO_ARCH_ESP32'
+    '-DARDUINO_ARCH_ESP32',
+    # Match the pinned ESP32Async/ESPAsyncWebServer dependency for analysis.
+    '-DASYNCWEBSERVER_FORK_ESP32Async=1',
+    '-DASYNCWEBSERVER_VERSION_NUM=0x030C01',
+    '-DASYNCWEBSERVER_USE_MUTEX=1'
 ) + $sourceRoots
 
 & cppcheck @arguments

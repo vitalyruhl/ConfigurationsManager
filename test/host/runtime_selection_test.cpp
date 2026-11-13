@@ -42,9 +42,11 @@ struct HeartbeatPeer {
 struct HeartbeatSocket {
   std::map<uint32_t, HeartbeatPeer> peers;
   std::function<void(uint32_t)> beforeLookup;
+  // cppcheck-suppress functionStatic
   bool availableForWriteAll() const {
     return false;
   }
+  // cppcheck-suppress functionStatic
   void textAll(const char*) {}
   HeartbeatPeer* client(uint32_t id) {
     if (beforeLookup)
@@ -52,6 +54,7 @@ struct HeartbeatSocket {
     const auto found = peers.find(id);
     return found == peers.end() ? nullptr : &found->second;
   }
+  // cppcheck-suppress functionStatic
   void cleanupClients() {}
   bool hasClient(uint32_t id) {
     return client(id) != nullptr;

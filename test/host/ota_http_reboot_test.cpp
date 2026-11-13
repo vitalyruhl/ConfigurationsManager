@@ -19,6 +19,7 @@ void fakeLog(Args...) {}
 using String = std::string;
 struct RestartTestSerial {
   template <class... Args>
+  // cppcheck-suppress functionStatic
   int printf(const char*, Args...) {
     return 0;
   }
@@ -33,6 +34,7 @@ void delay(unsigned) {
   ++delays;
 }
 struct AsyncWebServerResponse {
+  // cppcheck-suppress functionStatic
   void addHeader(const char*, const char*) {}
 };
 struct OtaUploadContext {
@@ -57,6 +59,7 @@ struct AsyncWebServerRequest {
   void send(int, const char*, const String&) {
     ++sent;
   }
+  // cppcheck-suppress functionStatic
   bool hasHeader(const char*) {
     return false;
   }
@@ -65,6 +68,7 @@ struct AsyncWebServerRequest {
   }
 };
 struct {
+  // cppcheck-suppress functionStatic
   void abort() {}
 } Update;
 struct {
@@ -88,6 +92,7 @@ struct ConfigManagerOTA {
   cm::detail::HttpRebootPreparation httpRebootPreparation;
   std::function<void()> rebootCallback;
   std::function<bool()> rebootPreparation;
+  // cppcheck-suppress functionStatic
   void cleanup(AsyncWebServerRequest* request) {
     delete request->_tempObject;
     request->_tempObject = nullptr;
@@ -95,7 +100,9 @@ struct ConfigManagerOTA {
   void setActive(bool value) {
     otaActive = value;
   }
+  // cppcheck-suppress functionStatic
   void checkStaleUpload() {}
+  // cppcheck-suppress functionStatic
   void notifyActivityState() {}
   void handle();
   void sendHttpSuccess(AsyncWebServerRequest*, const OtaUploadContext*);

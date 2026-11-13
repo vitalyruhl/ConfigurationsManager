@@ -105,7 +105,10 @@ int main() {
   const bool completedHttp = gate.completeHttp(httpId, [&] {responseInstalled=true;rebootInstalled=true; });
   assert(completedHttp);
   assert(responseInstalled && rebootInstalled);
-  assert(!gate.completeHttp(httpId + 1, [&] { assert(false); }));
+  bool unexpectedCompletion = false;
+  const bool wrongIdCompleted = gate.completeHttp(httpId + 1, [&] { unexpectedCompletion = true; });
+  assert(!wrongIdCompleted);
+  assert(!unexpectedCompletion);
   assert(!http.tryStart(OtaTransport::Arduino));
   http.finish(httpId, OtaStage::Aborted, 0); // Late disable/cleanup cannot undo success.
   assert(gate.completeHttp(httpId, [] {}));

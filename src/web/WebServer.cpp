@@ -21,7 +21,7 @@
 
 namespace {
 
-bool readLivePageSelection(AsyncWebServerRequest* request, ConfigManagerClass* manager, String& pageKey, bool& selected) {
+bool readLivePageSelection(AsyncWebServerRequest* request, const ConfigManagerClass* manager, String& pageKey, bool& selected) {
   selected = request->hasParam("page");
   if (!selected)
     return true;

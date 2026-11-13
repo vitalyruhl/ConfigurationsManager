@@ -20,9 +20,9 @@ void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldBase&) {
   if (placementRuntime)
     assert(placementRuntime->hasRuntimeMeta());
 }
-void ConfigManagerRuntime::reportRuntimeMetaFailure(const char*, size_t, size_t) const {}
-void ConfigManagerRuntime::logRuntimeMetaAdded(const String&, const String&) const {}
-void ConfigManagerRuntime::logRuntimeMetaEvent(const char*, size_t) const {}
+void ConfigManagerRuntime::reportRuntimeMetaFailure(const char*, size_t, size_t) {}
+void ConfigManagerRuntime::logRuntimeMetaAdded(const String&, const String&) {}
+void ConfigManagerRuntime::logRuntimeMetaEvent(const char*, size_t) {}
 
 static RuntimeFieldMeta field(const char* label, int order) {
   RuntimeFieldMeta m;
@@ -285,8 +285,10 @@ static void compactCompatibility() {
   assert(id);
   rt.addRuntimeMeta(field("Legacy A", 10));
   // Legacy callbacks preserve common registration order until serialization sorts it.
-  assert(rt.updateRuntimeMeta("sensors", "value", [](RuntimeFieldMeta& m) {assert(m.label=="Compact Z");m.label="Compact Changed";m.hasAlarm=true;m.alarmMax=80; }));
-  assert(rt.updateRuntimeMeta(id, std::function<void(RuntimeFloatMeta&)>([](RuntimeFloatMeta& m) {assert(m.base.label=="Compact Changed");m.precision=1; })));
+  const bool baseUpdated = rt.updateRuntimeMeta("sensors", "value", [](RuntimeFieldMeta& m) {assert(m.label=="Compact Z");m.label="Compact Changed";m.hasAlarm=true;m.alarmMax=80; });
+  assert(baseUpdated);
+  const bool floatUpdated = rt.updateRuntimeMeta(id, std::function<void(RuntimeFloatMeta&)>([](RuntimeFloatMeta& m) {assert(m.base.label=="Compact Changed");m.precision=1; }));
+  assert(floatUpdated);
   RuntimeBoolMeta b;
   b.base = f.base;
   b.base.key = "enabled";
@@ -377,10 +379,10 @@ static void compactCompatibility() {
 
 static void builtinSystemMetadata(bool withTime) {
   struct Expected {
-    const char* key;
-    const char* label;
-    const char* unit;
-    int order;
+    const char* key = nullptr;
+    const char* label = nullptr;
+    const char* unit = nullptr;
+    int order = 0;
     bool boolean = false;
     bool text = false;
   };

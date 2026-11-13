@@ -232,7 +232,11 @@ connection and clears pending bytes. Headroom does not guarantee timely
 control-packet delivery. Bounded mode does not support
 `MQTT_MAX_TRANSFER_SIZE`.
 
-### Optional discard of older queued publishes
+### Optional discard of older queued publishes (experimental)
+
+**Experimental:** Tests under sustained load observed TX stalls and reconnects
+when this option was enabled. The cause is still under investigation. Keep it
+disabled in production until it has been validated for your application.
 
 By default, the bounded transport keeps existing queued data and rejects a new
 publish when it cannot fit. Applications may instead explicitly allow older

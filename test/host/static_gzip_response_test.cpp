@@ -4,6 +4,8 @@
 #include <iostream>
 #include <memory>
 
+static constexpr size_t kExpectedInFlightLimit = 1024; // Two segments at the mocked MSS of 512.
+
 static void acknowledge(cm::StaticGzipResponse& response, AsyncWebServerRequest& request, AsyncClient& client, size_t count) {
   assert(count <= client.outstanding);
   client.outstanding -= count;
@@ -15,18 +17,19 @@ static void drain(cm::StaticGzipResponse& response, AsyncWebServerRequest& reque
       acknowledge(response, request, client, std::min<size_t>(client.outstanding, 73));
     else
       response._ack(&request, 0, 0);
-    assert(client.outstanding <= 512);
+    assert(client.outstanding <= kExpectedInFlightLimit);
   }
   assert(response._finished() && client.closed);
   assert(response.totalAccepted() == response.totalAcknowledged());
-  assert(client.maximumOffer <= 512 && client.maximumOutstanding <= 512);
+  assert(client.maximumOffer <= kExpectedInFlightLimit && client.maximumOutstanding <= kExpectedInFlightLimit);
   const auto boundary = client.accepted.find("\r\n\r\n");
   assert(boundary != std::string::npos);
   const auto header = client.accepted.substr(0, boundary);
   assert(header.find("Content-Encoding: gzip") != std::string::npos);
   assert(header.find("Connection: close") != std::string::npos);
   assert(header.find("Content-Type: text/html") != std::string::npos);
-  assert(header.find("Content-Length: " + std::to_string(WEB_HTML_GZ_LEN)) != std::string::npos);
+  const std::string contentLength = "Content-Length: " + std::to_string(WEB_HTML_GZ_LEN);
+  assert(header.find(contentLength) != std::string::npos);
   assert(client.accepted.substr(boundary + 4) == std::string(reinterpret_cast<const char*>(WEB_HTML_GZ), WEB_HTML_GZ_LEN));
 }
 int main() {
@@ -73,7 +76,7 @@ int main() {
     client.available = 16384;
     for (int i = 0; i < 10; ++i)
       response._ack(&request, 0, 0);
-    assert(client.outstanding == 512 && !response._finished());
+    assert(client.outstanding == kExpectedInFlightLimit && !response._finished());
     drain(response, request, client);
   }
   {
@@ -94,5 +97,5 @@ int main() {
     raw->_ack(&request, 1, 0);
     assert(!response && client.closed);
   }
-  std::cout << "Static gzip response passed: exact " << WEB_HTML_GZ_LEN << " body bytes; add0/short, flush failure, poll, partial/final ACK; max outstanding512\n";
+  std::cout << "Static gzip response passed: exact " << WEB_HTML_GZ_LEN << " body bytes; add0/short, flush failure, poll, partial/final ACK; bounded in-flight bytes\n";
 }

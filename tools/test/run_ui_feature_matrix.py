@@ -74,7 +74,6 @@ def main():
     source_files += [ROOT / 'webui' / 'vite.config.mjs', ROOT / 'webui' / 'package.json', ROOT / 'webui' / 'package-lock.json']
     source_files += [ROOT / 'tools' / name for name in ('preCompile_script.py', 'webui_features.py', 'webui_to_header.js', 'precompile_wrapper.py')]
     source_files += [ROOT / 'library.json', ROOT / 'tools' / 'precompile_wrapper_template.py']
-    source_files += [ROOT / 'examples' / name / 'tools' / 'precompile_wrapper.py' for name in ('SolarInverterLimiter', 'BoilerSaver')]
     source_manifest = {p.relative_to(ROOT).as_posix(): sha(p) for p in source_files
                        if p.is_file() and p != ROOT / 'src' / 'html_content.h'}
     (output / 'source-freeze.json').write_text(json.dumps(source_manifest, indent=2) + '\n')

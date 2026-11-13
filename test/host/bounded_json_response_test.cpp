@@ -30,7 +30,8 @@ static void verifyJson(const AsyncClient& client, const std::string& expected) {
   const auto headers = client.accepted.substr(0, boundary);
   assert(headers.find("Content-Type: application/json") != std::string::npos);
   assert(headers.find("Content-Encoding:") == std::string::npos);
-  assert(headers.find("Content-Length: " + std::to_string(expected.size())) != std::string::npos);
+  const std::string contentLength = "Content-Length: " + std::to_string(expected.size());
+  assert(headers.find(contentLength) != std::string::npos);
   assert(client.accepted.substr(boundary + 4) == expected);
 }
 static void mssWindow() {

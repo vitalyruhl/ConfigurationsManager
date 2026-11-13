@@ -28,9 +28,7 @@ def main():
     tools.mkdir(exist_ok=True)
     artifacts = args.matrix.resolve() / 'wrapper-contracts'
     artifacts.mkdir(exist_ok=True)
-    wrappers = {'template': ROOT / 'tools' / 'precompile_wrapper_template.py',
-                'solar-inverter-example': ROOT / 'examples' / 'SolarInverterLimiter' / 'tools' / 'precompile_wrapper.py',
-                'boiler-example': ROOT / 'examples' / 'BoilerSaver' / 'tools' / 'precompile_wrapper.py'}
+    wrappers = {'template': ROOT / 'tools' / 'precompile_wrapper_template.py'}
     results = {}
     environment = os.environ.copy()
     environment['CM_LOCAL_LIB'] = str(ROOT)

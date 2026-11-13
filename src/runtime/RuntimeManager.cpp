@@ -852,13 +852,13 @@ void ConfigManagerRuntime::registerRuntimePlacement(const RuntimeFieldBase& meta
   if (configManager)
     configManager->registerLivePlacement(cm::RuntimeMetaView(meta));
 }
-void ConfigManagerRuntime::reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) const {
+void ConfigManagerRuntime::reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) {
   logRuntimeMetaSerializationFailure(reason, bytes, fields);
 }
-void ConfigManagerRuntime::logRuntimeMetaAdded(const String& group, const String& key) const {
+void ConfigManagerRuntime::logRuntimeMetaAdded(const String& group, const String& key) {
   RUNTIME_LOG("Added meta: %s.%s", group.c_str(), key.c_str());
 }
-void ConfigManagerRuntime::logRuntimeMetaEvent(const char* message, size_t count) const {
+void ConfigManagerRuntime::logRuntimeMetaEvent(const char* message, size_t count) {
   RUNTIME_LOG("%s (%u)", message, static_cast<unsigned>(count));
 }
 

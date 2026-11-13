@@ -1,5 +1,0 @@
-.pio/
-.vscode/
-__pycache__/
-*.pyc
-src/secret/secrets.h

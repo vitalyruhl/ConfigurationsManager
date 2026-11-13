@@ -1,3 +1,4 @@
+param([string]$ArduinoJsonInclude = '')
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $outDir = Join-Path $repo ('.local/wifi-power-save-' + [guid]::NewGuid().ToString('N'))
@@ -36,11 +37,13 @@ $reset = Extract $driver '(?ms)^void ConfigManagerWiFi::startStackReset_\(\) \{.
 if ($reset.IndexOf('bleCoexistenceReady_ = false;') -lt 0 -or $reset.IndexOf('bleCoexistenceReady_ = false;') -gt $reset.IndexOf('WiFi.disconnect')) { throw 'Reset must invalidate readiness before touching the driver.' }
 $init = Extract $source '(?ms)^  void initializeWiFiHealthConfig\(\) \{.*?^  \}'
 if (!$init.Contains('WiFiPowerSave') -or !$init.Contains('applyWiFiHealthConfig();')) { throw 'Boot must load stored sleep and drain newer requests before connecting.' }
-$jsonInclude = Join-Path $repo '.pio/ble-validation/libdeps/usb/ArduinoJson/src'
+if (!$ArduinoJsonInclude) { $ArduinoJsonInclude = Join-Path $repo '.pio/libdeps/usb/ArduinoJson/src' }
+if (!(Test-Path -LiteralPath (Join-Path $ArduinoJsonInclude 'ArduinoJson.h'))) { throw "ArduinoJson.h not found in '$ArduinoJsonInclude'. Pass -ArduinoJsonInclude with an existing include directory." }
+Write-Output "ArduinoJson include: $ArduinoJsonInclude"
 $compiler = 'C:/Program Files/LLVM/bin/clang++.exe'
 foreach ($default in @(0,1)) {
   $exe = Join-Path $outDir "wifi-power-$default.exe"
-  & $compiler -std=c++20 -Wall -Wextra -Werror "-DCM_WIFI_POWER_SAVE_DEFAULT=$default" "-DEXPECTED_DEFAULT=$default" -DCM_ENABLE_LIVE_UI=0 -I (Join-Path $repo 'src') -I $jsonInclude -I $outDir (Join-Path $repo 'test/host/wifi_power_save_test.cpp') -o $exe
+  & $compiler -std=c++20 -Wall -Wextra -Werror "-DCM_WIFI_POWER_SAVE_DEFAULT=$default" "-DEXPECTED_DEFAULT=$default" -DCM_ENABLE_LIVE_UI=0 -I (Join-Path $repo 'src') -I $ArduinoJsonInclude -I $outDir (Join-Path $repo 'test/host/wifi_power_save_test.cpp') -o $exe
   if ($LASTEXITCODE -ne 0) { throw 'Power-save host compilation failed.' }
   & $exe
   if ($LASTEXITCODE -ne 0) { throw 'Power-save host assertions failed.' }

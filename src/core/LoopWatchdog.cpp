@@ -42,6 +42,8 @@ bool consumeMarker() {
 uint32_t nowMs() {
   return static_cast<uint32_t>(esp_timer_get_time() / 1000);
 }
+// esp_timer requires a callback taking void*.
+// cppcheck-suppress constParameterCallback
 void observe(void* argument) {
   auto& c = context();
   // Never block the shared esp_timer task behind application work.

@@ -7,7 +7,8 @@ WiFi, configuration UI and OTA integration using CoreSettings/CoreWiFiServices.
 No device address or protocol UUID is guessed by the example.
 
 For an application-level **WiFi + OTA + BLE** example, see
-[SolarBatteryTelemetry](../examples/SolarBatteryTelemetry/README.md). It shows
+[SolarBatteryTelemetry](https://github.com/vitalyruhl/SolarBatteryTelemetry)
+(repository access required). It shows
 network provisioning, configurable BLE battery/PV collectors, MQTT telemetry
 and firmware updates together. Its setup and hardware limitations are described
 in the example rather than assumed from a successful build.
@@ -176,8 +177,10 @@ flash-time timing, RF stability or the cause of an unrelated controller panic.
 The opt-in example retains central and observer roles and disables unused
 peripheral/broadcaster roles with `CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED` and
 `CONFIG_BT_NIMBLE_ROLE_BROADCASTER_DISABLED`. These are consumer flags, not core
-library defaults. The example uses `-flto` for size and retains the standard
-board dual-slot partition layout.
+library defaults. The example uses `-flto` and the 4 MB `min_spiffs.csv` layout,
+which provides two larger OTA slots and a smaller SPIFFS partition than the board
+default. Changing the partition layout on an existing device can affect stored
+filesystem data and requires a suitable installation or migration procedure.
 
 Run `tools/test/run-ble-host-tests.ps1 -Suite all` for hardware-free tests of the
 same production lifecycle, scheduler and queues. Compile `pio run -d

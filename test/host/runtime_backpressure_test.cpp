@@ -70,6 +70,7 @@ struct Harness {
   unsigned long wsLastPush = 0;
   Runtime runtimeManager;
   std::function<String()> customPayloadBuilder;
+  // cppcheck-suppress functionStatic
   bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload) {
     if (!client || client->queueIsFull())
       return false;
@@ -127,7 +128,8 @@ static void lifetimeAndReject() {
   {
     cm::RuntimeDeliveryReservation token(state);
     assert(token);
-    assert(cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token));
+    assert(sent);
   }
   assert(state->busy.load());
   AsyncWebSocketClient::beforeBufferRelease = [&] { assert(state->busy.load()); };
@@ -137,37 +139,43 @@ static void lifetimeAndReject() {
   {
     cm::RuntimeDeliveryReservation token(state);
     client.rejectOnMessage = true;
-    assert(!cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token));
+    assert(!sent);
     assert(!state->busy.load());
   }
   client.rejectOnMessage = false;
   {
     cm::RuntimeDeliveryReservation token(std::shared_ptr<cm::RuntimeDeliveryState>{});
-    assert(!cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token));
+    assert(!sent);
     assert(!state->busy.load());
   }
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(!cm::sendRuntimeMessage(socket, 999, String("payload"), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 999, String("payload"), std::move(token));
+    assert(!sent);
   }
   assert(!state->busy.load());
   for (unsigned i = 0; i < 32; ++i)
     client.queue.emplace_back(new AsyncWebSocketMessage);
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(!cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token));
+    assert(!sent);
     assert(client.queue.size() == 32);
   }
   assert(!state->busy.load());
   client.queue.clear();
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(!cm::sendRuntimeMessage(socket, 1, String(), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 1, String(), std::move(token));
+    assert(!sent);
   }
   assert(!state->busy.load());
   {
     cm::RuntimeDeliveryReservation token(state);
-    assert(cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token)));
+    const bool sent = cm::sendRuntimeMessage(socket, 1, String("payload"), std::move(token));
+    assert(sent);
   }
   state.reset(); // Subscription state disappears before transport destruction.
   assert(!weak.expired());
