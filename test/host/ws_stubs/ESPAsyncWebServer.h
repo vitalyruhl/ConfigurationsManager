@@ -55,9 +55,13 @@ struct AsyncWebSocketBasicMessage : AsyncWebSocketMessage {
 struct AsyncWebSocket;
 struct AsyncWebSocketClient {
   AsyncWebSocket* owner = nullptr;
-  AsyncWebSocket* server() { return owner; }
+  AsyncWebSocket* server() {
+    return owner;
+  }
   uint32_t clientId = 0;
-  uint32_t id() const { return clientId; }
+  uint32_t id() const {
+    return clientId;
+  }
   std::vector<std::unique_ptr<AsyncWebSocketMessage>> queue;
   bool rejectOnMessage = false;
   mutable bool connected = true;
@@ -99,17 +103,27 @@ struct AsyncWebSocketClient {
     }
     void ack(size_t, uint32_t) override {}
     size_t send(AsyncClient* client) override {
-      if (client) client->received.assign(buffer->begin(), buffer->end());
+      if (client)
+        client->received.assign(buffer->begin(), buffer->end());
       done = true; // Maintained transport releases its buffer after copying to TCP.
       return buffer->size();
     }
-    bool finished() override { return done; }
-    bool betweenFrames() const override { return true; }
+    bool finished() override {
+      return done;
+    }
+    bool betweenFrames() const override {
+      return true;
+    }
   };
   bool text(AsyncWebSocketSharedBuffer buffer) {
-    if (!connected) { ++closedQueueCalls; return false; }
-    if (onMessage) onMessage();
-    if (rejectOnMessage || queueIsFull()) return false;
+    if (!connected) {
+      ++closedQueueCalls;
+      return false;
+    }
+    if (onMessage)
+      onMessage();
+    if (rejectOnMessage || queueIsFull())
+      return false;
     queue.emplace_back(new SharedMessage(std::move(buffer)));
     return true;
   }
@@ -120,10 +134,15 @@ struct AsyncWebSocket {
   std::map<uint32_t, AsyncWebSocketClient> clients;
   AsyncWebSocketClient* client(uint32_t id) {
     auto i = clients.find(id);
-    if (i != clients.end()) { i->second.owner = this; i->second.clientId = id; }
+    if (i != clients.end()) {
+      i->second.owner = this;
+      i->second.clientId = id;
+    }
     return i == clients.end() || !i->second.connected ? nullptr : &i->second;
   }
-  bool hasClient(uint32_t id) { return client(id) != nullptr; }
+  bool hasClient(uint32_t id) {
+    return client(id) != nullptr;
+  }
   bool availableForWrite(uint32_t id) {
     auto* value = client(id);
     return value && !value->queueIsFull();

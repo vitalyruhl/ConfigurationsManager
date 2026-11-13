@@ -81,8 +81,12 @@ static void dropOldestQueuedPublishes() {
   std::vector<std::vector<uint8_t>> packets;
   for (uint8_t value = 0; value < 5; ++value) {
     std::vector<uint8_t> packet(996, value);
-    packet[0] = 0x30; packet[1] = 0xe1; packet[2] = 0x07;
-    packet[3] = 0; packet[4] = 1; packet[5] = 't';
+    packet[0] = 0x30;
+    packet[1] = 0xe1;
+    packet[2] = 0x07;
+    packet[3] = 0;
+    packet[4] = 1;
+    packet[5] = 't';
     packets.push_back(packet);
   }
   for (int i = 0; i < 4; ++i) {
@@ -117,8 +121,12 @@ static void dropPreservesPartialAndControl() {
   std::vector<std::vector<uint8_t>> packets;
   for (uint8_t value = 0; value < 5; ++value) {
     std::vector<uint8_t> packet(996, value);
-    packet[0] = 0x31; packet[1] = 0xe1; packet[2] = 0x07;
-    packet[3] = 0; packet[4] = 1; packet[5] = 't';
+    packet[0] = 0x31;
+    packet[1] = 0xe1;
+    packet[2] = 0x07;
+    packet[3] = 0;
+    packet[4] = 1;
+    packet[5] = 't';
     packets.push_back(packet);
   }
   auto publish = [&](size_t i) {
@@ -130,7 +138,10 @@ static void dropPreservesPartialAndControl() {
   publish(0);
   const uint8_t ping[] = {0xc0, 0};
   assert(client.write(ping, sizeof(ping)) == sizeof(ping));
-  publish(1); publish(2); publish(3); publish(4);
+  publish(1);
+  publish(2);
+  publish(3);
+  publish(4);
   assert(client.stats().txDroppedPublishes == 1);
   assert(client.stats().txDroppedBytes == 996);
   assert(!client.canQueuePublish(1, 5000, 8192));
@@ -193,8 +204,12 @@ static void dropWrappedQueue() {
   std::vector<std::vector<uint8_t>> packets;
   for (uint8_t value = 0; value < 7; ++value) {
     std::vector<uint8_t> packet(996, value);
-    packet[0] = 0x30; packet[1] = 0xe1; packet[2] = 0x07;
-    packet[3] = 0; packet[4] = 1; packet[5] = 't';
+    packet[0] = 0x30;
+    packet[1] = 0xe1;
+    packet[2] = 0x07;
+    packet[3] = 0;
+    packet[4] = 1;
+    packet[5] = 't';
     packets.push_back(packet);
   }
   auto publish = [&](size_t i) {
@@ -210,7 +225,9 @@ static void dropWrappedQueue() {
   client.beginLoop();
   client.pump();
   assert(mockSocket(id)->acceptedBytes().size() == 2000);
-  publish(4); publish(5); publish(6);
+  publish(4);
+  publish(5);
+  publish(6);
   assert(client.stats().txDroppedPublishes == 1);
   mockSendResult = -2;
   client.beginLoop();
@@ -231,14 +248,22 @@ static void dropPreflightRaceCountsReject() {
   mockSendResult = -1;
   mockSendError = EAGAIN;
   std::vector<uint8_t> oldPacket(4000, 'a');
-  oldPacket[0] = 0x30; oldPacket[1] = 0x9d; oldPacket[2] = 0x1f;
-  oldPacket[3] = 0; oldPacket[4] = 1; oldPacket[5] = 't';
+  oldPacket[0] = 0x30;
+  oldPacket[1] = 0x9d;
+  oldPacket[2] = 0x1f;
+  oldPacket[3] = 0;
+  oldPacket[4] = 1;
+  oldPacket[5] = 't';
   client.beginApplicationPublish();
   assert(client.write(oldPacket.data(), oldPacket.size()) == oldPacket.size());
   client.endApplicationPublish();
   std::vector<uint8_t> nextPacket(996, 'b');
-  nextPacket[0] = 0x30; nextPacket[1] = 0xe1; nextPacket[2] = 0x07;
-  nextPacket[3] = 0; nextPacket[4] = 1; nextPacket[5] = 't';
+  nextPacket[0] = 0x30;
+  nextPacket[1] = 0xe1;
+  nextPacket[2] = 0x07;
+  nextPacket[3] = 0;
+  nextPacket[4] = 1;
+  nextPacket[5] = 't';
   assert(client.canQueuePublish(1, 990, 1024));
   mockSendSteps = {{3, 0}, {-1, EAGAIN}};
   mockSendStepCursor = 0;

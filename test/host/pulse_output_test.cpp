@@ -4,14 +4,19 @@
 #include <cstdio>
 
 namespace {
-struct Event { char operation; uint8_t pin; uint8_t value; };
+struct Event {
+  char operation;
+  uint8_t pin;
+  uint8_t value;
+};
 Event events[256];
 unsigned eventCount = 0;
 unsigned long now = 0;
 bool runtimeReady = false;
 bool calledBeforeRuntime = false;
 void record(char operation, uint8_t pin, uint8_t value) {
-  if (!runtimeReady) calledBeforeRuntime = true;
+  if (!runtimeReady)
+    calledBeforeRuntime = true;
   assert(eventCount < 256);
   events[eventCount++] = {operation, pin, value};
 }
@@ -29,14 +34,21 @@ void expect(unsigned index, char operation, uint8_t pin, uint8_t value) {
   assert(events[index].pin == pin);
   assert(events[index].value == value);
 }
+} // namespace
+void pinMode(uint8_t pin, uint8_t mode) {
+  record('m', pin, mode);
 }
-void pinMode(uint8_t pin, uint8_t mode) { record('m', pin, mode); }
-void digitalWrite(uint8_t pin, uint8_t value) { record('w', pin, value); }
+void digitalWrite(uint8_t pin, uint8_t value) {
+  record('w', pin, value);
+}
 unsigned long millis() {
-  if (!runtimeReady) calledBeforeRuntime = true;
+  if (!runtimeReady)
+    calledBeforeRuntime = true;
   return now;
 }
-void delay(unsigned long duration) { now += duration; }
+void delay(unsigned long duration) {
+  now += duration;
+}
 
 int main() {
   // Catch hardware access from static constructors, including virtual RGB pins.

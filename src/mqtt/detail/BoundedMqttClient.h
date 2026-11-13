@@ -33,12 +33,22 @@ public:
   BoundedMqttClient() = default;
   BoundedMqttClient(const BoundedMqttClient&) = delete;
   BoundedMqttClient& operator=(const BoundedMqttClient&) = delete;
-  ~BoundedMqttClient() override { std::free(txExtra_); }
+  ~BoundedMqttClient() override {
+    std::free(txExtra_);
+  }
 
-  uint16_t txCapacity() const { return txCapacity_; }
-  uint16_t txUsed() const { return txUsed_; }
-  uint16_t txFree() const { return txCapacity_ - txUsed_; }
-  void noteRejectedPublish() { ++stats_.txRejectedPublishes; }
+  uint16_t txCapacity() const {
+    return txCapacity_;
+  }
+  uint16_t txUsed() const {
+    return txUsed_;
+  }
+  uint16_t txFree() const {
+    return txCapacity_ - txUsed_;
+  }
+  void noteRejectedPublish() {
+    ++stats_.txRejectedPublishes;
+  }
   void setDropOldestQueuedPublishes(bool enabled) {
     if (enabled == dropOldest_)
       return;
@@ -49,8 +59,12 @@ public:
       txSegmentCount_ = 1;
     }
   }
-  void beginApplicationPublish() { applicationPublish_ = true; }
-  void endApplicationPublish() { applicationPublish_ = false; }
+  void beginApplicationPublish() {
+    applicationPublish_ = true;
+  }
+  void endApplicationPublish() {
+    applicationPublish_ = false;
+  }
   bool canQueuePublish(size_t topicBytes, size_t payloadBytes, size_t bufferBytes) const {
     constexpr size_t maxHeader = 5;
     if (!topicBytes || topicBytes > 65535 || bufferBytes < maxHeader + 2 ||

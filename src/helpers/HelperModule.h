@@ -28,9 +28,7 @@ public:
 #ifdef CM_BUILTIN_LED_PIN
   // Use the selected board's LED metadata, including Arduino virtual RGB pins.
   PulseOutput()
-      : PulseOutput(CM_BUILTIN_LED_PIN, CM_BUILTIN_LED_ACTIVE_LOW
-                                            ? ActiveLevel::ActiveLow
-                                            : ActiveLevel::ActiveHigh) {}
+      : PulseOutput(CM_BUILTIN_LED_PIN, CM_BUILTIN_LED_ACTIVE_LOW ? ActiveLevel::ActiveLow : ActiveLevel::ActiveHigh) {}
 #endif
 
   // Configure defaults for subsequent setPulse() calls.

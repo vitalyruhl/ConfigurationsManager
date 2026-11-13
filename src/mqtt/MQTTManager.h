@@ -364,8 +364,7 @@ public:
     if (!isConnected())
       return false;
 #if CM_MQTT_BOUNDED_IO
-    return wifiClient_.canQueuePublish(topicBytes, payloadBytes,
-                                      const_cast<PubSubClient&>(mqttClient_).getBufferSize());
+    return wifiClient_.canQueuePublish(topicBytes, payloadBytes, const_cast<PubSubClient&>(mqttClient_).getBufferSize());
 #else
     (void)topicBytes;
     (void)payloadBytes;
@@ -859,7 +858,8 @@ inline MQTTManager::Settings::Settings()
         .defaultValue = 500,
         .sortOrder = 12})
 #if CM_MQTT_BOUNDED_IO
-      , txQueueBytes(ConfigOptions<int>{
+      ,
+      txQueueBytes(ConfigOptions<int>{
         .key = "MQTTTxQueue",
         .name = "TX Queue Size (bytes)",
         .category = "MQTT",
@@ -1696,8 +1696,12 @@ inline void MQTTManager::loop() {
     return;
   struct LoopGuard {
     bool& active;
-    explicit LoopGuard(bool& flag) : active(flag) { active = true; }
-    ~LoopGuard() { active = false; }
+    explicit LoopGuard(bool& flag) : active(flag) {
+      active = true;
+    }
+    ~LoopGuard() {
+      active = false;
+    }
   } loopGuard(boundedLoopRunning_);
   // Service partial frames even when the application selected a long listen interval.
   wifiClient_.beginLoop();
@@ -2160,7 +2164,7 @@ inline void MQTTManager::applyBoundedSettings_() {
   wifiClient_.setTxStallTimeoutMs(static_cast<uint32_t>(std::max(2000, std::min(120000, requestedTimeout))));
   const int requested = settings_.txQueueBytes.get();
   const uint16_t capacity = static_cast<uint16_t>(std::max<int>(detail::BoundedMqttClient::TxCapacity,
-      std::min<int>(detail::BoundedMqttClient::MaxTxCapacity, requested)));
+                                                                std::min<int>(detail::BoundedMqttClient::MaxTxCapacity, requested)));
   if (capacity == wifiClient_.txCapacity() || wifiClient_.txUsed())
     return;
   const uint32_t now = millis();

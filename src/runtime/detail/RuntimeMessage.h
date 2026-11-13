@@ -14,8 +14,7 @@ struct RuntimeOutgoingBuffer {
       : reservation(std::move(claim)), bytes(payload.c_str(), payload.c_str() + payload.length()) {}
 };
 
-inline bool sendRuntimeMessage(AsyncWebSocket& socket, uint32_t clientId, const String& payload,
-                               RuntimeDeliveryReservation reservation) {
+inline bool sendRuntimeMessage(AsyncWebSocket& socket, uint32_t clientId, const String& payload, RuntimeDeliveryReservation reservation) {
   if (!reservation || !payload.length() || !socket.availableForWrite(clientId))
     return false;
   auto* allocation = new (std::nothrow) RuntimeOutgoingBuffer(payload, std::move(reservation));
