@@ -1698,7 +1698,8 @@ inline void MQTTManager::loop() {
     return;
   struct LoopGuard {
     bool& active;
-    explicit LoopGuard(bool& flag) : active(flag) {
+    explicit LoopGuard(bool& flag)
+        : active(flag) {
       active = true;
     }
     ~LoopGuard() {

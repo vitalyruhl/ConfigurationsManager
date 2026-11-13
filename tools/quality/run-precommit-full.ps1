@@ -42,14 +42,27 @@ if (Test-Path -LiteralPath $preCommitConfig) {
     Write-Output 'No repository pre-commit configuration found; running whitespace and clang-format checks.'
 }
 
-$clangFormat = Get-Command clang-format, clang-format-18 -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $clangFormat) {
-    Write-Error 'clang-format is required for the full repository gate. Install it for the current environment or use the CI workflow.'
+$clangFormat = Get-Command clang-format-18 -ErrorAction SilentlyContinue | Select-Object -First 1
+$localClangFormat = Join-Path $repoRoot '.Temp/ci-clang-format/clang-format.exe'
+$clangFormatPath = if ($clangFormat) { $clangFormat.Source }
+elseif (Test-Path -LiteralPath $localClangFormat -PathType Leaf) { $localClangFormat }
+else {
+    $clangFormat = Get-Command clang-format -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($clangFormat) { $clangFormat.Source } else { $null }
+}
+if (-not $clangFormatPath) {
+    Write-Error 'clang-format 18.1.3 is required for the full repository gate.'
     exit 1
 }
+$clangFormatVersion = & $clangFormatPath --version
+if ($LASTEXITCODE -ne 0 -or $clangFormatVersion -notmatch '\bversion 18\.1\.3\b') {
+    Write-Error "clang-format 18.1.3 is required to match CI. Found: $clangFormatVersion"
+    exit 1
+}
+Write-Output "Using $clangFormatVersion"
 
 if ($sourceFiles.Count -gt 0) {
-    & $clangFormat.Source --style=file --fallback-style=none --dry-run --Werror $sourceFiles.FullName
+    & $clangFormatPath --style=file --fallback-style=none --dry-run --Werror $sourceFiles.FullName
     exit $LASTEXITCODE
 }
 

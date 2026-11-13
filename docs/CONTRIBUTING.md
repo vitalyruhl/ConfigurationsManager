@@ -104,7 +104,10 @@ results without uploading firmware:
 pwsh -NoProfile -File tools/build/run-full-repository-gate.ps1
 ```
 
-It requires PowerShell 7 and the toolchains used by the selected checks.
+It requires PowerShell 7, clang-format 18.1.3, and the toolchains used by the
+selected checks. The format check selects `clang-format-18` first, then the
+optional Windows executable at `.Temp/ci-clang-format/clang-format.exe`, then
+`clang-format` on PATH. Other clang-format versions are rejected to match CI.
 Inspect supported targets without running the full matrix:
 
 ```powershell

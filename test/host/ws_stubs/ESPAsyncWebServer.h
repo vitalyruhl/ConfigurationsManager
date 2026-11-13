@@ -95,7 +95,8 @@ struct AsyncWebSocketClient {
   struct SharedMessage : AsyncWebSocketMessage {
     AsyncWebSocketSharedBuffer buffer;
     bool done = false;
-    explicit SharedMessage(AsyncWebSocketSharedBuffer value) : buffer(std::move(value)) {}
+    explicit SharedMessage(AsyncWebSocketSharedBuffer value)
+        : buffer(std::move(value)) {}
     ~SharedMessage() override {
       if (beforeBufferRelease)
         beforeBufferRelease();
