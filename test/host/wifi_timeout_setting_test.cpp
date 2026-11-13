@@ -5,18 +5,18 @@
 using String = std::string;
 template <class T>
 struct ConfigOptions {
-  const char* key;
-  const char* name;
+  const char* key = nullptr;
+  const char* name = nullptr;
   // Match the category field in production ConfigOptions aggregate initializers.
   // cppcheck-suppress unusedStructMember
-  [[maybe_unused]] const char* category;
+  [[maybe_unused]] const char* category = nullptr;
   T defaultValue;
   // Match the visibility field in production ConfigOptions aggregate initializers.
   // cppcheck-suppress unusedStructMember
-  [[maybe_unused]] bool showInWeb;
+  [[maybe_unused]] bool showInWeb = false;
   // Match the ordering field in production ConfigOptions aggregate initializers.
   // cppcheck-suppress unusedStructMember
-  [[maybe_unused]] int sortOrder;
+  [[maybe_unused]] int sortOrder = 0;
 };
 struct JsonSetting {
   virtual ~JsonSetting() = default;

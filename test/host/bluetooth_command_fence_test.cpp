@@ -15,7 +15,9 @@ struct FenceBackend {
   bool connected = true, block = false, entered = false, release = false;
   std::mutex mutex;
   std::condition_variable changed;
+  // cppcheck-suppress functionStatic
   void scan() {}
+  // cppcheck-suppress functionStatic
   void stopScan() {}
   void cancel() {
     connected = false;

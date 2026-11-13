@@ -8,8 +8,12 @@ enum class RuntimeMode { Legacy,
                          Selected,
                          Events };
 struct RuntimeClient {
+  // Aggregate clients are initialized when inserted into the subscription list.
+  // cppcheck-suppress uninitMemberVarNoCtor
   uint32_t id;
+  // cppcheck-suppress uninitMemberVarNoCtor
   unsigned long lastSeen;
+  // cppcheck-suppress uninitMemberVarNoCtor
   RuntimeMode mode;
   RuntimeSelection selection;
   std::shared_ptr<RuntimeDeliveryState> delivery = std::make_shared<RuntimeDeliveryState>();

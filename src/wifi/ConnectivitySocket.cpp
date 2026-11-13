@@ -44,6 +44,8 @@ bool ConnectivitySocket::poll() {
     const int count = lwip_recvfrom(fd_, packet, sizeof(packet), MSG_DONTWAIT, reinterpret_cast<sockaddr*>(&source), &sourceSize);
     if (count < 0)
       break;
+    // A valid echo reply can pass checksum validation; see connectivity_socket_test.cpp.
+    // cppcheck-suppress knownConditionTrueFalse
     if (source.sin_family == AF_INET && EchoPacket::reply(packet, static_cast<std::size_t>(count), ntohl(source.sin_addr.s_addr), target_, sequence_, nonce_))
       return true;
   }

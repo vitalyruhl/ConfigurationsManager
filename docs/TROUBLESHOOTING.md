@@ -2,7 +2,18 @@
 
 ## Build issues
 
-The library itself builds without PlatformIO `extra_scripts`. Some examples use `extra_scripts` for helper tasks (e.g. WebUI embed or local library refresh). If you are developing the WebUI, see `webui/README.md`.
+The default library UI builds without PlatformIO `extra_scripts`. Some examples
+use helper hooks for Web UI regeneration or local library refresh. Alternate
+Live/Settings combinations require the hook described in
+[Feature flags](FEATURE_FLAGS.md#matching-the-embedded-frontend). For frontend
+development, see [the Web UI guide](../webui/README.md).
+
+### Conflicting asynchronous web transports
+
+Check [the required transport pair](GETTING_STARTED.md#build-and-dependency-compatibility)
+and remove explicit legacy `esphome` transport dependencies from the consumer.
+Do not patch installed dependency-cache headers to combine transport APIs.
+Keep the dependency selection consistent with the source being built.
 
 ### Windows: UnicodeEncodeError while running PlatformIO
 
@@ -38,7 +49,19 @@ pio run
 
 ### ESP32 won't boot or guru meditation errors
 
-Erase flash and re-upload.
+Capture the complete serial panic/reset log and keep the exact matching firmware
+ELF and build identity before changing the device. Decode the backtrace against
+that ELF; a backtrace from a different image can identify the wrong code. Record
+the board, dependency versions, flags and actions preceding the failure.
+
+For allocation failures, record both free heap and the largest suitable block,
+not only total free bytes. A short successful run or a smaller host fixture does
+not establish that the cause of an unclassified panic is repaired. See
+[memory ownership](../dev-info/memory-ownership.md) and
+[runtime delivery boundaries](GUI-Runtime.md#delivery-and-backpressure).
+
+If a deliberate clean-flash reproduction is needed, back up required settings
+first. Erasing is destructive and is not a general diagnosis for runtime panics:
 
 ```sh
 pio run -e usb -t erase
@@ -67,11 +90,10 @@ hide an unstable supply.
 
 See [Ethernet](ETHERNET.md) for the complete WT32 setup.
 
-## check the meta data
+## Inspect runtime metadata
 
 
 ```bash
-curl.exe -sS http://<deine-ip>/runtime_meta.json
-curl.exe -sS http://192.168.2.126/runtime_meta.json
+curl.exe -sS http://<device-ip>/runtime_meta.json
 ```
 

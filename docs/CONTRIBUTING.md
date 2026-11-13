@@ -1,108 +1,119 @@
-# Contributing Guidelines
+# Contributing
 
-These guidelines define how to work in this repository. The project targets ESP32 / PlatformIO and uses modern C++17.
+ConfigurationsManager is a C++17 ESP32/Arduino library with PlatformIO examples
+and an embedded Vue Web UI. Keep changes focused and include enough validation
+for a reviewer to assess the affected behavior.
 
-## 1. Where things live
+## Repository layout
 
-- **Documentation:** `docs/`
-- **Review reports (generated):** `review/`
-- **Tests:** `test/`
-- **Tools / helper scripts:** `tools/`
-- **GitHub files:** `.github/`
-- Keep the repo root clean (only essential project files like `README.md`, `library.json`, etc.)
+- `src/`: library implementation and public headers.
+- `examples/`: standalone PlatformIO applications.
+- `webui/`: frontend source, build configuration and browser tests.
+- `test/`: firmware and host test fixtures.
+- `tools/`: public build, test and CI helpers.
+- `docs/`: maintained user/contributor guides and the changelog.
+- `dev-info/`: curated technical reference and settled implementation principles.
+- `.github/`: workflows, dependency updates and collaboration templates.
 
-Recommended docs files:
-- `docs/NAMING.md` – API naming rules (authoritative)
-- `docs/CONTRIBUTING.md` – this document
-- `docs/TODO.md` – project tracking
+Use the [README documentation index](../README.md#documentation-index) to find
+an existing guide before adding another. Keep task plans, raw investigations,
+review reports and session notes in the repository's ignored local working area;
+they are not public documentation or build inputs. Public tools and CI must work
+in a clean clone without local AI configuration.
 
-## 2. Branching model
+## Proposing a change
 
-- `main`: published / released branch (do **not** develop directly here)
-- `release/v4.0.0`: runnable snapshot branch (must always build/run)
-- `feature/*`: work-in-progress branches (may be unfinished/broken)
-- Suggested naming:
-  - `feature/<short-topic>`
-  - `fix/<short-topic>`
-  - `chore/<short-topic>`
-  - `docs/<short-topic>`
+Use the [issue tracker](https://github.com/vitalyruhl/ConfigurationsManager/issues)
+for bugs and feature requests. Describe the observed behavior, expected behavior,
+reproduction steps, relevant board/dependency details and any useful logs. Remove
+credentials and private device data from reports.
 
-## 3. Code style (hard rules)
+Develop on a topic branch such as `fix/<topic>`, `feature/<topic>` or
+`docs/<topic>`, then open a pull request against `main`. Release branches are
+optional snapshots; no particular release branch is required for development.
+Keep unrelated edits out of the change and explain any public API or saved-setting
+compatibility impact. A merge requires the configured checks and applicable
+validation to pass.
 
-- All code comments **English only**
-- Clear, descriptive names (**English only**)
-- All log/error messages **English only**
-- **No emojis** in code/comments/log output. Use short severity tags: `[I]` for Info, `[W]` for Warning, `[E]` for Error, `[D]` for Debug, `[T]` for Trace.
-- Prefer C++17 features where appropriate
-- Prefer RAII + smart pointers
-- Avoid `std::function` in hot paths / ISR contexts
+## Code conventions
 
-## 4. String handling (ESP32 / C++17)
+Write code comments, diagnostic messages, documentation and contribution text in
+English. Use clear names consistent with neighboring public APIs; update all
+affected call sites, examples and documentation when changing an API. Preserve
+compatibility unless a breaking change is explicitly intended and documented.
 
-- Prefer `std::string_view` for read-only parameters (logging, lookups, parsing)
-- Use `std::string` when ownership/mutation is needed
-- Never store `std::string_view` in members/containers unless lifetime is guaranteed
-- Do not assume `string_view::data()` is null-terminated
+Prefer RAII and clear ownership. Use `std::string_view` for borrowed text only
+when its lifetime is guaranteed; `data()` is not necessarily null-terminated.
+Use owned strings when text must outlive the caller. Avoid allocating or blocking
+work in callbacks and interrupt handlers. Keep callbacks short and forward work
+to the application loop or the owning worker.
 
-## 5. Time handling
+Use concise log severity tags `[E]`, `[W]`, `[I]`, `[D]` and `[T]`. Use wrap-safe
+elapsed-time comparisons for `millis()`/`micros()` deadlines and document timeout
+units at API boundaries.
 
-- Use `<chrono>` for durations/timeouts/intervals (unit safety)
-- Treat `millis()` / `micros()` as raw clocks; convert to `std::chrono::duration` early
-- Use wrap-safe comparisons (`now - last >= interval`)
+## Documentation
 
-## 6. Naming convention (API)
+Keep the root README an introduction with practical entry points. Explain
+feature behavior and limitations in the relevant maintained guide. API guides
+should include a method table where it helps readers find supported overloads;
+non-API documents do not need placeholder method tables.
 
-The authoritative naming rules live in `docs/NAMING.md`.
+Verify commands, flags, defaults, local links and examples against source.
+Document confirmed behavior and distinguish host tests, embedded compilation
+and device observations. Do not describe unresolved failures as repaired based
+only on a build or a short observation. The changelog records user-relevant
+product changes; documentation-only cleanup does not require a version bump or
+a new release entry. Preserve published release history.
 
-When changing public API names:
-- If the library is **not yet published**, renames can be done directly (no deprecation required).
-- Always update **all** call sites:
-  - source code
-  - examples
-  - docs tables / snippets
-  - tests
-- Do not introduce synonyms (`State` vs `Status`, `Analog` vs `Adc`, etc.). Pick one concept name and use it everywhere.
+## Focused validation
 
-## 7. Documentation requirements
+Run checks that cover the changed behavior and its affected integration points.
+Documentation-only changes need link/content checks rather than firmware builds.
+A C++ change needs at least the relevant PlatformIO build and applicable tests:
 
-- Every `docs/*.md` must contain a **single** `## Method overview` section with a table:
-  | Method | Overloads / Variants | Description | Notes |
-- Overloads and variants must be listed explicitly (one per line using `<br>`).
-- Keep descriptions short, factual, and consistent.
+```sh
+pio run -e usb
+```
 
-## 8. Review artifacts (generated)
+For an example, select its actual directory and environment:
 
-Automation may generate:
-- `review/unused.deprecated.md`
-- `review/unused.undocumented.md`
-- `review/naming.inconsistencies.md`
-- (optional) `review/rename.plan.md`
+```sh
+pio run -d examples/minimal -e usb
+```
 
-These files help decide what to keep, document, demonstrate in examples, or remove later.
+The scripts under `tools/test/` provide focused host checks. For example:
 
-## 9. Testing / build validation
+```powershell
+pwsh -NoProfile -File tools/test/run-compact-runtime-meta-host-tests.ps1
+```
 
-- Default target for flashing/testing is typically `examples/Full-GUI-Demo` unless specified otherwise.
-- Before merging into `release/*` or `main`:
-  - Run at least one PlatformIO build: `pio run -e <env>`
-  - If tests are affected: `pio test -e <env>`
+For frontend changes, use the applicable Node/browser tests under `webui/test/`
+and the build instructions in [the Web UI guide](../webui/README.md).
+Embedded compilation and host mocks do not exercise real RF, flash callbacks,
+device timing or long-term stability. Record device checks separately when they
+are necessary; build commands never authorize an upload.
 
-## 10. Git workflow etiquette
+## Complete repository gate
 
-- Prefer small, reviewable commits
-- Do not stage/commit/push unless explicitly requested in the current task context
-- Before rename/delete:
-  - Search references and update them
-  - Ensure builds still pass
+Cross-cutting changes and final integration may require the complete public
+gate. It discovers PlatformIO targets, runs the automated checks and records
+results without uploading firmware:
 
-## 11. CI / merge policy
+```powershell
+pwsh -NoProfile -File tools/build/run-full-repository-gate.ps1
+```
 
-- All configured CI checks must pass before merging to `main`
-- No exceptions for failed CI
-- Keep `README.md` and `docs/TODO.md` current when usage/behavior changes
+It requires PowerShell 7, clang-format 18.1.3, and the toolchains used by the
+selected checks. The format check selects `clang-format-18` first, then the
+optional Windows executable at `.Temp/ci-clang-format/clang-format.exe`, then
+`clang-format` on PATH. Other clang-format versions are rejected to match CI.
+Inspect supported targets without running the full matrix:
 
-## Method overview
+```powershell
+pwsh -NoProfile -File tools/build/run-full-repository-gate.ps1 -DiscoverOnly
+```
 
-| Method | Overloads / Variants | Description | Notes |
-|---|---|---|---|
-| _none_ | - | Contribution guide only; no runtime API methods are defined here. | Policy/reference document. |
+Describe the checks actually run in the pull request, their results and any
+remaining verification gaps. Do not claim device acceptance from compilation
+or reuse a test result after changing the behavior it covers.

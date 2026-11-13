@@ -65,3 +65,27 @@ $backpressureExe = Join-Path $outDir 'runtime-backpressure.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Runtime backpressure host compile failed.' }
 & $backpressureExe
 if ($LASTEXITCODE -ne 0) { throw 'Runtime backpressure assertions failed.' }
+
+$connectionExe = Join-Path $outDir 'runtime-connection-delivery.exe'
+& $compiler -std=c++17 -Wall -Wextra -Werror -I (Join-Path $repo 'test/host/ws_stubs') -I (Join-Path $repo 'src') (Join-Path $repo 'test/host/runtime_connection_delivery_test.cpp') -o $connectionExe
+if ($LASTEXITCODE -ne 0) { throw 'Runtime connection delivery compile failed.' }
+& $connectionExe
+if ($LASTEXITCODE -ne 0) { throw 'Runtime connection delivery assertions failed.' }
+
+$callbackStart = $cmSource.IndexOf('  bool sendWebSocketText(AsyncWebSocketClient* client, const String& payload) {')
+if ($callbackStart -lt 0) { throw 'Public callback sender not found.' }
+$callbackBrace = $cmSource.IndexOf('{', $callbackStart)
+$depth = 1
+$end = $callbackBrace + 1
+while ($end -lt $cmSource.Length -and $depth -gt 0) {
+    if ($cmSource[$end] -eq '{') { $depth++ }
+    elseif ($cmSource[$end] -eq '}') { $depth-- }
+    $end++
+}
+if ($depth -ne 0) { throw 'Public callback sender is incomplete.' }
+[IO.File]::WriteAllText((Join-Path $outDir 'callback-delivery.inc'), $cmSource.Substring($callbackStart, $end - $callbackStart), [Text.UTF8Encoding]::new($false))
+$callbackExe = Join-Path $outDir 'runtime-callback-delivery.exe'
+& $compiler -std=c++17 -Wall -Wextra -Werror -I (Join-Path $repo 'test/host/ws_stubs') -I $outDir (Join-Path $repo 'test/host/runtime_callback_delivery_test.cpp') -o $callbackExe
+if ($LASTEXITCODE -ne 0) { throw 'Runtime callback delivery compile failed.' }
+& $callbackExe
+if ($LASTEXITCODE -ne 0) { throw 'Runtime callback delivery assertions failed.' }

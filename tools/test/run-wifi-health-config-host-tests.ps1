@@ -1,3 +1,4 @@
+param([string]$ArduinoJsonInclude = '')
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $outDir = Join-Path $repo '.local/wifi-health-config'
@@ -29,10 +30,11 @@ $coreFixture = "namespace cm { namespace CoreCategories { inline constexpr char 
 $baseParser = [regex]::Match($source, '(?ms)^  bool fromJSON\(const JsonVariant& jsonValue\) override \{.*?^  \}')
 if (!$baseParser.Success) { throw 'Production Config::fromJSON not found.' }
 [IO.File]::WriteAllText((Join-Path $outDir 'wifi-timeout-base.inc'), $baseParser.Value)
-$jsonInclude = Join-Path $repo '.pio/ble-validation/libdeps/usb/ArduinoJson/src'
-if (!(Test-Path -LiteralPath (Join-Path $jsonInclude 'ArduinoJson.h'))) { throw 'Existing ArduinoJson include is unavailable.' }
+if (!$ArduinoJsonInclude) { $ArduinoJsonInclude = Join-Path $repo '.pio/libdeps/usb/ArduinoJson/src' }
+if (!(Test-Path -LiteralPath (Join-Path $ArduinoJsonInclude 'ArduinoJson.h'))) { throw "ArduinoJson.h not found in '$ArduinoJsonInclude'. Pass -ArduinoJsonInclude with an existing include directory." }
+Write-Output "ArduinoJson include: $ArduinoJsonInclude"
 $exe = Join-Path $outDir 'wifi-timeout-setting.exe'
-& 'C:/Program Files/LLVM/bin/clang++.exe' -std=c++20 -Wall -Wextra -Werror -I $jsonInclude -I $outDir (Join-Path $repo 'test/host/wifi_timeout_setting_test.cpp') -o $exe
+& 'C:/Program Files/LLVM/bin/clang++.exe' -std=c++20 -Wall -Wextra -Werror -I $ArduinoJsonInclude -I $outDir (Join-Path $repo 'test/host/wifi_timeout_setting_test.cpp') -o $exe
 if ($LASTEXITCODE -ne 0) { throw 'WiFi timeout production setting host compile failed.' }
 & $exe
 if ($LASTEXITCODE -ne 0) { throw 'WiFi timeout production setting host checks failed.' }

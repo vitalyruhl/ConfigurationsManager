@@ -3,6 +3,33 @@
 This changelog is a curated overview. Development versions 4.5.0 through 4.7.1
 are consolidated into 4.8.0; they were not separate releases.
 
+## 4.12.0 - 2026-11-13
+
+- Move BoilerSaver, SolarInverterLimiter and SolarBatteryTelemetry into their
+  own repositories and update the documentation links.
+- Add configurable queue size and stall timeout for the optional bounded MQTT
+  transport, and reject application publishes when TX headroom is unavailable.
+- Add an experimental opt-in policy for discarding older unsent MQTT publishes
+  when queue space is needed, with separate drop counters and deferred
+  notifications. TX stalls under sustained load are being investigated.
+
+- Add board-aware default construction for `cm::helpers::PulseOutput`, using
+  `LED_BUILTIN` or explicit `CM_BUILTIN_LED_PIN` and
+  `CM_BUILTIN_LED_ACTIVE_LOW` board-profile overrides.
+- Defer pulse-output hardware initialization until runtime. Global helper
+  construction no longer invokes Arduino GPIO or virtual RGB/RMT drivers before
+  the scheduler starts; initialize the inactive level before enabling output.
+- Correct timeout clamps for ESP32-C3 toolchains where `uint32_t` aliases
+  `unsigned long`.
+- Guard runtime WebSocket delivery, heartbeat closure and queue checks by client
+  ID. Keep the runtime delivery slot reserved until the shared transport buffer
+  is released, including when a connection disappears during delivery.
+- Require the maintained ESP32Async WebSocket and TCP transports with mutexes
+  enabled. Reject legacy esphome transport headers explicitly.
+- Exclude the root firmware entry point when consuming CM as a source library.
+  Keep example build files and dependency caches separate, and distinguish
+  native host tests from embedded firmware test targets.
+
 ## 4.10.5 - 2026-10-28
 
 Development versions 4.9.1, 4.9.2 and 4.10.0 through 4.10.4 are consolidated
@@ -34,7 +61,8 @@ into this release; they were not separate releases.
   isolated plus production same-image SBT 1.4.12 OTA. Production restarted with
   SDK reason 3, restored BMS/Victron samples and preserved all 33 settings; the
   following 900-second observation had no new reboot or offline transition.
-  See the [bounded acceptance record](acceptance/2026-10-27-http-ota-ble-shutdown.md).
+  See [HTTP OTA restart preparation](OTA.md#http-ota-restart-preparation)
+  for the supported integration behavior.
   This is not long-run stability qualification. MQTT reconnect/session replacement
   remains open in [#89](https://github.com/vitalyruhl/ConfigurationsManager/issues/89);
   no root cause, thermal explanation or general TCP/heap recovery is claimed.
@@ -112,10 +140,10 @@ into this release; they were not separate releases.
   blocking transfer; asynchronous HTTP traffic cannot mask a blocked loop.
 - On 2026-10-22 the operator accepted normal SIL/SBT web access as substantially
   faster and without observed crashes, closing this development iteration's
-  HTTP/WebSocket item. Earlier diagnostic/overload failures remain recorded in
-  [the investigation history](todo_http_delivery_panic.md); their causes and
-  overload recovery are not claimed resolved. This operator acceptance does not
-  establish a full repository validation result.
+  HTTP/WebSocket item. Earlier diagnostic/overload failures remain historical
+  evidence; their causes and overload recovery are not claimed resolved. See
+  [runtime delivery boundaries](GUI-Runtime.md#delivery-and-backpressure).
+  This operator acceptance does not establish a full repository validation result.
 
 ## 4.4.10 - 2026-08-09
 

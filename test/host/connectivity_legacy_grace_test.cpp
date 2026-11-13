@@ -36,6 +36,7 @@ struct IPAddress {
   uint8_t operator[](unsigned i) const {
     return bytes[i];
   }
+  // cppcheck-suppress functionStatic
   String toString() const {
     return "192.168.2.126";
   }
@@ -55,6 +56,7 @@ struct Wifi {
   IPAddress gatewayIP() const {
     return route;
   }
+  // cppcheck-suppress functionStatic
   int RSSI() const {
     return -50;
   }
@@ -98,21 +100,30 @@ struct ConfigManagerWiFi {
   bool isOtaActive_() const {
     return ota;
   }
+  // cppcheck-suppress functionStatic
   bool advanceStackReset_() {
     return false;
   }
+  // cppcheck-suppress functionStatic
   void beginWiFiConnection_() {}
+  // cppcheck-suppress functionStatic
   void processPendingRoamingReconnect_() {}
+  // cppcheck-suppress functionStatic
   void attemptConnect() {}
+  // cppcheck-suppress functionStatic
   void handleReconnection() {}
+  // cppcheck-suppress functionStatic
   void checkSmartRoaming() {}
+  // cppcheck-suppress functionStatic
   void logNoSsidAvailScan_() {}
   void transitionToState(WiFiManagerState state) {
     currentState = state;
   }
+  // cppcheck-suppress functionStatic
   String getStatusString() const {
     return "connected";
   }
+  // cppcheck-suppress functionStatic
   String getWiFiStatusString(int) const {
     return "connected";
   }

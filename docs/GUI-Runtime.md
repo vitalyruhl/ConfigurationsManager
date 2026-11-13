@@ -11,7 +11,7 @@ Runtime values are served by the Web UI using:
 - `/live_layout.json` for the optional page/card/group layout
 - `/user_theme.css` for optional global CSS
 
-### Demand-driven updates (4.8.0)
+### Demand-driven updates
 
 `/runtime.json` without a selector remains a full snapshot. Pass a URL-encoded
 JSON array in `groups`, for example `groups=%5B%22sensors%22%5D`, to evaluate only
@@ -54,16 +54,21 @@ and at most one fallback request is active; superseded replies are ignored.
 ### Delivery and backpressure
 
 Runtime JSON construction is serialized across HTTP and WebSocket requests; a
-busy generator makes the loop's WebSocket tick skip rather than wait. Each
-runtime recipient has at most one outstanding message; slow peers skip ticks
-without suppressing independent healthy peers. General text/log/event APIs keep
-their existing behavior. HTTP static/JSON responses use bounded TCP admission;
-this limits in-flight bytes, not the total memory held by a generated response.
-An empty runtime provider result returns HTTP 503.
+busy generator makes the loop's WebSocket tick skip rather than wait. CM retains
+at most one transport-owned runtime buffer per client. The transport can release
+it after copying bytes into TCP, before the network ACK; bytes already copied
+remain bounded by the TCP window. This is not a one-snapshot-per-network-ACK
+guarantee. Slow peers skip ticks without suppressing independent healthy peers.
+Guarded server operations use client IDs so a concurrent disconnect cannot leave
+CM using a borrowed client pointer. See
+[transport compatibility](GETTING_STARTED.md#build-and-dependency-compatibility).
 
-Normal SIL/SBT access was operator-accepted on 2026-10-22 as faster and without
-observed crashes. See [the investigation record](todo_http_delivery_panic.md)
-for the acceptance scope and preserved failed diagnostic/overload cohorts.
+General text/log/event APIs retain their existing behavior. HTTP static/JSON
+responses use bounded TCP admission; this limits in-flight bytes, not the total
+memory held by a generated response. An empty runtime provider result returns
+HTTP 503. These bounds do not make every allocation failure safe or establish
+that a historical panic has been resolved. See
+[diagnosing crashes](TROUBLESHOOTING.md#esp32-wont-boot-or-guru-meditation-errors).
 
 ## 2. Runtime Providers
 

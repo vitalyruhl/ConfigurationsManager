@@ -21,7 +21,7 @@
 
 namespace {
 
-bool readLivePageSelection(AsyncWebServerRequest* request, ConfigManagerClass* manager, String& pageKey, bool& selected) {
+bool readLivePageSelection(AsyncWebServerRequest* request, const ConfigManagerClass* manager, String& pageKey, bool& selected) {
   selected = request->hasParam("page");
   if (!selected)
     return true;
@@ -66,7 +66,7 @@ bool parseForceFlag(AsyncWebServerRequest* request) {
   if (!request) {
     return false;
   }
-  AsyncWebParameter* param = nullptr;
+  const AsyncWebParameter* param = nullptr;
   if (request->hasParam("force")) {
     param = request->getParam("force");
   } else if (request->hasParam("force", true)) {
@@ -593,7 +593,7 @@ void ConfigManagerWeb::setupAPIRoutes() {
 #if CM_ENABLE_LIVE_UI || CM_ENABLE_SETTINGS_UI
   server->on("/gui/action", HTTP_POST, [this](AsyncWebServerRequest* request) {
     auto readParam = [request](const char* name) -> String {
-      AsyncWebParameter* param = request->getParam(name, false);
+      const AsyncWebParameter* param = request->getParam(name, false);
       if (!param) {
         param = request->getParam(name, true);
       }

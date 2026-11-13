@@ -29,8 +29,6 @@ float computeDewPoint(float temperatureC, float relHumidityPct) {
 
 PulseOutput::PulseOutput(uint8_t pin, ActiveLevel level)
     : pin_(pin), activeHigh_(level == ActiveLevel::ActiveHigh) {
-  pinMode(pin_, OUTPUT);
-  writeLevel(false);
   // register instance
   next_ = head_;
   head_ = this;
@@ -108,6 +106,7 @@ void PulseOutput::stop() {
 }
 
 void PulseOutput::loop() {
+  initialize();
   const unsigned long now = millis();
 
   if (forced_) {
@@ -158,7 +157,18 @@ void PulseOutput::loopAll() {
   }
 }
 
+void PulseOutput::initialize() {
+  if (initialized_) {
+    return;
+  }
+  // Set the inactive latch before enabling output; never touch hardware in constructors.
+  digitalWrite(pin_, activeHigh_ ? LOW : HIGH);
+  pinMode(pin_, OUTPUT);
+  initialized_ = true;
+}
+
 void PulseOutput::writeLevel(bool onLogical) {
+  initialize();
   const bool level = activeHigh_ ? onLogical : !onLogical;
   digitalWrite(pin_, level ? HIGH : LOW);
 }

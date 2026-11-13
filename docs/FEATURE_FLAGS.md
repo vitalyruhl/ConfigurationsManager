@@ -1,8 +1,9 @@
 # Feature Flags / Build Options
 
-## v3.0.0 change
+## Default build
 
-Starting with **v3.0.0**, the library no longer requires a list of `CM_ENABLE_*` build flags or PlatformIO `extra_scripts` to build.
+The default library build does not require a list of `CM_ENABLE_*` build flags
+or a PlatformIO `extra_scripts` hook.
 
 The default embedded UI is supplied with the library. Selecting a different
 Live/Settings combination requires the explicit regeneration hook described
@@ -24,6 +25,9 @@ below; `library.json` does not install that hook automatically.
   - `CM_ENABLE_WIFI` (default: `1`)
     - `1`: include ConfigManager WiFi connection, AP, and roaming support
     - `0`: compile out ConfigManager WiFi support for externally managed networks such as Ethernet
+  - `CM_WIFI_POWER_SAVE_DEFAULT` (default: `0`, accepts `0` or `1`)
+    - Seeds a missing WiFi power-saving preference; an existing saved setting wins.
+      See [WiFi power saving](WIFI.md#power-saving-and-ble-coexistence).
   - `CM_ENABLE_OTA` (default: `1`)
   - `CM_ENABLE_SYSTEM_PROVIDER` (default: `1`)
   - `CM_ENABLE_SYSTEM_TIME` (default: `1`)
@@ -33,7 +37,7 @@ below; `library.json` does not install that hook automatically.
 
 If your project still defines removed flags, the build will fail with a clear `#error` message so you can remove them (example: `CM_ENABLE_WS_PUSH`).
 
-## Live and Settings combinations (4.9.0)
+## Live and Settings combinations
 
 Both switches default to `1`; unsupported values produce a compile error.
 They remove the corresponding backend and frontend paths at build time, including

@@ -1,6 +1,7 @@
 # Smart WiFi Roaming
 
-ConfigurationsManager v2.7.0+ includes integrated **Smart WiFi Roaming** functionality that automatically switches to stronger access points in mesh networks.
+ConfigurationsManager includes **Smart WiFi Roaming** to switch to stronger
+access points in mesh networks.
 
 ## Overview
 
@@ -219,19 +220,11 @@ See the examples directory for complete implementations:
 - `examples/minimal/src/main.cpp`: Basic setup with default Smart Roaming
 - `examples/BME280-Temp-Sensor/src/main.cpp`: Advanced setup with custom roaming configuration
 
-## Version History
-
-- **v2.7.0**: Initial Smart WiFi Roaming implementation
-- Integrated into WiFiManager class
-- Default enabled with conservative settings
-- Configurable thresholds and timing
-- Support for static IP preservation during roaming
-
 ## Method overview
 
 | Method | Overloads / Variants | Description | Notes |
 |---|---|---|---|
-| `ConfigManager.enableSmartRoaming` | `enableSmartRoaming(bool enable = true)` | Enables/disables smart roaming behavior. | Enabled by default in typical v2.7+ style setups. |
+| `ConfigManager.enableSmartRoaming` | `enableSmartRoaming(bool enable = true)` | Enables/disables smart roaming behavior. | Use the configuration described above. |
 | `ConfigManager.setRoamingThreshold` | `setRoamingThreshold(int thresholdDbm = -75)` | Sets RSSI threshold that triggers roaming checks. | Lower value means less aggressive roaming. |
 | `ConfigManager.setRoamingCooldown` | `setRoamingCooldown(unsigned long cooldownSeconds = 120)` | Sets minimum delay between roaming attempts. | Prevents AP ping-pong. |
 | `ConfigManager.setRoamingImprovement` | `setRoamingImprovement(int improvementDbm = 10)` | Sets required RSSI gain before switching AP. | Higher value makes roaming more conservative. |

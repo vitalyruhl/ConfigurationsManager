@@ -15,5 +15,8 @@ struct MqttBoundedIoStats {
   uint32_t txOverflows = 0;
   uint32_t connectFailures = 0;
   uint32_t rejectedHosts = 0;
+  uint32_t txRejectedPublishes = 0;
+  uint32_t txDroppedPublishes = 0;
+  uint32_t txDroppedBytes = 0;
 };
 } // namespace cm

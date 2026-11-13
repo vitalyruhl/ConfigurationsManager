@@ -6,6 +6,11 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 try {
 $compiler = 'C:/Program Files/LLVM/bin/clang++.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw 'Verified clang++ compiler is unavailable.' }
+$notificationExe = Join-Path $outDir 'mqtt_drop_notifications_test.exe'
+& $compiler -std=c++17 -Wall -Wextra -Werror -I (Join-Path $repo 'src') (Join-Path $repo 'test/host/mqtt_drop_notifications_test.cpp') -o $notificationExe
+if ($LASTEXITCODE -ne 0) { throw 'MQTT drop notification host compile failed.' }
+& $notificationExe
+if ($LASTEXITCODE -ne 0) { throw 'MQTT drop notification host assertions failed.' }
 $exe = Join-Path $outDir 'mqtt_bounded_io_test.exe'
 & $compiler -std=c++17 -Wall -Wextra -Werror -I (Join-Path $repo 'test/host/mqtt_stubs') -I (Join-Path $repo 'src') (Join-Path $repo 'test/host/mqtt_bounded_io_test.cpp') -o $exe
 if ($LASTEXITCODE -ne 0) { throw 'Bounded MQTT host compile failed.' }

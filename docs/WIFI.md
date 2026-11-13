@@ -12,6 +12,7 @@ This document collects WiFi-related usage patterns and best practices for Config
 - Smart WiFi Roaming (mesh / multi-AP)
 - AP selection helpers (MAC filter / priority)
 - Reconnect + auto reboot timeout
+- Power-saving preferences and BLE coexistence
 
 ## Quickstart (recommended)
 
@@ -74,6 +75,7 @@ If you use `cm::CoreSettings` (see src/core/CoreSettings.h), the following setti
 | `WiFiSubnet` | Subnet Mask | string | Subnet mask |
 | `WiFiDNS1` | Primary DNS | string | Optional DNS1 |
 | `WiFiDNS2` | Secondary DNS | string | Optional DNS2 |
+| `WiFiPowerSave` | WiFi power saving | bool | Saved modem power-saving preference; default false |
 | `WiFiProbe` | Connectivity check target | string | `off` (default), `gateway`, or strict unicast IPv4 |
 | `WiFiRb` | Reboot if WiFi lost (min) | int | Whole minutes 0..9999; default 1; 0 disables network restarts |
 
@@ -243,8 +245,67 @@ to 30 seconds. `setLoopWatchdogTimeout(ms)` returns false for unsupported values
 use 0 to disable or 1000..3600000 ms to configure it. It does not install a global
 task watchdog and still requires the scheduler/ESP timer task to run. Synchronous
 ArduinoOTA progress can confirm loop work; asynchronous HTTP traffic cannot.
-See [bounded device acceptance](acceptance/2026-10-21-connectivity-watchdog.md)
-for the tested source/image identities and limits.
+Asynchronous HTTP traffic cannot establish application-loop progress. The loop
+supervisor still depends on the scheduler and ESP timer task, so it does not
+replace interrupt or hardware watchdogs. Build/host checks do not establish
+device timing or long-term stability.
+
+## Power saving and BLE coexistence
+
+WiFi defaults to modem power saving off (`WIFI_PS_NONE`). With the core WiFi
+bundle attached, `cm::CoreWiFiSettings::powerSave` exposes the boolean setting
+with key hint `WiFiPowerSave`. Save persists the choice. The switch displays
+that configured choice, while its diagnostic text is a separate runtime snapshot
+of the requested state, native driver mode and last apply/read result. Reload
+Settings for a fresh snapshot. `/config.json` includes these diagnostics even
+with `CM_ENABLE_LIVE_UI=0`; a failed driver read reports an unknown mode.
+
+Preference precedence and lifecycle:
+
+1. `CM_WIFI_POWER_SAVE_DEFAULT` accepts `0` (default) or `1` (MIN_MODEM). It seeds
+   a missing setting once; an existing NVS value takes precedence. Without the
+   core bundle, it is the WiFi manager's fallback.
+2. Loaded settings apply before the first station connection. Reconnects and
+   full stack resets reapply the requested policy.
+3. `ConfigManager.setWiFiPowerSave(bool)` queues a non-persistent runtime
+   override. The latest queued API or Settings update wins when `handleClient()`
+   runs. The override does not change the saved switch; loading/resetting Settings
+   queues their values again, and reboot restores the saved choice.
+
+Call the queued ConfigManager API from callbacks/tasks. The low-level
+`getWiFiManager().setPowerSave(bool)` belongs to the application loop.
+`getWiFiManager().getPowerSaveDiagnostics()` is read-only and exposes `requested`,
+`bleCoexistenceRequired`, `effectiveMode` (`-1` on read failure), `readError`,
+`applyAttempted`, `applySucceeded` and `applyError`. A request before station
+startup remains pending until a connection path applies it. CM synchronizes
+Arduino's cached sleep preference and explicitly calls `esp_wifi_set_ps` because
+the native driver can revert after reset even when the cache matches. A changed
+mode can therefore need two SDK calls; the explicit native result determines
+apply success.
+
+Before CM starts BLE scanning or GATT work, its worker queues a coexistence lease
+and waits for the application loop to acknowledge native `WIFI_PS_MIN_MODEM`.
+ESP32/ESP-IDF 4.4.7 does not support `WIFI_PS_NONE` with WiFi/Bluetooth coexistence;
+see [Espressif's power-saving constraints](https://docs.espressif.com/projects/esp-idf/en/v4.4.7/esp32/api-guides/wifi.html#esp32-wi-fi-power-saving-mode).
+A previous MIN read does not acknowledge a new lease. Apply/read failure leaves
+BLE startup pending and retries from the application loop at most once per
+second, outside a stack reset. When WiFi is explicitly uninitialized, startup
+may proceed after synchronizing Arduino's cache to MIN. Later station starts
+and resets reapply the lease.
+
+The saved preference remains unchanged. While the lease is active, requested
+false gives effective MIN with `reason=ble_coexistence`; requested true gives
+`reason=requested`. Settings JSON exposes `bleCoexistenceRequired` separately;
+an applied coexistence override is not an apply error. Ordinary BLE pause,
+disable, disconnect, peer removal or cancelled startup does not shut down the
+controller or release the lease. The terminal
+[BLE restart shutdown](BLUETOOTH.md#terminal-shutdown-for-http-ota-restart) also
+retains it conservatively until reboot. The Bluetooth Enabled switch alone does
+not prove controller shutdown. WiFi-only applications retain their requested
+policy, including the default NONE.
+
+These policy rules do not establish the cause of an observed panic, MQTT stall
+or TCP outage. Validate RF behavior and reconnect recovery on the target device.
 
 ## Smart WiFi Roaming
 
@@ -294,6 +355,13 @@ Recommended use:
 - trigger `performStackReset()` only after repeated failures
 - keep logs enabled while testing this path
 
+Recovery uses Arduino's `WiFi.mode(WIFI_OFF)` and `WiFi.mode(WIFI_STA)` lifecycle,
+so Arduino applies its runtime `WiFi.useStaticBuffers()` preference and initial
+TX/RX buffer policy. CM does not mix direct native stop/deinit/init calls into
+this path. A failed OFF/STA transition aborts that attempt without reporting
+completion; later attempts follow the existing reconnect cadence. This lifecycle
+does not prove that a specific outage or panic has been repaired.
+
 ## ADC2 warning (ESP32)
 
 On classic ESP32 (Arduino), ADC2 pins are typically not usable for `analogRead()` while WiFi is active.
@@ -301,7 +369,7 @@ On classic ESP32 (Arduino), ADC2 pins are typically not usable for `analogRead()
 If you use analog inputs in parallel with WiFi:
 
 - prefer ADC1 pins (GPIO32–39)
-- see also `docs/esp.md` and `docs/IO-AnalogInputs.md`
+- see also [IO analog inputs](IO-AnalogInputs.md)
 
 ## Method overview
 
@@ -311,6 +379,8 @@ If you use analog inputs in parallel with WiFi:
 | `ConfigManager.startAccessPoint` | `startAccessPoint(const String& apSSID = "", const String& apPassword = "")` | Starts AP mode fallback. | Used when no STA credentials are available. |
 | `ConfigManager.reconnectWifi` | `reconnectWifi()` | Triggers a reconnect attempt for STA mode. | Keep loop non-blocking and combine with `update()`. |
 | `ConfigManager.performStackReset` | `performStackReset()` | Performs full WiFi stack re-initialization. | Advanced troubleshooting only. |
+| `ConfigManager.setWiFiPowerSave` | `setWiFiPowerSave(bool enabled)` | Queues a runtime power-saving preference. | Non-persistent; service `handleClient()`. |
+| `ConfigManager.getWiFiManager().getPowerSaveDiagnostics` | `getPowerSaveDiagnostics()` | Reads requested/effective state and apply/read results. | Snapshot only; does not change the radio. |
 | `ConfigManager.setAccessPointMacFilter` | `setAccessPointMacFilter(const String& macAddress)` | Restricts connection to one AP MAC. | Multi-AP tuning helper. |
 | `ConfigManager.setAccessPointMacPriority` | `setAccessPointMacPriority(const String& macAddress)` | Prefers one AP MAC but allows fallback APs. | Multi-AP tuning helper. |
 

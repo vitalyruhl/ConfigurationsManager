@@ -187,9 +187,9 @@ private:
   RuntimeFieldMeta* promoteRuntimeMetaLocked(RuntimeFieldId id, RuntimeFieldMeta&& meta);
   cm::RuntimeMetaView runtimeMetaViewLocked(size_t index) const;
   size_t runtimeMetaCountLocked() const;
-  void reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields) const;
-  void logRuntimeMetaAdded(const String& group, const String& key) const;
-  void logRuntimeMetaEvent(const char* message, size_t count) const;
+  static void reportRuntimeMetaFailure(const char* reason, size_t bytes, size_t fields);
+  static void logRuntimeMetaAdded(const String& group, const String& key);
+  static void logRuntimeMetaEvent(const char* message, size_t count);
   String buildRuntimeMetaJsonLocked(const std::function<bool(const RuntimeFieldMeta&)>& include = {}, const std::function<bool(const cm::RuntimeMetaView&)>& viewInclude = {});
   void markRuntimeMetaJsonCacheDirtyLocked();
   RuntimeAlarm* findAlarm(const String& name);

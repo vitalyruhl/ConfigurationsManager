@@ -62,3 +62,27 @@ secrets.h
 /compile_commands.json
 /.Temp/
 /.Temp
+
+# Local-only AI instructions, tools, and working material.
+**/AGENTS.md
+**/AGENTS.override.md
+/.agents/
+/.serena/
+/.codex/
+/.projectatlas/
+/.context-mode/
+/.claude/
+/.cursor/
+/.mcp.json
+/CLAUDE.md
+/tools/governance/
+/dev-info/agent-new-prompts.md
+/.local/
+**/platformio.local.ini
+
+# Public GitHub files: workflows and project-specific collaboration templates.
+/.github/*
+!/.github/workflows/
+!/.github/dependabot.yml
+!/.github/pull_request_template.md
+!/.github/ISSUE_TEMPLATE/

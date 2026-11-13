@@ -105,12 +105,15 @@ struct EchoPacket {
     if (n < 20 || (b[0] >> 4) != 4)
       return false;
     const std::size_t ihl = (b[0] & 15u) * 4u;
+    // The checksum of a valid IP header can be zero; see connectivity_test.cpp.
     if (ihl < 20 || ihl > 60 || n < ihl + size || read16(b + 2) != ihl + size || b[9] != 1 ||
+        // cppcheck-suppress knownConditionTrueFalse
         (read16(b + 6) & 0x3fffu) != 0 || checksum(b, ihl) != 0 || source != target || read32(b + 12) != target)
       return false;
     const uint8_t* icmp = b + ihl;
     uint8_t expected[size];
     request(expected, target, sequence, nonce);
+    // cppcheck-suppress knownConditionTrueFalse
     return icmp[0] == 0 && icmp[1] == 0 && checksum(icmp, size) == 0 && std::memcmp(icmp + 4, expected + 4, size - 4) == 0;
   }
 };

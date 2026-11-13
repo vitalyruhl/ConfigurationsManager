@@ -2,6 +2,13 @@
 
 #include <Arduino.h>
 
+#if !defined(CM_BUILTIN_LED_PIN) && defined(LED_BUILTIN)
+#define CM_BUILTIN_LED_PIN LED_BUILTIN
+#endif
+#ifndef CM_BUILTIN_LED_ACTIVE_LOW
+#define CM_BUILTIN_LED_ACTIVE_LOW 0
+#endif
+
 namespace cm::helpers {
 
 // Utility functions shared across examples and modules.
@@ -17,6 +24,12 @@ public:
   // Cppcheck rationale: Preserve implicit construction used by existing callers.
   // cppcheck-suppress noExplicitConstructor
   PulseOutput(uint8_t pin, ActiveLevel level = ActiveLevel::ActiveHigh);
+
+#ifdef CM_BUILTIN_LED_PIN
+  // Use the selected board's LED metadata, including Arduino virtual RGB pins.
+  PulseOutput()
+      : PulseOutput(CM_BUILTIN_LED_PIN, CM_BUILTIN_LED_ACTIVE_LOW ? ActiveLevel::ActiveLow : ActiveLevel::ActiveHigh) {}
+#endif
 
   // Configure defaults for subsequent setPulse() calls.
   void setDefault(uint16_t count, uint32_t periodMs);
@@ -43,11 +56,13 @@ public:
   static void loopAll();
 
 private:
+  void initialize();
   void writeLevel(bool onLogical);
   void startSequence(uint16_t count, uint32_t onMs, uint32_t offMs, bool repeat, uint32_t gapMs);
 
   uint8_t pin_;
   bool activeHigh_;
+  bool initialized_ = false;
 
   // defaults
   uint16_t defCount_ = 1;

@@ -63,11 +63,15 @@ struct StackRecoveryTestWiFi {
       captured = arduinoBootBufferConfig();
     return true;
   }
+  // cppcheck-suppress functionStatic
   void disconnect(bool powerOff) {
     assert(!powerOff);
   }
+  // cppcheck-suppress functionStatic
   void setAutoReconnect(bool) {}
+  // cppcheck-suppress functionStatic
   void persistent(bool) {}
+  // cppcheck-suppress functionStatic
   void setTxPower(int) {}
 } WiFi;
 struct WiFiGenericClass {
@@ -84,6 +88,7 @@ struct ConfigManagerWiFi {
   uint32_t stackResetStepAtMs = 0;
   unsigned policyCalls = 0;
   bool bleCoexistenceReady_ = true;
+  // cppcheck-suppress functionStatic
   bool isOtaActive_() const {
     return WiFi.ota;
   }

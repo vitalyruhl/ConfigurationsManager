@@ -11,7 +11,8 @@ This document describes how **analog outputs** work in `cm::IOManager`.
 - Runtime UI controls (slider)
 - Runtime UI readouts (scaled value, volts, DAC 0..255)
 
-Note: the initial implementation is **DAC-only**. PWM/LEDC is a planned follow-up.
+The analog-output API supports DAC outputs. It does not provide a PWM/LEDC
+backend or an external I2C/SPI DAC driver.
 
 ## Creating an Analog Output
 
@@ -114,9 +115,9 @@ Typical sketch order:
 ## Recommendations
 
 - Use **at most 2 physical DAC outputs** on ESP32.
-- If you need more than 2 analog outputs:
-  - Use PWM/LEDC + filtering (RC) (planned follow-up)
-  - Use an external DAC via I2C/SPI (planned follow-up)
+- For more outputs, application-owned alternatives include PWM/LEDC with RC
+  filtering or an external I2C/SPI DAC. Those drivers require separate
+  application integration; they are not implemented by this API.
 
 ## Method overview
 

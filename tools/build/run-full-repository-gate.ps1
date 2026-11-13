@@ -107,10 +107,23 @@ function Write-Summary {
     $results | Format-Table Name, Status, Seconds, LogPath, Detail -AutoSize
 }
 
+function Test-EmbeddedTestSources {
+    param([string]$ProjectDirectory)
+
+    $testRoot = Join-Path $ProjectDirectory 'test'
+    if (-not (Test-Path -LiteralPath $testRoot -PathType Container)) { return $false }
+    $sources = @(Get-ChildItem -LiteralPath $testRoot -File -Recurse |
+            Where-Object {
+                $_.Extension -in @('.c', '.cc', '.cpp', '.cxx', '.ino') -and
+                [IO.Path]::GetRelativePath($testRoot, $_.FullName) -notmatch '(?:^|[\\/])(?:host|native)[\\/]'
+            })
+    return $sources.Count -gt 0
+}
+
 function Get-PlatformIoMatrix {
-    $excludedSegment = '[\\/](?:\.git|\.pio|\.Temp|node_modules|dist|libdeps)[\\/]'
+    $excludedSegment = '(?:^|[\\/])(?:\.git|\.pio|\.Temp|\.local|node_modules|dist|libdeps)[\\/]'
     $projects = Get-ChildItem -Path $platformIoRoot -Filter 'platformio.ini' -File -Recurse |
-        Where-Object { $MatrixRoot -or $_.FullName -notmatch $excludedSegment } |
+        Where-Object { [IO.Path]::GetRelativePath($platformIoRoot, $_.FullName) -notmatch $excludedSegment } |
         Sort-Object FullName
     $matrix = foreach ($project in $projects) {
         $environments = @(Select-String -Path $project.FullName -Pattern '^\s*\[env:([^\]]+)\]' |
@@ -133,7 +146,7 @@ function Get-PlatformIoMatrix {
                 ProjectDirectory = $project.Directory.FullName
                 Environment = $selection.Environment
                 SelectionReason = $selection.SelectionReason
-                HasEmbeddedTests = Test-Path -LiteralPath (Join-Path $project.Directory.FullName 'test')
+                HasEmbeddedTests = Test-EmbeddedTestSources -ProjectDirectory $project.Directory.FullName
             }
         }
     }
@@ -214,7 +227,7 @@ try {
         $matrix = Get-PlatformIoMatrix
         $embeddedTestTargets = @($matrix | Where-Object HasEmbeddedTests)
         $webUiTests = @(Get-ChildItem -Path (Join-Path $repoRoot 'webui\test') -Filter '*.test.mjs' -File -ErrorAction SilentlyContinue | Sort-Object FullName)
-        Add-Plan @('Format and precommit checks', 'Cppcheck', 'Working tree after static checks', 'Temporary content policy', 'PowerShell syntax', 'Agent governance generator', 'Serena memory generator', 'Workflow structure')
+        Add-Plan @('Format and precommit checks', 'Cppcheck', 'Working tree after static checks', 'Temporary content policy', 'PowerShell syntax', 'Workflow structure')
         foreach ($target in $embeddedTestTargets) {
             $relativeDirectory = [IO.Path]::GetRelativePath($repoRoot, $target.ProjectDirectory).Replace('\', '/')
             Add-Plan "PlatformIO test compile $relativeDirectory [$($target.Environment)]"
@@ -252,11 +265,7 @@ try {
             }
             if ($gateExitCode -eq 0 -and (Run-RequiredCheck -Name 'Temporary content policy' -Action { Test-IgnoredTemporaryContent })) {
                 if (Run-RequiredCheck -Name 'PowerShell syntax' -Action { Test-PowerShellSyntax }) {
-                    if (Run-RequiredCheck -Name 'Agent governance generator' -Action { & (Join-Path $repoRoot 'tools\governance\combine-agent-md.ps1') }) {
-                        if (Run-RequiredCheck -Name 'Serena memory generator' -Action { & (Join-Path $repoRoot 'tools\governance\serena\combine-serena-shared.ps1') }) {
-                            Run-RequiredCheck -Name 'Workflow structure' -Action { Test-WorkflowStructure } | Out-Null
-                        }
-                    }
+                    Run-RequiredCheck -Name 'Workflow structure' -Action { Test-WorkflowStructure } | Out-Null
                 }
             }
             if ($gateExitCode -eq 0) {

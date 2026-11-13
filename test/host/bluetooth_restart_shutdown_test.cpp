@@ -41,7 +41,13 @@ int main(int argc, char** argv) {
     if (scenario == "idleworker-native")
       nativeControllerStatus = ESP_BT_CONTROLLER_STATUS_ENABLED;
     manager.requestShutdownForRestart();
-    delay = [&] {assert(manager.isShutdownForRestartComplete()==(scenario=="disabledworker"));assert(NimBLEDevice::deinitCalls==0 && NimBLEDevice::initCalls==0);throw StopWorker{}; };
+    delay = [&] {
+      assert(manager.isShutdownForRestartComplete() == (scenario == "disabledworker"));
+      assert(NimBLEDevice::deinitCalls == 0 && NimBLEDevice::initCalls == 0);
+      // The worker exit is caught around entry() below.
+      // cppcheck-suppress throwInEntryPoint
+      throw StopWorker{};
+    };
     try {
       entry(entryValue);
     } catch (const StopWorker&) {

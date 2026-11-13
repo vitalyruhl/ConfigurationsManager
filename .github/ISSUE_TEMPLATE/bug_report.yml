@@ -1,0 +1,61 @@
+name: Bug report
+description: Report unexpected behavior in ConfigurationsManager.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Include a minimal example and the affected ConfigurationsManager version.
+        Remove passwords, tokens, WiFi credentials, and private configuration from
+        code, logs, and screenshots before sharing them.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and the affected feature.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: Include numbered steps, relevant commands, and a minimal sketch or example.
+    validations:
+      required: true
+  - type: input
+    id: cm_version
+    attributes:
+      label: ConfigurationsManager version or commit
+      description: Use the library version or the full commit SHA for an unreleased checkout.
+    validations:
+      required: true
+  - type: input
+    id: board
+    attributes:
+      label: ESP32 board or chip model
+      placeholder: Include the board name and chip variant, or write not applicable for a Web UI-only issue.
+    validations:
+      required: true
+  - type: textarea
+    id: build_environment
+    attributes:
+      label: Framework and build environment
+      placeholder: >-
+        Include OS, PlatformIO Core version, selected environment, Espressif32
+        platform and Arduino framework versions. For Web UI issues, include
+        browser, Node.js, and npm versions. Mark unrelated items not applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Include the full error and backtrace when available. Remove credentials and private data.
+      render: text

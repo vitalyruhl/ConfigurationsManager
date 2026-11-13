@@ -35,9 +35,11 @@ struct JsonObject {};
 struct JsonDocument {
   static bool overflow;
   template <class T>
+  // cppcheck-suppress functionStatic
   T to() {
     return T{};
   }
+  // cppcheck-suppress functionStatic
   bool overflowed() const {
     return overflow;
   }
@@ -69,12 +71,14 @@ class ConfigManagerRuntime {
 
 public:
 #include "runtime-generation.inc"
+  // cppcheck-suppress functionStatic
   void fillRuntimeSnapshot(JsonObject, const cm::RuntimeSelection&) {}
   String runtimeValuesToJSON(const cm::RuntimeSelection&);
 };
 #include "runtime-serialization.inc"
 struct AsyncWebServerResponse {
   virtual ~AsyncWebServerResponse() = default;
+  // cppcheck-suppress functionStatic
   void addHeader(const char*, const char*) {}
 };
 namespace cm {
@@ -94,9 +98,11 @@ struct Param {
 };
 struct AsyncWebServerRequest {
   unsigned status = 0;
+  // cppcheck-suppress functionStatic
   bool hasParam(const char*) const {
     return false;
   }
+  // cppcheck-suppress functionStatic
   Param* getParam(const char*) {
     static Param p;
     return &p;
@@ -124,7 +130,9 @@ struct ConfigManagerWeb {
   Server* server = &transport;
   std::function<String()> runtimeJsonProvider;
   std::function<String(const cm::RuntimeSelection&)> selectedRuntimeJsonProvider;
+  // cppcheck-suppress functionStatic
   void enableCORS(AsyncWebServerResponse*) {}
+  // cppcheck-suppress functionStatic
   void install() {
 #include "runtime-route.inc"
   }

@@ -30,6 +30,7 @@ struct Preferences {
   bool begin(const char*, bool) {
     return available;
   }
+  // cppcheck-suppress functionStatic
   void end() {}
 };
 struct BaseSetting {
@@ -39,9 +40,11 @@ struct BaseSetting {
   virtual void save() = 0;
   virtual SettingType getType() const = 0;
   virtual const char* getKeyHint() const = 0;
+  // cppcheck-suppress functionStatic
   bool shouldPersist() const {
     return true;
   }
+  // cppcheck-suppress functionStatic
   const char* getCategory() const {
     return "WiFi";
   }
@@ -78,6 +81,7 @@ struct Harness {
   std::vector<BaseSetting*> settings;
   Preferences prefs;
   struct {
+    // cppcheck-suppress functionStatic
     void setPassword(const String&) {}
     // Retain the OTA integration slot referenced by the extracted reset callback.
     // cppcheck-suppress unusedStructMember

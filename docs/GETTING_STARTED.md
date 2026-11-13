@@ -6,9 +6,16 @@ If you prefer a full working project, open one of the example projects in `examp
 
 ## Examples: PlatformIO setup notes
 
-The examples use this repository as a local library via
-`lib_deps = symlink://../..`. Per-example `build_dir` and `libdeps_dir` values
-under `${sysenv.HOME}/.pio/CM/ex/...` keep build outputs outside the repository.
+The examples that use CM link to this repository via `lib_deps = symlink://../..`.
+Each example keeps build files and library dependencies in separate directories
+under `${sysenv.HOME}/.pio/CM/ex/...`. CM remains linked to this checkout; no
+second CM source copy or working repository is created. ChipInfo is a standalone
+example and does not depend on CM.
+
+The Bluetooth and Full-IO demos use `min_spiffs.csv` to provide larger dual OTA
+slots on 4 MB boards, leaving less space for SPIFFS. Changing the partition layout
+on an existing device can affect filesystem data and requires a suitable
+installation or migration procedure.
 
 Avoid using `lib_extra_dirs = ../..` for the workspace library. If a build ever seems to use stale local library code, run:
 
@@ -20,7 +27,45 @@ pio run
 Some examples include `tools/pio_force_local_lib_refresh.py` to refresh local
 library metadata automatically. Set `CM_PIO_NO_LIB_REFRESH=1` to disable it.
 
+## Build and dependency compatibility
+
+Use C++17 or newer and remove the framework's `gnu++11` flag when necessary:
+
+```ini
+build_unflags = -std=gnu++11
+build_flags = -std=gnu++17
+```
+
+`library.json` defines the library's version and required dependency versions;
+each example's `platformio.ini` defines its board and build environments. The
+checkout uses the maintained `ESP32Async/ESPAsyncWebServer@3.12.1` and
+`ESP32Async/AsyncTCP@3.5.0` pair with transport mutexes enabled. Remove explicit
+legacy `esphome` transport dependencies from consumer projects before building
+this source. The web transport rejects legacy headers rather than silently
+combining incompatible ownership APIs. See
+[runtime delivery](GUI-Runtime.md#delivery-and-backpressure) for buffer lifetime
+and backpressure behavior.
+
+The default embedded Web UI ships in `src/html_content.*`; normal consumers do
+not need Node.js or a custom embed hook. Changing the Live/Settings build-time
+combination requires the regeneration hook in
+[Feature flags](FEATURE_FLAGS.md#matching-the-embedded-frontend). Rebuilding the
+frontend also requires the Node.js version declared in `webui/package.json` and
+the steps in [the Web UI guide](../webui/README.md).
+
+For example credentials, copy the selected example's
+`src/secret/secrets.example.h` to `src/secret/secrets.h` and edit local defaults.
+Do not commit credentials. If that optional file is absent, use the example's
+Settings/AP setup flow. A compiled example is not a device acceptance result;
+verify its board, ports, partitions and application behavior before uploading.
+
 ## Quick start (recommended)
+
+For a complete WiFi, OTA and BLE application, see
+[SolarBatteryTelemetry](https://github.com/vitalyruhl/SolarBatteryTelemetry)
+(repository access required). It combines
+network provisioning, configurable BLE battery/PV collectors and telemetry;
+its README explains hardware, public defaults and the stock-controller baseline.
 
 1. Clone this repository (or your fork).
 2. Pick an example in `examples/`.
@@ -193,7 +238,44 @@ void loop()
 
 ```
 
-        > **Note:** Every setting registered via `ConfigManager.addSetting()` now automatically gets a layout placement (page/card/group) derived from its category and Card name. If you need custom tabs or groups, call `ConfigManager.addSettingsPage()/addSettingsCard()/addSettingsGroup()` before `addSetting()` and then fine-tune placement with `ConfigManager.addToSettingsGroup(setting.getKey(), ...)`.
+Every setting registered via `ConfigManager.addSetting()` receives a layout
+placement derived from its category and card name. For custom tabs/groups,
+define pages/cards/groups before `addSetting()`, then adjust placement with
+`ConfigManager.addToSettingsGroup(setting.getKey(), ...)`. See
+[Settings](SETTINGS.md) for the layout APIs.
+
+## Built-in LED pulses
+
+`cm::helpers::PulseOutput led;` selects the LED from the active Arduino board
+variant's `LED_BUILTIN`. A PlatformIO board profile may provide
+`-DCM_BUILTIN_LED_PIN=8` and `-DCM_BUILTIN_LED_ACTIVE_LOW=1` when that specific
+board uses an ordinary active-low LED on GPIO8. These values describe that board;
+they are not inferred from its ESP32 chip family. Without a polarity override,
+the built-in LED defaults to active-high. Arduino virtual RGB LED pins remain
+supported through the Arduino digital-output interface.
+
+```cpp
+#include <helpers/HelperModule.h>
+
+cm::helpers::PulseOutput led;
+
+void setup() {
+  led.stop();
+}
+
+void loop() {
+  led.loop();
+  // Call led.setPulse(1, 100) when an application event occurs.
+}
+```
+
+Construction and `setDefault()` do not access hardware, so global instances are
+safe to construct before Arduino starts. The first `loop()`, `stop()`, `force()`
+or pulse operation initializes the output at its inactive level before enabling
+output mode. Call these operations from `setup()` or later, after Arduino and
+its scheduler are ready. An explicit `PulseOutput(pin, ActiveLevel)` continues
+to use the supplied pin and polarity. If the board defines no LED pin, provide
+`CM_BUILTIN_LED_PIN` or use the explicit-pin constructor.
 
 ## Next
 
